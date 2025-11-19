@@ -112,12 +112,76 @@ class BiologyMetadata:
     `extra`.
     """
 
-    species: Optional[str] = None
-    cell_type: Optional[str] = None
-    region: Optional[str] = None
-    note: Optional[str] = None
-    acquisition_date: Optional[str] = None
-    acquisition_time: Optional[str] = None
+    species: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": True,
+            "label": "Species",
+            "widget_type": "text",
+            "order": 1,
+            "grid_span": 1,
+        }
+    )
+    cell_type: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": True,
+            "label": "Cell type",
+            "widget_type": "text",
+            "order": 2,
+            "grid_span": 1,
+        }
+    )
+    region: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": True,
+            "label": "Region",
+            "widget_type": "text",
+            "order": 3,
+            "grid_span": 1,  # Span full width in 2-column grid
+        }
+    )
+    condition: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": True,
+            "label": "Condition",
+            "widget_type": "text",
+            "order": 4,
+            "grid_span": 1,  # Span full width in 2-column grid
+        }
+    )
+    note: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": True,
+            "label": "Note",
+            "widget_type": "text",
+            "order": 5,
+            "grid_span": 2,  # Span full width in 2-column grid
+        }
+    )
+    acquisition_date: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": False,
+            "label": "Acquisition Date",
+            "widget_type": "text",
+            "order": 6,
+            "grid_span": 1,
+        }
+    )
+    acquisition_time: Optional[str] = field(
+        default=None,
+        metadata={
+            "editable": False,
+            "label": "Acquisition Time",
+            "widget_type": "text",
+            "order": 7,
+            "grid_span": 1,
+        }
+    )
     extra: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -140,6 +204,44 @@ class BiologyMetadata:
         }
         meta.update(self.extra)
         return meta
+
+    @classmethod
+    def form_schema(cls) -> List[Dict[str, Any]]:
+        """
+        Return field schema for form generation.
+        
+        Returns list of field definitions with metadata.
+        Backend-only, no UI framework knowledge.
+        """
+        schema = []
+        for field_obj in fields(cls):
+            if field_obj.name == "extra":
+                continue
+            
+            meta = field_obj.metadata
+            schema.append({
+                "name": field_obj.name,
+                "label": meta.get("label", field_obj.name.replace("_", " ").title()),
+                "editable": meta.get("editable", True),
+                "widget_type": meta.get("widget_type", "text"),
+                "order": meta.get("order", 999),
+                "grid_span": meta.get("grid_span", 1),
+                "field_type": str(field_obj.type),
+            })
+        
+        # Sort by order
+        schema.sort(key=lambda x: x["order"])
+        return schema
+
+    def get_editable_values(self) -> Dict[str, str]:
+        """Return current values for editable fields only."""
+        schema = self.form_schema()
+        values = {}
+        for field_def in schema:
+            if field_def["editable"]:
+                field_name = field_def["name"]
+                values[field_name] = getattr(self, field_name) or ""
+        return values
 
 
 @dataclass
