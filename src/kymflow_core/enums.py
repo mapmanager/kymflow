@@ -11,3 +11,10 @@ class SelectionOrigin(str, Enum):
     PLOT = "plot"
     NAV = "nav"
     OTHER = "other"
+
+
+class ThemeMode(str, Enum):
+    """UI theme used for coordinating between components."""
+
+    DARK = "dark"
+    LIGHT = "light"

@@ -55,7 +55,8 @@ def run_flow_analysis(
         else:
             task_state.message = "Done"
             if on_result:
-                on_result(payload)
+                # on_result(payload)
+                on_result(True)
         finally:
             task_state.running = False
             task_state.cancellable = False

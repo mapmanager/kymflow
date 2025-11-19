@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from kymflow_core.kym_file import (
-    BiologyMetadata,
+    ExperimentMetadata,
     KymFile,
     collect_metadata,
     iter_metadata,
@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 TEST_TIF = Path("/Users/cudmore/Dropbox/data/declan/data/20221102/Capillary1_0001.tif")
 
 
-class BiologyMetadataTests(unittest.TestCase):
+class ExperimentMetadataTests(unittest.TestCase):
     def test_extra_fields_preserved(self) -> None:
         payload = {
             "species": "mouse",
@@ -34,7 +34,7 @@ class BiologyMetadataTests(unittest.TestCase):
             "favorite_color": "blue",
             "note": "Important sample",
         }
-        meta = BiologyMetadata.from_dict(payload)
+        meta = ExperimentMetadata.from_dict(payload)
         self.assertEqual(meta.species, "mouse")
         self.assertEqual(meta.region, "cortex")
         self.assertEqual(meta.extra["favorite_color"], "blue")

@@ -2,26 +2,29 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow_core.kym_file import BiologyMetadata
+from kymflow_core.kym_file import ExperimentMetadata
 from kymflow_core.state import AppState
 
 
 def create_metadata_form(app_state: AppState) -> None:
-    """Create metadata form dynamically from BiologyMetadata schema."""
-    ui.label("Metadata").classes("text-lg font-semibold")
+    """Create metadata form dynamically from ExperimentMetadata schema."""
+    ui.label("Experimental Metadata").classes("font-semibold")
     
     # Get schema from backend (no NiceGUI knowledge in schema)
-    schema = BiologyMetadata.form_schema()
+    schema = ExperimentMetadata.form_schema()
+    
+    # Filter to only visible fields
+    visible_schema = [f for f in schema if f.get("visible", True)]
     
     # Create lookup dictionaries for editable/read-only fields
-    editable_fields = {f["name"]: f for f in schema if f["editable"]}
-    read_only_fields = {f["name"]: f for f in schema if not f["editable"]}
+    editable_fields = {f["name"]: f for f in visible_schema if f["editable"]}
+    read_only_fields = {f["name"]: f for f in visible_schema if not f["editable"]}
     
     # Create widgets dynamically based on schema (preserve order)
     widgets = {}
     with ui.grid(columns=3).classes("w-full gap-2"):
-        # Iterate through schema in order to preserve field ordering
-        for field_def in schema:
+        # Iterate through visible schema in order to preserve field ordering
+        for field_def in visible_schema:
             widget_classes = "w-full"
             if field_def["grid_span"] == 2:
                 widget_classes += " col-span-2"
@@ -45,7 +48,7 @@ def create_metadata_form(app_state: AppState) -> None:
                 widget.set_value("")
             return
         
-        meta = kf.biology_metadata
+        meta = kf.experiment_metadata
         # Use get_editable_values() for editable fields
         editable_values = meta.get_editable_values()
         for field_name, value in editable_values.items():
@@ -75,7 +78,7 @@ def create_metadata_form(app_state: AppState) -> None:
             if field_name in editable_fields:
                 updates[field_name] = widget.value
         
-        kf.update_biology_metadata(**updates)
+        kf.update_experiment_metadata(**updates)
         app_state.notify_metadata_changed(kf)
         ui.notify("Metadata updated", color="positive")
 

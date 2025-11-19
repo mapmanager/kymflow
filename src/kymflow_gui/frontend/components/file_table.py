@@ -14,33 +14,19 @@ def _rows(files: List[KymFile]) -> List[Dict]:
 
 
 def create_file_table(app_state: AppState) -> None:
-    columns = [
-        {"name": "filename", "label": "Filename", "field": "filename"},
-        {
-            "name": "pixels",
-            "label": "Pixels/Line",
-            "field": "pixels",
-            'sortable': True, 
-            'width': '20px',
-            'headerStyle': 'min-width: 10px'
-        },
-        {
-            "name": "lines",
-            "label": "Lines",
-            "field": "lines",
-            'sortable': True, 
-            'width': '70px',
-        },
-        {"name": "lines", "label": "Lines", "field": "lines"},
-        {"name": "note", "label": "Note", "field": "note"},
-    ]
-
     table = ui.table(
-        columns=columns,
         rows=_rows(app_state.files),
         selection="single",
         row_key="path",
     ).classes("w-full")
+
+    # Hide the 'path' column after table creation
+    for column in table.columns:
+        if column["name"] == "path":
+            column["classes"] = "hidden"
+            column["headerClasses"] = "hidden"
+            table.update()
+            break
 
     @app_state.file_list_changed.connect
     def _refresh() -> None:

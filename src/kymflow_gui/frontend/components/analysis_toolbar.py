@@ -24,10 +24,10 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         if not kf:
             ui.notify("Select a file first", color="warning")
             return
-        window_value = window_input.value or 16
+        window_value = window_input.value
         window = int(window_value)
 
-        def _after_result(_payload) -> None:
+        def _after_result(_success: bool) -> None:
             app_state.notify_metadata_changed(kf)
 
         run_flow_analysis(

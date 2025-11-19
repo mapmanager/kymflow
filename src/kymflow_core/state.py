@@ -10,7 +10,7 @@ from pydantic import ConfigDict, Field
 
 from .kym_file import KymFile
 from .repository import FolderScanResult, scan_folder
-from .enums import SelectionOrigin
+from .enums import SelectionOrigin, ThemeMode
 
 
 class TaskState(EventedModel):
@@ -40,10 +40,12 @@ class AppState(EventedModel):
     folder: Optional[Path] = None
     files: List[KymFile] = Field(default_factory=list)
     selected_file: Optional[KymFile] = None
+    theme_mode: ThemeMode = ThemeMode.DARK
 
     file_list_changed: ClassVar[Signal] = Signal()
     selection_changed: ClassVar[Signal] = Signal(object, object)
     metadata_changed: ClassVar[Signal] = Signal(object)
+    theme_changed: ClassVar[Signal] = Signal(object)
 
     def load_folder(self, folder: Path) -> FolderScanResult:
         result = scan_folder(folder)
@@ -68,3 +70,9 @@ class AppState(EventedModel):
 
     def notify_metadata_changed(self, kym_file: KymFile) -> None:
         self.metadata_changed.emit(kym_file)
+
+    def set_theme(self, mode: ThemeMode) -> None:
+        if self.theme_mode == mode:
+            return
+        self.theme_mode = mode
+        self.theme_changed.emit(mode)
