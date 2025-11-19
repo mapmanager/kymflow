@@ -1,0 +1,74 @@
+"""
+Threaded helpers for running heavy analysis routines without blocking the GUI.
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import Callable, Optional
+
+from .kym_file import KymFile
+from .kym_flow_radon_gpt import FlowCancelled
+from .state import TaskState
+
+
+def run_flow_analysis(
+    kym_file: KymFile,
+    task_state: TaskState,
+    *,
+    window_size: int = 16,
+    start_pixel: Optional[int] = None,
+    stop_pixel: Optional[int] = None,
+    on_result: Optional[Callable[[dict], None]] = None,
+) -> None:
+    """
+    Launch the Radon flow analysis in a background thread.
+
+    Emits progress updates through `task_state` and supports cancellation.
+    """
+    cancel_event = threading.Event()
+
+    def _worker() -> None:
+        task_state.running = True
+        task_state.cancellable = True
+        task_state.set_progress(0.0, "Starting analysis")
+
+        def progress_cb(completed: int, total: int) -> None:
+            if total:
+                pct = max(0.0, min(1.0, completed / total))
+            else:
+                pct = 0.0
+            task_state.set_progress(pct, f"{completed}/{total} windows")
+
+        try:
+            payload = kym_file.analyze_flow(
+                window_size,
+                start_pixel=start_pixel,
+                stop_pixel=stop_pixel,
+                progress_callback=progress_cb,
+                is_cancelled=cancel_event.is_set,
+            )
+        except FlowCancelled:
+            task_state.message = "Cancelled"
+        except Exception as exc:  # pragma: no cover - surfaced to UI
+            task_state.message = f"Error: {exc}"
+        else:
+            task_state.message = "Done"
+            if on_result:
+                on_result(payload)
+        finally:
+            task_state.running = False
+            task_state.cancellable = False
+            task_state.finished.emit()
+
+    def _handle_cancel() -> None:
+        cancel_event.set()
+
+    # Ensure multiple runs do not accumulate duplicate slots
+    try:
+        task_state.cancelled.disconnect(_handle_cancel)
+    except Exception:
+        pass
+    task_state.cancelled.connect(_handle_cancel)
+
+    threading.Thread(target=_worker, daemon=True).start()

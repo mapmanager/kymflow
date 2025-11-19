@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kymflow"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=2.0.2",
+    "pandas>=2.3.3",
+    "psygnal>=0.14.2",
+    "tifffile>=2024.5.24",
+    "scikit-image>=0.24.0",
+]
+
+[dependency-groups]
+gui = [
+    "nicegui>=3.3.1",
+    "plotly>=6.5.0",
+]
+dev = [
+    "pytest>=7.4",
+]
+
+[project.scripts]
+kymflow-gui = "kymflow_gui.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kymflow_core", "src/kymflow_gui"]

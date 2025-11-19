@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from nicegui import ui
+
+from kymflow_core.state import AppState, TaskState
+from kymflow_core.tasks import run_flow_analysis
+
+
+def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
+    ui.label("Analysis").classes("text-lg font-semibold")
+    with ui.row().classes("items-end gap-2"):
+        window_input = ui.number(
+            "Window size",
+            value=16,
+            min=4,
+            step=4,
+        ).classes("w-32")
+        start_button = ui.button("Run analysis")
+        cancel_button = ui.button("Cancel", on_click=task_state.request_cancel)
+        cancel_button.visible = False
+
+    def _on_run() -> None:
+        kf = app_state.selected_file
+        if not kf:
+            ui.notify("Select a file first", color="warning")
+            return
+        window = int(window_input.value or 16)
+
+        def _after_result(_payload) -> None:
+            app_state.notify_metadata_changed(kf)
+
+        run_flow_analysis(
+            kf,
+            task_state,
+            window_size=window,
+            on_result=_after_result,
+        )
+
+    start_button.on("click", _on_run)
+
+    @task_state.events.running.connect  # type: ignore[attr-defined]
+    def _toggle_buttons() -> None:
+        start_button.disabled = task_state.running
+        cancel_button.visible = task_state.running and task_state.cancellable
