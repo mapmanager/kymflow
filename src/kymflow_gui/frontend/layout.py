@@ -63,6 +63,17 @@ def create_main_page(default_folder: Path) -> None:
         if selection:
             _load_folder(selection)
 
+    with ui.header().classes("items-center justify-between"):
+        ui.label("Kymflow")
+        with ui.row():
+            ui.button("Home")
+            ui.button("About")
+            with ui.dropdown_button("Options", icon="menu"):
+                ui.menu_item("Settings", on_click=lambda: ui.notify("Settings clicked"))
+                ui.menu_item("Profile", on_click=lambda: ui.notify("Profile clicked"))
+                ui.separator()
+                ui.menu_item("Logout", on_click=lambda: ui.notify("Logout clicked"))
+
     with ui.column().classes("w-full p-4 gap-4"):
         folder_row = ui.row().classes("w-full items-end gap-2")
         with folder_row:
@@ -81,13 +92,21 @@ def create_main_page(default_folder: Path) -> None:
                 color="warning",
             )
 
-        create_task_progress(task_state)
-        create_analysis_toolbar(app_state, task_state)
+        with ui.row().classes("w-full items-start gap-4"):
+            with ui.column().classes("flex-1 gap-2"):
+                create_analysis_toolbar(app_state, task_state)
+            with ui.column().classes("shrink gap-2"):
+                create_task_progress(task_state)
+
+        with ui.expansion("Files", value=True).classes("w-full"):
+            create_file_table(app_state)
 
         with ui.row().classes("w-full gap-4"):
-            with ui.column().classes("w-1/3 gap-2"):
-                create_file_table(app_state)
             with ui.column().classes("w-2/3 gap-4"):
-                create_image_viewer(app_state)
-                create_plot_viewer(app_state)
-                create_metadata_form(app_state)
+                with ui.expansion("Image Viewer", value=True).classes("w-full"):
+                    create_image_viewer(app_state)
+                with ui.expansion("Plot Viewer", value=True).classes("w-full"):
+                    create_plot_viewer(app_state)
+            with ui.column().classes("w-1/3 gap-4"):
+                with ui.expansion("Metadata", value=True).classes("w-full"):
+                    create_metadata_form(app_state)

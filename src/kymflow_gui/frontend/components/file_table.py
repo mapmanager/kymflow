@@ -10,27 +10,32 @@ from kymflow_core.state import AppState
 
 
 def _rows(files: List[KymFile]) -> List[Dict]:
-    return [
-        {
-            "filename": file.path.name,
-            "path": str(file.path),
-            "pixels": file.pixels_per_line or "-",
-            "lines": file.num_lines or "-",
-        }
-        for file in files
-    ]
+    return [f.summary_row() for f in files]
 
 
 def create_file_table(app_state: AppState) -> None:
     columns = [
         {"name": "filename", "label": "Filename", "field": "filename"},
-        {"name": "path", "label": "Path", "field": "path"},
-        {"name": "pixels", "label": "Pixels/Line", "field": "pixels"},
+        {
+            "name": "pixels",
+            "label": "Pixels/Line",
+            "field": "pixels",
+            'sortable': True, 
+            'width': '20px',
+            'headerStyle': 'min-width: 10px'
+        },
+        {
+            "name": "lines",
+            "label": "Lines",
+            "field": "lines",
+            'sortable': True, 
+            'width': '70px',
+        },
         {"name": "lines", "label": "Lines", "field": "lines"},
+        {"name": "note", "label": "Note", "field": "note"},
     ]
 
     table = ui.table(
-        title="Files",
         columns=columns,
         rows=_rows(app_state.files),
         selection="single",

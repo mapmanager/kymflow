@@ -195,6 +195,16 @@ class KymFile:
         if load_image:
             self.ensure_image_loaded()
 
+    def summary_row(self) -> Dict[str, Any]:
+        """Tabular summary suitable for file list views."""
+        return {
+            "filename": self.path.name,
+            "path": str(self.path),
+            "pixels": self.pixels_per_line or "-",
+            "lines": self.num_lines or "-",
+            "note": self.biology_metadata.note or "-",
+        }
+
     # ------------------------------------------------------------------
     # Loading helpers
     # ------------------------------------------------------------------

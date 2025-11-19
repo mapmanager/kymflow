@@ -20,8 +20,8 @@ def _figure_from_image(image: np.ndarray) -> go.Figure:
     )
     fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(showticklabels=False),
-        yaxis=dict(showticklabels=False),
+        xaxis=dict(showticklabels=True),
+        yaxis=dict(showticklabels=True),
     )
     return fig
 

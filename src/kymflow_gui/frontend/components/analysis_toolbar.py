@@ -7,13 +7,13 @@ from kymflow_core.tasks import run_flow_analysis
 
 
 def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
-    ui.label("Analysis").classes("text-lg font-semibold")
+    
     with ui.row().classes("items-end gap-2"):
-        window_input = ui.number(
-            "Window size",
+        ui.label("Analysis").classes("text-lg font-semibold")
+        window_input = ui.select(
+            options=[16, 32, 64, 128, 256],
             value=16,
-            min=4,
-            step=4,
+            label="Window size",
         ).classes("w-32")
         start_button = ui.button("Run analysis")
         cancel_button = ui.button("Cancel", on_click=task_state.request_cancel)
@@ -24,7 +24,8 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         if not kf:
             ui.notify("Select a file first", color="warning")
             return
-        window = int(window_input.value or 16)
+        window_value = window_input.value or 16
+        window = int(window_value)
 
         def _after_result(_payload) -> None:
             app_state.notify_metadata_changed(kf)
