@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # ===== configuration =====
-MAX_SIZE_MB=95                     # change this if needed
+MAX_SIZE_MB=60                     # change this if needed
 MAX_SIZE_BYTES=$((MAX_SIZE_MB * 1024 * 1024))
 
 MODE="${1:-staged}"                # "staged" or "tracked"
