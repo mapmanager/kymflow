@@ -3,7 +3,7 @@ from pathlib import Path
 from nicegui import ui
 
 from .config import DEFAULT_DATA_DIR, DEFAULT_PORT
-from .frontend.layout import create_main_page
+from .frontend.layout import create_batch_page, create_main_page
 
 # IMPORTANT: configure logging at module import, so it runs in the uvicorn worker too
 from kymflow_core.utils.logging import get_logger, setup_logging
@@ -21,6 +21,10 @@ def main() -> None:
     @ui.page("/")
     def index() -> None:
         create_main_page(DEFAULT_DATA_DIR)
+
+    @ui.page("/batch")
+    def batch() -> None:
+        create_batch_page(DEFAULT_DATA_DIR)
 
     ui.run(port=DEFAULT_PORT, reload=True)
 

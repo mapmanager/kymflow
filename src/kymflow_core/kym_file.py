@@ -465,10 +465,42 @@ class AnalysisParameters:
     """Metadata describing the last performed analysis.
     """
 
-    algorithm: str = ''
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    analyzed_at: Optional[datetime] = None
-    result_path: Optional[Path] = None
+    algorithm: str = field(
+        default='',
+        metadata=field_metadata(
+            editable=False,
+            label="Algorithm",
+            widget_type="text",
+            grid_span=1,
+        )
+    )
+    parameters: Dict[str, Any] = field(
+        default_factory=dict,
+        metadata=field_metadata(
+            editable=False,
+            label="Parameters",
+            widget_type="text",
+            grid_span=2,
+        )
+    )
+    analyzed_at: Optional[datetime] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Analyzed At",
+            widget_type="text",
+            grid_span=1,
+        )
+    )
+    result_path: Optional[Path] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Result Path",
+            widget_type="text",
+            grid_span=2,
+        )
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -477,6 +509,31 @@ class AnalysisParameters:
             "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
             "result_path": str(self.result_path) if self.result_path else None,
         }
+
+    @classmethod
+    def form_schema(cls) -> List[Dict[str, Any]]:
+        """
+        Return field schema for form generation.
+        
+        Returns list of field definitions with metadata.
+        Backend-only, no UI framework knowledge.
+        """
+        schema = []
+        for field_obj in fields(cls):
+            meta = field_obj.metadata
+            schema.append({
+                "name": field_obj.name,
+                "label": meta.get("label", field_obj.name.replace("_", " ").title()),
+                "editable": meta.get("editable", True),
+                "widget_type": meta.get("widget_type", "text"),
+                "order": meta.get("order", 999),
+                "grid_span": meta.get("grid_span", 1),
+                "visible": meta.get("visible", True),
+                "field_type": str(field_obj.type),
+            })
+        
+        # Order is determined by the order of the fields in the dataclass
+        return schema
 
 
 class KymFile:
@@ -519,10 +576,14 @@ class KymFile:
         if load_image:
             self.ensure_image_loaded()
 
+        self._dirty: bool = False
+
     def summary_row(self) -> Dict[str, Any]:
         """Tabular summary suitable for file list views."""
         return {
-            "filename": self.path.name,
+            "File Name": self.path.name,
+            'Analyzed': '✓' if self.analysisExists else '',
+            'Window Size': self._analysis_parameters.parameters.get('window_size', '-'),
             "pixels": self.pixels_per_line or "-",
             "lines": self.num_lines or "-",
             "duration (s)": self.duration_seconds or "-",
@@ -552,6 +613,7 @@ class KymFile:
     # ------------------------------------------------------------------
     # Metadata exposure
     # ------------------------------------------------------------------
+    # abb not used
     def to_metadata_dict(self, include_analysis: bool = True) -> Dict[str, Any]:
         """
         Merge Olympus header + experimental metadata + derived info.
@@ -578,12 +640,18 @@ class KymFile:
     def acquisition_metadata(self) -> OlympusHeader:
         return self._header
 
+    @property
+    def analysis_parameters(self) -> AnalysisParameters:
+        return self._analysis_parameters
+
     def update_experiment_metadata(self, **fields: Any) -> None:
         """Update stored experimental metadata."""
+        logger.info(f'fields:{fields}')
         for key, value in fields.items():
             if hasattr(self._experiment_metadata, key):
                 setattr(self._experiment_metadata, key, value)
             # Unknown keys are silently ignored (strict schema-only strategy)
+        self._dirty = True
 
     # ------------------------------------------------------------------
     # Analysis hooks
@@ -669,8 +737,11 @@ class KymFile:
             "absVelocity": abs(cleanVelocity),  # what were these in v0
         })
         
+        # Mark as dirty so save_analysis() will save
+        self._dirty = True
+        
         # Auto-save analysis after successful computation
-        self.save_analysis()
+        # self.save_analysis()
         
     def save_analysis(self) -> bool:
         """
@@ -681,6 +752,10 @@ class KymFile:
         
         Returns True if successful, False otherwise.
         """
+        if not self._dirty:
+            logger.info(f"Analysis does not need to be for  {self.path.name}")
+            return False
+
         if not self.analysisExists:
             logger.warning(f"No analysis to save for {self.path.name}")
             return False
@@ -707,8 +782,9 @@ class KymFile:
         logger.info(f"Saved analysis metadata to {json_path}")
         
         # Update analysis snapshot with result path
-        self._analysis.result_path = csv_path
+        self._analysis_parameters.result_path = csv_path
         
+        self._dirty = False
         return True
             
     def load_metadata(self) -> bool:

@@ -5,7 +5,7 @@ Threaded helpers for running heavy analysis routines without blocking the GUI.
 from __future__ import annotations
 
 import threading
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 from .kym_file import KymFile
 from .kym_flow_radon_gpt import FlowCancelled
@@ -71,5 +71,87 @@ def run_flow_analysis(
     except Exception:
         pass
     task_state.cancelled.connect(_handle_cancel)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def run_batch_flow_analysis(
+    kym_files: Sequence[KymFile],
+    per_file_task: TaskState,
+    overall_task: TaskState,
+    *,
+    window_size: int = 16,
+    start_pixel: Optional[int] = None,
+    stop_pixel: Optional[int] = None,
+    on_file_complete: Optional[Callable[[KymFile], None]] = None,
+    on_batch_complete: Optional[Callable[[bool], None]] = None,
+) -> None:
+    """Run flow analysis sequentially for many files in a background thread."""
+    cancel_event = threading.Event()
+    files = list(kym_files)
+    total_files = len(files)
+    if total_files == 0:
+        return
+
+    def _handle_cancel() -> None:
+        cancel_event.set()
+
+    try:
+        per_file_task.cancelled.disconnect(_handle_cancel)
+    except Exception:
+        pass
+    per_file_task.cancelled.connect(_handle_cancel)
+
+    def _worker() -> None:
+        cancelled = False
+        per_file_task.running = True
+        per_file_task.cancellable = True
+        overall_task.running = True
+        overall_task.cancellable = False
+        overall_task.set_progress(0.0, f"0/{total_files} files")
+
+        for index, kf in enumerate(files, start=1):
+            if cancel_event.is_set():
+                cancelled = True
+                break
+
+            per_file_task.set_progress(0.0, f"Starting {kf.path.name}")
+
+            def progress_cb(completed: int, total: int) -> None:
+                pct = (completed / total) if total else 0.0
+                per_file_task.set_progress(pct, f"{kf.path.name}: {completed}/{total} windows")
+
+            try:
+                kf.analyze_flow(
+                    window_size,
+                    start_pixel=start_pixel,
+                    stop_pixel=stop_pixel,
+                    progress_callback=progress_cb,
+                    is_cancelled=cancel_event.is_set,
+                )
+                kf.save_analysis()
+            except FlowCancelled:
+                cancelled = True
+                per_file_task.message = "Cancelled"
+                break
+            except Exception as exc:  # pragma: no cover - surfaced to UI
+                per_file_task.message = f"Error: {exc}"
+            else:
+                per_file_task.message = f"Done: {kf.path.name}"
+                if on_file_complete:
+                    on_file_complete(kf)
+
+            overall_task.set_progress(index / total_files, f"{index}/{total_files} files")
+
+        per_file_task.running = False
+        per_file_task.cancellable = False
+        per_file_task.finished.emit()
+
+        overall_task.running = False
+        overall_task.cancellable = False
+        overall_task.finished.emit()
+
+        if on_batch_complete:
+            on_batch_complete(cancelled)
 
     threading.Thread(target=_worker, daemon=True).start()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from nicegui import ui
 
@@ -13,12 +13,19 @@ def _rows(files: List[KymFile]) -> List[Dict]:
     return [f.summary_row() for f in files]
 
 
-def create_file_table(app_state: AppState) -> None:
+def create_file_table(
+    app_state: AppState,
+    *,
+    selection_mode: str = "single",
+    on_selection_change: Optional[Callable[[List[KymFile]], None]] = None,
+) -> None:
+    multi_select = selection_mode == "multiple"
+
     table = ui.table(
         rows=_rows(app_state.files),
-        selection="single",
+        selection=selection_mode,
         row_key="path",
-    ).classes("w-full")
+    ).classes("w-full").props("dense")
 
     # Hide the 'path' column after table creation
     for column in table.columns:
@@ -26,14 +33,34 @@ def create_file_table(app_state: AppState) -> None:
             column["classes"] = "hidden"
             column["headerClasses"] = "hidden"
             table.update()
-            break
+
+        if column["name"] in ['File Name', "Analyzed", "Window Size", 'pixels', 'lines', 'duration (s)', 'ms/line', 'um/pixel']:
+            column["style"] = "width: 50px; min-width: 50px; max-width: 50px;"
+            column["align"] = "center"
+            table.update()
 
     @app_state.file_list_changed.connect
     def _refresh() -> None:
         table.rows = _rows(app_state.files)
+        if multi_select:
+            table.selected = []
+            if on_selection_change is not None:
+                on_selection_change([])
 
     def _on_select(event) -> None:
         selected = event.args.get("rows") or []
+
+        if multi_select:
+            if on_selection_change is None:
+                return
+            matches: List[KymFile] = []
+            for row in selected:
+                match = next((f for f in app_state.files if str(f.path) == row["path"]), None)
+                if match:
+                    matches.append(match)
+            on_selection_change(matches)
+            return
+
         if not selected:
             app_state.select_file(None, origin=SelectionOrigin.TABLE)
             return
@@ -44,19 +71,20 @@ def create_file_table(app_state: AppState) -> None:
 
     table.on("selection", _on_select)
 
-    @app_state.selection_changed.connect
-    def _on_external_selection(
-        kf: Optional[KymFile],
-        origin: Optional[SelectionOrigin],
-    ) -> None:
-        if origin is SelectionOrigin.TABLE:
-            return
-        if not kf:
-            table.selected = []
-            return
+    if not multi_select:
+        @app_state.selection_changed.connect
+        def _on_external_selection(
+            kf: Optional[KymFile],
+            origin: Optional[SelectionOrigin],
+        ) -> None:
+            if origin is SelectionOrigin.TABLE:
+                return
+            if not kf:
+                table.selected = []
+                return
 
-        row = next((r for r in table.rows if r["path"] == str(kf.path)), None)
-        if row is None:
-            table.selected = []
-            return
-        table.selected = [row]
+            row = next((r for r in table.rows if r["path"] == str(kf.path)), None)
+            if row is None:
+                table.selected = []
+                return
+            table.selected = [row]

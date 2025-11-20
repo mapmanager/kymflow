@@ -71,6 +71,10 @@ class AppState(EventedModel):
     def notify_metadata_changed(self, kym_file: KymFile) -> None:
         self.metadata_changed.emit(kym_file)
 
+    def refresh_file_rows(self) -> None:
+        """Notify listeners that file metadata changed without reloading folder."""
+        self.file_list_changed.emit()
+
     def set_theme(self, mode: ThemeMode) -> None:
         if self.theme_mode == mode:
             return
