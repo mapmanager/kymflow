@@ -233,6 +233,14 @@ def plot_image_line_plotly(
             showgrid=False,
             color=fg_color,
         )
+
+        # trying to independently zoom x and y axis
+        fig.update_layout(
+            dragmode='zoom',
+            modebar_add=["zoomInX", "zoomOutX", "zoomInY", "zoomOutY"],
+        )
+        fig.update_xaxes(constrain='range')
+        fig.update_yaxes(constrain='range')
     
     # Get line plot data
     y_values = kf.getAnalysisValue(y) if analysis_time_values is not None else None
@@ -300,7 +308,7 @@ def plot_image_line_plotly(
             col=1,
         )
     
-    # Update overall layout
+    # Update overall layout with tight margins
     fig.update_layout(
         template=template,
         paper_bgcolor=bg_color,
@@ -308,6 +316,7 @@ def plot_image_line_plotly(
         font=dict(color=fg_color),
         height=800,  # Taller figure for subplots
         showlegend=False,
+        margin=dict(l=10, r=10, t=10, b=10),  # Tight margins similar to single plot
     )
     
     return fig

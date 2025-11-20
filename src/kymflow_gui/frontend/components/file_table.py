@@ -25,16 +25,24 @@ def create_file_table(
         rows=_rows(app_state.files),
         selection=selection_mode,
         row_key="path",
-    ).classes("w-full").props("dense")
+    ).classes("w-full").props("dense hide-selected-banner")
 
-    # Hide the 'path' column after table creation
+    # Get column visibility schema from backend (reuses existing form schemas)
+    column_visibility = KymFile.table_column_schema()
+    
+    # Configure columns based on schema
     for column in table.columns:
-        if column["name"] == "path":
+        col_name = column["name"]
+        
+        # Check visibility from schema (defaults to True if not in schema)
+        if not column_visibility.get(col_name, True):
             column["classes"] = "hidden"
             column["headerClasses"] = "hidden"
             table.update()
-
-        if column["name"] in ['File Name', "Analyzed", "Window Size", 'pixels', 'lines', 'duration (s)', 'ms/line', 'um/pixel']:
+            continue
+        
+        # Set width and alignment for narrow columns (checkmark columns)
+        if col_name in ['File Name', "Analyzed", "Saved", "Window Size", 'pixels', 'lines', 'duration (s)', 'ms/line', 'um/pixel']:
             column["style"] = "width: 50px; min-width: 50px; max-width: 50px;"
             column["align"] = "center"
             table.update()

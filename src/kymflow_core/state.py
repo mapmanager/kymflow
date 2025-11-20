@@ -14,6 +14,8 @@ from .enums import SelectionOrigin, ThemeMode
 
 
 class TaskState(EventedModel):
+    """Lightweight container for tracking long-running UI tasks."""
+
     running: bool = False
     progress: float = 0.0
     message: str = ""
@@ -35,6 +37,8 @@ class TaskState(EventedModel):
 
 
 class AppState(EventedModel):
+    """Shared state for the NiceGUI app (selected folder, files, theme)."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     folder: Optional[Path] = None

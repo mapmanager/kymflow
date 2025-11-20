@@ -32,6 +32,8 @@ def create_metadata_form(app_state: AppState) -> None:
         value = widget.value
         kf.update_experiment_metadata(**{field_name: value})
         app_state.notify_metadata_changed(kf)
+        # Refresh file table to show updated metadata (e.g., note field)
+        app_state.refresh_file_rows()
     
     with ui.grid(columns=3).classes("w-full gap-2"):
         # Iterate through visible schema in order to preserve field ordering

@@ -45,14 +45,12 @@ def prompt_for_directory(initial: Path) -> Optional[str]:
 
 def create_folder_selector(
     current_folder: dict[str, Path],
-    folder_display: ui.label,
     on_folder_changed: Callable[[Path], None],
 ) -> None:
     """Create folder selection UI with Choose and Reload buttons.
     
     Args:
         current_folder: Dictionary with 'path' key to track current folder
-        folder_display: Label widget to display current folder path
         on_folder_changed: Callback function called when folder changes, receives Path
     """
     def _load_folder(path_str: str) -> None:
@@ -71,12 +69,13 @@ def create_folder_selector(
         if selection:
             _load_folder(selection)
 
-    folder_row = ui.row().classes("w-full items-end gap-2")
+    folder_row = ui.row().classes("w-full items-center gap-2")
     with folder_row:
         ui.button("Choose folder", on_click=_choose_folder)
         ui.button(
             "Reload",
             on_click=lambda: _load_folder(str(current_folder["path"]))
         )
-        folder_display
+        # Create label to display current folder path (after buttons)
+        folder_display = ui.label(f"Folder: {current_folder['path']}")
 

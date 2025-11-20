@@ -58,7 +58,7 @@ def setup_logging(
     root.setLevel(level)
 
     # -------- Formatter --------
-    fmt = "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d: %(message)s"
+    fmt = "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d:%(funcName)s: %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
     formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
 

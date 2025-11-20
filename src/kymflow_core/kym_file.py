@@ -592,8 +592,49 @@ class KymFile:
             "um/pixel": self._header.um_per_pixel or "-",
 
             "note": self.experiment_metadata.note or "-",
-            "path": str(self.path),
+            "path": str(self.path),  # special case, not in any shema
         }
+
+    @classmethod
+    def table_column_schema(cls) -> Dict[str, bool]:
+        """
+        Return column visibility schema for table display.
+        
+        Returns dict mapping summary_row column name to visible bool.
+        Reuses existing form schemas where possible to avoid duplication.
+        
+        Backend-only, no UI framework knowledge.
+        """
+        # Mapping from summary_row keys to (dataclass_class, field_name) for schema lookup
+        # Keys not in this mapping are derived/computed fields
+        schema_field_mapping = {
+            "note": (ExperimentMetadata, "note"),
+            "um/pixel": (OlympusHeader, "um_per_pixel"),
+            # "pixels", "lines", "duration (s)", "ms/line" are derived from OlympusHeader
+            # but with different names, so we'd need property mappings - keeping simple for now
+        }
+        
+        # Override dict for columns not in any schema (derived/computed fields)
+        # Defaults to True if not specified
+        visibility_overrides = {
+            "path": False,  # Always hide - used as row_key only
+            # All other columns default to visible=True (don't need to list them)
+        }
+        
+        result = {}
+        
+        # Look up visibility from existing form schemas
+        for col_name, (dataclass_cls, field_name) in schema_field_mapping.items():
+            form_schema = dataclass_cls.form_schema()
+            for field_def in form_schema:
+                if field_def["name"] == field_name:
+                    result[col_name] = field_def.get("visible", True)
+                    break
+        
+        # Apply overrides (takes precedence)
+        result.update(visibility_overrides)
+        
+        return result
 
     # ------------------------------------------------------------------
     # Loading helpers

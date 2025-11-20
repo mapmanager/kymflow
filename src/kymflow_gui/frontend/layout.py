@@ -24,6 +24,22 @@ from .components.task_progress import create_task_progress
 logger = get_logger(__name__)
 
 
+def _inject_global_styles() -> None:
+    """Add shared CSS tweaks for NiceGUI components."""
+    ui.add_head_html(
+        """
+<style>
+.q-expansion-item__container .q-item {
+    flex-direction: row-reverse;
+}
+.q-expansion-item__container .q-item__section--main {
+    text-align: left;
+}
+</style>
+"""
+    )
+
+
 def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
 
     def _navigate(path: str) -> None:
@@ -40,31 +56,39 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
         app_state.set_theme(mode)
 
     with ui.header().classes("items-center justify-between"):
-        ui.label("Kymflow")
-        with ui.row().classes("items-center gap-2"):
+        # Left side: Title and navigation buttons
+        with ui.row().classes("items-center gap-4"):
+            ui.label("KymFlow").classes("text-2xl font-bold text-white")
             home_button = ui.button(
                 "Home",
                 on_click=lambda: _navigate("/"),
             ).props("flat text-color=white")
+
             batch_button = ui.button(
                 "Batch",
                 on_click=lambda: _navigate("/batch"),
             ).props("flat text-color=white")
+
             if current_page == "home":
                 home_button.disable()
             if current_page == "batch":
                 batch_button.disable()
 
-            ui.button("About").props("flat text-color=white")
+        # Right side: GitHub and theme buttons
+        with ui.row().classes("items-center gap-2"):
+            # --- GitHub "button" as a clickable image (no background) ---
+            github_icon = ui.image(
+                "https://cdn.simpleicons.org/github/ffffff"
+            ).classes("w-6 h-6 cursor-pointer")
 
-            github_button = ui.button(
-                on_click=lambda: ui.run_javascript(
+            github_icon.on(
+                "click",
+                lambda _: ui.run_javascript(
                     'window.open("https://github.com/mapmanager/kymflow", "_blank")'
                 ),
-            ).props('flat round dense')
-            with github_button:
-                ui.icon('i-mdi-github').classes('text-white text-lg')
-            github_button.tooltip('Open GitHub repository')
+            )
+
+            github_icon.tooltip("Open GitHub repository")
 
             theme_button = ui.button(
                 icon="light_mode" if dark_mode.value else "dark_mode",
@@ -75,6 +99,7 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
 
 def create_main_page(default_folder: Path) -> None:
     ui.page_title('KymFlow')
+    _inject_global_styles()
 
     app_state = AppState()
     task_state = TaskState()
@@ -90,10 +115,8 @@ def create_main_page(default_folder: Path) -> None:
     _build_header(app_state, dark_mode, current_page="home")
 
     with ui.column().classes("w-full p-4 gap-4"):
-        folder_display = ui.label(f"Folder: {current_folder['path']}")
         create_folder_selector(
             current_folder=current_folder,
-            folder_display=folder_display,
             on_folder_changed=_on_folder_changed,
         )
 
@@ -133,6 +156,7 @@ def create_main_page(default_folder: Path) -> None:
 
 def create_batch_page(default_folder: Path) -> None:
     ui.page_title('KymFlow - Batch Analysis')
+    _inject_global_styles()
 
     app_state = AppState()
     per_file_task = TaskState()
@@ -149,10 +173,8 @@ def create_batch_page(default_folder: Path) -> None:
     _build_header(app_state, dark_mode, current_page="batch")
 
     with ui.column().classes("w-full p-4 gap-4"):
-        folder_display = ui.label(f"Folder: {current_folder['path']}")
         create_folder_selector(
             current_folder=current_folder,
-            folder_display=folder_display,
             on_folder_changed=_on_folder_changed,
         )
 
