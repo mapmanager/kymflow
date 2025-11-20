@@ -18,7 +18,7 @@ wheels/
 # Local files
 *.log
 
-notebooks/quality_control.ipynb
+# notebooks/quality_control.ipynb
 
 # Jupyter notebooks / checkpoints
 *.ipynb_checkpoints
