@@ -18,3 +18,4 @@ wheels/
 # Local files
 *.log
 
+notebooks/quality_control.ipynb
