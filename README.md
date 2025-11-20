@@ -1,12 +1,10 @@
 # KymFlow
 
 KymFlow is a NiceGUI-based application for browsing kymograph TIFF files,
-editing metadata, and running Radon-based flow analysis. The backend lives in
-`src/kymflow_core` and is completely GUI-agnostic, so scripts and notebooks can
-reuse the same API for analysis, metadata editing, or batch processing.
+editing metadata, and running Radon-based flow analysis.
 
-This README is also a personal cheat sheet for installing, running, and
-developing the project using **uv**.
+The backend lives in `src/kymflow_core` and is completely GUI-agnostic, so scripts and notebooks can
+reuse the same API for analysis, metadata editing, or batch processing.
 
 ---
 
@@ -17,77 +15,54 @@ developing the project using **uv**.
 
 ---
 
+# Getting the Source
+
+Clone the repository (or download the ZIP) from GitHub:
+
+```bash
+git clone https://github.com/mapmanager/kymflow.git
+cd kymflow
+```
+
+All commands below assume you are in the project root.
+
+---
+
 # Installation (uv)
 
-KymFlow uses a **src/** layout and should be installed in **editable mode**.
-
-### Install backend + dev tools:
-
-```bash
-uv pip install -e ".[dev]"
-```
-
-### Install GUI extras (NiceGUI + Plotly):
+KymFlow uses a **src/** layout and should be installed in editable mode. With
+uv this is a single command:
 
 ```bash
-uv pip install -e ".[gui]"
+uv pip install -e ".[gui,test]"
 ```
 
-These two commands:
+This creates (or updates) `.venv/`, installs the package in editable mode, and
+pulls in the GUI + dev extras. If you add/remove dependencies in
+`pyproject.toml`, rerun the same command. Regular source edits do **not**
+require reinstalling.
 
-- create or update the `.venv/` environment  
-- install the project in true editable mode (PEP 660)  
-- install optional extras for GUI development  
-
-> **Tip:**  
-> Re-run these commands only if you change `pyproject.toml`.  
-> Source edits under `src/` do **not** require reinstalling.
+> Not using uv?
+> Any standard tool can install the same extras via: `pip install -e ".[gui,test]"`
+> or the equivalent in your environment.
 
 ---
 
 # Running the GUI
 
-The only reliably correct way to launch the GUI (because of NiceGUI’s
-multiprocessing design) is:
+Launch the NiceGUI app with:
 
 ```bash
 uv run python -m kymflow_gui.main
 ```
 
-This:
-
-- uses uv’s environment (no manual activation)
-- respects editable installs
-- correctly initializes NiceGUI with `ui.run(...)`
-
-The GUI defaults to port **8080**.  
-You can adjust defaults (data folder, port, etc.) in:
-
-```
-src/kymflow_gui/config.py
-```
-
-> **Note:**  
-> The console script defined in `pyproject.toml` (`kymflow-gui`) currently
-> cannot be used with NiceGUI’s multiprocessing unless the module changes its
-> `__main__` guard to support the `"__mp_main__"` name used by worker processes.
-> For now, always run:
->
-> ```bash
-> uv run python -m kymflow_gui.main
-> ```
+This automatically uses the uv-managed environment and keeps editable imports
+intact. The GUI defaults to port **8080**; tweak defaults in
+`src/kymflow_gui/config.py` if needed.
 
 ---
 
 # Running Tests
-
-Install dev dependencies first:
-
-```bash
-uv pip install -e ".[dev]"
-```
-
-Run tests:
 
 ```bash
 uv run pytest
@@ -96,60 +71,26 @@ uv run pytest
 Tests that require proprietary TIFF data auto-skip when the sample data is
 unavailable.
 
+
 ---
 
-# Development Workflow (Cheat Sheet)
+# Working with Jupyter Notebooks
 
-**Editable install:**
-
-```bash
-uv pip install -e ".[dev]"
-uv pip install -e ".[gui]"
-```
-
-**Run GUI while developing:**
+Install the optional notebook extras (once):
 
 ```bash
-uv run python -m kymflow_gui.main
+uv pip install -e ".[notebook]"
 ```
 
-**Run tests:**
+Launch Jupyter Lab inside the repo (it will open in the `notebooks/` folder by
+default):
 
 ```bash
-uv run pytest
+uv run jupyter lab --notebook-dir notebooks
 ```
 
-**When do I need to reinstall?**
-
-- ✔ When `pyproject.toml` changes  
-  (new dependencies, extras, or metadata)
-- ✖ *Not needed* for normal source edits under `src/`  
-  (editable mode picks them up automatically)
-- ✔ If environment feels stale (rare)  
-  reinstalling is safe and fast:
-
-```bash
-uv pip uninstall kymflow -y
-uv pip install -e ".[dev]"
-uv pip install -e ".[gui]"
-```
-
-**How to verify editable mode is active:**
-
-```bash
-uv run python - << 'EOF'
-import inspect, kymflow_core
-print(inspect.getfile(kymflow_core))
-EOF
-```
-
-Output should show:
-
-```
-.../kymflow/src/kymflow_core/...
-```
-
-If it shows a `.venv/site-packages` path, the install is not editable.
+You can also use `jupyter notebook` if you prefer the classic interface. All
+dependencies run inside the same uv-managed environment.
 
 ---
 
@@ -170,25 +111,7 @@ kymflow/
 
 # Contributing
 
-1. Install dependencies:
+Issues and pull requests are welcome. Please include clear steps to reproduce
+bugs and run `uv run pytest` before submitting changes. More detailed
+guidelines will be added later.
 
-   ```bash
-   uv pip install -e ".[dev]"
-   uv pip install -e ".[gui]"
-   ```
-
-2. Create a feature branch.
-
-3. Run:
-
-   ```bash
-   uv run pytest
-   ```
-
-4. Submit a pull request with a clear description.
-
-
-5. dev troubleshooting
-
-uv sync --group dev --group gui
-uv run python -m kymflow_gui.main
