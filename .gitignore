@@ -19,3 +19,10 @@ wheels/
 *.log
 
 notebooks/quality_control.ipynb
+
+# Jupyter notebooks / checkpoints
+*.ipynb_checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+*checkpoint.ipynb
+.notebooks/
