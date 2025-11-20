@@ -165,13 +165,13 @@ def create_batch_page(default_folder: Path) -> None:
             )
 
         with ui.card().classes("w-full gap-4 p-4"):
-            ui.label("Batch controls").classes("text-lg font-semibold")
-            window_select = ui.select(
-                options=[16, 32, 64, 128, 256],
-                value=16,
-                label="Window size",
-            ).classes("w-32")
-            with ui.row().classes("gap-2"):
+            with ui.row().classes("items-center gap-2 w-full"):
+                ui.label("Batch controls").classes("text-lg font-semibold")
+                window_select = ui.select(
+                    options=[16, 32, 64, 128, 256],
+                    value=16,
+                    label="Window size",
+                ).classes("w-32")
                 analyze_selected_button = ui.button(
                     "Analyze selected",
                     on_click=lambda: _start_batch(True),
@@ -181,7 +181,7 @@ def create_batch_page(default_folder: Path) -> None:
                     on_click=lambda: _start_batch(False),
                 )
                 cancel_button = ui.button("Cancel", on_click=per_file_task.request_cancel)
-                cancel_button.visible = False
+                cancel_button.disabled = True
 
         selected_label = ui.label("Selected: 0 files").classes("text-sm text-gray-400")
 
@@ -229,7 +229,8 @@ def create_batch_page(default_folder: Path) -> None:
         running = per_file_task.running
         analyze_selected_button.disabled = running
         analyze_all_button.disabled = running
-        cancel_button.visible = running and per_file_task.cancellable
+        # Cancel button always visible, enabled only when running and cancellable
+        cancel_button.disabled = not (running and per_file_task.cancellable)
 
     _update_selection([])
     _sync_buttons()

@@ -583,6 +583,7 @@ class KymFile:
         return {
             "File Name": self.path.name,
             'Analyzed': '✓' if self.analysisExists else '',
+            'Saved': '✓' if not self._dirty else '',
             'Window Size': self._analysis_parameters.parameters.get('window_size', '-'),
             "pixels": self.pixels_per_line or "-",
             "lines": self.num_lines or "-",

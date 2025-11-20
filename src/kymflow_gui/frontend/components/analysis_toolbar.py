@@ -17,7 +17,7 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         ).classes("w-32")
         start_button = ui.button("Run analysis")
         cancel_button = ui.button("Cancel", on_click=task_state.request_cancel)
-        cancel_button.visible = False
+        cancel_button.disabled = True
 
     def _on_run() -> None:
         kf = app_state.selected_file
@@ -43,4 +43,5 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
     @task_state.events.running.connect  # type: ignore[attr-defined]
     def _toggle_buttons() -> None:
         start_button.disabled = task_state.running
-        cancel_button.visible = task_state.running and task_state.cancellable
+        # Cancel button always visible, enabled only when running and cancellable
+        cancel_button.disabled = not (task_state.running and task_state.cancellable)
