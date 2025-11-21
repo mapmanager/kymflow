@@ -591,7 +591,7 @@ class KymFile:
             "ms/line": round(self._header.seconds_per_line * 1000, 2) if self._header.seconds_per_line else "-",
             "um/pixel": self._header.um_per_pixel or "-",
             "bits/pixel": self._header.bits_per_pixel or "-",
-            
+
             "note": self.experiment_metadata.note or "-",
             "path": str(self.path),  # special case, not in any shema
         }
@@ -650,7 +650,11 @@ class KymFile:
     def ensure_image_loaded(self) -> np.ndarray:
         if self._image is None:
             self._image = tifffile.imread(self.path)
-        logger.info(f'image loaded: {self._image.shape}')
+            # abb 20251121
+            self._image = np.flip(self._image, axis=1)
+
+        logger.info(f'image loaded: {self._image.shape} dtype:{self._image.dtype}')        
+        
         return self._image
 
     # ------------------------------------------------------------------

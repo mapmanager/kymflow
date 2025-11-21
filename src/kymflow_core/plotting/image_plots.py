@@ -158,7 +158,8 @@ def histogram_plot_plotly(
             gridcolor=grid_color,
             type="log" if log_scale else "linear",
         ),
-        margin=dict(l=50, r=10, t=10, b=40),
+        # margin=dict(l=50, r=10, t=10, b=40),
+        margin=dict(l=0, r=20, t=10, b=20),
         showlegend=False,
     )
     

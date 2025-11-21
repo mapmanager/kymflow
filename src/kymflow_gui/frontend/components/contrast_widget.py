@@ -53,12 +53,15 @@ def create_contrast_widget(app_state: AppState) -> None:
     
     # Row 3: Min slider
     with ui.row().classes("w-full items-center gap-2"):
+    # with ui.row().classes("w-full"):
         ui.label("Min:").classes("w-12")
+        # min_value_label = ui.label("0").classes("w-16")
         min_slider = ui.slider(
             min=0,
             max=255,
             value=0,
             step=1,
+        # ).classes("flex-1")
         ).classes("flex-1")
         min_value_label = ui.label("0").classes("w-16")
     
