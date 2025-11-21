@@ -584,13 +584,14 @@ class KymFile:
             "File Name": self.path.name,
             'Analyzed': '✓' if self.analysisExists else '',
             'Saved': '✓' if not self._dirty else '',
-            'Window Size': self._analysis_parameters.parameters.get('window_size', '-'),
+            'Window Points': self._analysis_parameters.parameters.get('window_size', '-'),
             "pixels": self.pixels_per_line or "-",
             "lines": self.num_lines or "-",
             "duration (s)": self.duration_seconds or "-",
             "ms/line": round(self._header.seconds_per_line * 1000, 2) if self._header.seconds_per_line else "-",
             "um/pixel": self._header.um_per_pixel or "-",
-
+            "bits/pixel": self._header.bits_per_pixel or "-",
+            
             "note": self.experiment_metadata.note or "-",
             "path": str(self.path),  # special case, not in any shema
         }

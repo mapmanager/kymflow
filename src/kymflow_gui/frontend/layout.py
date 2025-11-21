@@ -13,6 +13,7 @@ from kymflow_core.utils.logging import get_logger
 
 from .components.analysis_form import create_analysis_form
 from .components.analysis_toolbar import create_analysis_toolbar
+from .components.contrast_widget import create_contrast_widget
 from .components.file_table import create_file_table
 from .components.folder_selector import create_folder_selector
 from .components.image_line_viewer import create_image_line_viewer
@@ -139,6 +140,9 @@ def create_main_page(default_folder: Path) -> None:
         with ui.expansion("Files", value=True).classes("w-full"):
             create_file_table(app_state)
 
+        with ui.expansion("Contrast Controls", value=False).classes("w-full"):
+            create_contrast_widget(app_state)
+
         with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
             create_image_line_viewer(app_state)
 
@@ -192,7 +196,7 @@ def create_batch_page(default_folder: Path) -> None:
                 window_select = ui.select(
                     options=[16, 32, 64, 128, 256],
                     value=16,
-                    label="Window size",
+                    label="Window Points",
                 ).classes("w-32")
                 analyze_selected_button = ui.button(
                     "Analyze selected",

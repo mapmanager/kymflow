@@ -18,3 +18,11 @@ class ThemeMode(str, Enum):
 
     DARK = "dark"
     LIGHT = "light"
+
+
+class ImageDisplayOrigin(str, Enum):
+    """Identify which UI element initiated an image display change."""
+
+    CONTRAST_WIDGET = "contrast_widget"
+    PROGRAMMATIC = "programmatic"
+    OTHER = "other"

@@ -9,6 +9,7 @@ from plotly.subplots import make_subplots
 from kymflow_core.enums import ThemeMode
 from kymflow_core.kym_file import KymFile, _medianFilter, _removeOutliers
 
+from .colorscales import get_colorscale
 from .theme import get_theme_colors, get_theme_template
 
 
@@ -136,6 +137,9 @@ def plot_image_line_plotly(
     remove_outliers: bool = False,
     median_filter: int = 0,
     theme: Optional[ThemeMode] = None,
+    colorscale: str = "Gray",
+    zmin: Optional[int] = None,
+    zmax: Optional[int] = None,
 ) -> go.Figure:
     """Create a figure with two subplots: kymograph image (top) and line plot (bottom).
     
@@ -149,6 +153,9 @@ def plot_image_line_plotly(
         median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
                        If even and > 0, raises ValueError.
         theme: Theme mode (DARK or LIGHT). Defaults to LIGHT if None.
+        colorscale: Plotly colorscale name (default: "Gray")
+        zmin: Minimum intensity for display (optional)
+        zmax: Maximum intensity for display (optional)
         
     Returns:
         Plotly Figure with two subplots ready for display
@@ -169,8 +176,8 @@ def plot_image_line_plotly(
         rows=2,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.6, 0.4],  # Image gets 60%, line plot gets 40%
+        vertical_spacing=0.025,
+        row_heights=[0.5, 0.5],  # Image gets 60%, line plot gets 40%
         # subplot_titles=("Kymograph", "Velocity vs Time"),
     )
     
@@ -205,13 +212,22 @@ def plot_image_line_plotly(
         # Image shape: (num_lines, pixels_per_line)
         # After transpose in heatmap z=image.T: (pixels_per_line, num_lines)
         # X-axis corresponds to num_lines (time dimension), so we use image_time
+        # Get colorscale (may be string or custom list)
+        colorscale_value = get_colorscale(colorscale)
+        
+        heatmap_kwargs = {
+            "z": image.T,
+            "x": image_time,
+            "colorscale": colorscale_value,
+            "showscale": False,
+        }
+        if zmin is not None:
+            heatmap_kwargs["zmin"] = zmin
+        if zmax is not None:
+            heatmap_kwargs["zmax"] = zmax
+        
         fig.add_trace(
-            go.Heatmap(
-                z=image.T,
-                x=image_time,
-                colorscale="Gray",
-                showscale=False,
-            ),
+            go.Heatmap(**heatmap_kwargs),
             row=1,
             col=1,
         )

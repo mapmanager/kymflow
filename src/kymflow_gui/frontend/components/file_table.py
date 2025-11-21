@@ -42,7 +42,7 @@ def create_file_table(
             continue
         
         # Set width and alignment for narrow columns (checkmark columns)
-        if col_name in ['File Name', "Analyzed", "Saved", "Window Size", 'pixels', 'lines', 'duration (s)', 'ms/line', 'um/pixel']:
+        if col_name in ['File Name', "Analyzed", "Saved", "Window Points", 'pixels', 'lines', 'duration (s)', 'ms/line', 'um/pixel']:
             column["style"] = "width: 50px; min-width: 50px; max-width: 50px;"
             column["align"] = "center"
             table.update()

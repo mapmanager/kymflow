@@ -13,7 +13,7 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         window_input = ui.select(
             options=[16, 32, 64, 128, 256],
             value=16,
-            label="Window size",
+            label="Window Points",
         ).classes("w-32")
         start_button = ui.button("Run analysis")
         cancel_button = ui.button("Cancel", on_click=task_state.request_cancel)
