@@ -3,8 +3,15 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from nicegui import ui
 
+import numpy as np
+
 from kymflow_core.enums import ThemeMode
-from kymflow_core.plotting import plot_image_line_plotly
+from kymflow_core.kym_file import _medianFilter, _removeOutliers
+from kymflow_core.plotting import (
+    plot_image_line_plotly,
+    update_colorscale,
+    update_contrast,
+)
 from kymflow_core.state import AppState, ImageDisplayParams
 
 from kymflow_core.utils.logging import get_logger
@@ -25,6 +32,9 @@ def create_image_line_viewer(app_state: AppState) -> None:
         "selected": None,
         "theme": app_state.theme_mode,
         "display_params": None,  # Store ImageDisplayParams
+        "current_figure": None,  # Store current figure reference for partial updates
+        "original_y_values": None,  # Store original unfiltered y-values for line plot
+        "original_time_values": None,  # Store original time values for line plot
     }
 
     def _render_combined() -> None:
@@ -51,6 +61,23 @@ def create_image_line_viewer(app_state: AppState) -> None:
             zmin=zmin,
             zmax=zmax,
         )
+        
+        # Store original unfiltered y-values for partial updates
+        if kf is not None:
+            time_values = kf.getAnalysisValue("time")
+            y_values = kf.getAnalysisValue("velocity")
+            if time_values is not None and y_values is not None:
+                state["original_time_values"] = np.array(time_values).copy()
+                state["original_y_values"] = np.array(y_values).copy()
+            else:
+                state["original_time_values"] = None
+                state["original_y_values"] = None
+        else:
+            state["original_time_values"] = None
+            state["original_y_values"] = None
+        
+        # Store figure reference
+        state["current_figure"] = fig
         plot.update_figure(fig)
 
     @app_state.selection_changed.connect
@@ -63,19 +90,84 @@ def create_image_line_viewer(app_state: AppState) -> None:
         if kf is app_state.selected_file:
             _render_combined()
 
+    def _update_line_plot_partial() -> None:
+        """Update only the Scatter trace y-values when filters change, preserving zoom."""
+        fig = state["current_figure"]
+        if fig is None:
+            # No figure yet, do full render
+            _render_combined()
+            return
+        
+        original_y = state["original_y_values"]
+        if original_y is None:
+            # No data available, do full render
+            _render_combined()
+            return
+        
+        # Get current filter settings
+        remove_outliers = remove_outliers_cb.value
+        median_filter_size = 5 if median_filter_cb.value else 0
+        
+        # Re-compute filtered y-values
+        filtered_y = original_y.copy()
+        if remove_outliers:
+            filtered_y = _removeOutliers(filtered_y)
+        if median_filter_size > 0:
+            if median_filter_size % 2 == 0:
+                median_filter_size = 5  # Default to 5 if even
+            filtered_y = _medianFilter(filtered_y, median_filter_size)
+        
+        # Find the Scatter trace and update its y-values
+        for trace in fig.data:
+            if isinstance(trace, go.Scatter):
+                trace.y = filtered_y
+                break
+        else:
+            # No Scatter trace found, do full render
+            _render_combined()
+            return
+        
+        # Update the plot with modified figure (preserves zoom via uirevision)
+        plot.update_figure(fig)
+    
     def _on_filter_change() -> None:
-        _render_combined()
+        """Handle filter checkbox changes - use partial update to preserve zoom."""
+        _update_line_plot_partial()
 
     @app_state.theme_changed.connect
     def _on_theme_change(mode: ThemeMode) -> None:
+        """Handle theme change - requires full render."""
         state["theme"] = mode
         _render_combined()
 
+    def _update_contrast_partial() -> None:
+        """Update only colorscale/zmin/zmax when contrast changes, preserving zoom."""
+        fig = state["current_figure"]
+        if fig is None:
+            # No figure yet, ignore contrast changes
+            return
+        
+        display_params = state["display_params"]
+        if display_params is None:
+            return
+        
+        # Update colorscale
+        update_colorscale(fig, display_params.colorscale)
+        
+        # Update contrast (zmin/zmax)
+        update_contrast(fig, zmin=display_params.zmin, zmax=display_params.zmax)
+        
+        # Update the plot with modified figure (preserves zoom via uirevision)
+        plot.update_figure(fig)
+
     @app_state.image_display_changed.connect
-    def _on_image_display_change(params: ImageDisplayParams, origin) -> None:
-        """Handle image display parameter changes from contrast widget."""
+    def _on_image_display_change(params: ImageDisplayParams) -> None:
+        """Handle image display parameter changes from contrast widget.
+        
+        Uses partial updates to preserve zoom/pan state.
+        """
         state["display_params"] = params
-        _render_combined()
+        _update_contrast_partial()
 
     remove_outliers_cb.on("update:model-value", _on_filter_change)
     median_filter_cb.on("update:model-value", _on_filter_change)

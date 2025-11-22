@@ -16,11 +16,16 @@ from .enums import ImageDisplayOrigin, SelectionOrigin, ThemeMode
 
 @dataclass
 class ImageDisplayParams:
-    """Parameters for adjusting image display (colorscale, intensity range)."""
+    """Complete event payload for image display parameter changes.
+    
+    Contains all information about the display parameter change, including
+    which UI element initiated the change (origin).
+    """
 
     colorscale: str
     zmin: Optional[int] = None
     zmax: Optional[int] = None
+    origin: ImageDisplayOrigin = ImageDisplayOrigin.OTHER
 
 
 class TaskState(EventedModel):
@@ -60,7 +65,7 @@ class AppState(EventedModel):
     selection_changed: ClassVar[Signal] = Signal(object, object)
     metadata_changed: ClassVar[Signal] = Signal(object)
     theme_changed: ClassVar[Signal] = Signal(object)
-    image_display_changed: ClassVar[Signal] = Signal(object, object)
+    image_display_changed: ClassVar[Signal] = Signal(object)
 
     def load_folder(self, folder: Path) -> FolderScanResult:
         """Scan folder for kymograph files and update app state."""
@@ -100,15 +105,10 @@ class AppState(EventedModel):
         self.theme_mode = mode
         self.theme_changed.emit(mode)
 
-    def set_image_display(
-        self,
-        colorscale: str,
-        zmin: Optional[int] = None,
-        zmax: Optional[int] = None,
-        origin: Optional[ImageDisplayOrigin] = None,
-    ) -> None:
-        """Emit signal to update image display parameters (colorscale, intensity range)."""
-        if origin is None:
-            origin = ImageDisplayOrigin.OTHER
-        params = ImageDisplayParams(colorscale=colorscale, zmin=zmin, zmax=zmax)
-        self.image_display_changed.emit(params, origin)
+    def set_image_display(self, params: ImageDisplayParams) -> None:
+        """Emit signal to update image display parameters (colorscale, intensity range).
+        
+        Args:
+            params: Complete event payload containing colorscale, zmin, zmax, and origin.
+        """
+        self.image_display_changed.emit(params)

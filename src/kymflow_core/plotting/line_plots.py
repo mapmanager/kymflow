@@ -12,6 +12,8 @@ from kymflow_core.kym_file import KymFile, _medianFilter, _removeOutliers
 from .colorscales import get_colorscale
 from .theme import get_theme_colors, get_theme_template
 
+from kymflow_core.utils.logging import get_logger
+logger = get_logger(__name__)
 
 def line_plot_plotly(
     kf: Optional[KymFile],
@@ -188,6 +190,7 @@ def plot_image_line_plotly(
             paper_bgcolor=bg_color,
             plot_bgcolor=bg_color,
             font=dict(color=fg_color),
+            uirevision="kymflow-plot",  # Preserve zoom/pan state
         )
         return fig
     
@@ -333,6 +336,65 @@ def plot_image_line_plotly(
         height=800,  # Taller figure for subplots
         showlegend=False,
         margin=dict(l=10, r=10, t=10, b=10),  # Tight margins similar to single plot
+        uirevision="kymflow-plot",  # Preserve zoom/pan state when updating traces
     )
     
     return fig
+
+
+def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:
+    """Update the x-axis range for both subplots in an image/line plotly figure.
+    
+    With shared_xaxes=True in make_subplots, the bottom subplot (row=2, line plot)
+    is the "master" x-axis that controls both subplots. This function updates
+    both subplots for consistency and clarity.
+    
+    Args:
+        fig: Plotly Figure with two subplots created by plot_image_line_plotly()
+        x_range: List of two floats [min, max] for the x-axis range
+    """
+    # Update master axis (row=2) - this controls both subplots with shared_xaxes
+    fig.update_xaxes(range=x_range, row=2, col=1)
+    # Also update row=1 for explicit consistency
+    fig.update_xaxes(range=x_range, row=1, col=1)
+
+
+def update_colorscale(fig: go.Figure, colorscale: str) -> None:
+    """Update the colorscale (color LUT) for the heatmap in an image/line plotly figure.
+    
+    This function updates only the colorscale property of the heatmap trace,
+    preserving all other figure properties including zoom/pan state (via uirevision).
+    
+    Args:
+        fig: Plotly Figure with two subplots created by plot_image_line_plotly()
+        colorscale: Colorscale name (e.g., "Gray", "Viridis", "inverted_grays")
+    """
+    colorscale_value = get_colorscale(colorscale)
+    fig.update_traces(
+        colorscale=colorscale_value,
+        selector=dict(type="heatmap"),
+    )
+
+
+def update_contrast(fig: go.Figure, zmin: Optional[int] = None, zmax: Optional[int] = None) -> None:
+    """Update the contrast (zmin/zmax) for the heatmap in an image/line plotly figure.
+    
+    This function updates the zmin and/or zmax properties of the heatmap trace,
+    preserving all other figure properties including zoom/pan state (via uirevision).
+    
+    Args:
+        fig: Plotly Figure with two subplots created by plot_image_line_plotly()
+        zmin: Minimum intensity value for display (optional)
+        zmax: Maximum intensity value for display (optional)
+    """
+    update_dict = {}
+    if zmin is not None:
+        update_dict["zmin"] = zmin
+    if zmax is not None:
+        update_dict["zmax"] = zmax
+    
+    if update_dict:
+        fig.update_traces(
+            **update_dict,
+            selector=dict(type="heatmap"),
+        )

@@ -9,7 +9,7 @@ from nicegui import ui
 from kymflow_core.enums import ImageDisplayOrigin, ThemeMode
 from kymflow_core.plotting.colorscales import COLORSCALE_OPTIONS
 from kymflow_core.plotting.image_plots import histogram_plot_plotly
-from kymflow_core.state import AppState
+from kymflow_core.state import AppState, ImageDisplayParams
 
 from kymflow_core.utils.logging import get_logger
 
@@ -96,12 +96,13 @@ def create_contrast_widget(app_state: AppState) -> None:
     def _on_colorscale_change(e) -> None:
         """Handle colorscale change."""
         state["colorscale"] = e.value if hasattr(e, 'value') else colorscale_select.value
-        app_state.set_image_display(
+        params = ImageDisplayParams(
             colorscale=state["colorscale"],
             zmin=state["zmin"],
             zmax=state["zmax"],
             origin=ImageDisplayOrigin.CONTRAST_WIDGET,
         )
+        app_state.set_image_display(params)
     
     def _on_slider_change() -> None:
         """Handle slider change (min or max)."""
@@ -137,12 +138,13 @@ def create_contrast_widget(app_state: AppState) -> None:
         max_value_label.text = str(new_zmax)
         
         # Emit signal and update histogram (these are throttled via event handler)
-        app_state.set_image_display(
+        params = ImageDisplayParams(
             colorscale=state["colorscale"],
             zmin=state["zmin"],
             zmax=state["zmax"],
             origin=ImageDisplayOrigin.CONTRAST_WIDGET,
         )
+        app_state.set_image_display(params)
         _update_histogram()
     
     def _on_log_toggle() -> None:
@@ -190,12 +192,13 @@ def create_contrast_widget(app_state: AppState) -> None:
                 
                 # Update histogram and emit signal
                 _update_histogram()
-                app_state.set_image_display(
+                params = ImageDisplayParams(
                     colorscale=state["colorscale"],
                     zmin=state["zmin"],
                     zmax=state["zmax"],
                     origin=ImageDisplayOrigin.PROGRAMMATIC,
                 )
+                app_state.set_image_display(params)
             else:
                 # No image available
                 state["zmin"] = 0
