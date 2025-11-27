@@ -13,6 +13,8 @@ from .kym_file import KymFile
 from .repository import FolderScanResult, scan_folder
 from .enums import ImageDisplayOrigin, SelectionOrigin, ThemeMode
 
+from .utils.logging import get_logger
+logger = get_logger(__name__)
 
 @dataclass
 class ImageDisplayParams:
@@ -27,6 +29,8 @@ class ImageDisplayParams:
     zmax: Optional[int] = None
     origin: ImageDisplayOrigin = ImageDisplayOrigin.OTHER
 
+    def __str__(self) -> str:
+        return f"ImageDisplayParams(colorscale: {self.colorscale}, zmin: {self.zmin}, zmax: {self.zmax}, origin: {self.origin})"
 
 class TaskState(EventedModel):
     """Lightweight container for tracking long-running UI tasks."""
@@ -72,7 +76,10 @@ class AppState(EventedModel):
         result = scan_folder(folder)
         self.folder = result.folder
         self.files = result.files
+        
+        logger.info(f"--- file_list_changed emit ---")
         self.file_list_changed.emit()
+        
         if self.files:
             self.select_file(self.files[0])
         else:
@@ -88,14 +95,18 @@ class AppState(EventedModel):
         if self.selected_file is kym_file:
             return
         self.selected_file = kym_file
+
+        logger.info(f"--- selection_changed emit --- kym_file: {kym_file} origin: {origin} ---")
         self.selection_changed.emit(kym_file, origin)
 
     def notify_metadata_changed(self, kym_file: KymFile) -> None:
         """Notify listeners that file metadata has been updated."""
+        logger.info(f"--- metadata_changed emit --- kym_file: {kym_file} ---")
         self.metadata_changed.emit(kym_file)
 
     def refresh_file_rows(self) -> None:
         """Notify listeners that file metadata changed without reloading folder."""
+        logger.info(f"--- file_list_changed emit ---")
         self.file_list_changed.emit()
 
     def set_theme(self, mode: ThemeMode) -> None:
@@ -103,6 +114,7 @@ class AppState(EventedModel):
         if self.theme_mode == mode:
             return
         self.theme_mode = mode
+        logger.info(f"--- theme_changed emit --- mode: {mode} ---")
         self.theme_changed.emit(mode)
 
     def set_image_display(self, params: ImageDisplayParams) -> None:
@@ -111,4 +123,5 @@ class AppState(EventedModel):
         Args:
             params: Complete event payload containing colorscale, zmin, zmax, and origin.
         """
+        logger.info(f"--- image_display_changed emit --- {params} ---")
         self.image_display_changed.emit(params)

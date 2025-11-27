@@ -199,11 +199,10 @@ def plot_image_line_plotly(
     header = kf.acquisition_metadata
     seconds_per_line = header.seconds_per_line or 0.001  # Default 1ms
     
-    # Calculate image time based on image dimensions
-    # Image shape: (num_lines, pixels_per_line) where num_lines is time dimension
+    # Calculate image time using KymFile API
+    num_lines = kf.num_lines
     image_time = None
-    if image is not None:
-        num_lines = image.shape[0]  # Time dimension
+    if image is not None and num_lines is not None:
         # Calculate time for each line: time[i] = i * seconds_per_line
         image_time = np.arange(num_lines) * seconds_per_line
     
@@ -343,16 +342,7 @@ def plot_image_line_plotly(
 
 
 def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:
-    """Update the x-axis range for both subplots in an image/line plotly figure.
-    
-    With shared_xaxes=True in make_subplots, the bottom subplot (row=2, line plot)
-    is the "master" x-axis that controls both subplots. This function updates
-    both subplots for consistency and clarity.
-    
-    Args:
-        fig: Plotly Figure with two subplots created by plot_image_line_plotly()
-        x_range: List of two floats [min, max] for the x-axis range
-    """
+    """Update the x-axis range for both subplots in an image/line plotly figure."""
     # Update master axis (row=2) - this controls both subplots with shared_xaxes
     fig.update_xaxes(range=x_range, row=2, col=1)
     # Also update row=1 for explicit consistency
@@ -360,15 +350,7 @@ def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:
 
 
 def update_colorscale(fig: go.Figure, colorscale: str) -> None:
-    """Update the colorscale (color LUT) for the heatmap in an image/line plotly figure.
-    
-    This function updates only the colorscale property of the heatmap trace,
-    preserving all other figure properties including zoom/pan state (via uirevision).
-    
-    Args:
-        fig: Plotly Figure with two subplots created by plot_image_line_plotly()
-        colorscale: Colorscale name (e.g., "Gray", "Viridis", "inverted_grays")
-    """
+    """Update the colorscale for the heatmap in an image/line plotly figure."""
     colorscale_value = get_colorscale(colorscale)
     fig.update_traces(
         colorscale=colorscale_value,
@@ -377,16 +359,7 @@ def update_colorscale(fig: go.Figure, colorscale: str) -> None:
 
 
 def update_contrast(fig: go.Figure, zmin: Optional[int] = None, zmax: Optional[int] = None) -> None:
-    """Update the contrast (zmin/zmax) for the heatmap in an image/line plotly figure.
-    
-    This function updates the zmin and/or zmax properties of the heatmap trace,
-    preserving all other figure properties including zoom/pan state (via uirevision).
-    
-    Args:
-        fig: Plotly Figure with two subplots created by plot_image_line_plotly()
-        zmin: Minimum intensity value for display (optional)
-        zmax: Maximum intensity value for display (optional)
-    """
+    """Update the contrast (zmin/zmax) for the heatmap in an image/line plotly figure."""
     update_dict = {}
     if zmin is not None:
         update_dict["zmin"] = zmin
@@ -398,3 +371,21 @@ def update_contrast(fig: go.Figure, zmin: Optional[int] = None, zmax: Optional[i
             **update_dict,
             selector=dict(type="heatmap"),
         )
+
+
+def reset_image_zoom(fig: go.Figure, kf: Optional[KymFile]) -> None:
+    """Reset the zoom to full scale for the kymograph image subplot."""
+    if kf is None:
+        return
+    
+    duration_seconds = kf.duration_seconds
+    pixels_per_line = kf.pixels_per_line
+    
+    # logger.info(f"reset_image_zoom: duration_seconds: {duration_seconds} pixels_per_line: {pixels_per_line}")
+
+    # Reset x-axis (time) for both subplots (they're shared)
+    fig.update_xaxes(range=[0, duration_seconds], row=1, col=1)
+    fig.update_xaxes(range=[0, duration_seconds], row=2, col=1)
+    
+    # Reset y-axis (position) for image subplot only
+    fig.update_yaxes(range=[0, pixels_per_line - 1], row=1, col=1)

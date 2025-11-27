@@ -550,6 +550,23 @@ class KymFile:
     experiment_metadata:
         Optional dictionary of user-supplied metadata that overrides the values
         inferred from Olympus header.
+
+    API Usage
+    ---------
+    Always use KymFile properties and methods rather than accessing internal
+    data structures directly. Key properties include:
+    
+    - ``duration_seconds``: Total recording duration in seconds
+    - ``pixels_per_line``: Number of pixels per line (spatial dimension)
+    - ``num_lines``: Number of lines (time dimension)
+    - ``acquisition_metadata``: OlympusHeader with metadata (seconds_per_line, um_per_pixel, etc.)
+    - ``ensure_image_loaded()``: Load and return the image array
+    
+    Example::
+    
+        kf = KymFile("file.tif", load_image=False)
+        duration = kf.duration_seconds  # Use API, don't calculate from image
+        pixels = kf.pixels_per_line     # Use API, don't use image.shape[1]
     """
 
     def __init__(
@@ -578,10 +595,16 @@ class KymFile:
 
         self._dirty: bool = False
 
+    def __str__(self) -> str:
+        return f"KymFile(filename: {self.path.name})"
+
     def summary_row(self) -> Dict[str, Any]:
         """Tabular summary suitable for file list views."""
         return {
             "File Name": self.path.name,
+            'Parent Folder': self.path.parent.name,
+            'Grandparent Folder': self.path.parent.parent.name,
+
             'Analyzed': '✓' if self.analysisExists else '',
             'Saved': '✓' if not self._dirty else '',
             'Window Points': self._analysis_parameters.parameters.get('window_size', '-'),
@@ -653,7 +676,7 @@ class KymFile:
             # abb 20251121
             self._image = np.flip(self._image, axis=1)
 
-        logger.info(f'image loaded: {self._image.shape} dtype:{self._image.dtype}')        
+        # logger.info(f'image loaded: {self._image.shape} dtype:{self._image.dtype}')        
         
         return self._image
 
@@ -907,9 +930,7 @@ class KymFile:
         return self._dfAnalysis is not None
 
     def getAnalysisValue(self, key: str) -> Any:
-        """
-        Get a value from the analysis DataFrame.
-        """
+        """Get a value from the analysis DataFrame."""
         if self._dfAnalysis is None:
             logger.warning(f"No analysis loaded for {self.path.name}")
             return None
@@ -924,16 +945,19 @@ class KymFile:
     # ------------------------------------------------------------------
     @property
     def num_lines(self) -> Optional[int]:
+        """Number of lines (time dimension) in the kymograph."""
         header = self.ensure_header_loaded()
         return header.num_lines
 
     @property
     def pixels_per_line(self) -> Optional[int]:
+        """Number of pixels per line (spatial dimension) in the kymograph."""
         header = self.ensure_header_loaded()
         return header.pixels_per_line
 
     @property
     def duration_seconds(self) -> Optional[float]:
+        """Total recording duration in seconds."""
         header = self.ensure_header_loaded()
         return header.duration_seconds
 

@@ -11,6 +11,7 @@ from kymflow_core.plotting import (
     plot_image_line_plotly,
     update_colorscale,
     update_contrast,
+    reset_image_zoom,
 )
 from kymflow_core.state import AppState, ImageDisplayParams
 
@@ -21,10 +22,11 @@ logger = get_logger(__name__)
 
 def create_image_line_viewer(app_state: AppState) -> None:
     """Create a combined viewer showing kymograph image and velocity plot in subplots."""
-    # Filter checkboxes (same as plot_viewer)
+    # Filter checkboxes and zoom button
     with ui.row().classes("w-full gap-2 items-center"):
         remove_outliers_cb = ui.checkbox("Remove outliers")
         median_filter_cb = ui.checkbox("Median filter")
+        full_zoom_btn = ui.button("Full zoom", icon="zoom_out_map")
     
     # Plot with larger height to accommodate both subplots
     plot = ui.plotly(go.Figure()).classes("w-full")
@@ -35,7 +37,12 @@ def create_image_line_viewer(app_state: AppState) -> None:
         "current_figure": None,  # Store current figure reference for partial updates
         "original_y_values": None,  # Store original unfiltered y-values for line plot
         "original_time_values": None,  # Store original time values for line plot
+        "uirevision": 0,  # Counter to control Plotly's uirevision for forced resets
     }
+
+    def _set_uirevision(fig: go.Figure) -> None:
+        """Apply the current uirevision to the figure."""
+        fig.layout.uirevision = f"kymflow-plot-{state['uirevision']}"
 
     def _render_combined() -> None:
         """Render the combined image and line plot."""
@@ -77,13 +84,30 @@ def create_image_line_viewer(app_state: AppState) -> None:
             state["original_y_values"] = None
         
         # Store figure reference
+        _set_uirevision(fig)
         state["current_figure"] = fig
+        plot.update_figure(fig)
+
+    def _reset_zoom(force_new_uirevision: bool = False) -> None:
+        """Reset zoom while optionally forcing Plotly to drop preserved UI state."""
+        fig = state["current_figure"]
+        kf = state["selected"]
+        if fig is None or kf is None:
+            return
+
+        if force_new_uirevision:
+            state["uirevision"] += 1
+            _set_uirevision(fig)
+
+        reset_image_zoom(fig, kf)
         plot.update_figure(fig)
 
     @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         state["selected"] = kf
         _render_combined()
+        # Reset to full zoom when selection changes
+        _reset_zoom(force_new_uirevision=True)
 
     @app_state.metadata_changed.connect
     def _on_metadata(kf) -> None:
@@ -169,6 +193,10 @@ def create_image_line_viewer(app_state: AppState) -> None:
         state["display_params"] = params
         _update_contrast_partial()
 
+    def _on_full_zoom() -> None:
+        """Handle full zoom button click - reset image zoom to full scale."""
+        _reset_zoom(force_new_uirevision=True)
+
     remove_outliers_cb.on("update:model-value", _on_filter_change)
     median_filter_cb.on("update:model-value", _on_filter_change)
-
+    full_zoom_btn.on("click", _on_full_zoom)
