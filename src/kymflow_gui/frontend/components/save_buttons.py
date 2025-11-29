@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow_core.state import AppState
+from kymflow_core.state import AppState, TaskState
 
 
-def create_save_buttons(app_state: AppState) -> None:
+def create_save_buttons(app_state: AppState, task_state: TaskState) -> None:
     """Create Save Selected and Save All buttons."""
     
     def _save_selected() -> None:
@@ -23,6 +23,7 @@ def create_save_buttons(app_state: AppState) -> None:
             success = kf.save_analysis()
             if success:
                 ui.notify(f"Saved {kf.path.name}", color="positive")
+                app_state.refresh_file_rows()
             else:
                 ui.notify(f"Nothing to save for {kf.path.name}", color="info")
         except Exception as e:
@@ -55,12 +56,33 @@ def create_save_buttons(app_state: AppState) -> None:
         
         if saved_count > 0:
             ui.notify(f"Saved {saved_count} file(s)", color="positive")
+            app_state.refresh_file_rows()
         if skipped_count > 0 and saved_count == 0:
             ui.notify(f"Skipped {skipped_count} file(s) (no changes or no analysis)", color="info")
         if error_count > 0:
             ui.notify(f"Errors saving {error_count} file(s)", color="negative")
     
     with ui.row().classes("gap-2 items-center"):
-        ui.button("Save Selected", on_click=_save_selected, icon="save")
-        ui.button("Save All", on_click=_save_all, icon="save_alt")
+        save_selected_button = ui.button("Save Selected", on_click=_save_selected, icon="save")
+        save_all_button = ui.button("Save All", on_click=_save_all, icon="save_alt")
+    
+    # Set initial disabled state and color
+    def _update_button_states() -> None:
+        running = task_state.running
+        save_selected_button.disabled = running
+        save_all_button.disabled = running
+        # Set red color when running (disabled) to verify buttons are actually disabled
+        if running:
+            save_selected_button.props("color=red")
+            save_all_button.props("color=red")
+        else:
+            save_selected_button.props(remove="color")
+            save_all_button.props(remove="color")
+    
+    _update_button_states()
+    
+    # Connect to task state changes (match task_progress.py pattern)
+    @task_state.events.running.connect  # type: ignore[attr-defined]
+    def _on_running_changed() -> None:
+        _update_button_states()
 

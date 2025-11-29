@@ -919,7 +919,7 @@ class KymFile:
                         
         self.load_metadata()
 
-        logger.info(f"Loaded analysis for {self.path.name}")
+        # logger.info(f"Loaded analysis for {self.path.name}")
         return True
         
     @property

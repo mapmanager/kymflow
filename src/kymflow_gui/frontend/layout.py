@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import webbrowser
 from pathlib import Path
 from typing import List
 
-from nicegui import ui
+from nicegui import ui, app
 
 from kymflow_core.enums import ThemeMode
 from kymflow_core.kym_file import KymFile
 from kymflow_core.state import AppState, TaskState
 from kymflow_core.tasks import run_batch_flow_analysis
-from kymflow_core.utils.logging import get_logger
+from kymflow_core.utils.logging import get_log_file_path, get_logger
 
 from .components.analysis_form import create_analysis_form
 from .components.analysis_toolbar import create_analysis_toolbar
+from .components.button_utils import sync_cancel_button
 from .components.contrast_widget import create_contrast_widget
 from .components.file_table import create_file_table
 from .components.folder_selector import create_folder_selector
@@ -24,7 +26,19 @@ from .components.task_progress import create_task_progress
 
 logger = get_logger(__name__)
 
+def open_external(url: str) -> None:
+    """Open a URL in the system browser (native) or new tab (browser)."""
+    # Heuristic: in native mode, a main_window is created
+    native = getattr(app, "native", None)
+    in_native = getattr(native, "main_window", None) is not None
 
+    if in_native:
+        # Native desktop app: open in system browser
+        webbrowser.open(url)
+    else:
+        # Browser mode: open in new tab
+        ui.run_javascript(f'window.open("{url}", "_blank")')
+        
 def _inject_global_styles() -> None:
     """Add shared CSS tweaks for NiceGUI components."""
     ui.add_head_html(
@@ -70,10 +84,17 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
                 on_click=lambda: _navigate("/batch"),
             ).props("flat text-color=white")
 
+            about_button = ui.button(
+                "About",
+                on_click=lambda: _navigate("/about"),
+            ).props("flat text-color=white")
+
             if current_page == "home":
                 home_button.disable()
             if current_page == "batch":
                 batch_button.disable()
+            if current_page == "about":
+                about_button.disable()
 
         # Right side: GitHub and theme buttons
         with ui.row().classes("items-center gap-2"):
@@ -84,9 +105,7 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
 
             github_icon.on(
                 "click",
-                lambda _: ui.run_javascript(
-                    'window.open("https://github.com/mapmanager/kymflow", "_blank")'
-                ),
+                lambda _: open_external("https://github.com/mapmanager/kymflow"),
             )
 
             github_icon.tooltip("Open GitHub repository")
@@ -135,7 +154,7 @@ def create_main_page(default_folder: Path) -> None:
             with ui.column().classes("shrink gap-2"):
                 create_task_progress(task_state)
             with ui.column().classes("shrink gap-2"):
-                create_save_buttons(app_state)
+                create_save_buttons(app_state, task_state)
 
         with ui.expansion("Files", value=True).classes("w-full"):
             create_file_table(app_state)
@@ -190,24 +209,24 @@ def create_batch_page(default_folder: Path) -> None:
                 color="warning",
             )
 
-        with ui.card().classes("w-full gap-4 p-4"):
-            with ui.row().classes("items-center gap-2 w-full"):
-                ui.label("Batch controls").classes("text-lg font-semibold")
-                window_select = ui.select(
-                    options=[16, 32, 64, 128, 256],
-                    value=16,
-                    label="Window Points",
-                ).classes("w-32")
-                analyze_selected_button = ui.button(
-                    "Analyze selected",
-                    on_click=lambda: _start_batch(True),
-                )
-                analyze_all_button = ui.button(
-                    "Analyze all",
-                    on_click=lambda: _start_batch(False),
-                )
-                cancel_button = ui.button("Cancel", on_click=per_file_task.request_cancel)
-                cancel_button.disabled = True
+        with ui.row().classes("w-full items-start gap-4"):
+            with ui.column().classes("flex-1 gap-2"):
+                with ui.card().classes("w-full gap-4 p-4"):
+                    with ui.row().classes("items-center gap-2 w-full"):
+                        ui.label("Batch controls").classes("text-lg font-semibold")
+                        window_select = ui.select(
+                            options=[16, 32, 64, 128, 256],
+                            value=16,
+                            label="Window Points",
+                        ).classes("w-32")
+                        analyze_selected_button = ui.button(
+                            "Analyze selected",
+                            on_click=lambda: _start_batch(True),
+                        )
+                        cancel_button = ui.button("Cancel", on_click=per_file_task.request_cancel)
+                        cancel_button.disabled = True
+            with ui.column().classes("shrink gap-2"):
+                create_save_buttons(app_state, per_file_task)
 
         selected_label = ui.label("Selected: 0 files").classes("text-sm text-gray-400")
 
@@ -251,16 +270,68 @@ def create_batch_page(default_folder: Path) -> None:
             on_batch_complete=lambda _cancelled: app_state.refresh_file_rows(),
         )
 
-    def _sync_buttons() -> None:
+    _update_selection([])
+    
+    # Set initial disabled state and color for analyze button
+    def _update_analyze_button_state() -> None:
         running = per_file_task.running
         analyze_selected_button.disabled = running
-        analyze_all_button.disabled = running
-        # Cancel button always visible, enabled only when running and cancellable
-        cancel_button.disabled = not (running and per_file_task.cancellable)
-
-    _update_selection([])
-    _sync_buttons()
-
+        # Set red color when running (disabled) to verify button is actually disabled
+        if running:
+            analyze_selected_button.props("color=red")
+        else:
+            analyze_selected_button.props(remove="color")
+    
+    _update_analyze_button_state()
+    
+    # Connect analyze button to task state changes (match task_progress.py pattern)
     @per_file_task.events.running.connect  # type: ignore[attr-defined]
     def _on_running_changed() -> None:
-        _sync_buttons()
+        _update_analyze_button_state()
+    
+    # Use button_utils for cancel button (it works, so keep it)
+    sync_cancel_button(cancel_button, per_file_task, red_when_running=True)
+
+
+def create_about_page(version_info: dict[str, str]) -> None:
+    """Render the About page with version/build information."""
+    ui.page_title('KymFlow - About')
+    _inject_global_styles()
+
+    app_state = AppState()
+    dark_mode = ui.dark_mode()
+    dark_mode.value = True
+    app_state.set_theme(ThemeMode.DARK)
+
+    _build_header(app_state, dark_mode, current_page="about")
+
+    with ui.column().classes("w-full p-4 gap-4"):
+        ui.label("Welcome to KymFlow").classes("text-2xl font-bold")
+        with ui.card().classes("w-full p-4 gap-2"):
+            ui.label("Version info").classes("text-lg font-semibold")
+            for key, value in version_info.items():
+                with ui.row().classes("items-center gap-2"):
+                    ui.label(f"{key}:").classes("text-sm text-gray-500")
+                    ui.label(str(value)).classes("text-sm")
+
+        # Log file viewer
+        log_path = get_log_file_path()
+
+        max_lines = 300
+        log_content = ""
+        if log_path and log_path.exists():
+            try:
+                from collections import deque
+                with log_path.open("r", encoding="utf-8", errors="replace") as f:
+                    tail_lines = deque(f, maxlen=max_lines)
+                log_content = "".join(tail_lines)
+                if len(tail_lines) == max_lines:
+                    log_content = f"...(truncated, last {max_lines} lines)...\n{log_content}"
+            except Exception as e:
+                log_content = f"Unable to read log file: {e}"
+                
+        with ui.expansion("Logs", value=False).classes("w-full"):
+            ui.label(f"Log file: {log_path or 'N/A'}").classes("text-sm text-gray-500")
+            ui.code(log_content or "[empty]").classes("w-full text-sm").style(
+                "white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow: auto;"
+            )

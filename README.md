@@ -34,7 +34,7 @@ KymFlow uses a **src/** layout and should be installed in editable mode. With
 uv this is a single command:
 
 ```bash
-uv pip install -e ".[gui,test]"
+uv pip install -e ".[gui]"
 ```
 
 This creates (or updates) `.venv/`, installs the package in editable mode, and
@@ -63,6 +63,10 @@ intact. The GUI defaults to port **8080**; tweak defaults in
 ---
 
 # Running Tests
+
+```bash
+uv pip install -e ".[test]"
+```
 
 ```bash
 uv run pytest
@@ -114,4 +118,15 @@ kymflow/
 Issues and pull requests are welcome. Please include clear steps to reproduce
 bugs and run `uv run pytest` before submitting changes. More detailed
 guidelines will be added later.
+
+
+# Troubleshooting
+
+To kill a stale nicegui. By default it should be running on port 8080.
+
+```bash
+sudo lsof -iTCP:8080 -sTCP:LISTEN
+```
+
+Then look for `pid` and `kill <pid>`
 

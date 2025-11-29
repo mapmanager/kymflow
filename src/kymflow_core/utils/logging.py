@@ -19,6 +19,9 @@ from typing import Optional, Union
 # Internal flag to avoid double-configuration
 _CONFIGURED = False
 
+# Store the log file path for retrieval
+_LOG_FILE_PATH: Optional[Path] = None
+
 
 def _expand_path(path: Union[str, Path]) -> Path:
     return Path(os.path.expanduser(str(path))).resolve()
@@ -69,9 +72,11 @@ def setup_logging(
     root.addHandler(console)
 
     # -------- File handler (optional) --------
+    global _LOG_FILE_PATH
     if log_file is not None:
         log_path = _expand_path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        _LOG_FILE_PATH = log_path
 
         file_handler = logging.handlers.RotatingFileHandler(
             filename=log_path,
@@ -100,3 +105,20 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     if name is None:
         name = "kymflow"
     return logging.getLogger(name)
+
+
+def get_log_file_path() -> Optional[Path]:
+    """
+    Get the path to the log file, if file logging is configured.
+
+    Returns
+    -------
+    Path to the log file, or None if file logging is not configured.
+
+    Examples
+    --------
+    >>> log_path = get_log_file_path()
+    >>> if log_path:
+    ...     print(f"Logging to: {log_path}")
+    """
+    return _LOG_FILE_PATH

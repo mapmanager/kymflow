@@ -38,6 +38,7 @@ def run_flow_analysis(
                 pct = max(0.0, min(1.0, completed / total))
             else:
                 pct = 0.0
+            pct = round(pct, 1)
             task_state.set_progress(pct, f"{completed}/{total} windows")
 
         try:
@@ -129,7 +130,8 @@ def run_batch_flow_analysis(
                     progress_callback=progress_cb,
                     is_cancelled=cancel_event.is_set,
                 )
-                kf.save_analysis()
+                # Auto-save disabled: users should explicitly save via save buttons
+                # kf.save_analysis()
             except FlowCancelled:
                 cancelled = True
                 per_file_task.message = "Cancelled"
@@ -141,7 +143,9 @@ def run_batch_flow_analysis(
                 if on_file_complete:
                     on_file_complete(kf)
 
-            overall_task.set_progress(index / total_files, f"{index}/{total_files} files")
+            # Update overall progress (clamp to 0.0-1.0 range)
+            overall_progress = max(0.0, min(1.0, index / total_files))
+            overall_task.set_progress(overall_progress, f"{index}/{total_files} files")
 
         per_file_task.running = False
         per_file_task.cancellable = False
