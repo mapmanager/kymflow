@@ -65,7 +65,7 @@ def line_plot_plotly(
     if x_values is None or y_values is None:
         fig = go.Figure()
         fig.add_annotation(
-            text="Run analysis to see velocity trace",
+            text="Analyze flow to see velocity trace",
             showarrow=False,
             x=0.5,
             y=0.5,
@@ -315,7 +315,7 @@ def plot_image_line_plotly(
     else:
         # No analysis data - show message
         fig.add_annotation(
-            text="Run analysis to see velocity trace",
+            text="Analyze flow to see velocity trace",
             showarrow=False,
             x=0.5,
             y=0.5,

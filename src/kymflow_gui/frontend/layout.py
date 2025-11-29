@@ -220,7 +220,7 @@ def create_batch_page(default_folder: Path) -> None:
                             label="Window Points",
                         ).classes("w-32")
                         analyze_selected_button = ui.button(
-                            "Analyze selected",
+                            "Analyze Flow",
                             on_click=lambda: _start_batch(True),
                         )
                         cancel_button = ui.button("Cancel", on_click=per_file_task.request_cancel)

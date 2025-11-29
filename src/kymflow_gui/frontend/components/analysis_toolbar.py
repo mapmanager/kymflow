@@ -5,8 +5,6 @@ from nicegui import ui
 from kymflow_core.state import AppState, TaskState
 from kymflow_core.tasks import run_flow_analysis
 
-from .button_utils import connect_button_states
-
 from kymflow_core.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +18,7 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
             value=16,
             label="Window Points",
         ).classes("w-32")
-        start_button = ui.button("Run analysis")
+        start_button = ui.button("Analyze Flow")
         cancel_button = ui.button("Cancel", on_click=task_state.request_cancel)
         cancel_button.disabled = True
 
@@ -33,6 +31,9 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
             return
         window_value = window_input.value
         window = int(window_value)
+
+        # Immediate UI feedback before the worker thread toggles state
+        start_button.disable()
 
         def _after_result(_success: bool) -> None:
             app_state.notify_metadata_changed(kf)
@@ -47,10 +48,26 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
 
     start_button.on("click", _on_run)
 
-    # Wire button states to task lifecycle in one place
-    connect_button_states(
-        action_buttons=[start_button],
-        cancel_button=cancel_button,
-        task_state=task_state,
-        red_cancel_when_running=True,
-    )
+    # Sync buttons based on task state; keep it on the UI thread via timer polling
+    def _sync_buttons() -> None:
+        running = task_state.running
+        cancellable = task_state.cancellable
+        if running:
+            start_button.disable()
+        else:
+            start_button.enable()
+
+        if running and cancellable:
+            cancel_button.enable()
+        else:
+            cancel_button.disable()
+
+        if running:
+            start_button.props("color=red")
+            cancel_button.props("color=red")
+        else:
+            start_button.props(remove="color")
+            cancel_button.props(remove="color")
+
+    _sync_buttons()
+    ui.timer(0.2, _sync_buttons)

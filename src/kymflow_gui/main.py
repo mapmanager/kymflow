@@ -65,6 +65,7 @@ def main(*, reload: bool | None = None) -> None:
         create_about_page(_getVersionInfo())
 
     _native = False  # when True, runs in native window (Mac only)
+    # reload = False
     ui.run(port=DEFAULT_PORT, reload=reload, native=_native)
 
 

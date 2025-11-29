@@ -3,7 +3,6 @@ from __future__ import annotations
 from nicegui import ui
 
 from kymflow_core.state import AppState, TaskState
-from .button_utils import sync_action_buttons
 
 
 def create_save_buttons(app_state: AppState, task_state: TaskState) -> None:
@@ -67,9 +66,19 @@ def create_save_buttons(app_state: AppState, task_state: TaskState) -> None:
         save_selected_button = ui.button("Save Selected", on_click=_save_selected, icon="save")
         save_all_button = ui.button("Save All", on_click=_save_all, icon="save_alt")
     
-    # Disable save buttons while analysis task is running
-    sync_action_buttons(
-        [save_selected_button, save_all_button],
-        task_state,
-        red_when_running=True,
-    )
+    # Sync buttons based on task state; keep it on the UI thread via timer polling
+    def _sync_buttons() -> None:
+        running = task_state.running
+        if running:
+            save_selected_button.disable()
+            save_all_button.disable()
+            save_selected_button.props("color=red")
+            save_all_button.props("color=red")
+        else:
+            save_selected_button.enable()
+            save_all_button.enable()
+            save_selected_button.props(remove="color")
+            save_all_button.props(remove="color")
+
+    _sync_buttons()
+    ui.timer(0.2, _sync_buttons)

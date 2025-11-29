@@ -73,6 +73,9 @@ def run_flow_analysis(
         pass
     task_state.cancelled.connect(_handle_cancel)
 
+    # Mark running immediately so UI can react before the thread fully starts
+    task_state.running = True
+    task_state.cancellable = True
     threading.Thread(target=_worker, daemon=True).start()
 
 
