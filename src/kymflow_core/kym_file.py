@@ -919,10 +919,12 @@ class KymFile:
         # Restore AnalysisParameters
         if "analysis_parameters" in metadata:
             snap_data = metadata["analysis_parameters"]
+            analyzed_at_str = snap_data.get("analyzed_at")
+            analyzed_at = datetime.fromisoformat(analyzed_at_str) if analyzed_at_str else None
             self._analysis_parameters = AnalysisParameters(
                 algorithm=snap_data.get("algorithm"),
                 parameters=snap_data.get("parameters"),
-                analyzed_at=datetime.fromisoformat(snap_data["analyzed_at"]),
+                analyzed_at=analyzed_at,
                 result_path=Path(snap_data["result_path"]) if snap_data.get("result_path") else None,
             )
 
