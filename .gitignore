@@ -26,3 +26,7 @@ wheels/
 **/.ipynb_checkpoints/
 *checkpoint.ipynb
 .notebooks/
+
+build/
+dist/
+
