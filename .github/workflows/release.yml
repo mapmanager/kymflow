@@ -1,0 +1,114 @@
+name: Release kymflow
+
+on:
+  push:
+    tags:
+      - "v*.*.*"   # e.g. v0.1.0
+
+permissions:
+  contents: write   # needed for creating/updating GitHub Releases
+
+jobs:
+  build-and-publish:
+    name: Build & publish to PyPI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Check tag matches pyproject version
+        run: |
+          python - << 'PYCODE'
+          import os, sys, pathlib, tomllib
+
+          pyproject = pathlib.Path("pyproject.toml")
+          data = tomllib.loads(pyproject.read_text())
+          version = data["project"]["version"]
+
+          ref_name = os.environ["GITHUB_REF_NAME"]  # e.g. 'v0.1.0'
+          if not ref_name.startswith("v"):
+              sys.exit(f"Tag {ref_name!r} does not start with 'v'")
+
+          tag_version = ref_name.lstrip("v")
+          if version != tag_version:
+              sys.exit(
+                  f"pyproject.toml version {version!r} "
+                  f"!= tag version {tag_version!r}"
+              )
+
+          print(f"Version check passed: {version} == {tag_version}")
+          PYCODE
+
+      - name: Build sdist and wheel
+        run: |
+          python -m build
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m twine upload dist/*
+
+  macos-intel-app:
+    name: Build macOS Intel app and attach to release
+    runs-on: macos-13   # Intel macOS runner
+    needs: build-and-publish
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install kymflow (GUI + PyInstaller) and pack tooling
+        run: |
+          python -m pip install --upgrade pip
+          # install your package with GUI + pyinstaller extras
+          python -m pip install ".[gui,pyinstaller]"
+          # install nicegui pack CLI (for `nicegui-pack`)
+          python -m pip install "nicegui[pack]"
+
+      - name: Clean previous build artifacts
+        run: |
+          rm -rf dist build
+
+      - name: Build macOS app with nicegui-pack
+        env:
+          KYMFLOW_GUI_RELOAD: "0"
+        run: |
+          nicegui-pack \
+            --windowed \
+            --name "KymFlow" \
+            --icon "pyinstaller/macos/kymflow.icns" \
+            src/kymflow_gui/main.py
+
+      - name: Archive KymFlow.app
+        run: |
+          mkdir -p release
+          cd dist
+          # Zip the .app bundle into a single download artifact
+          zip -r "../release/KymFlow-macos-intel-${{ github.ref_name }}.zip" "KymFlow.app"
+          cd ..
+
+      - name: Upload macOS Intel app to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/KymFlow-macos-intel-${{ github.ref_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
