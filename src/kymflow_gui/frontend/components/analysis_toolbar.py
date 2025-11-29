@@ -5,8 +5,11 @@ from nicegui import ui
 from kymflow_core.state import AppState, TaskState
 from kymflow_core.tasks import run_flow_analysis
 
-from .button_utils import sync_cancel_button
+from .button_utils import connect_button_states
 
+from kymflow_core.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
     
@@ -22,6 +25,8 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         cancel_button.disabled = True
 
     def _on_run() -> None:
+        logger.warning('')
+
         kf = app_state.selected_file
         if not kf:
             ui.notify("Select a file first", color="warning")
@@ -42,22 +47,10 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
 
     start_button.on("click", _on_run)
 
-    # Set initial disabled state and color for start button
-    def _update_start_button_state() -> None:
-        running = task_state.running
-        start_button.disabled = running
-        # Set red color when running (disabled) to verify button is actually disabled
-        if running:
-            start_button.props("color=red")
-        else:
-            start_button.props(remove="color")
-    
-    _update_start_button_state()
-    
-    # Connect start button to task state changes (match task_progress.py pattern)
-    @task_state.events.running.connect  # type: ignore[attr-defined]
-    def _on_running_changed() -> None:
-        _update_start_button_state()
-    
-    # Use button_utils for cancel button (it works, so keep it)
-    sync_cancel_button(cancel_button, task_state, red_when_running=True)
+    # Wire button states to task lifecycle in one place
+    connect_button_states(
+        action_buttons=[start_button],
+        cancel_button=cancel_button,
+        task_state=task_state,
+        red_cancel_when_running=True,
+    )
