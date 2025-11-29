@@ -1,4 +1,10 @@
-# flow_backend.py
+"""Radon transform-based flow analysis for kymograph images.
+
+This module implements a multiprocessing-capable flow analysis algorithm using
+Radon transforms to detect flow direction and velocity in kymograph data.
+The algorithm uses a sliding window approach with coarse and fine angle
+search to efficiently determine flow angles.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +19,11 @@ from skimage.transform import radon
 
 
 class FlowCancelled(Exception):
-    """Raised when analysis is cancelled by the caller."""
+    """Exception raised when flow analysis is cancelled.
+    
+    This exception is raised when the analysis is cancelled via the
+    is_cancelled callback during processing.
+    """
     pass
 
 
@@ -22,23 +32,24 @@ def radon_worker(
     angles: np.ndarray,
     angles_fine: np.ndarray,
 ) -> Tuple[float, np.ndarray]:
-    """
-    Multiprocessing worker to calculate flow for a single time window.
-
+    """Calculate flow angle for a single time window using Radon transforms.
+    
+    This function is designed to be used as a multiprocessing worker. It
+    performs a two-stage Radon transform: first a coarse search over all
+    angles, then a fine search around the best coarse angle.
+    
     Args:
-        data_window:
-            2D numpy array (time, space) for this window slice.
-            time axis = 0, space axis = 1.
-        angles:
-            1D array of coarse angles (degrees).
-        angles_fine:
-            1D array of fine angle offsets (degrees), typically small around 0.
-
+        data_window: 2D numpy array (time, space) for this window slice.
+            Time axis is 0, space axis is 1. The mean is subtracted before
+            processing.
+        angles: 1D array of coarse angles in degrees (typically 0-179).
+        angles_fine: 1D array of fine angle offsets in degrees, typically
+            small values around 0 (e.g., -2 to +2 degrees in 0.25 degree steps).
+    
     Returns:
-        worker_theta:
-            Best angle (float, in degrees) for this window.
-        worker_spread_matrix_fine:
-            1D array of variance values for each fine angle.
+        Tuple containing:
+            - Best angle in degrees (float) for this window.
+            - 1D array of variance values for each fine angle.
     """
     # Ensure float for radon + mean subtraction
     data_window = data_window.astype(np.float32, copy=False)
@@ -80,55 +91,54 @@ def mp_analyze_flow(
     use_multiprocessing: bool = True,
     processes: Optional[int] = None,
 ):
-    """
-    Analyze a blood-flow kymograph using Radon transforms.
-
+    """Analyze blood flow in a kymograph using Radon transforms.
+    
+    Performs a sliding window analysis along the time axis to detect flow
+    direction and velocity. Uses a two-stage Radon transform approach:
+    coarse search over 0-179 degrees, then fine refinement around the best
+    angle.
+    
     Data convention:
-        data is a 2D numpy array with shape (time, space),
-        where:
-            - axis 0 (index 0) is time (aka 'lines', 'line scans')
-            - axis 1 (index 1) is space (aka 'pixels')
-
-    Algorithm (same as your original mpAnalyzeFlow):
-        - Use a sliding window along the time axis.
+        data is a 2D numpy array with shape (time, space), where:
+        - axis 0 (index 0) is time (aka 'lines', 'line scans')
+        - axis 1 (index 1) is space (aka 'pixels')
+    
+    Algorithm:
+        - Use a sliding window along the time axis with 25% overlap.
         - For each window, run a coarse Radon transform over 0..179 degrees.
         - Find the angle that maximizes the variance in Radon space.
-        - Refine around that angle with a fine grid (e.g., ±2 degrees, 0.25 step).
+        - Refine around that angle with a fine grid (±2 degrees, 0.25 step).
         - Return best angles and associated fine spread.
-
+    
     Args:
-        data:
-            2D numpy array (time, space).
-        windowsize:
-            Number of time lines per window (must be multiple of 4 given stepsize).
-        start_pixel:
-            Start index in 'space' dimension (axis 1), inclusive.
-        stop_pixel:
-            Stop index in 'space' dimension (axis 1), exclusive.
-        verbose:
-            If True, prints basic timing and shape info to stdout.
-        progress_callback:
-            Optional callable (completed, total_windows).
-        progress_every:
-            Emit progress every N completed windows.
-        is_cancelled:
-            Optional callable returning True if computation should be cancelled.
-        use_multiprocessing:
-            If True, uses multiprocessing.Pool; otherwise runs in a single process.
-        processes:
-            Optional number of worker processes. Default: cpu_count() - 1 (min 1).
-
+        data: 2D numpy array (time, space) containing the kymograph data.
+        windowsize: Number of time lines per analysis window. Must be a
+            multiple of 4 (stepsize is 25% of windowsize).
+        start_pixel: Start index in space dimension (axis 1), inclusive.
+            If None, uses 0.
+        stop_pixel: Stop index in space dimension (axis 1), exclusive.
+            If None, uses full width.
+        verbose: If True, prints timing and shape information to stdout.
+        progress_callback: Optional callable(completed, total_windows) called
+            periodically to report progress.
+        progress_every: Emit progress every N completed windows. Defaults to 1.
+        is_cancelled: Optional callable() -> bool that returns True if
+            computation should be cancelled.
+        use_multiprocessing: If True, uses multiprocessing.Pool for parallel
+            computation. If False, runs sequentially. Defaults to True.
+        processes: Optional number of worker processes. If None, uses
+            cpu_count() - 1 (minimum 1). Defaults to None.
+    
     Returns:
-        thetas:
-            1D array (nsteps,) of best angle (degrees) per time window.
-        the_t:
-            1D array (nsteps,) of the center time index for each window.
-        spread_matrix_fine:
-            2D array (nsteps, len(angles_fine)) of fine variance values.
-
+        Tuple containing:
+            - thetas: 1D array (nsteps,) of best angle in degrees per window.
+            - the_t: 1D array (nsteps,) of center time index for each window.
+            - spread_matrix_fine: 2D array (nsteps, len(angles_fine)) of
+              variance values for fine angles.
+    
     Raises:
-        FlowCancelled:
-            If is_cancelled() returns True during processing.
+        ValueError: If data is not 2D or windowsize is invalid.
+        FlowCancelled: If is_cancelled() returns True during processing.
     """
     start_sec = time.time()
 

@@ -117,8 +117,10 @@ def get_log_file_path() -> Optional[Path]:
 
     Examples
     --------
-    >>> log_path = get_log_file_path()
-    >>> if log_path:
-    ...     print(f"Logging to: {log_path}")
+    ```python
+    log_path = get_log_file_path()
+    if log_path:
+        print(f"Logging to: {log_path}")
+    ```
     """
     return _LOG_FILE_PATH

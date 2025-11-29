@@ -1,5 +1,15 @@
 # KymFlow
 
+[![PyPI version](https://img.shields.io/pypi/v/kymflow.svg)](https://pypi.org/project/kymflow/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/kymflow.svg)](https://pypi.org/project/kymflow/)
+[![License: GPL v3+](https://img.shields.io/badge/License-GPLv3%2B-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![codecov](https://codecov.io/gh/mapmanager/kymflow/branch/main/graph/badge.svg)](https://codecov.io/gh/mapmanager/kymflow)
+<!--
+[![GitHub issues](https://img.shields.io/github/issues/mapmanager/kymflow.svg)](https://github.com/mapmanager/kymflow/issues)
+[![GitHub stars](https://img.shields.io/github/stars/mapmanager/kymflow.svg)](https://github.com/mapmanager/kymflow/stargazers)
+-->
+
+
 KymFlow is a NiceGUI-based application for browsing kymograph TIFF files,
 editing metadata, and running Radon-based flow analysis.
 
@@ -8,14 +18,46 @@ reuse the same API for analysis, metadata editing, or batch processing.
 
 ---
 
-# Requirements
+## Requirements
 
-- Python 3.9+
+- Python 3.11+
 - [uv](https://github.com/astral-sh/uv) for dependency management (recommended)
 
 ---
 
-# Getting the Source
+## Quick Start
+
+### Install and Run GUI
+
+1. **Create a virtual environment:**
+   
+   python -m venv kymflow-venv
+
+2. **Activate the virtual environment:**
+
+    ```bash
+    # On macOS/Linux:
+    source kymflow-venv/bin/activate
+   
+    # On Windows:
+    kymflow-venv\Scripts\activate
+    ```
+
+3. **Install KymFlow with GUI dependencies:**
+   
+    ```bash
+    pip install 'kymflow[gui]'
+    ```
+
+4. **Run the GUI:**
+   
+   ```bash
+   python -m kymflow_gui.main
+   ```
+      The GUI will open in your default web browser at `http://localhost:8080` (or the next available port).
+
+
+## Getting the Source
 
 Clone the repository (or download the ZIP) from GitHub:
 
@@ -28,10 +70,9 @@ All commands below assume you are in the project root.
 
 ---
 
-# Installation (uv)
+## Installation (uv)
 
-KymFlow uses a **src/** layout and should be installed in editable mode. With
-uv this is a single command:
+KymFlow uses a **src/** layout and should be installed in editable mode. With uv this is a single command:
 
 ```bash
 uv pip install -e ".[gui]"
@@ -43,12 +84,12 @@ pulls in the GUI + dev extras. If you add/remove dependencies in
 require reinstalling.
 
 > Not using uv?
-> Any standard tool can install the same extras via: `pip install -e ".[gui,test]"`
+> Any standard tool can install the same extras via: `pip install -e ".[gui]"`
 > or the equivalent in your environment.
 
 ---
 
-# Running the GUI
+### Running the GUI
 
 Launch the NiceGUI app with:
 
@@ -62,7 +103,7 @@ intact. The GUI defaults to port **8080**; tweak defaults in
 
 ---
 
-# Running Tests
+## Running Tests
 
 ```bash
 uv pip install -e ".[test]"
@@ -78,7 +119,7 @@ unavailable.
 
 ---
 
-# Working with Jupyter Notebooks
+## Working with Jupyter Notebooks
 
 Install the optional notebook extras (once):
 
@@ -98,7 +139,7 @@ dependencies run inside the same uv-managed environment.
 
 ---
 
-# Project Layout
+## Project Layout
 
 ```
 kymflow/
@@ -113,14 +154,14 @@ kymflow/
 
 ---
 
-# Contributing
+## Contributing
 
 Issues and pull requests are welcome. Please include clear steps to reproduce
 bugs and run `uv run pytest` before submitting changes. More detailed
 guidelines will be added later.
 
 
-# Troubleshooting
+## Troubleshooting
 
 To kill a stale nicegui. By default it should be running on port 8080.
 

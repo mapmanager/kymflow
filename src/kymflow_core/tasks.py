@@ -1,5 +1,7 @@
-"""
-Threaded helpers for running heavy analysis routines without blocking the GUI.
+"""Threaded helpers for running analysis routines without blocking the GUI.
+
+This module provides functions to run flow analysis in background threads,
+with progress tracking and cancellation support through TaskState objects.
 """
 
 from __future__ import annotations
@@ -21,10 +23,20 @@ def run_flow_analysis(
     stop_pixel: Optional[int] = None,
     on_result: Optional[Callable[[dict], None]] = None,
 ) -> None:
-    """
-    Launch the Radon flow analysis in a background thread.
-
-    Emits progress updates through `task_state` and supports cancellation.
+    """Run Radon flow analysis in a background thread.
+    
+    Launches the analysis in a daemon thread to avoid blocking the GUI.
+    Progress updates and cancellation are handled through the task_state object.
+    
+    Args:
+        kym_file: KymFile instance to analyze.
+        task_state: TaskState object for progress tracking and cancellation.
+        window_size: Number of time lines per analysis window. Defaults to 16.
+        start_pixel: Start index in space dimension (inclusive). If None, uses 0.
+        stop_pixel: Stop index in space dimension (exclusive). If None, uses
+            full width.
+        on_result: Optional callback function called when analysis completes
+            successfully. Receives a boolean indicating success.
     """
     cancel_event = threading.Event()
 
@@ -90,7 +102,25 @@ def run_batch_flow_analysis(
     on_file_complete: Optional[Callable[[KymFile], None]] = None,
     on_batch_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
-    """Run flow analysis sequentially for many files in a background thread."""
+    """Run flow analysis sequentially for multiple files in a background thread.
+    
+    Processes files one at a time in a daemon thread, with progress tracking
+    for both individual files and the overall batch. Supports cancellation
+    at any point.
+    
+    Args:
+        kym_files: Sequence of KymFile instances to analyze.
+        per_file_task: TaskState for tracking progress of the current file.
+        overall_task: TaskState for tracking overall batch progress.
+        window_size: Number of time lines per analysis window. Defaults to 16.
+        start_pixel: Start index in space dimension (inclusive). If None, uses 0.
+        stop_pixel: Stop index in space dimension (exclusive). If None, uses
+            full width.
+        on_file_complete: Optional callback called after each file completes
+            analysis. Receives the KymFile that was just analyzed.
+        on_batch_complete: Optional callback called when the entire batch
+            completes. Receives a boolean indicating if the batch was cancelled.
+    """
     cancel_event = threading.Event()
     files = list(kym_files)
     total_files = len(files)

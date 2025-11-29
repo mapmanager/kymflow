@@ -1,71 +1,47 @@
+"""Parser for Olympus microscope header files.
+
+This module provides functionality to parse Olympus .txt header files that
+accompany kymograph TIFF files. The header files contain acquisition parameters
+such as spatial and temporal resolution, image dimensions, and acquisition
+date/time.
+"""
+
 import logging
 import os
 
 logger = logging.getLogger(__name__)
 
 def _readOlympusHeader(tifPath):
-    """Read the Olympus header from exported txt file.
-
-        Return:
-            dx:
-            dt:
-
-        The important Olympus txt header lines are:
-            "Date"	"11/02/2022 12:54:17.359 PM"
-            "File Version"	"2.1.2.3"
-            "System Version"	"2.3.2.169"
-
-            "X Dimension"	"38, 0.0 - 10.796 [um], 0.284 [um/pixel]"
-            "T Dimension"	"1, 0.000 - 35.099 [s], Interval FreeRun"
-            "Image Size"	"38 * 30000 [pixel]"
-
-            "Bits/Pixel"	"12 [bits]"
-
-        20230404
-
-        "[General]"	""
-        "Name"	"Live"
-        "Scan Mode"	"XT"
-        "Date"	"04/04/2023 02:01:15.183 PM"
-        "System Name"	"FVMPE-RS"
-        "System Version"	"2.3.2.169"
-        "[Image]"	""
-        "Primary Dimensions"	"X * T"
-        "Image Size"	"37 * 512 [pixel]"
-        "Image Size(Unit Converted)"	"8.140 [um] * 599.040 [ms]"
-        "[Reference Image]"	""
-        "Image Size"	"512 * 512 [pixel]"
-        "Image Size(Unit Converted)"	"112.636 [um] * 112.636 [um]"
-        "[Acquisition]"	""
-        "Objective Lens"	"XLUMPLFLN20XW"
-        "Objective Lens Mag."	"20.0X"
-        "Objective Lens NA"	"1.0"
-        "Scan Device"	"Galvano"
-        "Scan Direction"	"Oneway"
-        "Sampling Speed"	"2.0 [us/pixel]"
-        "Sequential Mode"	"None"
-        "Integration Type"	"None"
-        "Integration Count"	"0"
-        "Region Mode"	"Line"
-        "Find Mode"	"x1"
-        "Rotation"	"0.0 [deg]"
-        "Pan X"	"0.0 [um]"
-        "Pan Y"	"0.0 [um]"
-        "Zoom"	"x5.65"
-        "ADM"	"ADM800"
-        "MirrorTurret 1"	"DMVBOIR"
-        "[Channel 1]"	""
-        "Channel Name"	"RNDD2"
-        "Dye Name"	"Alexa Fluor 488"
-        "Emission WaveLength"	"520 [nm]"
-        "PMT Voltage"	"550 [V]"
-        "BF Name"	"BA495-540"
-        "Emission DM Name"	"SDM570"
-        "Bits/Pixel"	"12 [bits]"
-        "Laser Wavelength"	"920 [nm]"
-        "Laser Transmissivity"	"5.0 [%]"
-        "Laser ND Filter"	"None"
-
+    """Read and parse Olympus header from accompanying .txt file.
+    
+    Parses the Olympus header file that should be in the same directory as
+    the TIFF file with the same base name. Extracts key acquisition parameters
+    including spatial resolution (um/pixel), temporal resolution (seconds/line),
+    image dimensions, and acquisition date/time.
+    
+    The function looks for specific header lines:
+    - "X Dimension": Contains spatial resolution (um/pixel)
+    - "T Dimension": Contains total duration (seconds)
+    - "Image Size": Contains pixels per line and number of lines
+    - "Date": Contains acquisition date and time
+    - "Bits/Pixel": Contains bit depth
+    
+    Args:
+        tifPath: Path to the TIFF file. The corresponding .txt file will be
+            looked up in the same directory.
+    
+    Returns:
+        Dictionary containing parsed header values:
+        - dateStr: Acquisition date string
+        - timeStr: Acquisition time string
+        - umPerPixel: Spatial resolution in micrometers per pixel
+        - secondsPerLine: Temporal resolution in seconds per line (calculated)
+        - durImage_sec: Total image duration in seconds
+        - pixelsPerLine: Number of pixels per line (spatial dimension)
+        - numLines: Number of lines (temporal dimension)
+        - bitsPerPixel: Bit depth of the image
+        
+        Returns None if the .txt file is not found.
     """
 
     txtPath = os.path.splitext(tifPath)[0] + '.txt'
@@ -137,11 +113,11 @@ def _readOlympusHeader(tifPath):
 
     # april 5, 2023
     if retDict['durImage_sec'] is None:
-        logger.error(f'did not get durImage_sec')
+        logger.error('did not get durImage_sec')
     else:
         retDict['secondsPerLine'] = retDict['durImage_sec'] / retDict['numLines']
 
     if retDict['umPerPixel'] is None:
-        logger.error(f'did not get umPerPixel')
+        logger.error('did not get umPerPixel')
 
     return retDict

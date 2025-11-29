@@ -16,23 +16,32 @@ from .kym_file import KymFile, collect_metadata
 
 @dataclass
 class FolderScanResult:
-    """Convenience bundle for folder level information."""
+    """Result of scanning a folder for kymograph files.
+    
+    Attributes:
+        folder: Path to the scanned folder.
+        files: List of KymFile instances found in the folder.
+    """
 
     folder: Path
     files: List[KymFile]
 
 
 def scan_folder(folder: str | Path, *, load_images: bool = False) -> FolderScanResult:
-    """
-    Create `KymFile` objects for every `.tif` in `folder`.
-
-    Parameters
-    ----------
-    folder:
-        Directory to inspect (non-recursive).
-    load_images:
-        If True, TIFF arrays are loaded immediately; otherwise, they are loaded
-        lazily when accessed.
+    """Scan a folder for kymograph TIFF files.
+    
+    Creates KymFile objects for every .tif file found in the specified folder.
+    The scan is non-recursive (only direct children of the folder are checked).
+    
+    Args:
+        folder: Directory path to scan for TIFF files.
+        load_images: If True, TIFF image arrays are loaded immediately.
+            If False, images are loaded lazily when accessed. Defaults to False
+            for efficient metadata-only workflows.
+    
+    Returns:
+        FolderScanResult containing the folder path and list of KymFile
+        instances found.
     """
     base = Path(folder)
     tif_paths = sorted(
@@ -43,10 +52,16 @@ def scan_folder(folder: str | Path, *, load_images: bool = False) -> FolderScanR
 
 
 def metadata_table(folder: str | Path) -> Sequence[dict]:
-    """
-    Return metadata dictionaries for each TIFF under `folder`.
-
-    Uses the lighter-weight `collect_metadata` helper so callers can quickly
-    populate tables without instantiating `KymFile` objects.
+    """Get metadata dictionaries for all TIFF files in a folder.
+    
+    Lightweight alternative to scan_folder() that returns metadata dictionaries
+    instead of KymFile objects. Useful for quickly populating tables without
+    the overhead of instantiating full KymFile objects.
+    
+    Args:
+        folder: Directory path to scan for TIFF files.
+    
+    Returns:
+        Sequence of metadata dictionaries, one per TIFF file found.
     """
     return collect_metadata(folder)

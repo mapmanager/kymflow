@@ -96,8 +96,14 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
             if current_page == "about":
                 about_button.disable()
 
-        # Right side: GitHub and theme buttons
+        # Right side: Documentation, GitHub and theme buttons
         with ui.row().classes("items-center gap-2"):
+            # Documentation "button" as a clickable icon
+            docs_icon = ui.button(
+                icon="menu_book",
+                on_click=lambda _: open_external("https://mapmanager.github.io/kymflow/"),
+            ).props("flat round dense text-color=white").tooltip("Open documentation")
+            
             # GitHub "button" as a clickable image (no background)
             github_icon = ui.image(
                 "https://cdn.simpleicons.org/github/ffffff"
