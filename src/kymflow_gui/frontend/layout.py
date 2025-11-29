@@ -98,7 +98,7 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
 
         # Right side: GitHub and theme buttons
         with ui.row().classes("items-center gap-2"):
-            # --- GitHub "button" as a clickable image (no background) ---
+            # GitHub "button" as a clickable image (no background)
             github_icon = ui.image(
                 "https://cdn.simpleicons.org/github/ffffff"
             ).classes("w-6 h-6 cursor-pointer")
@@ -157,7 +157,10 @@ def create_main_page(default_folder: Path) -> None:
                 create_save_buttons(app_state, task_state)
 
         with ui.expansion("Files", value=True).classes("w-full"):
-            create_file_table(app_state)
+            # Retrieve stored selection for home page
+            stored_selection = app.storage.browser.get('home_selection_path', None)
+            restore_selection = [stored_selection] if stored_selection else None
+            create_file_table(app_state, restore_selection=restore_selection)
 
         with ui.expansion("Contrast Controls", value=False).classes("w-full"):
             create_contrast_widget(app_state)
@@ -230,11 +233,22 @@ def create_batch_page(default_folder: Path) -> None:
 
         selected_label = ui.label("Selected: 0 files").classes("text-sm text-gray-400")
 
+        def _update_selection(files: List[KymFile]) -> None:
+            selected_files["files"] = files
+            selected_label.set_text(f"Selected: {len(files)} file(s)")
+
+        # Initialize selection state before the table renders and fires callbacks
+        _update_selection([])
+
         with ui.expansion("Files", value=True).classes("w-full"):
+            # Retrieve stored selection for batch page
+            stored_selection = app.storage.browser.get('batch_selection_paths', [])
+            restore_selection = stored_selection if isinstance(stored_selection, list) else []
             create_file_table(
                 app_state,
                 selection_mode="multiple",
-                on_selection_change=lambda files: _update_selection(files),
+                on_selection_change=_update_selection,
+                restore_selection=restore_selection,
             )
 
         with ui.row().classes("w-full gap-4"):
@@ -244,10 +258,6 @@ def create_batch_page(default_folder: Path) -> None:
             with ui.card().classes("flex-1 gap-2 p-4"):
                 ui.label("Within file").classes("font-semibold")
                 create_task_progress(per_file_task)
-
-    def _update_selection(files: List[KymFile]) -> None:
-        selected_files["files"] = files
-        selected_label.set_text(f"Selected: {len(files)} file(s)")
 
     def _start_batch(selected_only: bool) -> None:
         if per_file_task.running:

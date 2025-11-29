@@ -327,6 +327,15 @@ class ExperimentMetadata:
             grid_span=1,
         )
     )
+    region: Optional[str] = field(
+        default='',
+        metadata=field_metadata(
+            editable=True,
+            label="Region",
+            widget_type="text",
+            grid_span=1,
+        )
+    )
     cell_type: Optional[str] = field(
         default='',
         metadata=field_metadata(
@@ -336,11 +345,29 @@ class ExperimentMetadata:
             grid_span=1,
         )
     )
-    region: Optional[str] = field(
+    depth: Optional[float] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=True,
+            label="Depth",
+            widget_type="number",
+            grid_span=1,
+        )
+    )
+    branch_order: Optional[int] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=True,
+            label="Branch order",
+            widget_type="number",
+            grid_span=1,
+        )
+    )
+    direction: Optional[str] = field(
         default='',
         metadata=field_metadata(
             editable=True,
-            label="Region",
+            label="Direction",
             widget_type="text",
             grid_span=1,
         )

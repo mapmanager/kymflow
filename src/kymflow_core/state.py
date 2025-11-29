@@ -77,7 +77,7 @@ class AppState(EventedModel):
         self.folder = result.folder
         self.files = result.files
         
-        logger.info(f"--- file_list_changed emit ---")
+        logger.info(f"--> emit file_list_changed")
         self.file_list_changed.emit()
         
         if self.files:
@@ -96,17 +96,17 @@ class AppState(EventedModel):
             return
         self.selected_file = kym_file
 
-        logger.info(f"--- selection_changed emit --- kym_file: {kym_file} origin: {origin} ---")
+        logger.info(f"--> emit selection_changed kym_file: {kym_file} origin: {origin}")
         self.selection_changed.emit(kym_file, origin)
 
     def notify_metadata_changed(self, kym_file: KymFile) -> None:
         """Notify listeners that file metadata has been updated."""
-        logger.info(f"--- metadata_changed emit --- kym_file: {kym_file} ---")
+        logger.info(f"--> emit metadata_changed kym_file: {kym_file}")
         self.metadata_changed.emit(kym_file)
 
     def refresh_file_rows(self) -> None:
         """Notify listeners that file metadata changed without reloading folder."""
-        logger.info(f"--- file_list_changed emit ---")
+        logger.info(f"--> emit file_list_changed")
         self.file_list_changed.emit()
 
     def set_theme(self, mode: ThemeMode) -> None:
@@ -114,7 +114,7 @@ class AppState(EventedModel):
         if self.theme_mode == mode:
             return
         self.theme_mode = mode
-        logger.info(f"--- theme_changed emit --- mode: {mode} ---")
+        logger.info(f"--> emit theme_changed mode: {mode}")
         self.theme_changed.emit(mode)
 
     def set_image_display(self, params: ImageDisplayParams) -> None:
@@ -123,5 +123,5 @@ class AppState(EventedModel):
         Args:
             params: Complete event payload containing colorscale, zmin, zmax, and origin.
         """
-        logger.info(f"--- image_display_changed emit --- {params} ---")
+        logger.info(f"--> emit image_display_changed {params}")
         self.image_display_changed.emit(params)

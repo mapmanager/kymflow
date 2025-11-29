@@ -10,7 +10,7 @@ from pathlib import Path
 
 from nicegui import native, ui
 
-from kymflow_gui.config import DEFAULT_DATA_DIR, DEFAULT_PORT
+from kymflow_gui.config import DEFAULT_DATA_DIR, DEFAULT_PORT, STORAGE_SECRET
 from kymflow_gui.frontend.layout import (
     create_about_page,
     create_batch_page,
@@ -66,7 +66,7 @@ def main(*, reload: bool | None = None) -> None:
 
     _native = False  # when True, runs in native window (Mac only)
     # reload = False
-    ui.run(port=DEFAULT_PORT, reload=reload, native=_native)
+    ui.run(port=DEFAULT_PORT, reload=reload, native=_native, storage_secret=STORAGE_SECRET)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
