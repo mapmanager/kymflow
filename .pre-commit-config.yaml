@@ -1,0 +1,25 @@
+repos:
+  # Basic hygiene hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      # prevent accidentally committing massive files
+      - id: check-added-large-files
+        args: ["--maxkb=80000"]  # 80 MB
+
+  # Ruff linter + (optional) formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      - id: ruff
+        args: ["--fix"]  # auto-fix what it can
+      - id: ruff-format  # black-compatible formatter
+
+  # If you prefer Black instead of ruff-format, use this:
+  # - repo: https://github.com/psf/black
+  #   rev: 24.3.0
+  #   hooks:
+  #     - id: black
