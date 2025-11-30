@@ -1,0 +1,38 @@
+# codecov.yml
+
+codecov:
+  # Default branch for comparisons
+  branch: main
+
+coverage:
+  precision: 1       # show 1 decimal place, e.g. 92.3%
+  round: down
+  range: 50..100     # color scale for badge (optional)
+
+  status:
+    project:
+      default:
+        # fail PR status if total coverage drops more than X%
+        threshold: 1.0  # 1% tolerance
+        target: auto    # let Codecov choose target based on base branch
+
+    patch:
+      default:
+        # coverage on changed lines in a PR
+        threshold: 1.0
+        target: auto
+
+# Only include coverage from the main source packages
+ignore:
+  - "tests/"
+  - "docs/"
+  - "site/"
+  - "pyinstaller/"
+
+flags:
+  unittests:
+    carryforward: true      # keep this flag’s data even if no new upload for some commits
+  py3.11:
+    carryforward: true
+  py3.12:
+    carryforward: true
