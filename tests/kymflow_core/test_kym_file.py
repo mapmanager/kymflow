@@ -12,11 +12,11 @@ import numpy as np
 import pytest
 
 from kymflow_core.kym_file import (
-    ExperimentMetadata,
     KymFile,
     collect_metadata,
     iter_metadata,
 )
+from kymflow_core.metadata import ExperimentMetadata
 from kymflow_core.utils.logging import get_logger, setup_logging
 
 setup_logging()

@@ -73,10 +73,13 @@ nav:
   - Getting Started: user-guide/getting-started.md
   - GUI Usage: user-guide/gui-usage.md
   - Batch Processing: user-guide/batch-processing.md
+  - File Formats: file-formats.md
+  - Algorithms: algorithms.md
+  - Notebooks: examples/notebooks.md
   - API Reference:
     - kymflow_core.kym_file: api/kym_file.md
+    - kymflow_core.metadata: api/metadata.md
     - kymflow_core.kym_flow_radon_gpt: api/kym_flow_radon_gpt.md
     - kymflow_core.repository: api/repository.md
     - kymflow_core.state: api/state.md
-  - Notebooks: examples/notebooks.md
   - About: about.md

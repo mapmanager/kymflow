@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-# Configure NiceGUI testing plugin
 # Note: Parent conftest.py fixtures (like test_data_dir) are automatically available
-pytest_plugins = ["nicegui.testing.plugin"]
+# pytest_plugins is now defined in tests/conftest.py (top-level)
 
 
 @pytest.fixture

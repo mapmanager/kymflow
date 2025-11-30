@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+# Configure NiceGUI testing plugin
+pytest_plugins = ["nicegui.testing.plugin"]
+
 # Path to test data directory
 TEST_DATA_DIR = Path(__file__).parent / "data"
 
