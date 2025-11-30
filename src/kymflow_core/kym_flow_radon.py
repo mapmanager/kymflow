@@ -84,6 +84,8 @@ def mp_analyze_flow(
     windowsize: int,
     start_pixel: Optional[int] = None,
     stop_pixel: Optional[int] = None,
+    start_line: Optional[int] = None,
+    stop_line: Optional[int] = None,
     *,
     verbose: bool = False,
     progress_callback: Optional[Callable[[int, int], Any]] = None,
@@ -119,6 +121,10 @@ def mp_analyze_flow(
             If None, uses 0.
         stop_pixel: Stop index in space dimension (axis 1), exclusive.
             If None, uses full width.
+        start_line: Start index in time dimension (axis 0), inclusive.
+            If None, uses 0.
+        stop_line: Stop index in time dimension (axis 0), exclusive.
+            If None, uses full height (n_time).
         verbose: If True, prints timing and shape information to stdout.
         progress_callback: Optional callable(completed, total_windows) called
             periodically to report progress.
@@ -164,6 +170,10 @@ def mp_analyze_flow(
         start_pixel = 0
     if stop_pixel is None:
         stop_pixel = n_space
+    if start_line is None:
+        start_line = 0
+    if stop_line is None:
+        stop_line = n_time
 
     # Coarse and fine angle grids (degrees)
     angles = np.arange(180, dtype=np.float32)  # 0..179 degrees

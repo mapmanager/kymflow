@@ -36,7 +36,7 @@ import tifffile
 # import scipy.signal
 
 from .metadata import ExperimentMetadata, OlympusHeader, AnalysisParameters
-from .kym_flow_radon_gpt import mp_analyze_flow
+from .kym_flow_radon import mp_analyze_flow
 from .analysis_utils import _removeOutliers, _medianFilter
 from .utils.logging import get_logger
 
@@ -169,9 +169,7 @@ class KymFile:
             "Grandparent Folder": self.path.parent.parent.name,
             "Analyzed": "✓" if self.analysisExists else "",
             "Saved": "✓" if not self._dirty else "",
-            "Window Points": self._analysis_parameters.parameters.get(
-                "window_size", "-"
-            ),
+            "Window Points": self._analysis_parameters.window_size or "-",
             "pixels": self.pixels_per_line or "-",
             "lines": self.num_lines or "-",
             "duration (s)": self.duration_seconds or "-",
@@ -328,6 +326,8 @@ class KymFile:
         *,  # boundary between positional and keyword-only arguments
         start_pixel: Optional[int] = None,
         stop_pixel: Optional[int] = None,
+        start_line: Optional[int] = None,
+        stop_line: Optional[int] = None,
         progress_callback: Optional[ProgressCallback] = None,
         is_cancelled: Optional[CancelCallback] = None,
         use_multiprocessing: bool = True,
@@ -346,6 +346,10 @@ class KymFile:
                 uses 0.
             stop_pixel: Stop index in space dimension (exclusive). If None,
                 uses full width.
+            start_line: Start index in time dimension (inclusive). If None,
+                uses 0.
+            stop_line: Stop index in time dimension (exclusive). If None,
+                uses full height.
             progress_callback: Optional callback function(completed, total)
                 called periodically to report progress.
             is_cancelled: Optional callback function() -> bool that returns
@@ -365,6 +369,8 @@ class KymFile:
             window_size,
             start_pixel=start_pixel,
             stop_pixel=stop_pixel,
+            start_line=start_line,
+            stop_line=stop_line,
             progress_callback=progress_callback,
             is_cancelled=is_cancelled,
             use_multiprocessing=use_multiprocessing,
@@ -372,12 +378,12 @@ class KymFile:
         # Store lightweight metadata for UI access.
         self._analysis_parameters = AnalysisParameters(
             algorithm="mpRadon",
-            parameters={
-                "window_size": window_size,
-                "start_pixel": start_pixel,
-                "stop_pixel": stop_pixel,
-                "use_multiprocessing": use_multiprocessing,
-            },
+            window_size=window_size,
+            start_pixel=start_pixel,
+            stop_pixel=stop_pixel,
+            start_line=start_line,
+            stop_line=stop_line,
+            use_multiprocessing=use_multiprocessing,
             analyzed_at=datetime.now(timezone.utc),
         )
 
@@ -531,14 +537,39 @@ class KymFile:
             analyzed_at = (
                 datetime.fromisoformat(analyzed_at_str) if analyzed_at_str else None
             )
-            self._analysis_parameters = AnalysisParameters(
-                algorithm=snap_data.get("algorithm"),
-                parameters=snap_data.get("parameters"),
-                analyzed_at=analyzed_at,
-                result_path=Path(snap_data["result_path"])
-                if snap_data.get("result_path")
-                else None,
-            )
+            
+            # Handle backward compatibility: check for old nested structure
+            if "parameters" in snap_data:
+                # Old structure: extract from nested parameters dict
+                params = snap_data.get("parameters", {})
+                self._analysis_parameters = AnalysisParameters(
+                    algorithm=snap_data.get("algorithm"),
+                    window_size=params.get("window_size"),
+                    start_pixel=params.get("start_pixel"),
+                    stop_pixel=params.get("stop_pixel"),
+                    start_line=params.get("start_line"),
+                    stop_line=params.get("stop_line"),
+                    use_multiprocessing=params.get("use_multiprocessing", True),
+                    analyzed_at=analyzed_at,
+                    result_path=Path(snap_data["result_path"])
+                    if snap_data.get("result_path")
+                    else None,
+                )
+            else:
+                # New flattened structure: fields are at top level
+                self._analysis_parameters = AnalysisParameters(
+                    algorithm=snap_data.get("algorithm"),
+                    window_size=snap_data.get("window_size"),
+                    start_pixel=snap_data.get("start_pixel"),
+                    stop_pixel=snap_data.get("stop_pixel"),
+                    start_line=snap_data.get("start_line"),
+                    stop_line=snap_data.get("stop_line"),
+                    use_multiprocessing=snap_data.get("use_multiprocessing", True),
+                    analyzed_at=analyzed_at,
+                    result_path=Path(snap_data["result_path"])
+                    if snap_data.get("result_path")
+                    else None,
+                )
 
         return True
 

@@ -586,7 +586,12 @@ class AnalysisParameters:
 
     Attributes:
         algorithm: Name of the analysis algorithm (e.g., "mpRadon").
-        parameters: Dictionary of algorithm-specific parameters.
+        window_size: Number of time lines per analysis window.
+        start_pixel: Start index in space dimension (inclusive). None uses 0.
+        stop_pixel: Stop index in space dimension (exclusive). None uses full width.
+        start_line: Start index in time dimension (inclusive). None uses 0.
+        stop_line: Stop index in time dimension (exclusive). None uses full height.
+        use_multiprocessing: Whether multiprocessing was used for computation.
         analyzed_at: Timestamp when analysis was performed.
         result_path: Path to the saved analysis results file (CSV).
     """
@@ -600,13 +605,58 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    parameters: Dict[str, Any] = field(
-        default_factory=dict,
+    window_size: Optional[int] = field(
+        default=None,
         metadata=field_metadata(
             editable=False,
-            label="Parameters",
+            label="Window Size",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    start_pixel: Optional[int] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Start Pixel",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    stop_pixel: Optional[int] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Stop Pixel",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    start_line: Optional[int] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Start Line",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    stop_line: Optional[int] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Stop Line",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    use_multiprocessing: bool = field(
+        default=True,
+        metadata=field_metadata(
+            editable=False,
+            label="Use Multiprocessing",
             widget_type="text",
-            grid_span=2,
+            grid_span=1,
         ),
     )
     analyzed_at: Optional[datetime] = field(

@@ -10,7 +10,7 @@ import threading
 from typing import Callable, Optional, Sequence
 
 from .kym_file import KymFile
-from .kym_flow_radon_gpt import FlowCancelled
+from .kym_flow_radon import FlowCancelled
 from .state import TaskState
 
 

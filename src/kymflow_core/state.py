@@ -106,6 +106,10 @@ class AppState(EventedModel):
         files: List of KymFile instances in the current folder.
         selected_file: Currently selected KymFile, or None.
         theme_mode: Current UI theme (dark or light).
+        folder_depth: Depth for recursive folder scanning. depth=1 includes only
+            base folder (code depth 0). depth=2 includes base folder (code depth 0)
+            and immediate subfolders (code depth 1). depth=n includes all files from
+            code depth 0 up to and including code depth (n-1).
 
     Signals:
         file_list_changed: Emitted when the file list is updated.
@@ -123,6 +127,7 @@ class AppState(EventedModel):
     files: List[KymFile] = Field(default_factory=list)
     selected_file: Optional[KymFile] = None
     theme_mode: ThemeMode = ThemeMode.DARK
+    folder_depth: int = 1
 
     file_list_changed: ClassVar[Signal] = Signal()
     selection_changed: ClassVar[Signal] = Signal(object, object)
@@ -130,7 +135,7 @@ class AppState(EventedModel):
     theme_changed: ClassVar[Signal] = Signal(object)
     image_display_changed: ClassVar[Signal] = Signal(object)
 
-    def load_folder(self, folder: Path) -> FolderScanResult:
+    def load_folder(self, folder: Path, depth: Optional[int] = None) -> FolderScanResult:
         """Scan folder for kymograph files and update app state.
 
         Scans the specified folder for TIFF files, creates KymFile instances,
@@ -139,11 +144,18 @@ class AppState(EventedModel):
 
         Args:
             folder: Path to the folder to scan.
+            depth: Recursive scanning depth. If None, uses self.folder_depth.
+                depth=1 includes only base folder (code depth 0). depth=2 includes
+                base folder (code depth 0) and immediate subfolders (code depth 1).
+                depth=n includes all files from code depth 0 up to and including
+                code depth (n-1).
 
         Returns:
             FolderScanResult containing the scanned folder and file list.
         """
-        result = scan_folder(folder)
+        if depth is None:
+            depth = self.folder_depth
+        result = scan_folder(folder, depth=depth)
         self.folder = result.folder
         self.files = result.files
 

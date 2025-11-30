@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow_core.kym_file import KymFile, _get_analysis_folder_path
+from kymflow_core.kym_file import KymFile, _get_analysis_folder_path, _getSavePaths
 from kymflow_core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -172,9 +172,88 @@ def test_analyze_and_save_analysis(sample_tif_file: Path | None) -> None:
     
     # Verify analysis parameters
     assert kym_reloaded.analysis_parameters.algorithm == "mpRadon"
-    assert kym_reloaded.analysis_parameters.parameters["window_size"] == window_size
+    assert kym_reloaded.analysis_parameters.window_size == window_size
     
     logger.info(f"Successfully saved and reloaded analysis for {sample_tif_file.name}")
+
+
+@pytest.mark.requires_data
+def test_analysis_parameters_all_fields_saved(sample_tif_file: Path | None) -> None:
+    """Test that all AnalysisParameters fields are saved to JSON file.
+    
+    This test verifies that programmatically declared fields in AnalysisParameters
+    are actually persisted to the JSON file when analysis is saved.
+    """
+    if sample_tif_file is None:
+        pytest.skip("No test data files available")
+    
+    import json
+    
+    # Load file and run analysis with various parameter values
+    kym = KymFile(sample_tif_file, load_image=True)
+    window_size = 32
+    start_pixel = 10
+    stop_pixel = 100
+    start_line = 5
+    stop_line = 200
+    use_multiprocessing = False
+    
+    kym.analyze_flow(
+        window_size=window_size,
+        start_pixel=start_pixel,
+        stop_pixel=stop_pixel,
+        start_line=start_line,
+        stop_line=stop_line,
+        use_multiprocessing=use_multiprocessing,
+    )
+    
+    # Save analysis
+    save_result = kym.save_analysis()
+    assert save_result is True, "Analysis should have been saved successfully"
+    
+    # Load the saved JSON file directly
+    _, json_path = _getSavePaths(sample_tif_file)
+    
+    assert json_path.exists(), f"JSON file should exist at {json_path}"
+    
+    with open(json_path, "r") as f:
+        saved_metadata = json.load(f)
+    
+    # Verify analysis_parameters section exists
+    assert "analysis_parameters" in saved_metadata
+    ap_data = saved_metadata["analysis_parameters"]
+    
+    # Verify all expected fields are present
+    expected_fields = [
+        "algorithm",
+        "window_size",
+        "start_pixel",
+        "stop_pixel",
+        "start_line",
+        "stop_line",
+        "use_multiprocessing",
+        "analyzed_at",
+        "result_path",
+    ]
+    
+    for field in expected_fields:
+        assert field in ap_data, f"Field '{field}' should be present in saved JSON"
+    
+    # Verify values match what was set
+    assert ap_data["algorithm"] == "mpRadon"
+    assert ap_data["window_size"] == window_size
+    assert ap_data["start_pixel"] == start_pixel
+    assert ap_data["stop_pixel"] == stop_pixel
+    assert ap_data["start_line"] == start_line
+    assert ap_data["stop_line"] == stop_line
+    assert ap_data["use_multiprocessing"] == use_multiprocessing
+    assert ap_data["analyzed_at"] is not None
+    # result_path may be None or a string path
+    
+    # Verify no nested "parameters" dict exists (flattened structure)
+    assert "parameters" not in ap_data, "Should not have nested 'parameters' dict in flattened structure"
+    
+    logger.info(f"All AnalysisParameters fields verified in JSON for {sample_tif_file.name}")
 
 
 @pytest.mark.requires_data

@@ -147,7 +147,7 @@ def create_main_page(default_folder: Path) -> None:
 
     def _on_folder_changed(folder: Path) -> None:
         """Callback when folder is changed via folder selector."""
-        app_state.load_folder(folder)
+        app_state.load_folder(folder, depth=app_state.folder_depth)
 
     _build_header(app_state, dark_mode, current_page="home")
 
@@ -155,6 +155,7 @@ def create_main_page(default_folder: Path) -> None:
         create_folder_selector(
             current_folder=current_folder,
             on_folder_changed=_on_folder_changed,
+            app_state=app_state,
         )
 
         if current_folder["path"].exists():
@@ -211,7 +212,7 @@ def create_batch_page(default_folder: Path) -> None:
     app_state.set_theme(ThemeMode.DARK)
 
     def _on_folder_changed(folder: Path) -> None:
-        app_state.load_folder(folder)
+        app_state.load_folder(folder, depth=app_state.folder_depth)
 
     _build_header(app_state, dark_mode, current_page="batch")
 
@@ -219,6 +220,7 @@ def create_batch_page(default_folder: Path) -> None:
         create_folder_selector(
             current_folder=current_folder,
             on_folder_changed=_on_folder_changed,
+            app_state=app_state,
         )
 
         if current_folder["path"].exists():

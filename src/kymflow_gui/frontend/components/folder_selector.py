@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 from nicegui import ui
 
+from kymflow_core.state import AppState
 from kymflow_core.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -46,12 +47,14 @@ def prompt_for_directory(initial: Path) -> Optional[str]:
 def create_folder_selector(
     current_folder: dict[str, Path],
     on_folder_changed: Callable[[Path], None],
+    app_state: AppState,
 ) -> None:
-    """Create folder selection UI with Choose and Reload buttons.
+    """Create folder selection UI with Choose and Reload buttons and folder depth control.
 
     Args:
         current_folder: Dictionary with 'path' key to track current folder
         on_folder_changed: Callback function called when folder changes, receives Path
+        app_state: AppState instance to bind folder_depth control
     """
 
     def _load_folder(path_str: str) -> None:
@@ -59,7 +62,7 @@ def create_folder_selector(
         if not folder.exists():
             ui.notify(f"Folder not found: {folder}", color="negative")
             return
-        logger.info("Loading folder %s", folder)
+        logger.info("Loading folder %s with depth %d", folder, app_state.folder_depth)
         current_folder["path"] = folder
         folder_display.set_text(f"Folder: {folder}")
         on_folder_changed(folder)
@@ -74,5 +77,14 @@ def create_folder_selector(
     with folder_row:
         ui.button("Choose folder", on_click=_choose_folder)
         ui.button("Reload", on_click=lambda: _load_folder(str(current_folder["path"])))
+        # Folder depth control
+        ui.label("Depth:").classes("ml-2")
+        depth_input = ui.number(
+            value=app_state.folder_depth,
+            min=1,
+            format="%d",
+        ).classes("w-20")
+        # Bind to app_state.folder_depth
+        depth_input.bind_value(app_state, "folder_depth")
         # Create label to display current folder path (after buttons)
         folder_display = ui.label(f"Folder: {current_folder['path']}")
