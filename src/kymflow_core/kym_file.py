@@ -1091,6 +1091,10 @@ class KymFile:
 
         csv_path, json_path = _getSavePaths(self.path)
 
+        # Create analysis folder if it doesn't exist
+        analysis_folder = csv_path.parent
+        analysis_folder.mkdir(parents=True, exist_ok=True)
+
         # our original in kym_file_v0.py saved these columns:
         # time,velocity,parentFolder,file,algorithm,delx,delt,numLines,pntsPerLine,cleanVelocity,absVelocity
 

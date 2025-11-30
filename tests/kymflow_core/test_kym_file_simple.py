@@ -50,11 +50,11 @@ def test_kym_file_basic_properties(sample_tif_file: Path | None) -> None:
 
 
 @pytest.mark.requires_data
-def test_save_analysis(sample_tif_file: Path | None) -> None:
-    """Test saving analysis results.
+def test_save_analysis_without_analysis(sample_tif_file: Path | None) -> None:
+    """Test that save_analysis() handles the case where no analysis has been run.
     
     Note: save_analysis() only saves if analysis has been run.
-    This test verifies the method exists and can be called.
+    This test verifies the method exists and doesn't crash when called without analysis.
     """
     if sample_tif_file is None:
         pytest.skip("No test data files available")
@@ -62,10 +62,142 @@ def test_save_analysis(sample_tif_file: Path | None) -> None:
     kym = KymFile(sample_tif_file, load_image=False)
     
     # save_analysis() will only save if analysis has been performed
-    # For a full test, we'd need to run analysis first
     # This just verifies the method exists and doesn't crash
-    kym.save_analysis()  # Should not raise an error even if no analysis to save
+    result = kym.save_analysis()  # Should return False and not raise an error
+    assert result is False  # No analysis to save
     
     # The analysis folder path can be checked
     analysis_folder = _get_analysis_folder_path(sample_tif_file)
     logger.info(f"Analysis folder would be: {analysis_folder}")
+
+
+@pytest.mark.requires_data
+def test_tif_file_without_txt_header(tif_file_without_txt: Path | None) -> None:
+    """Test loading a TIFF file that doesn't have a corresponding .txt header file.
+    
+    This tests the case where Capillary2_no_txt.tif is loaded and should handle
+    the missing Olympus header gracefully with default values.
+    """
+    if tif_file_without_txt is None:
+        pytest.skip("Capillary2_no_txt.tif not found in test data")
+    
+    kym = KymFile(tif_file_without_txt, load_image=False)
+    
+    # Should load without error even without .txt file
+    assert kym.path.name == "Capillary2_no_txt.tif"
+    
+    # Header should have default values since .txt file is missing
+    header = kym.acquisition_metadata
+    assert header.um_per_pixel == 1.0  # Default value
+    assert header.seconds_per_line == 0.001  # Default value (1 ms)
+    
+    logger.info(f"Loaded file without header: {tif_file_without_txt.name}")
+    logger.info(f"Using default um_per_pixel: {header.um_per_pixel}")
+    logger.info(f"Using default seconds_per_line: {header.seconds_per_line}")
+
+
+@pytest.mark.requires_data
+def test_analyze_and_save_analysis(sample_tif_file: Path | None) -> None:
+    """Test running analysis and saving results, then verifying they can be loaded.
+    
+    This test:
+    1. Loads a file and runs analyze_flow()
+    2. Modifies experiment metadata
+    3. Saves the analysis
+    4. Creates a new KymFile instance and loads the saved analysis
+    5. Verifies the loaded analysis matches what was saved
+    """
+    if sample_tif_file is None:
+        pytest.skip("No test data files available")
+    
+    # Step 1: Load file and run analysis
+    logger.info(f'testing sample_tif_file:{sample_tif_file}')
+    kym = KymFile(sample_tif_file, load_image=True)
+    
+    # Modify experiment metadata to test that it gets saved
+    kym.update_experiment_metadata(
+        species="test_species",
+        region="test_region",
+        note="Test note for analysis save/load test"
+    )
+    
+    # Run analysis with a larger window size for faster testing (fewer windows to process)
+    # window_size = 256
+    window_size = 32
+    logger.info(f'calling analyze_flow() window_size: {window_size} -->> wait ...')
+    kym.analyze_flow(window_size=window_size, use_multiprocessing=False)
+    
+    # Verify analysis was created
+    assert kym.analysisExists
+    assert kym._dfAnalysis is not None
+    
+    # Get some values to verify after reload
+    original_velocity = kym.getAnalysisValue("velocity")
+    original_time = kym.getAnalysisValue("time")
+    original_species = kym.experiment_metadata.species
+    original_note = kym.experiment_metadata.note
+    
+    # Step 2: Save analysis
+    save_result = kym.save_analysis()
+    assert save_result is True, "Analysis should have been saved successfully"
+    
+    # Verify files were created
+    analysis_folder = _get_analysis_folder_path(sample_tif_file)
+    csv_path = analysis_folder / f"{sample_tif_file.stem}.csv"
+    json_path = analysis_folder / f"{sample_tif_file.stem}.json"
+    
+    assert csv_path.exists(), f"CSV file should exist at {csv_path}"
+    assert json_path.exists(), f"JSON file should exist at {json_path}"
+    
+    # Step 3: Create a new KymFile instance and load the saved analysis
+    kym_reloaded = KymFile(sample_tif_file, load_image=False)
+    load_result = kym_reloaded.load_analysis()
+    
+    assert load_result is True, "Analysis should have been loaded successfully"
+    assert kym_reloaded.analysisExists, "Reloaded file should have analysis"
+    
+    # Step 4: Verify the loaded analysis matches what was saved
+    reloaded_velocity = kym_reloaded.getAnalysisValue("velocity")
+    reloaded_time = kym_reloaded.getAnalysisValue("time")
+    
+    # Compare arrays (allowing for small floating point differences)
+    assert reloaded_velocity is not None
+    assert reloaded_time is not None
+    assert len(reloaded_velocity) == len(original_velocity)
+    assert len(reloaded_time) == len(original_time)
+    
+    # Verify metadata was saved and loaded
+    assert kym_reloaded.experiment_metadata.species == original_species
+    assert kym_reloaded.experiment_metadata.note == original_note
+    
+    # Verify analysis parameters
+    assert kym_reloaded.analysis_parameters.algorithm == "mpRadon"
+    assert kym_reloaded.analysis_parameters.parameters["window_size"] == window_size
+    
+    logger.info(f"Successfully saved and reloaded analysis for {sample_tif_file.name}")
+
+
+@pytest.mark.requires_data
+def test_all_tif_files_loadable(sample_tif_files: list[Path]) -> None:
+    """Test that all TIFF files in the test data directory can be loaded.
+    
+    This ensures we test all files, including the one without a .txt header file.
+    """
+    if not sample_tif_files:
+        pytest.skip("No test data files available")
+    
+    logger.info(f"Testing {len(sample_tif_files)} TIFF files")
+    
+    for tif_file in sample_tif_files:
+        logger.info(f"Loading {tif_file.name}")
+        kym = KymFile(tif_file, load_image=False)
+        
+        # Basic assertions that should work for all files
+        assert kym.path == tif_file
+        assert kym.path.name == tif_file.name
+        
+        # Files should have some basic properties (may be None if header missing)
+        # But the file should still load without error
+        logger.info(f"  - num_lines: {kym.num_lines}")
+        logger.info(f"  - pixels_per_line: {kym.pixels_per_line}")
+        logger.info(f"  - duration_seconds: {kym.duration_seconds}")

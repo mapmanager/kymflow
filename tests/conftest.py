@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -31,16 +33,44 @@ def pytest_collection_modifyitems(
             item.add_marker(skip_marker)
 
 
-@pytest.fixture
-def test_data_dir() -> Path:
-    """Fixture providing path to test data directory.
-
+@pytest.fixture(scope="session")
+def temp_test_data_dir() -> Path:
+    """Create a temporary copy of the test data directory for the entire test session.
+    
+    This fixture copies the entire tests/data/ directory to a temporary location
+    to prevent tests from modifying the original test data files. The temporary
+    directory is cleaned up after all tests complete.
+    
     Returns:
-        Path to tests/data/ directory.
+        Path to the temporary test data directory.
     """
     if not TEST_DATA_DIR.exists():
         pytest.skip("Test data directory does not exist")
-    return TEST_DATA_DIR
+    
+    # Create a temporary directory
+    temp_dir = Path(tempfile.mkdtemp(prefix="kymflow_test_data_"))
+    
+    try:
+        # Copy entire test data directory to temp location
+        shutil.copytree(TEST_DATA_DIR, temp_dir, dirs_exist_ok=True)
+        
+        yield temp_dir
+    finally:
+        # Clean up: remove the temporary directory and all its contents
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def test_data_dir(temp_test_data_dir: Path) -> Path:
+    """Fixture providing path to temporary test data directory.
+
+    This fixture uses the session-scoped temp_test_data_dir to ensure all tests
+    use a copy of the test data, preventing modifications to the original files.
+
+    Returns:
+        Path to temporary copy of tests/data/ directory.
+    """
+    return temp_test_data_dir
 
 
 @pytest.fixture
@@ -66,3 +96,19 @@ def sample_tif_file(sample_tif_files: list[Path]) -> Path | None:
         First TIFF file found, or None if no files available.
     """
     return sample_tif_files[0] if sample_tif_files else None
+
+
+@pytest.fixture
+def tif_file_without_txt(test_data_dir: Path) -> Path | None:
+    """Fixture providing the TIFF file that doesn't have a corresponding .txt file.
+    
+    This fixture specifically finds Capillary2_no_txt.tif to test the case where
+    the Olympus header file is missing.
+    
+    Returns:
+        Path to Capillary2_no_txt.tif if it exists, or None.
+    """
+    tif_path = test_data_dir / "Capillary2_no_txt.tif"
+    if tif_path.exists():
+        return tif_path
+    return None
