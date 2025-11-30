@@ -55,6 +55,8 @@ gui = [
 test = [
     "pytest>=7.4",
     "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "selenium>=4.0.0",
 ]
 notebook = ["jupyterlab>=4.3.0"]
 pyinstaller = [
@@ -81,6 +83,8 @@ gui = [
 test = [
     "pytest>=7.4",
     "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "selenium>=4.0.0",
 ]
 notebook = ["jupyterlab>=4.3.0"]
 pyinstaller = [
@@ -113,8 +117,12 @@ addopts = [
     "--strict-markers",
     "--strict-config",
 ]
+asyncio_mode = "auto"
+# NiceGUI testing configuration - points to main application file
+main_file = "src/kymflow_gui/main.py"
 markers = [
     "requires_data: mark test as requiring test data directory (deselect with '-m \"not requires_data\"')",
+    "asyncio: mark test as an asyncio coroutine",
 ]
 
 [tool.hatch.build.targets.wheel]
