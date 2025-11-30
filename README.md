@@ -30,7 +30,7 @@ reuse the same API for analysis, metadata editing, or batch processing.
 ### Install and Run GUI
 
 1. **Create a virtual environment:**
-   
+
    python -m venv kymflow-venv
 
 2. **Activate the virtual environment:**
@@ -38,19 +38,19 @@ reuse the same API for analysis, metadata editing, or batch processing.
     ```bash
     # On macOS/Linux:
     source kymflow-venv/bin/activate
-   
+
     # On Windows:
     kymflow-venv\Scripts\activate
     ```
 
 3. **Install KymFlow with GUI dependencies:**
-   
+
     ```bash
     pip install 'kymflow[gui]'
     ```
 
 4. **Run the GUI:**
-   
+
    ```bash
    python -m kymflow_gui.main
    ```
@@ -171,3 +171,22 @@ sudo lsof -iTCP:8080 -sTCP:LISTEN
 
 Then look for `pid` and `kill <pid>`
 
+## Development
+
+To push a new version:
+
+edit version in pyproject.toml
+
+```
+version = "0.2.0"
+```
+
+Then
+
+```bash
+git commit -am "Bump version to 0.2.0"
+
+git tag -a v0.2.0 -m "KymFlow 0.2.0"
+git push origin main
+git push origin v0.2.0
+```
