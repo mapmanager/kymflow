@@ -3,6 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/kymflow.svg)](https://pypi.org/project/kymflow/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/kymflow.svg)](https://pypi.org/project/kymflow/)
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3%2B-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Tests](https://github.com/mapmanager/kymflow/actions/workflows/test.yml/badge.svg)](https://github.com/mapmanager/kymflow/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/mapmanager/kymflow/branch/main/graph/badge.svg)](https://codecov.io/gh/mapmanager/kymflow)
 <!--
 [![GitHub issues](https://img.shields.io/github/issues/mapmanager/kymflow.svg)](https://github.com/mapmanager/kymflow/issues)

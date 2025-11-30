@@ -42,8 +42,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
+          flags: unittests,py${{ matrix.python-version }}
+          name: kymflow-${{ matrix.python-version }}  # just for display, not critical
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
           verbose: true
