@@ -517,20 +517,15 @@ class ExperimentMetadata:
         """Convert to dictionary with standardized key names.
 
         Returns:
-            Dictionary with field values, using abbreviated keys (acq_date,
-            acq_time) for compatibility with external APIs.
+            Dictionary with all field values, using abbreviated keys (acq_date,
+            acq_time) for compatibility with external APIs. All fields are
+            included automatically, including depth and branch_order.
         """
-        return {
-            "species": self.species,
-            "cell_type": self.cell_type,
-            "region": self.region,
-            "sex": self.sex,
-            "genotype": self.genotype,
-            "condition": self.condition,
-            "note": self.note,
-            "acq_date": self.acquisition_date,
-            "acq_time": self.acquisition_time,
-        }
+        d = asdict(self)
+        # Rename keys for compatibility with external APIs
+        d["acq_date"] = d.pop("acquisition_date", None)
+        d["acq_time"] = d.pop("acquisition_time", None)
+        return d
 
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
@@ -638,14 +633,17 @@ class AnalysisParameters:
 
         Returns:
             Dictionary with all analysis parameters. Datetime is converted to
-            ISO format string, and Path is converted to string.
+            ISO format string, and Path is converted to string. All fields are
+            included automatically.
         """
-        return {
-            "algorithm": self.algorithm,
-            "parameters": self.parameters,
-            "analyzed_at": self.analyzed_at.isoformat() if self.analyzed_at else None,
-            "result_path": str(self.result_path) if self.result_path else None,
-        }
+        d = asdict(self)
+        # Convert datetime to ISO format string
+        if d.get("analyzed_at") is not None:
+            d["analyzed_at"] = d["analyzed_at"].isoformat()
+        # Convert Path to string
+        if d.get("result_path") is not None:
+            d["result_path"] = str(d["result_path"])
+        return d
 
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
