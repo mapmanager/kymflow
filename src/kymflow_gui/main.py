@@ -2,13 +2,14 @@
 # Add the following snippet before anything else in your main app's file,
 # to prevent new processes from being spawned in an endless loop:
 from multiprocessing import freeze_support  # noqa
+
 freeze_support()  # noqa
 
 import os
 import sys
 from pathlib import Path
 
-from nicegui import native, ui
+from nicegui import ui
 
 from kymflow_gui.config import DEFAULT_DATA_DIR, DEFAULT_PORT, STORAGE_SECRET
 from kymflow_gui.frontend.layout import (
@@ -30,7 +31,6 @@ logger = get_logger(__name__)
 logger.warning("=== kymflow_gui.main imported")
 
 
-
 def main(*, reload: bool | None = None) -> None:
     """Start the NiceGUI app.
 
@@ -48,10 +48,11 @@ def main(*, reload: bool | None = None) -> None:
     logger.info(f"DEFAULT_PORT: {DEFAULT_PORT}")
 
     versionInfo = _getVersionInfo()
-    logger.info(f"versionInfo:")
+    logger.info("versionInfo:")
     from pprint import pprint
+
     pprint(versionInfo)
-    
+
     @ui.page("/")
     def index() -> None:
         create_main_page(DEFAULT_DATA_DIR)
@@ -66,11 +67,13 @@ def main(*, reload: bool | None = None) -> None:
 
     _native = False  # when True, runs in native window (Mac only)
     # reload = False
-    ui.run(port=DEFAULT_PORT, reload=reload, native=_native, storage_secret=STORAGE_SECRET)
+    ui.run(
+        port=DEFAULT_PORT, reload=reload, native=_native, storage_secret=STORAGE_SECRET
+    )
 
 
 if __name__ in {"__main__", "__mp_main__"}:
-    logger.warning(f'__name__: {__name__}')
+    logger.warning(f"__name__: {__name__}")
     main()
 
     # from pprint import pprint

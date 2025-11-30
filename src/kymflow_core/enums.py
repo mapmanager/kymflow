@@ -11,10 +11,10 @@ from enum import Enum
 
 class SelectionOrigin(str, Enum):
     """Origin of a file selection change.
-    
+
     Used to identify which UI element initiated a selection change, allowing
     components to avoid feedback loops when updating selections.
-    
+
     Values:
         TABLE: Selection originated from the file table.
         IMAGE: Selection originated from the image viewer.
@@ -32,9 +32,9 @@ class SelectionOrigin(str, Enum):
 
 class ThemeMode(str, Enum):
     """UI theme mode.
-    
+
     Used to coordinate theme settings across GUI components.
-    
+
     Values:
         DARK: Dark theme mode.
         LIGHT: Light theme mode.
@@ -46,10 +46,10 @@ class ThemeMode(str, Enum):
 
 class ImageDisplayOrigin(str, Enum):
     """Origin of an image display parameter change.
-    
+
     Used to identify which UI element initiated a display parameter change
     (colorscale, intensity range), allowing components to avoid feedback loops.
-    
+
     Values:
         CONTRAST_WIDGET: Change originated from the contrast control widget.
         PROGRAMMATIC: Change originated from programmatic code.

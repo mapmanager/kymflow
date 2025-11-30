@@ -26,6 +26,7 @@ from .components.task_progress import create_task_progress
 
 logger = get_logger(__name__)
 
+
 def open_external(url: str) -> None:
     """Open a URL in the system browser (native) or new tab (browser)."""
     # Heuristic: in native mode, a main_window is created
@@ -38,7 +39,8 @@ def open_external(url: str) -> None:
     else:
         # Browser mode: open in new tab
         ui.run_javascript(f'window.open("{url}", "_blank")')
-        
+
+
 def _inject_global_styles() -> None:
     """Add shared CSS tweaks for NiceGUI components."""
     ui.add_head_html(
@@ -56,7 +58,6 @@ def _inject_global_styles() -> None:
 
 
 def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
-
     def _navigate(path: str) -> None:
         ui.run_javascript(f'window.location.href="{path}"')
 
@@ -99,15 +100,21 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
         # Right side: Documentation, GitHub and theme buttons
         with ui.row().classes("items-center gap-2"):
             # Documentation "button" as a clickable icon
-            docs_icon = ui.button(
-                icon="menu_book",
-                on_click=lambda _: open_external("https://mapmanager.github.io/kymflow/"),
-            ).props("flat round dense text-color=white").tooltip("Open documentation")
-            
+            docs_icon = (
+                ui.button(
+                    icon="menu_book",
+                    on_click=lambda _: open_external(
+                        "https://mapmanager.github.io/kymflow/"
+                    ),
+                )
+                .props("flat round dense text-color=white")
+                .tooltip("Open documentation")
+            )
+
             # GitHub "button" as a clickable image (no background)
-            github_icon = ui.image(
-                "https://cdn.simpleicons.org/github/ffffff"
-            ).classes("w-6 h-6 cursor-pointer")
+            github_icon = ui.image("https://cdn.simpleicons.org/github/ffffff").classes(
+                "w-6 h-6 cursor-pointer"
+            )
 
             github_icon.on(
                 "click",
@@ -116,15 +123,19 @@ def _build_header(app_state: AppState, dark_mode, current_page: str) -> None:
 
             github_icon.tooltip("Open GitHub repository")
 
-            theme_button = ui.button(
-                icon="light_mode" if dark_mode.value else "dark_mode",
-                on_click=_toggle_theme,
-            ).props("flat round dense text-color=white").tooltip("Toggle dark / light mode")
+            theme_button = (
+                ui.button(
+                    icon="light_mode" if dark_mode.value else "dark_mode",
+                    on_click=_toggle_theme,
+                )
+                .props("flat round dense text-color=white")
+                .tooltip("Toggle dark / light mode")
+            )
             _update_theme_icon()
 
 
 def create_main_page(default_folder: Path) -> None:
-    ui.page_title('KymFlow')
+    ui.page_title("KymFlow")
     _inject_global_styles()
 
     app_state = AppState()
@@ -164,7 +175,7 @@ def create_main_page(default_folder: Path) -> None:
 
         with ui.expansion("Files", value=True).classes("w-full"):
             # Retrieve stored selection for home page
-            stored_selection = app.storage.browser.get('home_selection_path', None)
+            stored_selection = app.storage.browser.get("home_selection_path", None)
             restore_selection = [stored_selection] if stored_selection else None
             create_file_table(app_state, restore_selection=restore_selection)
 
@@ -175,19 +186,19 @@ def create_main_page(default_folder: Path) -> None:
             create_image_line_viewer(app_state)
 
         with ui.expansion("Metadata", value=True).classes("w-full"):
-            with ui.element('div').classes('flex w-full gap-4 items-start'):
-                with ui.card().classes('flex-1'):
+            with ui.element("div").classes("flex w-full gap-4 items-start"):
+                with ui.card().classes("flex-1"):
                     create_metadata_form(app_state)
 
-                with ui.card().classes('flex-1'):
+                with ui.card().classes("flex-1"):
                     create_olympus_form(app_state)
 
-                with ui.card().classes('flex-1'):
+                with ui.card().classes("flex-1"):
                     create_analysis_form(app_state)
 
 
 def create_batch_page(default_folder: Path) -> None:
-    ui.page_title('KymFlow - Batch Analysis')
+    ui.page_title("KymFlow - Batch Analysis")
     _inject_global_styles()
 
     app_state = AppState()
@@ -232,7 +243,9 @@ def create_batch_page(default_folder: Path) -> None:
                             "Analyze Flow",
                             on_click=lambda: _start_batch(True),
                         )
-                        cancel_button = ui.button("Cancel", on_click=per_file_task.request_cancel)
+                        cancel_button = ui.button(
+                            "Cancel", on_click=per_file_task.request_cancel
+                        )
                         cancel_button.disabled = True
             with ui.column().classes("shrink gap-2"):
                 create_save_buttons(app_state, per_file_task)
@@ -248,8 +261,10 @@ def create_batch_page(default_folder: Path) -> None:
 
         with ui.expansion("Files", value=True).classes("w-full"):
             # Retrieve stored selection for batch page
-            stored_selection = app.storage.browser.get('batch_selection_paths', [])
-            restore_selection = stored_selection if isinstance(stored_selection, list) else []
+            stored_selection = app.storage.browser.get("batch_selection_paths", [])
+            restore_selection = (
+                stored_selection if isinstance(stored_selection, list) else []
+            )
             create_file_table(
                 app_state,
                 selection_mode="multiple",
@@ -287,7 +302,7 @@ def create_batch_page(default_folder: Path) -> None:
         )
 
     _update_selection([])
-    
+
     # Set initial disabled state and color for analyze button
     def _update_analyze_button_state() -> None:
         running = per_file_task.running
@@ -297,21 +312,21 @@ def create_batch_page(default_folder: Path) -> None:
             analyze_selected_button.props("color=red")
         else:
             analyze_selected_button.props(remove="color")
-    
+
     _update_analyze_button_state()
-    
+
     # Connect analyze button to task state changes (match task_progress.py pattern)
     @per_file_task.events.running.connect  # type: ignore[attr-defined]
     def _on_running_changed() -> None:
         _update_analyze_button_state()
-    
+
     # Use button_utils for cancel button (it works, so keep it)
     sync_cancel_button(cancel_button, per_file_task, red_when_running=True)
 
 
 def create_about_page(version_info: dict[str, str]) -> None:
     """Render the About page with version/build information."""
-    ui.page_title('KymFlow - About')
+    ui.page_title("KymFlow - About")
     _inject_global_styles()
 
     app_state = AppState()
@@ -338,14 +353,17 @@ def create_about_page(version_info: dict[str, str]) -> None:
         if log_path and log_path.exists():
             try:
                 from collections import deque
+
                 with log_path.open("r", encoding="utf-8", errors="replace") as f:
                     tail_lines = deque(f, maxlen=max_lines)
                 log_content = "".join(tail_lines)
                 if len(tail_lines) == max_lines:
-                    log_content = f"...(truncated, last {max_lines} lines)...\n{log_content}"
+                    log_content = (
+                        f"...(truncated, last {max_lines} lines)...\n{log_content}"
+                    )
             except Exception as e:
                 log_content = f"Unable to read log file: {e}"
-                
+
         with ui.expansion("Logs", value=False).classes("w-full"):
             ui.label(f"Log file: {log_path or 'N/A'}").classes("text-sm text-gray-500")
             ui.code(log_content or "[empty]").classes("w-full text-sm").style(

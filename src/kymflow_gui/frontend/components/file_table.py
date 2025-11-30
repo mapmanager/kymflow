@@ -12,6 +12,7 @@ from kymflow_core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 def _rows(files: List[KymFile]) -> List[Dict]:
     return [f.summary_row() for f in files]
 
@@ -25,11 +26,15 @@ def create_file_table(
 ) -> None:
     multi_select = selection_mode == "multiple"
 
-    table = ui.table(
-        rows=_rows(app_state.files),
-        selection=selection_mode,
-        row_key="path",
-    ).classes("w-full").props("dense hide-selected-banner")
+    table = (
+        ui.table(
+            rows=_rows(app_state.files),
+            selection=selection_mode,
+            row_key="path",
+        )
+        .classes("w-full")
+        .props("dense hide-selected-banner")
+    )
 
     # Storage keys for per-user persistence
     storage_key = "file_selection_multi" if multi_select else "file_selection_single"
@@ -51,20 +56,30 @@ def create_file_table(
 
     # Get column visibility schema from backend (reuses existing form schemas)
     column_visibility = KymFile.table_column_schema()
-    
+
     # Configure columns based on schema
     for column in table.columns:
         col_name = column["name"]
-        
+
         # Check visibility from schema (defaults to True if not in schema)
         if not column_visibility.get(col_name, True):
             column["classes"] = "hidden"
             column["headerClasses"] = "hidden"
             table.update()
             continue
-        
+
         # Set width and alignment for narrow columns (checkmark columns)
-        if col_name in ['File Name', "Analyzed", "Saved", "Window Points", 'pixels', 'lines', 'duration (s)', 'ms/line', 'um/pixel']:
+        if col_name in [
+            "File Name",
+            "Analyzed",
+            "Saved",
+            "Window Points",
+            "pixels",
+            "lines",
+            "duration (s)",
+            "ms/line",
+            "um/pixel",
+        ]:
             column["style"] = "width: 50px; min-width: 50px; max-width: 50px;"
             column["align"] = "center"
             table.update()
@@ -74,20 +89,28 @@ def create_file_table(
         if multi_select:
             if not selected_paths:
                 return
-            table.selected = [row for row in table.rows if row.get("path") in selected_paths]
+            table.selected = [
+                row for row in table.rows if row.get("path") in selected_paths
+            ]
             if on_selection_change is not None:
                 matches: List[KymFile] = []
                 for path in selected_paths:
-                    match = next((f for f in app_state.files if str(f.path) == path), None)
+                    match = next(
+                        (f for f in app_state.files if str(f.path) == path), None
+                    )
                     if match:
                         matches.append(match)
                 on_selection_change(matches)
         else:
             if not current_single:
                 return
-            match = next((f for f in app_state.files if str(f.path) == current_single), None)
+            match = next(
+                (f for f in app_state.files if str(f.path) == current_single), None
+            )
             if match:
-                row = next((r for r in table.rows if r.get("path") == current_single), None)
+                row = next(
+                    (r for r in table.rows if r.get("path") == current_single), None
+                )
                 if row:
                     table.selected = [row]
                     app_state.select_file(match, origin=SelectionOrigin.TABLE)
@@ -128,15 +151,21 @@ def create_file_table(
             else:
                 # Fallback: rebuild from rows payload
                 selected_paths.clear()
-                selected_paths.update({row.get("path") for row in rows if "path" in row})
+                selected_paths.update(
+                    {row.get("path") for row in rows if "path" in row}
+                )
 
             # Sync visual selection to tracked set
-            table.selected = [row for row in table.rows if row.get("path") in selected_paths]
+            table.selected = [
+                row for row in table.rows if row.get("path") in selected_paths
+            ]
 
             if on_selection_change is not None:
                 matches: List[KymFile] = []
                 for path in selected_paths:
-                    match = next((f for f in app_state.files if str(f.path) == path), None)
+                    match = next(
+                        (f for f in app_state.files if str(f.path) == path), None
+                    )
                     if match:
                         matches.append(match)
                 on_selection_change(matches)
@@ -171,6 +200,7 @@ def create_file_table(
     table.on("selection", _on_select)
 
     if not multi_select:
+
         @app_state.selection_changed.connect
         def _on_external_selection(
             kf: Optional[KymFile],

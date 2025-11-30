@@ -74,4 +74,3 @@ If you prefer to install from source or need the latest development version, see
 
 - **Issues**: Report problems on [GitHub Issues](https://github.com/mapmanager/kymflow/issues)
 - **Documentation**: See the [User Guide](user-guide/getting-started.md) for usage instructions
-

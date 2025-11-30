@@ -55,4 +55,3 @@ Contributions are welcome! Please see the [Contributing Guide](contributing.md) 
 ## Acknowledgments
 
 KymFlow is designed for analyzing kymograph data from in vivo blood flow imaging experiments, particularly those using laser scanning microscopy techniques.
-

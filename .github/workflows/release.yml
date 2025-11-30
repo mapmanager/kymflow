@@ -110,5 +110,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: release/KymFlow-macos-intel-${{ github.ref_name }}.zip
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

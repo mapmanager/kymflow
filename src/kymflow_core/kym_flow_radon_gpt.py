@@ -20,10 +20,11 @@ from skimage.transform import radon
 
 class FlowCancelled(Exception):
     """Exception raised when flow analysis is cancelled.
-    
+
     This exception is raised when the analysis is cancelled via the
     is_cancelled callback during processing.
     """
+
     pass
 
 
@@ -33,11 +34,11 @@ def radon_worker(
     angles_fine: np.ndarray,
 ) -> Tuple[float, np.ndarray]:
     """Calculate flow angle for a single time window using Radon transforms.
-    
+
     This function is designed to be used as a multiprocessing worker. It
     performs a two-stage Radon transform: first a coarse search over all
     angles, then a fine search around the best coarse angle.
-    
+
     Args:
         data_window: 2D numpy array (time, space) for this window slice.
             Time axis is 0, space axis is 1. The mean is subtracted before
@@ -45,7 +46,7 @@ def radon_worker(
         angles: 1D array of coarse angles in degrees (typically 0-179).
         angles_fine: 1D array of fine angle offsets in degrees, typically
             small values around 0 (e.g., -2 to +2 degrees in 0.25 degree steps).
-    
+
     Returns:
         Tuple containing:
             - Best angle in degrees (float) for this window.
@@ -92,24 +93,24 @@ def mp_analyze_flow(
     processes: Optional[int] = None,
 ):
     """Analyze blood flow in a kymograph using Radon transforms.
-    
+
     Performs a sliding window analysis along the time axis to detect flow
     direction and velocity. Uses a two-stage Radon transform approach:
     coarse search over 0-179 degrees, then fine refinement around the best
     angle.
-    
+
     Data convention:
         data is a 2D numpy array with shape (time, space), where:
         - axis 0 (index 0) is time (aka 'lines', 'line scans')
         - axis 1 (index 1) is space (aka 'pixels')
-    
+
     Algorithm:
         - Use a sliding window along the time axis with 25% overlap.
         - For each window, run a coarse Radon transform over 0..179 degrees.
         - Find the angle that maximizes the variance in Radon space.
         - Refine around that angle with a fine grid (±2 degrees, 0.25 step).
         - Return best angles and associated fine spread.
-    
+
     Args:
         data: 2D numpy array (time, space) containing the kymograph data.
         windowsize: Number of time lines per analysis window. Must be a
@@ -128,14 +129,14 @@ def mp_analyze_flow(
             computation. If False, runs sequentially. Defaults to True.
         processes: Optional number of worker processes. If None, uses
             cpu_count() - 1 (minimum 1). Defaults to None.
-    
+
     Returns:
         Tuple containing:
             - thetas: 1D array (nsteps,) of best angle in degrees per window.
             - the_t: 1D array (nsteps,) of center time index for each window.
             - spread_matrix_fine: 2D array (nsteps, len(angles_fine)) of
               variance values for fine angles.
-    
+
     Raises:
         ValueError: If data is not 2D or windowsize is invalid.
         FlowCancelled: If is_cancelled() returns True during processing.
@@ -211,7 +212,9 @@ def mp_analyze_flow(
                 if cancelled():
                     pool.terminate()
                     pool.join()
-                    raise FlowCancelled("Flow analysis cancelled before submitting all windows.")
+                    raise FlowCancelled(
+                        "Flow analysis cancelled before submitting all windows."
+                    )
 
                 # Center time index for this window
                 the_t[k] = 1 + k * stepsize + windowsize / 2.0
@@ -229,7 +232,9 @@ def mp_analyze_flow(
                 if cancelled():
                     pool.terminate()
                     pool.join()
-                    raise FlowCancelled("Flow analysis cancelled while processing windows.")
+                    raise FlowCancelled(
+                        "Flow analysis cancelled while processing windows."
+                    )
 
                 worker_theta, worker_spread_fine = result.get()
                 thetas[k] = worker_theta
@@ -250,7 +255,9 @@ def mp_analyze_flow(
             t_stop = k * stepsize + windowsize
             data_window = data[t_start:t_stop, start_pixel:stop_pixel]
 
-            worker_theta, worker_spread_fine = radon_worker(data_window, angles, angles_fine)
+            worker_theta, worker_spread_fine = radon_worker(
+                data_window, angles, angles_fine
+            )
             thetas[k] = worker_theta
             spread_matrix_fine[k, :] = worker_spread_fine
 

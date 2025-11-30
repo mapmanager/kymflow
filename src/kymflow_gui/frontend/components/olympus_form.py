@@ -9,16 +9,16 @@ from kymflow_core.state import AppState
 def create_olympus_form(app_state: AppState) -> None:
     """Create Olympus metadata form dynamically from OlympusHeader schema."""
     ui.label("Olympus Metadata").classes("font-semibold")
-    
+
     # Get schema from backend (no NiceGUI knowledge in schema)
     schema = OlympusHeader.form_schema()
-    
+
     # Filter to only visible fields
     visible_schema = [f for f in schema if f.get("visible", True)]
-    
+
     # All fields are read-only for now
     read_only_fields = {f["name"]: f for f in visible_schema}
-    
+
     # Create widgets dynamically based on schema (preserve order)
     widgets = {}
     with ui.grid(columns=3).classes("w-full gap-2"):
@@ -27,16 +27,16 @@ def create_olympus_form(app_state: AppState) -> None:
             widget_classes = "w-full"
             if field_def["grid_span"] == 2:
                 widget_classes += " col-span-2"
-            
+
             # Create widget based on type
             if field_def["widget_type"] == "multiline":
                 widget = ui.textarea(field_def["label"]).classes(widget_classes)
             else:  # text, etc.
                 widget = ui.input(field_def["label"]).classes(widget_classes)
-            
+
             # All fields are read-only initially
             widget.set_enabled(False)
-            
+
             widgets[field_def["name"]] = widget
 
     def _populate_fields(kf) -> None:
@@ -45,9 +45,9 @@ def create_olympus_form(app_state: AppState) -> None:
             for widget in widgets.values():
                 widget.set_value("")
             return
-        
+
         header = kf.acquisition_metadata
-        
+
         # Populate all fields
         for field_name, field_def in read_only_fields.items():
             if field_name in widgets:
@@ -63,4 +63,3 @@ def create_olympus_form(app_state: AppState) -> None:
     @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         _populate_fields(kf)
-

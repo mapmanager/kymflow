@@ -5,12 +5,12 @@ Batch processing allows you to analyze multiple kymograph files sequentially wit
 ## Workflow
 
 1. **Navigate to Batch Page**: Click "Batch" in the header navigation
-2. **Select Files**: 
+2. **Select Files**:
    - Click multiple rows to select files (multi-select mode)
    - Selection counter shows number of selected files
 3. **Set Parameters**: Choose window size for analysis
 4. **Start Analysis**: Click "Analyze Flow" button
-5. **Monitor Progress**: 
+5. **Monitor Progress**:
    - Overall progress shows files completed
    - Per-file progress shows windows completed for current file
 6. **Save Results**: Files are marked as analyzed; use Save button to persist
@@ -28,4 +28,3 @@ Batch processing allows you to analyze multiple kymograph files sequentially wit
 - Window size applies to all files in the batch
 - Results are not auto-saved - use Save button after batch completes
 - Large batches may take significant time depending on file sizes
-

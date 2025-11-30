@@ -24,10 +24,10 @@ def run_flow_analysis(
     on_result: Optional[Callable[[dict], None]] = None,
 ) -> None:
     """Run Radon flow analysis in a background thread.
-    
+
     Launches the analysis in a daemon thread to avoid blocking the GUI.
     Progress updates and cancellation are handled through the task_state object.
-    
+
     Args:
         kym_file: KymFile instance to analyze.
         task_state: TaskState object for progress tracking and cancellation.
@@ -103,11 +103,11 @@ def run_batch_flow_analysis(
     on_batch_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
     """Run flow analysis sequentially for multiple files in a background thread.
-    
+
     Processes files one at a time in a daemon thread, with progress tracking
     for both individual files and the overall batch. Supports cancellation
     at any point.
-    
+
     Args:
         kym_files: Sequence of KymFile instances to analyze.
         per_file_task: TaskState for tracking progress of the current file.
@@ -153,7 +153,9 @@ def run_batch_flow_analysis(
 
             def progress_cb(completed: int, total: int) -> None:
                 pct = (completed / total) if total else 0.0
-                per_file_task.set_progress(pct, f"{kf.path.name}: {completed}/{total} windows")
+                per_file_task.set_progress(
+                    pct, f"{kf.path.name}: {completed}/{total} windows"
+                )
 
             try:
                 kf.analyze_flow(

@@ -62,4 +62,3 @@ pip install -e ".[gui,test,notebook]"
 
 - Python 3.11 or higher
 - See `pyproject.toml` for full dependency list
-

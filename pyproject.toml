@@ -102,6 +102,21 @@ dev = [
 # [project.scripts]
 # kymflow-gui = "kymflow_gui.main:main"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+markers = [
+    "requires_data: mark test as requiring test data directory (deselect with '-m \"not requires_data\"')",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/kymflow_core", "src/kymflow_gui"]
 

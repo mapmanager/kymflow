@@ -41,4 +41,3 @@
 - See [GUI Usage](gui-usage.md) for detailed interface documentation
 - See [Batch Processing](batch-processing.md) for batch analysis workflows
 - See [API Reference](../api/kym_file.md) for programmatic access
-

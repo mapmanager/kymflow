@@ -18,4 +18,3 @@ KymFlow provides both a desktop GUI application and a Python API for working wit
 - **Metadata Management**: Edit experimental metadata and save with analysis results
 - **Python API**: Use the backend programmatically in scripts and notebooks
 - **Radon Flow Analysis**: Detect flow direction and velocity using Radon transforms
-

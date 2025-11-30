@@ -48,4 +48,3 @@ Thank you for your interest in contributing to KymFlow!
 3. Add/update tests
 4. Run tests and ensure they pass
 5. Submit a pull request with a clear description
-

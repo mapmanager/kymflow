@@ -80,4 +80,3 @@ nav:
     - kymflow_core.state: api/state.md
   - Notebooks: examples/notebooks.md
   - About: about.md
-

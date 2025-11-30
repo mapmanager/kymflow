@@ -19,17 +19,16 @@ COLORSCALE_OPTIONS: List[Dict[str, str]] = [
 
 def get_colorscale(name: str) -> str | List[List[float | str]]:
     """Get Plotly colorscale string or list from name.
-    
+
     Args:
         name: Colorscale name (e.g., "Gray", "Viridis", "inverted_grays")
-        
+
     Returns:
         Colorscale string for built-in scales, or list for custom scales
     """
     # Handle custom inverted grayscale
     if name == "inverted_grays":
         return [[0, "rgb(255,255,255)"], [1, "rgb(0,0,0)"]]
-    
+
     # Return name as-is for built-in Plotly colorscales
     return name
-

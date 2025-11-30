@@ -110,12 +110,16 @@ uv pip install -e ".[test]"
 ```
 
 ```bash
-uv run pytest
+uv run pytest tests/                    # Run all tests
+uv run pytest tests/kymflow_core/      # Run only core tests
+uv run pytest tests/kymflow_gui/       # Run only GUI tests (when you add them)
 ```
 
-Tests that require proprietary TIFF data auto-skip when the sample data is
-unavailable.
+Run tests without data using
 
+```bash
+uv run pytest -m "not requires_data"
+```
 
 ---
 
@@ -171,22 +175,33 @@ sudo lsof -iTCP:8080 -sTCP:LISTEN
 
 Then look for `pid` and `kill <pid>`
 
+
 ## Development
 
-To push a new version:
+### To push a new version from local dev machine
 
 edit version in pyproject.toml
 
 ```
-version = "0.2.0"
+version = "0.1.1"
 ```
 
 Then
 
 ```bash
-git commit -am "Bump version to 0.2.0"
+git commit -am "Bump version to 0.1.1"
 
-git tag -a v0.2.0 -m "KymFlow 0.2.0"
+git tag -a v0.1.1 -m "KymFlow 0.1.1"
 git push origin main
-git push origin v0.2.0
+git push origin v0.1.1
 ```
+
+### To append info to macOS app
+
+Build your macOS app bundle and go to:
+
+ - GitHub → Releases → “Draft a new release”
+ - Select tag v0.1.1
+ - In the description, paste the 0.1.1 section from CHANGELOG.md.
+ - Attach the macOS .dmg / .zip / .app as an asset.
+ - Publish release.

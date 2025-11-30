@@ -9,8 +9,8 @@ from kymflow_core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
-    
     with ui.row().classes("items-end gap-2"):
         ui.label("Analysis").classes("text-lg font-semibold")
         window_input = ui.select(
@@ -23,7 +23,7 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         cancel_button.disabled = True
 
     def _on_run() -> None:
-        logger.warning('')
+        logger.warning("")
 
         kf = app_state.selected_file
         if not kf:

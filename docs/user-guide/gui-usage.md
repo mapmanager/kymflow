@@ -53,4 +53,3 @@ The batch page allows processing multiple files sequentially.
 - Analysis results are saved in a `-analysis` subfolder alongside your TIFF files
 - The GUI preserves your file selections when navigating between pages
 - Use the contrast controls to better visualize flow patterns in the image
-

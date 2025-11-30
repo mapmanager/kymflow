@@ -22,7 +22,7 @@ def sync_action_buttons(
 ) -> None:
     """
     Disable/enable action buttons (start, analyze, etc.) based on task running state.
-    
+
     Parameters
     ----------
     buttons:
@@ -32,6 +32,7 @@ def sync_action_buttons(
     red_when_running:
         If True, set button color to red when running (disabled).
     """
+
     def _sync() -> None:
         running = task_state.running
         for button in buttons:
@@ -41,10 +42,10 @@ def sync_action_buttons(
                     button.props("color=red")
                 else:
                     button.props(remove="color")
-    
+
     # Set initial state
     _sync()
-    
+
     # Connect to task state changes
     @task_state.events.running.connect  # type: ignore[attr-defined]
     def _on_running_changed() -> None:
@@ -59,10 +60,10 @@ def sync_cancel_button(
 ) -> None:
     """
     Sync cancel button state and color based on task state.
-    
+
     Cancel button is enabled only when task is running AND cancellable.
     Optionally sets button color to red when running.
-    
+
     Parameters
     ----------
     cancel_button:
@@ -72,31 +73,32 @@ def sync_cancel_button(
     red_when_running:
         If True, set button color to red when task is running.
     """
+
     def _sync() -> None:
         running = task_state.running
         cancellable = task_state.cancellable
-        
+
         # Enable only when running and cancellable
         cancel_button.disabled = not (running and cancellable)
-        
+
         # Set color to red when running
         if red_when_running:
             if running:
                 cancel_button.props("color=red")
             else:
                 cancel_button.props(remove="color")
-    
+
     # Set initial state
     _sync()
-    
+
     # Connect to task state changes
     @task_state.events.running.connect  # type: ignore[attr-defined]
     def _on_running_changed() -> None:
         _sync()
-    
+
     # Also listen to cancellable changes (though it's usually set with running)
     # This ensures we catch any edge cases
-    if hasattr(task_state, 'cancellable'):
+    if hasattr(task_state, "cancellable"):
         # Note: cancellable is not an evented field, so we rely on running changes
         # which typically happen together with cancellable changes
         pass
@@ -111,7 +113,7 @@ def connect_button_states(
 ) -> None:
     """
     Convenience function to connect both action and cancel buttons to task state.
-    
+
     Parameters
     ----------
     action_buttons:
@@ -124,6 +126,8 @@ def connect_button_states(
         If True, set cancel button color to red when running.
     """
     sync_action_buttons(action_buttons, task_state)
-    
+
     if cancel_button is not None:
-        sync_cancel_button(cancel_button, task_state, red_when_running=red_cancel_when_running)
+        sync_cancel_button(
+            cancel_button, task_state, red_when_running=red_cancel_when_running
+        )

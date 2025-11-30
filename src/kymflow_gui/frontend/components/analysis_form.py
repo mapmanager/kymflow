@@ -9,16 +9,16 @@ from kymflow_core.state import AppState
 def create_analysis_form(app_state: AppState) -> None:
     """Create Analysis Parameters form dynamically from AnalysisParameters schema."""
     ui.label("Analysis Parameters").classes("font-semibold")
-    
+
     # Get schema from backend (no NiceGUI knowledge in schema)
     schema = AnalysisParameters.form_schema()
-    
+
     # Filter to only visible fields
     visible_schema = [f for f in schema if f.get("visible", True)]
-    
+
     # All fields are read-only
     read_only_fields = {f["name"]: f for f in visible_schema}
-    
+
     # Create widgets dynamically based on schema (preserve order)
     widgets = {}
     with ui.grid(columns=3).classes("w-full gap-2"):
@@ -27,16 +27,16 @@ def create_analysis_form(app_state: AppState) -> None:
             widget_classes = "w-full"
             if field_def["grid_span"] == 2:
                 widget_classes += " col-span-2"
-            
+
             # Create widget based on type
             if field_def["widget_type"] == "multiline":
                 widget = ui.textarea(field_def["label"]).classes(widget_classes)
             else:  # text, etc.
                 widget = ui.input(field_def["label"]).classes(widget_classes)
-            
+
             # All fields are read-only
             widget.set_enabled(False)
-            
+
             widgets[field_def["name"]] = widget
 
     def _populate_fields(kf) -> None:
@@ -45,9 +45,9 @@ def create_analysis_form(app_state: AppState) -> None:
             for widget in widgets.values():
                 widget.set_value("")
             return
-        
+
         analysis_params = kf.analysis_parameters
-        
+
         # Populate all fields
         for field_name, field_def in read_only_fields.items():
             if field_name in widgets:
@@ -58,10 +58,11 @@ def create_analysis_form(app_state: AppState) -> None:
                 elif isinstance(value, dict):
                     # Convert dict to readable string format
                     import json
+
                     widgets[field_name].set_value(json.dumps(value, indent=2))
-                elif hasattr(value, 'isoformat'):  # datetime
+                elif hasattr(value, "isoformat"):  # datetime
                     widgets[field_name].set_value(value.isoformat())
-                elif hasattr(value, '__str__'):  # Path or other objects
+                elif hasattr(value, "__str__"):  # Path or other objects
                     widgets[field_name].set_value(str(value))
                 else:
                     widgets[field_name].set_value(str(value))
@@ -69,4 +70,3 @@ def create_analysis_form(app_state: AppState) -> None:
     @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         _populate_fields(kf)
-

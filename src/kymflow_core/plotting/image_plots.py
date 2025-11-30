@@ -15,21 +15,21 @@ def image_plot_plotly(
     theme: Optional[ThemeMode] = None,
 ) -> go.Figure:
     """Create a heatmap plot from a 2D numpy array (kymograph image).
-    
+
     Args:
         image: 2D numpy array (kymograph image), or None for empty plot
         theme: Theme mode (DARK or LIGHT). Defaults to LIGHT if None.
-        
+
     Returns:
         Plotly Figure ready for display
     """
     # Default to LIGHT theme
     if theme is None:
         theme = ThemeMode.LIGHT
-    
+
     template = get_theme_template(theme)
     bg_color, _ = get_theme_colors(theme)
-    
+
     # Handle None image
     if image is None:
         fig = go.Figure()
@@ -39,7 +39,7 @@ def image_plot_plotly(
             plot_bgcolor=bg_color,
         )
         return fig
-    
+
     # Create heatmap with transposed image
     fig = go.Figure()
     fig.add_trace(
@@ -69,7 +69,7 @@ def histogram_plot_plotly(
     bins: int = 256,
 ) -> go.Figure:
     """Create a histogram plot of image pixel intensities.
-    
+
     Args:
         image: 2D numpy array (kymograph image), or None for empty plot
         zmin: Minimum intensity value to show as vertical line (optional)
@@ -77,18 +77,18 @@ def histogram_plot_plotly(
         log_scale: If True, use log scale for y-axis (default: True)
         theme: Theme mode (DARK or LIGHT). Defaults to LIGHT if None.
         bins: Number of bins for histogram (default: 256)
-        
+
     Returns:
         Plotly Figure with histogram ready for display
     """
     # Default to LIGHT theme
     if theme is None:
         theme = ThemeMode.LIGHT
-    
+
     template = get_theme_template(theme)
     bg_color, fg_color = get_theme_colors(theme)
     grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
-    
+
     # Handle None image
     if image is None:
         fig = go.Figure()
@@ -99,15 +99,15 @@ def histogram_plot_plotly(
             font=dict(color=fg_color),
         )
         return fig
-    
+
     # Compute histogram of entire image (always full range)
     flat_image = image.flatten()
     hist, bin_edges = np.histogram(flat_image, bins=bins)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    
+
     # Get image intensity range for fixed x-axis (always start at 0)
     image_max = float(np.max(flat_image))
-    
+
     # Create bar chart
     fig = go.Figure()
     fig.add_trace(
@@ -118,7 +118,7 @@ def histogram_plot_plotly(
             opacity=0.7,
         )
     )
-    
+
     # Add vertical lines for zmin and zmax
     if zmin is not None:
         fig.add_vline(
@@ -129,7 +129,7 @@ def histogram_plot_plotly(
             annotation_text="Min",
             annotation_position="top",
         )
-    
+
     if zmax is not None:
         fig.add_vline(
             x=zmax,
@@ -139,7 +139,7 @@ def histogram_plot_plotly(
             annotation_text="Max",
             annotation_position="top",
         )
-    
+
     # Configure layout with fixed x-axis range
     fig.update_layout(
         template=template,
@@ -162,6 +162,5 @@ def histogram_plot_plotly(
         margin=dict(l=0, r=20, t=10, b=20),
         showlegend=False,
     )
-    
-    return fig
 
+    return fig

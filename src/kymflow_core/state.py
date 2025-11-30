@@ -14,16 +14,18 @@ from .repository import FolderScanResult, scan_folder
 from .enums import ImageDisplayOrigin, SelectionOrigin, ThemeMode
 
 from .utils.logging import get_logger
+
 logger = get_logger(__name__)
+
 
 @dataclass
 class ImageDisplayParams:
     """Event payload for image display parameter changes.
-    
+
     Contains all information about display parameter changes, including
     which UI element initiated the change. Used to coordinate image display
     updates across GUI components.
-    
+
     Attributes:
         colorscale: Name of the color scale to use (e.g., "viridis", "gray").
         zmin: Minimum intensity value for display scaling. If None, uses
@@ -41,18 +43,19 @@ class ImageDisplayParams:
     def __str__(self) -> str:
         return f"ImageDisplayParams(colorscale: {self.colorscale}, zmin: {self.zmin}, zmax: {self.zmax}, origin: {self.origin})"
 
+
 class TaskState(EventedModel):
     """Container for tracking long-running UI tasks with progress.
-    
+
     Provides signals for progress updates, cancellation, and completion.
     Used to coordinate between background threads and GUI components.
-    
+
     Attributes:
         running: Whether a task is currently running.
         progress: Progress value between 0.0 and 1.0.
         message: Status message describing current task state.
         cancellable: Whether the task can be cancelled.
-    
+
     Signals:
         progress_changed: Emitted when progress value changes (float).
         cancelled: Emitted when cancellation is requested.
@@ -70,7 +73,7 @@ class TaskState(EventedModel):
 
     def set_progress(self, value: float, message: str = "") -> None:
         """Update task progress and emit progress_changed signal.
-        
+
         Args:
             value: Progress value between 0.0 and 1.0.
             message: Optional status message describing current progress.
@@ -81,7 +84,7 @@ class TaskState(EventedModel):
 
     def request_cancel(self) -> None:
         """Request cancellation of the current task.
-        
+
         Emits the cancelled signal if a task is currently running.
         The task implementation should check for cancellation and stop
         processing when this is called.
@@ -93,17 +96,17 @@ class TaskState(EventedModel):
 
 class AppState(EventedModel):
     """Shared application state for the NiceGUI GUI.
-    
+
     Manages the current folder, file list, selected file, theme, and image
     display parameters. Provides signals for state changes to coordinate
     updates across GUI components.
-    
+
     Attributes:
         folder: Currently selected folder path.
         files: List of KymFile instances in the current folder.
         selected_file: Currently selected KymFile, or None.
         theme_mode: Current UI theme (dark or light).
-    
+
     Signals:
         file_list_changed: Emitted when the file list is updated.
         selection_changed: Emitted when the selected file changes
@@ -129,24 +132,24 @@ class AppState(EventedModel):
 
     def load_folder(self, folder: Path) -> FolderScanResult:
         """Scan folder for kymograph files and update app state.
-        
+
         Scans the specified folder for TIFF files, creates KymFile instances,
         and updates the app state. Automatically selects the first file if
         files are found. Emits file_list_changed signal.
-        
+
         Args:
             folder: Path to the folder to scan.
-        
+
         Returns:
             FolderScanResult containing the scanned folder and file list.
         """
         result = scan_folder(folder)
         self.folder = result.folder
         self.files = result.files
-        
-        logger.info(f"--> emit file_list_changed")
+
+        logger.info("--> emit file_list_changed")
         self.file_list_changed.emit()
-        
+
         if self.files:
             self.select_file(self.files[0])
         else:
@@ -159,10 +162,10 @@ class AppState(EventedModel):
         origin: Optional[SelectionOrigin] = None,
     ) -> None:
         """Set the currently selected file and emit selection_changed signal.
-        
+
         Updates the selected file and emits a signal to notify GUI components.
         If the file is already selected, no signal is emitted.
-        
+
         Args:
             kym_file: KymFile to select, or None to clear selection.
             origin: Source of the selection change (for avoiding feedback loops).
@@ -177,10 +180,10 @@ class AppState(EventedModel):
 
     def notify_metadata_changed(self, kym_file: KymFile) -> None:
         """Notify listeners that file metadata has been updated.
-        
+
         Emits metadata_changed signal to notify GUI components that metadata
         for the specified file has been modified.
-        
+
         Args:
             kym_file: KymFile whose metadata was updated.
         """
@@ -189,20 +192,20 @@ class AppState(EventedModel):
 
     def refresh_file_rows(self) -> None:
         """Notify listeners that file metadata changed without reloading folder.
-        
+
         Emits file_list_changed signal to refresh file table displays without
         re-scanning the folder. Useful when metadata is updated but the file
         list itself hasn't changed.
         """
-        logger.info(f"--> emit file_list_changed")
+        logger.info("--> emit file_list_changed")
         self.file_list_changed.emit()
 
     def set_theme(self, mode: ThemeMode) -> None:
         """Set the application theme and emit theme_changed signal.
-        
+
         Updates the theme mode and notifies GUI components. If the theme
         is already set to the specified mode, no signal is emitted.
-        
+
         Args:
             mode: Theme mode to set (DARK or LIGHT).
         """
@@ -214,7 +217,7 @@ class AppState(EventedModel):
 
     def set_image_display(self, params: ImageDisplayParams) -> None:
         """Emit signal to update image display parameters (colorscale, intensity range).
-        
+
         Args:
             params: Complete event payload containing colorscale, zmin, zmax, and origin.
         """

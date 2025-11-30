@@ -19,4 +19,3 @@ __all__ = [
     "update_contrast",
     "update_xaxis_range",
 ]
-

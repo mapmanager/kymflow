@@ -27,7 +27,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         remove_outliers_cb = ui.checkbox("Remove outliers")
         median_filter_cb = ui.checkbox("Median filter")
         full_zoom_btn = ui.button("Full zoom", icon="zoom_out_map")
-    
+
     # Plot with larger height to accommodate both subplots
     plot = ui.plotly(go.Figure()).classes("w-full")
     state = {
@@ -49,15 +49,15 @@ def create_image_line_viewer(app_state: AppState) -> None:
         kf = state["selected"]
         theme = state["theme"]
         display_params = state["display_params"]
-        
+
         # Convert checkbox to median_filter int (0 = off, 5 = on with window size 5)
         median_filter_size = 5 if median_filter_cb.value else 0
-        
+
         # Get display parameters from stored params or use defaults
         colorscale = display_params.colorscale if display_params else "Gray"
         zmin = display_params.zmin if display_params else None
         zmax = display_params.zmax if display_params else None
-        
+
         fig = plot_image_line_plotly(
             kf=kf,
             y="velocity",
@@ -68,7 +68,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
             zmin=zmin,
             zmax=zmax,
         )
-        
+
         # Store original unfiltered y-values for partial updates
         if kf is not None:
             time_values = kf.getAnalysisValue("time")
@@ -82,7 +82,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         else:
             state["original_time_values"] = None
             state["original_y_values"] = None
-        
+
         # Store figure reference
         _set_uirevision(fig)
         state["current_figure"] = fig
@@ -121,17 +121,17 @@ def create_image_line_viewer(app_state: AppState) -> None:
             # No figure yet, do full render
             _render_combined()
             return
-        
+
         original_y = state["original_y_values"]
         if original_y is None:
             # No data available, do full render
             _render_combined()
             return
-        
+
         # Get current filter settings
         remove_outliers = remove_outliers_cb.value
         median_filter_size = 5 if median_filter_cb.value else 0
-        
+
         # Re-compute filtered y-values
         filtered_y = original_y.copy()
         if remove_outliers:
@@ -140,7 +140,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
             if median_filter_size % 2 == 0:
                 median_filter_size = 5  # Default to 5 if even
             filtered_y = _medianFilter(filtered_y, median_filter_size)
-        
+
         # Find the Scatter trace and update its y-values
         for trace in fig.data:
             if isinstance(trace, go.Scatter):
@@ -150,10 +150,10 @@ def create_image_line_viewer(app_state: AppState) -> None:
             # No Scatter trace found, do full render
             _render_combined()
             return
-        
+
         # Update the plot with modified figure (preserves zoom via uirevision)
         plot.update_figure(fig)
-    
+
     def _on_filter_change() -> None:
         """Handle filter checkbox changes - use partial update to preserve zoom."""
         _update_line_plot_partial()
@@ -170,24 +170,24 @@ def create_image_line_viewer(app_state: AppState) -> None:
         if fig is None:
             # No figure yet, ignore contrast changes
             return
-        
+
         display_params = state["display_params"]
         if display_params is None:
             return
-        
+
         # Update colorscale
         update_colorscale(fig, display_params.colorscale)
-        
+
         # Update contrast (zmin/zmax)
         update_contrast(fig, zmin=display_params.zmin, zmax=display_params.zmax)
-        
+
         # Update the plot with modified figure (preserves zoom via uirevision)
         plot.update_figure(fig)
 
     @app_state.image_display_changed.connect
     def _on_image_display_change(params: ImageDisplayParams) -> None:
         """Handle image display parameter changes from contrast widget.
-        
+
         Uses partial updates to preserve zoom/pan state.
         """
         state["display_params"] = params

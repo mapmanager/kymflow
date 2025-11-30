@@ -14,7 +14,7 @@ Example:
 
     ```python
     from kymflow_core.kym_file import KymFile
-    
+
     kym = KymFile("/path/to/file.tif", load_image=False)
     info = kym.to_metadata_dict(include_analysis=False)
     image = kym.ensure_image_loaded()
@@ -39,6 +39,7 @@ from .read_olympus_header import _readOlympusHeader
 from .kym_flow_radon_gpt import mp_analyze_flow
 
 from .utils.logging import get_logger
+
 logger = get_logger(__name__)
 
 ProgressCallback = Callable[[int, int], Any]
@@ -48,10 +49,10 @@ CancelCallback = Callable[[], bool]
 @dataclass
 class FieldMetadata:
     """Structured metadata for form field definitions.
-    
+
     Provides type-safe field metadata to avoid typos in metadata dictionaries.
     Used by GUI forms to configure field visibility, editability, and layout.
-    
+
     Attributes:
         editable: Whether the field can be edited by the user.
         label: Display label for the field.
@@ -60,6 +61,7 @@ class FieldMetadata:
         order: Optional ordering value for field display.
         visible: Whether the field should be visible in forms.
     """
+
     editable: bool = True
     label: str = ""
     widget_type: str = "text"
@@ -69,7 +71,7 @@ class FieldMetadata:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for use in field(metadata=...).
-        
+
         Returns:
             Dictionary containing all field metadata attributes, with None
             values for order omitted.
@@ -95,10 +97,10 @@ def field_metadata(
     visible: bool = True,
 ) -> Dict[str, Any]:
     """Create field metadata dictionary.
-    
+
     Convenience function that creates a FieldMetadata instance and converts
     it to a dictionary suitable for use in dataclass field metadata.
-    
+
     Args:
         editable: Whether the field can be edited by the user.
         label: Display label for the field.
@@ -106,7 +108,7 @@ def field_metadata(
         grid_span: Number of grid columns this field spans.
         order: Optional ordering value for field display.
         visible: Whether the field should be visible in forms.
-    
+
     Returns:
         Dictionary containing field metadata attributes.
     """
@@ -121,36 +123,36 @@ def field_metadata(
 
 
 def _removeOutliers(y: np.ndarray) -> np.ndarray:
-    """Nan out values +/- 2*std.
-    """
-    
+    """Nan out values +/- 2*std."""
+
     # trying to fix plotly refresh bug
-    #_y = y.copy()
+    # _y = y.copy()
     _y = y
 
     _mean = np.nanmean(_y)
     _std = np.nanstd(_y)
-    
-    _greater = _y > (_mean + 2*_std)
-    _y[_greater] = np.nan #float('nan')
-    
-    _less = _y < (_mean - 2*_std)
-    _y[_less] = np.nan #float('nan')
+
+    _greater = _y > (_mean + 2 * _std)
+    _y[_greater] = np.nan  # float('nan')
+
+    _less = _y < (_mean - 2 * _std)
+    _y[_less] = np.nan  # float('nan')
 
     # _greaterLess = (_y > (_mean + 2*_std)) | (_y < (_mean - 2*_std))
     # _y[_greaterLess] = np.nan #float('nan')
 
     return _y
 
+
 def _medianFilter(y: np.ndarray, window_size: int = 5) -> np.ndarray:
-    """Apply a median filter to the array.
-    """
+    """Apply a median filter to the array."""
     return scipy.signal.medfilt(y, window_size)
+
 
 def _get_analysis_folder_path(tif_path: Path) -> Path:
     """
     Get the analysis folder path for a given TIFF file.
-    
+
     Pattern: parent folder + '-analysis' suffix
     Example: 20221102/Capillary1_0001.tif -> 20221102/20221102-analysis/
     """
@@ -164,10 +166,11 @@ def _get_analysis_folder_path(tif_path: Path) -> Path:
 
     return parent / analysis_folder_name
 
+
 def _getSavePaths(tif_path: Path) -> (Path, Path):
     """
     Get the save paths for a given TIFF file.
-    
+
     Returns:
         csv_path: Path to the CSV file
         json_path: Path to the JSON file
@@ -178,14 +181,15 @@ def _getSavePaths(tif_path: Path) -> (Path, Path):
     json_path = analysis_folder / f"{base_name}.json"
     return csv_path, json_path
 
+
 @dataclass
 class OlympusHeader:
     """Structured representation of Olympus microscope header metadata.
-    
+
     Contains acquisition parameters extracted from the Olympus .txt header file
     that accompanies kymograph TIFF files. All fields have default values to
     handle cases where the header file is missing.
-    
+
     Attributes:
         um_per_pixel: Spatial resolution in micrometers per pixel.
         seconds_per_line: Temporal resolution in seconds per line scan.
@@ -206,7 +210,7 @@ class OlympusHeader:
             label="um/pixel",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     seconds_per_line: Optional[float] = field(
         default=0.001,  # 1 ms
@@ -215,7 +219,7 @@ class OlympusHeader:
             label="seconds/line",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     duration_seconds: Optional[float] = field(
         default=None,
@@ -224,7 +228,7 @@ class OlympusHeader:
             label="Duration (s)",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     pixels_per_line: Optional[int] = field(
         default=None,
@@ -233,7 +237,7 @@ class OlympusHeader:
             label="Pixels/Line",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     num_lines: Optional[int] = field(
         default=None,
@@ -242,7 +246,7 @@ class OlympusHeader:
             label="Lines",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     bits_per_pixel: Optional[int] = field(
         default=None,
@@ -251,7 +255,7 @@ class OlympusHeader:
             label="Bits/Pixel",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     date_str: Optional[str] = field(
         default=None,
@@ -260,7 +264,7 @@ class OlympusHeader:
             label="Date",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     time_str: Optional[str] = field(
         default=None,
@@ -269,7 +273,7 @@ class OlympusHeader:
             label="Time",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     raw: Dict[str, Any] = field(
         default_factory=dict,
@@ -279,21 +283,21 @@ class OlympusHeader:
             widget_type="text",
             grid_span=2,  # Full width for raw dict
             visible=False,  # Hide raw dict from form display
-        )
+        ),
     )
 
     @classmethod
     def from_tif(cls, tif_path: Path) -> "OlympusHeader":
         """Load Olympus header from accompanying .txt file.
-        
+
         Attempts to parse the Olympus header file that should be in the same
         directory as the TIFF file with the same base name. Returns a header
         with default values if the file is not found or cannot be parsed.
-        
+
         Args:
             tif_path: Path to the TIFF file. The corresponding .txt file will
                 be looked up in the same directory.
-        
+
         Returns:
             OlympusHeader instance with parsed values, or default values if
             the header file is missing.
@@ -315,7 +319,7 @@ class OlympusHeader:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary with renamed keys.
-        
+
         Returns:
             Dictionary representation with date_str and time_str renamed to
             date and time for compatibility with external APIs.
@@ -329,11 +333,11 @@ class OlympusHeader:
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
         """Return field schema for form generation.
-        
+
         Generates a list of field definitions with metadata extracted from
         the dataclass field definitions. Used by GUI frameworks to dynamically
         generate forms without hardcoding field information.
-        
+
         Returns:
             List of dictionaries, each containing field name, label, editability,
             widget type, grid span, visibility, and field type information.
@@ -342,23 +346,27 @@ class OlympusHeader:
         schema = []
         for field_obj in fields(cls):
             meta = field_obj.metadata
-            schema.append({
-                "name": field_obj.name,
-                "label": meta.get("label", field_obj.name.replace("_", " ").title()),
-                "editable": meta.get("editable", True),
-                "widget_type": meta.get("widget_type", "text"),
-                "order": meta.get("order", 999),
-                "grid_span": meta.get("grid_span", 1),
-                "visible": meta.get("visible", True),
-                "field_type": str(field_obj.type),
-            })
-        
+            schema.append(
+                {
+                    "name": field_obj.name,
+                    "label": meta.get(
+                        "label", field_obj.name.replace("_", " ").title()
+                    ),
+                    "editable": meta.get("editable", True),
+                    "widget_type": meta.get("widget_type", "text"),
+                    "order": meta.get("order", 999),
+                    "grid_span": meta.get("grid_span", 1),
+                    "visible": meta.get("visible", True),
+                    "field_type": str(field_obj.type),
+                }
+            )
+
         # Order is determined by the order of the fields in the dataclass
         return schema
 
     def get_editable_values(self) -> Dict[str, str]:
         """Get current values for editable fields only.
-        
+
         Returns:
             Dictionary mapping field names to string representations of their
             current values. Only includes fields marked as editable in the
@@ -379,15 +387,16 @@ class OlympusHeader:
                     values[field_name] = str(value)
         return values
 
+
 @dataclass
 class ExperimentMetadata:
     """User-provided experimental metadata for kymograph files.
-    
+
     Contains structured fields for documenting experimental conditions,
     sample information, and notes. All fields are optional and have default
     values. Unknown keys in dictionaries are silently ignored when loading
     from dict to maintain strict schema validation.
-    
+
     Attributes:
         species: Animal species (e.g., "mouse", "rat").
         region: Brain region or anatomical location.
@@ -404,31 +413,31 @@ class ExperimentMetadata:
     """
 
     species: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Species",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     region: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Region",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     cell_type: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Cell type",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     depth: Optional[float] = field(
         default=None,
@@ -437,7 +446,7 @@ class ExperimentMetadata:
             label="Depth",
             widget_type="number",
             grid_span=1,
-        )
+        ),
     )
     branch_order: Optional[int] = field(
         default=None,
@@ -446,82 +455,82 @@ class ExperimentMetadata:
             label="Branch order",
             widget_type="number",
             grid_span=1,
-        )
+        ),
     )
     direction: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Direction",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     sex: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Sex",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     genotype: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Genotype",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     condition: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Condition",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     acquisition_date: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=False,
             label="Acquisition Date",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     acquisition_time: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=False,
             label="Acquisition Time",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     note: Optional[str] = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=True,
             label="Note",
             widget_type="text",
             grid_span=2,
-        )
+        ),
     )
 
     @classmethod
     def from_dict(cls, payload: Optional[Dict[str, Any]]) -> "ExperimentMetadata":
         """Create instance from dictionary, ignoring unknown keys.
-        
+
         Only fields defined in the dataclass are extracted from the payload.
         Unknown keys are silently ignored to maintain strict schema validation.
-        
+
         Args:
             payload: Dictionary containing metadata fields. Can be None or empty.
-        
+
         Returns:
             ExperimentMetadata instance with values from payload, or defaults
             if payload is None or empty.
@@ -534,7 +543,7 @@ class ExperimentMetadata:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary with standardized key names.
-        
+
         Returns:
             Dictionary with field values, using abbreviated keys (acq_date,
             acq_time) for compatibility with external APIs.
@@ -554,11 +563,11 @@ class ExperimentMetadata:
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
         """Return field schema for form generation.
-        
+
         Generates a list of field definitions with metadata extracted from
         the dataclass field definitions. Used by GUI frameworks to dynamically
         generate forms without hardcoding field information.
-        
+
         Returns:
             List of dictionaries, each containing field name, label, editability,
             widget type, grid span, visibility, and field type information.
@@ -567,17 +576,21 @@ class ExperimentMetadata:
         schema = []
         for field_obj in fields(cls):
             meta = field_obj.metadata
-            schema.append({
-                "name": field_obj.name,
-                "label": meta.get("label", field_obj.name.replace("_", " ").title()),
-                "editable": meta.get("editable", True),
-                "widget_type": meta.get("widget_type", "text"),
-                "order": meta.get("order", 999),
-                "grid_span": meta.get("grid_span", 1),
-                "visible": meta.get("visible", True),
-                "field_type": str(field_obj.type),
-            })
-        
+            schema.append(
+                {
+                    "name": field_obj.name,
+                    "label": meta.get(
+                        "label", field_obj.name.replace("_", " ").title()
+                    ),
+                    "editable": meta.get("editable", True),
+                    "widget_type": meta.get("widget_type", "text"),
+                    "order": meta.get("order", 999),
+                    "grid_span": meta.get("grid_span", 1),
+                    "visible": meta.get("visible", True),
+                    "field_type": str(field_obj.type),
+                }
+            )
+
         # order is determined by the order of the fields in the dataclass
         # # Sort by order
         # schema.sort(key=lambda x: x["order"])
@@ -585,7 +598,7 @@ class ExperimentMetadata:
 
     def get_editable_values(self) -> Dict[str, str]:
         """Get current values for editable fields only.
-        
+
         Returns:
             Dictionary mapping field names to string representations of their
             current values. Only includes fields marked as editable in the
@@ -603,11 +616,11 @@ class ExperimentMetadata:
 @dataclass
 class AnalysisParameters:
     """Metadata describing analysis parameters and results.
-    
+
     Stores information about the analysis algorithm used, its parameters,
     when it was run, and where results are saved. This metadata is saved
     alongside analysis results for reproducibility.
-    
+
     Attributes:
         algorithm: Name of the analysis algorithm (e.g., "mpRadon").
         parameters: Dictionary of algorithm-specific parameters.
@@ -616,13 +629,13 @@ class AnalysisParameters:
     """
 
     algorithm: str = field(
-        default='',
+        default="",
         metadata=field_metadata(
             editable=False,
             label="Algorithm",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     parameters: Dict[str, Any] = field(
         default_factory=dict,
@@ -631,7 +644,7 @@ class AnalysisParameters:
             label="Parameters",
             widget_type="text",
             grid_span=2,
-        )
+        ),
     )
     analyzed_at: Optional[datetime] = field(
         default=None,
@@ -640,7 +653,7 @@ class AnalysisParameters:
             label="Analyzed At",
             widget_type="text",
             grid_span=1,
-        )
+        ),
     )
     result_path: Optional[Path] = field(
         default=None,
@@ -649,12 +662,12 @@ class AnalysisParameters:
             label="Result Path",
             widget_type="text",
             grid_span=2,
-        )
+        ),
     )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
-        
+
         Returns:
             Dictionary with all analysis parameters. Datetime is converted to
             ISO format string, and Path is converted to string.
@@ -669,11 +682,11 @@ class AnalysisParameters:
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
         """Return field schema for form generation.
-        
+
         Generates a list of field definitions with metadata extracted from
         the dataclass field definitions. Used by GUI frameworks to dynamically
         generate forms without hardcoding field information.
-        
+
         Returns:
             List of dictionaries, each containing field name, label, editability,
             widget type, grid span, visibility, and field type information.
@@ -682,44 +695,48 @@ class AnalysisParameters:
         schema = []
         for field_obj in fields(cls):
             meta = field_obj.metadata
-            schema.append({
-                "name": field_obj.name,
-                "label": meta.get("label", field_obj.name.replace("_", " ").title()),
-                "editable": meta.get("editable", True),
-                "widget_type": meta.get("widget_type", "text"),
-                "order": meta.get("order", 999),
-                "grid_span": meta.get("grid_span", 1),
-                "visible": meta.get("visible", True),
-                "field_type": str(field_obj.type),
-            })
-        
+            schema.append(
+                {
+                    "name": field_obj.name,
+                    "label": meta.get(
+                        "label", field_obj.name.replace("_", " ").title()
+                    ),
+                    "editable": meta.get("editable", True),
+                    "widget_type": meta.get("widget_type", "text"),
+                    "order": meta.get("order", 999),
+                    "grid_span": meta.get("grid_span", 1),
+                    "visible": meta.get("visible", True),
+                    "field_type": str(field_obj.type),
+                }
+            )
+
         # Order is determined by the order of the fields in the dataclass
         return schema
 
 
 class KymFile:
     """Encapsulates a kymograph TIFF file with metadata and analysis.
-    
+
     This class provides a unified interface for working with kymograph files,
     including lazy loading of image data, metadata management, and flow analysis.
     The class is designed to support efficient metadata-only workflows where
     full image data is not needed.
-    
+
     Always use KymFile properties and methods rather than accessing internal
     data structures directly. Key properties include:
-    
+
     - `duration_seconds`: Total recording duration in seconds
     - `pixels_per_line`: Number of pixels per line (spatial dimension)
     - `num_lines`: Number of lines (time dimension)
     - `acquisition_metadata`: OlympusHeader with metadata (seconds_per_line, um_per_pixel, etc.)
     - `ensure_image_loaded()`: Load and return the image array
-    
+
     Attributes:
         path: Path to the TIFF file.
         experiment_metadata: User-provided experimental metadata.
         acquisition_metadata: Olympus microscope header data.
         analysis_parameters: Parameters and results from flow analysis.
-    
+
     Example:
         ```python
         kym = KymFile("file.tif", load_image=False)
@@ -736,11 +753,11 @@ class KymFile:
         load_image: bool = False,
     ) -> None:
         """Initialize KymFile instance.
-        
+
         Loads metadata from the TIFF file and accompanying Olympus header file
         if available. Optionally loads the image data immediately if requested.
         Analysis data is automatically loaded if available.
-        
+
         Args:
             path: Path to the kymograph TIFF file.
             load_image: If True, load the TIFF image data immediately. If False,
@@ -754,7 +771,7 @@ class KymFile:
         self._header: OlympusHeader = OlympusHeader()  # header is default values
 
         self._analysis_parameters: AnalysisParameters = AnalysisParameters()
-        
+
         self._dfAnalysis: Optional[pd.DataFrame] = None  # full df loaded from csv file
 
         # try and load Olympus header from txt file if it exists
@@ -772,30 +789,32 @@ class KymFile:
 
     def summary_row(self) -> Dict[str, Any]:
         """Generate tabular summary for file list views.
-        
+
         Returns a dictionary with key metadata fields formatted for display
         in table views. Includes file name, folder hierarchy, analysis status,
         and key acquisition parameters.
-        
+
         Returns:
             Dictionary with keys suitable for table display, including file
             name, folder names, analysis status, and metadata values.
         """
         return {
             "File Name": self.path.name,
-            'Parent Folder': self.path.parent.name,
-            'Grandparent Folder': self.path.parent.parent.name,
-
-            'Analyzed': '✓' if self.analysisExists else '',
-            'Saved': '✓' if not self._dirty else '',
-            'Window Points': self._analysis_parameters.parameters.get('window_size', '-'),
+            "Parent Folder": self.path.parent.name,
+            "Grandparent Folder": self.path.parent.parent.name,
+            "Analyzed": "✓" if self.analysisExists else "",
+            "Saved": "✓" if not self._dirty else "",
+            "Window Points": self._analysis_parameters.parameters.get(
+                "window_size", "-"
+            ),
             "pixels": self.pixels_per_line or "-",
             "lines": self.num_lines or "-",
             "duration (s)": self.duration_seconds or "-",
-            "ms/line": round(self._header.seconds_per_line * 1000, 2) if self._header.seconds_per_line else "-",
+            "ms/line": round(self._header.seconds_per_line * 1000, 2)
+            if self._header.seconds_per_line
+            else "-",
             "um/pixel": self._header.um_per_pixel or "-",
             "bits/pixel": self._header.bits_per_pixel or "-",
-
             "note": self.experiment_metadata.note or "-",
             "path": str(self.path),  # special case, not in any shema
         }
@@ -803,11 +822,11 @@ class KymFile:
     @classmethod
     def table_column_schema(cls) -> Dict[str, bool]:
         """Return column visibility schema for table display.
-        
+
         Generates a dictionary mapping column names from summary_row() to
         visibility flags. Reuses existing form schemas where possible to
         avoid duplication of visibility rules.
-        
+
         Returns:
             Dictionary mapping column names to boolean visibility flags.
             Columns not in the mapping default to visible=True.
@@ -820,16 +839,16 @@ class KymFile:
             # "pixels", "lines", "duration (s)", "ms/line" are derived from OlympusHeader
             # but with different names, so we'd need property mappings - keeping simple for now
         }
-        
+
         # Override dict for columns not in any schema (derived/computed fields)
         # Defaults to True if not specified
         visibility_overrides = {
             "path": False,  # Always hide - used as row_key only
             # All other columns default to visible=True (don't need to list them)
         }
-        
+
         result = {}
-        
+
         # Look up visibility from existing form schemas
         for col_name, (dataclass_cls, field_name) in schema_field_mapping.items():
             form_schema = dataclass_cls.form_schema()
@@ -837,10 +856,10 @@ class KymFile:
                 if field_def["name"] == field_name:
                     result[col_name] = field_def.get("visible", True)
                     break
-        
+
         # Apply overrides (takes precedence)
         result.update(visibility_overrides)
-        
+
         return result
 
     # ------------------------------------------------------------------
@@ -855,11 +874,11 @@ class KymFile:
 
     def ensure_image_loaded(self) -> np.ndarray:
         """Load and return the kymograph image data.
-        
+
         Implements lazy loading - the image is only loaded from disk when
         this method is called. Subsequent calls return the cached image.
         The image is flipped horizontally to match the expected orientation.
-        
+
         Returns:
             2D numpy array with shape (time, space) where axis 0 is time
             (line scans) and axis 1 is space (pixels).
@@ -869,8 +888,8 @@ class KymFile:
             # abb 20251121
             self._image = np.flip(self._image, axis=1)
 
-        # logger.info(f'image loaded: {self._image.shape} dtype:{self._image.dtype}')        
-        
+        # logger.info(f'image loaded: {self._image.shape} dtype:{self._image.dtype}')
+
         return self._image
 
     # ------------------------------------------------------------------
@@ -879,20 +898,22 @@ class KymFile:
     # abb not used
     def to_metadata_dict(self, include_analysis: bool = True) -> Dict[str, Any]:
         """Merge all metadata into a single dictionary.
-        
+
         Combines Olympus header data, experimental metadata, and optionally
         analysis parameters into a unified dictionary structure. This is the
         primary format consumed by GUI tables and CLI scripts.
-        
+
         Args:
             include_analysis: If True, include analysis parameters in the
                 output. Defaults to True.
-        
+
         Returns:
             Dictionary containing path, filename, and all metadata fields
             from header, experiment metadata, and optionally analysis.
         """
-        header = self.ensure_header_loaded()  # header is always loaded in __init__ (can be default)
+        header = (
+            self.ensure_header_loaded()
+        )  # header is always loaded in __init__ (can be default)
         merged: Dict[str, Any] = {
             "path": str(self.path),
             "filename": self.path.name,
@@ -918,15 +939,15 @@ class KymFile:
 
     def update_experiment_metadata(self, **fields: Any) -> None:
         """Update stored experimental metadata fields.
-        
+
         Updates one or more fields in the experiment metadata. Unknown fields
         are silently ignored. Marks the file as dirty (needs saving).
-        
+
         Args:
             **fields: Keyword arguments mapping field names to new values.
                 Only fields that exist in ExperimentMetadata are updated.
         """
-        logger.info(f'fields:{fields}')
+        logger.info(f"fields:{fields}")
         for key, value in fields.items():
             if hasattr(self._experiment_metadata, key):
                 setattr(self._experiment_metadata, key, value)
@@ -947,12 +968,12 @@ class KymFile:
         use_multiprocessing: bool = True,
     ) -> None:
         """Run Radon-based flow analysis on the kymograph.
-        
+
         Performs a sliding window analysis along the time axis using Radon
         transforms to detect flow direction and velocity. Results are stored
         internally and can be saved using save_analysis(). The image must
         be loaded before calling this method.
-        
+
         Args:
             window_size: Number of time lines per analysis window. Must be
                 a multiple of 4.
@@ -966,14 +987,14 @@ class KymFile:
                 True if analysis should be cancelled.
             use_multiprocessing: If True, use multiprocessing for parallel
                 computation. Defaults to True.
-        
+
         Raises:
             ValueError: If window_size is invalid or data dimensions are
                 incompatible.
             FlowCancelled: If analysis is cancelled via is_cancelled callback.
         """
         image = self.ensure_image_loaded()
-        
+
         thetas, the_t, spread = mp_analyze_flow(
             image,
             window_size,
@@ -997,13 +1018,13 @@ class KymFile:
 
         secondsPerLine = self._header.seconds_per_line
         umPerPixel = self._header.um_per_pixel
-        
+
         # convert to physical units
         drewTime = the_t * secondsPerLine
-        
+
         # convert radians to angle
         _rad = np.deg2rad(thetas)
-        drewVelocity = (umPerPixel/secondsPerLine) * np.tan(_rad)
+        drewVelocity = (umPerPixel / secondsPerLine) * np.tan(_rad)
         drewVelocity = drewVelocity / 1000  # mm/s
 
         # debug, count inf and 0 tan
@@ -1012,48 +1033,50 @@ class KymFile:
 
         # remove inf and 0 tan()
         # np.tan(90 deg) is returning 1e16 rather than inf
-        logger.info('not removing inf/0 velocity -->> use this to calculate stalls')
+        logger.info("not removing inf/0 velocity -->> use this to calculate stalls")
         # tan90or0 = (drewVelocity > 1e6) | (drewVelocity == 0)
         # drewVelocity[tan90or0] = float('nan')
-        
+
         # our original in kym_file_v0.py saved these columns:
         # time,velocity,parentFolder,file,algorithm,delx,delt,numLines,pntsPerLine,cleanVelocity,absVelocity
-        
+
         cleanVelocity = _removeOutliers(drewVelocity)
         cleanVelocity = _medianFilter(cleanVelocity, window_size=5)
 
-        self._dfAnalysis = pd.DataFrame({
-            "time": drewTime,
-            "velocity": drewVelocity,
-            "parentFolder": self.path.parent.name,
-            "file": self.path.name,
-            "algorithm": "mpRadon",
-            "delx": umPerPixel,
-            "delt": secondsPerLine,
-            "numLines": self.num_lines,
-            "pntsPerLine": self.pixels_per_line,
-            "cleanVelocity": cleanVelocity,  # what were these in v0
-            "absVelocity": abs(cleanVelocity),  # what were these in v0
-        })
-        
+        self._dfAnalysis = pd.DataFrame(
+            {
+                "time": drewTime,
+                "velocity": drewVelocity,
+                "parentFolder": self.path.parent.name,
+                "file": self.path.name,
+                "algorithm": "mpRadon",
+                "delx": umPerPixel,
+                "delt": secondsPerLine,
+                "numLines": self.num_lines,
+                "pntsPerLine": self.pixels_per_line,
+                "cleanVelocity": cleanVelocity,  # what were these in v0
+                "absVelocity": abs(cleanVelocity),  # what were these in v0
+            }
+        )
+
         # Mark as dirty so save_analysis() will save
         self._dirty = True
-        
+
         # Auto-save analysis after successful computation
         # self.save_analysis()
-        
+
     def save_analysis(self) -> bool:
         """Save analysis results to CSV and JSON files.
-        
+
         Saves the analysis DataFrame to a CSV file and metadata to a JSON file
         in the analysis folder (parent folder + '-analysis' suffix). Only saves
         if the file is marked as dirty (has unsaved changes).
-        
+
         CSV contains: time, velocity, parentFolder, file, algorithm, delx, delt,
         numLines, pntsPerLine, cleanVelocity, absVelocity.
-        
+
         JSON contains: OlympusHeader, ExperimentMetadata, AnalysisParameters.
-        
+
         Returns:
             True if analysis was saved successfully, False if no analysis exists
             or file is not dirty.
@@ -1065,7 +1088,7 @@ class KymFile:
         if not self.analysisExists:
             logger.warning(f"No analysis to save for {self.path.name}")
             return False
-        
+
         csv_path, json_path = _getSavePaths(self.path)
 
         # our original in kym_file_v0.py saved these columns:
@@ -1074,32 +1097,32 @@ class KymFile:
         # Save CSV (no index, no header row)
         self._dfAnalysis.to_csv(csv_path, index=False)
         logger.info(f"Saved analysis CSV to {csv_path}")
-        
+
         # Build JSON metadata
         metadata = {
             "olympus_header": self.ensure_header_loaded().to_dict(),
             "experiment_metadata": self._experiment_metadata.to_dict(),
             "analysis_parameters": self._analysis_parameters.to_dict(),
         }
-        
+
         # Save JSON
         with open(json_path, "w") as f:
             json.dump(metadata, f, indent=2, default=str)
         logger.info(f"Saved analysis metadata to {json_path}")
-        
+
         # Update analysis snapshot with result path
         self._analysis_parameters.result_path = csv_path
-        
+
         self._dirty = False
         return True
-            
+
     def load_metadata(self) -> bool:
         """Load metadata from saved JSON file.
-        
+
         Loads Olympus header, experiment metadata, and analysis parameters
         from the JSON file in the analysis folder. Overwrites current metadata
         if the file exists.
-        
+
         Returns:
             True if metadata was loaded successfully, False if the JSON file
             does not exist.
@@ -1112,7 +1135,7 @@ class KymFile:
         # Load JSON metadata
         with open(json_path, "r") as f:
             metadata = json.load(f)
-        
+
         # Restore OlympusHeader if not already loaded
         if "olympus_header" in metadata:
             header_data = metadata["olympus_header"]
@@ -1126,52 +1149,56 @@ class KymFile:
                 date_str=header_data.get("date"),
                 time_str=header_data.get("time"),
             )
-        
+
         # Restore ExperimentMetadata
         if "experiment_metadata" in metadata:
             bio_data = metadata["experiment_metadata"]
             self._experiment_metadata = ExperimentMetadata.from_dict(bio_data)
-        
+
         # Restore AnalysisParameters
         if "analysis_parameters" in metadata:
             snap_data = metadata["analysis_parameters"]
             analyzed_at_str = snap_data.get("analyzed_at")
-            analyzed_at = datetime.fromisoformat(analyzed_at_str) if analyzed_at_str else None
+            analyzed_at = (
+                datetime.fromisoformat(analyzed_at_str) if analyzed_at_str else None
+            )
             self._analysis_parameters = AnalysisParameters(
                 algorithm=snap_data.get("algorithm"),
                 parameters=snap_data.get("parameters"),
                 analyzed_at=analyzed_at,
-                result_path=Path(snap_data["result_path"]) if snap_data.get("result_path") else None,
+                result_path=Path(snap_data["result_path"])
+                if snap_data.get("result_path")
+                else None,
             )
 
         return True
 
     def load_analysis(self) -> bool:
         """Load analysis results from CSV and JSON files.
-        
+
         Loads the analysis DataFrame from CSV and metadata from JSON in the
         analysis folder. This is called automatically during initialization
         if analysis files exist.
-        
+
         Returns:
             True if analysis was loaded successfully, False if the CSV file
             does not exist.
         """
         csv_path, _ = _getSavePaths(self.path)
-        
+
         # Check if files exist
-        if not csv_path.exists() :
+        if not csv_path.exists():
             logger.info(f"No analysis files found for {self.path.name}")
             return False
-        
+
         # Load CSV into DataFrame
         self._dfAnalysis = pd.read_csv(csv_path)
-                        
+
         self.load_metadata()
 
         # logger.info(f"Loaded analysis for {self.path.name}")
         return True
-        
+
     @property
     def analysisExists(self) -> bool:
         """
@@ -1185,7 +1212,9 @@ class KymFile:
             logger.warning(f"No analysis loaded for {self.path.name}")
             return None
         if key not in self._dfAnalysis.columns:
-            logger.warning(f"Key {key} not found in analysis DataFrame for {self.path.name}")
+            logger.warning(
+                f"Key {key} not found in analysis DataFrame for {self.path.name}"
+            )
             logger.warning(f"  Columns: {self._dfAnalysis.columns}")
             return None
         return self._dfAnalysis[key].values
@@ -1222,17 +1251,17 @@ def iter_metadata(
     follow_symlinks: bool = False,
 ) -> Iterator[Dict[str, Any]]:
     """Iterate over metadata for all TIFF files under a root directory.
-    
+
     Efficiently scans a directory tree for TIFF files and yields metadata
     dictionaries for each file. Only metadata is loaded - image pixels are
     not read, making this suitable for browsing large collections.
-    
+
     Args:
         root: Root directory to search, or a single file path.
         glob: Glob pattern for matching files. Defaults to "*.tif".
         follow_symlinks: If True, follow symbolic links when searching.
             Defaults to False.
-    
+
     Yields:
         Dictionary containing metadata for each TIFF file found, including
         path, filename, Olympus header data, and experiment metadata.
@@ -1258,15 +1287,15 @@ def iter_metadata(
 
 def collect_metadata(root: str | Path, **kwargs: Any) -> List[Dict[str, Any]]:
     """Collect metadata for all TIFF files under a root directory.
-    
+
     Convenience wrapper around iter_metadata() that collects all results
     into a list. Useful for GUI applications that need all metadata at once.
-    
+
     Args:
         root: Root directory to search, or a single file path.
         **kwargs: Additional arguments passed to iter_metadata() (glob,
             follow_symlinks, etc.).
-    
+
     Returns:
         List of metadata dictionaries, one per TIFF file found.
     """

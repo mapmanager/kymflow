@@ -12,10 +12,10 @@ logger = get_logger(__name__)
 
 def prompt_for_directory(initial: Path) -> Optional[str]:
     """Prompt user to select a directory using a file dialog.
-    
+
     Args:
         initial: Initial directory to show in the dialog
-        
+
     Returns:
         Selected directory path as string, or None if cancelled/error
     """
@@ -48,11 +48,12 @@ def create_folder_selector(
     on_folder_changed: Callable[[Path], None],
 ) -> None:
     """Create folder selection UI with Choose and Reload buttons.
-    
+
     Args:
         current_folder: Dictionary with 'path' key to track current folder
         on_folder_changed: Callback function called when folder changes, receives Path
     """
+
     def _load_folder(path_str: str) -> None:
         folder = Path(path_str).expanduser()
         if not folder.exists():
@@ -72,10 +73,6 @@ def create_folder_selector(
     folder_row = ui.row().classes("w-full items-center gap-2")
     with folder_row:
         ui.button("Choose folder", on_click=_choose_folder)
-        ui.button(
-            "Reload",
-            on_click=lambda: _load_folder(str(current_folder["path"]))
-        )
+        ui.button("Reload", on_click=lambda: _load_folder(str(current_folder["path"])))
         # Create label to display current folder path (after buttons)
         folder_display = ui.label(f"Folder: {current_folder['path']}")
-

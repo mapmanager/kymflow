@@ -60,4 +60,3 @@ After deployment, the documentation will be available at:
 - **404 errors**: Ensure GitHub Pages is enabled and pointing to the `gh-pages` branch
 - **Build errors**: Run `mkdocs build` locally first to catch errors
 - **Missing updates**: Clear browser cache or wait a few minutes for GitHub to update
-
