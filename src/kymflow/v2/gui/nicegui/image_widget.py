@@ -9,9 +9,9 @@ import numpy as np
 from nicegui import ui, events
 from psygnal import Signal
 
-from v2.core.session import KymEngine
-from v2.core.roi import KymRoi, KymRoiSet, hit_test_rois
-from v2.core.viewport import KymViewport, view_to_full, full_to_view
+from kymflow.v2.core.session import KymEngine
+from kymflow.v2.core.roi import KymRoi, KymRoiSet, hit_test_rois
+from kymflow.v2.core.viewport import KymViewport, view_to_full, full_to_view
 
 
 class KymImageWidget:

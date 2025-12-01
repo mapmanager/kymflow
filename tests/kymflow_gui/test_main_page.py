@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from nicegui import ui
 
-from kymflow_gui.frontend.layout import create_main_page
+from kymflow.kymflow_gui.frontend.layout import create_main_page
 
 
 @pytest.mark.requires_data
@@ -35,7 +35,7 @@ async def test_app_starts(user, test_data_dir: Path) -> None:
 @pytest.mark.asyncio
 async def test_load_folder_displays_table(user, test_data_dir: Path) -> None:
     """Test that loading a folder displays files in the table."""
-    from kymflow_core.state import AppState
+    from kymflow.kymflow_core.state import AppState
     
     # Verify test data exists
     if not test_data_dir.exists():
@@ -67,7 +67,7 @@ async def test_load_folder_displays_table(user, test_data_dir: Path) -> None:
 @pytest.mark.asyncio
 async def test_select_row_displays_plots_metadata(user, test_data_dir: Path) -> None:
     """Test that selecting a row displays plots and metadata."""
-    from kymflow_core.state import AppState
+    from kymflow.kymflow_core.state import AppState
     
     # Verify test data exists and has files
     if not test_data_dir.exists():

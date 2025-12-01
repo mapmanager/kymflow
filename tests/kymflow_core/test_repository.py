@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow_core.repository import FolderScanResult, scan_folder, metadata_table
+from kymflow.kymflow_core.repository import FolderScanResult, scan_folder, metadata_table
 
 
 @pytest.mark.requires_data

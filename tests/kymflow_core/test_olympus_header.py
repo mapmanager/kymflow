@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow_core.read_olympus_header import _readOlympusHeader
+from kymflow.kymflow_core.read_olympus_header import _readOlympusHeader
 
 
 @pytest.mark.requires_data

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow_core.metadata import ExperimentMetadata, OlympusHeader
+from kymflow.kymflow_core.metadata import ExperimentMetadata, OlympusHeader
 
 
 def test_experiment_metadata_from_dict() -> None:

@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 DIST_DIR="$ROOT_DIR/pyinstaller/macos/dist"
 BUILD_DIR="$ROOT_DIR/pyinstaller/macos/build"
-APP_ENTRY="$ROOT_DIR/src/kymflow_gui/main.py"
+APP_ENTRY="$ROOT_DIR/src/kymflow/kymflow_gui/main.py"
 
 echo "ROOT_DIR: $ROOT_DIR"
 echo "DIST_DIR: $DIST_DIR"
@@ -54,7 +54,7 @@ export KYMFLOW_GUI_RELOAD=0
 #   --distpath "$DIST_DIR"
 
 # nicegui-pack --windowed ../../src/kymflow_gui/main.py
-nicegui-pack --windowed --name "KymFlow" --icon "kymflow_transparent.icns" ../../src/kymflow_gui/main.py
+nicegui-pack --windowed --name "KymFlow" --icon "kymflow_transparent.icns" ../../src/kymflow/kymflow_gui/main.py
 
 # PyInstaller command:
 # python -m PyInstaller --name Your App Name --windowed --add-data /Users/cudmore/opt/miniconda3/envs/kymflow-pyinstaller-arm/lib/python3.11/site-packages/nicegui:nicegui ../../src/kymflow_gui/main.py

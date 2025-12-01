@@ -121,18 +121,17 @@ addopts = [
 ]
 asyncio_mode = "auto"
 # NiceGUI testing configuration - points to main application file
-main_file = "src/kymflow_gui/main.py"
+main_file = "src/kymflow/kymflow_gui/main.py"
 markers = [
     "requires_data: mark test as requiring test data directory (deselect with '-m \"not requires_data\"')",
     "asyncio: mark test as an asyncio coroutine",
 ]
 
+[tool.hatch.build]
+sources = ["src"]
+
 [tool.hatch.build.targets.wheel]
-packages = [
-    "src/kymflow_core",
-    "src/kymflow_gui",
-    "src/v2",
-]
+packages = ["src/kymflow"]
 
 [project.urls]
 Homepage = "https://github.com/mapmanager/kymflow"

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from nicegui import ui
 
-from kymflow_gui.frontend.layout import create_batch_page
+from kymflow.kymflow_gui.frontend.layout import create_batch_page
 
 
 @pytest.mark.requires_data
@@ -67,7 +67,7 @@ async def test_load_folder_displays_table(user, test_data_dir: Path) -> None:
 @pytest.mark.asyncio
 async def test_select_single_file(user, test_data_dir: Path) -> None:
     """Test selecting a single file on batch page and verify AppState updates."""
-    from kymflow_core.state import AppState
+    from kymflow.kymflow_core.state import AppState
     
     # Verify test data exists and has files
     if not test_data_dir.exists():
@@ -116,7 +116,7 @@ async def test_select_single_file(user, test_data_dir: Path) -> None:
 @pytest.mark.asyncio
 async def test_select_multiple_files(user, test_data_dir: Path) -> None:
     """Test selecting multiple files on batch page and verify AppState updates."""
-    from kymflow_core.state import AppState
+    from kymflow.kymflow_core.state import AppState
     
     # Verify test data exists and has multiple files
     if not test_data_dir.exists():
@@ -164,7 +164,7 @@ async def test_select_multiple_files(user, test_data_dir: Path) -> None:
 @pytest.mark.asyncio
 async def test_deselect_file(user, test_data_dir: Path) -> None:
     """Test deselecting a previously selected file and verify AppState updates."""
-    from kymflow_core.state import AppState
+    from kymflow.kymflow_core.state import AppState
     
     # Verify test data exists and has multiple files
     if not test_data_dir.exists():

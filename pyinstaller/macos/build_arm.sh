@@ -57,4 +57,4 @@ export KYMFLOW_GUI_RELOAD=0
 #   --distpath "$DIST_DIR"
 
 # nicegui-pack --windowed --name "KymFlow" --icon "kymflow_transparent.icns" ../../src/kymflow_gui/main.py
-nicegui-pack --windowed --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow_gui/main.py
+nicegui-pack --windowed --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/kymflow_gui/main.py

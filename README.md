@@ -14,7 +14,7 @@
 KymFlow is a NiceGUI-based application for browsing kymograph TIFF files,
 editing metadata, and running Radon-based flow analysis.
 
-The backend lives in `src/kymflow_core` and is completely GUI-agnostic, so scripts and notebooks can
+The backend lives in `src/kymflow/kymflow_core` and is completely GUI-agnostic, so scripts and notebooks can
 reuse the same API for analysis, metadata editing, or batch processing.
 
 ---
@@ -53,7 +53,7 @@ reuse the same API for analysis, metadata editing, or batch processing.
 4. **Run the GUI:**
 
    ```bash
-   python -m kymflow_gui.main
+   python -m kymflow.kymflow_gui.main
    ```
       The GUI will open in your default web browser at `http://localhost:8080` (or the next available port).
 
@@ -95,12 +95,12 @@ require reinstalling.
 Launch the NiceGUI app with:
 
 ```bash
-uv run python -m kymflow_gui.main
+uv run python -m kymflow.kymflow_gui.main
 ```
 
 This automatically uses the uv-managed environment and keeps editable imports
 intact. The GUI defaults to port **8080**; tweak defaults in
-`src/kymflow_gui/config.py` if needed.
+`src/kymflow/kymflow_gui/config.py` if needed.
 
 ---
 
@@ -149,8 +149,10 @@ dependencies run inside the same uv-managed environment.
 ```
 kymflow/
 ├─ src/
-│  ├─ kymflow_core/       # backend (KymFile, metadata, analysis, repository)
-│  └─ kymflow_gui/        # NiceGUI frontend (layout, components)
+│  └─ kymflow/
+│     ├─ kymflow_core/       # backend (KymFile, metadata, analysis, repository)
+│     ├─ kymflow_gui/        # NiceGUI frontend (layout, components)
+│     └─ v2/                 # v2 API (experimental)
 ├─ tests/                 # unit/integration tests
 ├─ pyproject.toml
 ├─ README.md

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from kymflow_core.kym_file import KymFile, _get_analysis_folder_path, _getSavePaths
-from kymflow_core.utils.logging import get_logger, setup_logging
+from kymflow.kymflow_core.kym_file import KymFile, _get_analysis_folder_path, _getSavePaths
+from kymflow.kymflow_core.utils.logging import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)
