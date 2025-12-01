@@ -1692,7 +1692,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
-    { name = "pywebview", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=6.1" },
+    { name = "pywebview", marker = "extra == 'gui'", specifier = ">=6.1" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "scikit-image", specifier = ">=0.24.0" },
     { name = "selenium", marker = "extra == 'test'", specifier = ">=4.0.0" },
@@ -1717,7 +1717,7 @@ docs = [
 ]
 gui = [
     { name = "nicegui", specifier = ">=3.3.1" },
-    { name = "pywebview", extras = ["gui"], specifier = ">=6.1" },
+    { name = "pywebview", specifier = ">=6.1" },
 ]
 notebook = [{ name = "jupyterlab", specifier = ">=4.3.0" }]
 pyinstaller = [{ name = "pyinstaller", specifier = ">=6.17.0" }]

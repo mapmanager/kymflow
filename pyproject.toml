@@ -50,7 +50,7 @@ classifiers = [
 [project.optional-dependencies]  # pip/venv/conda extras
 gui = [
     "nicegui>=3.3.1",
-    "pywebview[gui]>=6.1",
+    "pywebview>=6.1",
 ]
 test = [
     "pytest>=7.4",
@@ -79,7 +79,7 @@ dev = [
 [dependency-groups]  # uv dependency groups (kept in sync with extras)
 gui = [
     "nicegui>=3.3.1",
-    "pywebview[gui]>=6.1",
+    "pywebview>=6.1",
 ]
 test = [
     "pytest>=7.4",
@@ -128,7 +128,11 @@ markers = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/kymflow_core", "src/kymflow_gui"]
+packages = [
+    "src/kymflow_core",
+    "src/kymflow_gui",
+    "src/v2",
+]
 
 [project.urls]
 Homepage = "https://github.com/mapmanager/kymflow"

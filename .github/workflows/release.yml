@@ -91,6 +91,7 @@ jobs:
       - name: Build macOS app with nicegui-pack
         env:
           KYMFLOW_GUI_RELOAD: "0"
+          KYMFLOW_GUI_NATIVE: "1"
         run: |
           nicegui-pack \
             --windowed \
@@ -142,6 +143,7 @@ jobs:
       - name: Build macOS ARM app with nicegui-pack
         env:
           KYMFLOW_GUI_RELOAD: "0"
+          KYMFLOW_GUI_NATIVE: "1"
         run: |
           nicegui-pack \
             --windowed \
