@@ -1,12 +1,12 @@
-from kymflow.kymflow_core.kym_file import KymFile
-from kymflow.kymflow_core.plotting import (
+from kymflow.core.kym_file import KymFile
+from kymflow.core.plotting import (
     plot_image_line_plotly,
     update_colorscale,
     update_contrast,
     update_xaxis_range,
 )
 
-from kymflow.kymflow_core.utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

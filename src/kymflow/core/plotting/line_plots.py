@@ -6,13 +6,13 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from kymflow.kymflow_core.enums import ThemeMode
-from kymflow.kymflow_core.kym_file import KymFile, _medianFilter, _removeOutliers
+from kymflow.core.enums import ThemeMode
+from kymflow.core.kym_file import KymFile, _medianFilter, _removeOutliers
 
 from .colorscales import get_colorscale
 from .theme import get_theme_colors, get_theme_template
 
-from kymflow.kymflow_core.utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

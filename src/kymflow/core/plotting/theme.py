@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from kymflow.kymflow_core.enums import ThemeMode
+from kymflow.core.enums import ThemeMode
 
 
 def get_theme_colors(theme: ThemeMode) -> tuple[str, str]:

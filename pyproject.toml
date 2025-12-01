@@ -106,7 +106,7 @@ dev = [
 ]
 
 # [project.scripts]
-# kymflow-gui = "kymflow_gui.main:main"
+# kymflow-gui = "gui.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -121,7 +121,7 @@ addopts = [
 ]
 asyncio_mode = "auto"
 # NiceGUI testing configuration - points to main application file
-main_file = "src/kymflow/kymflow_gui/main.py"
+main_file = "src/kymflow/gui/main.py"
 markers = [
     "requires_data: mark test as requiring test data directory (deselect with '-m \"not requires_data\"')",
     "asyncio: mark test as an asyncio coroutine",

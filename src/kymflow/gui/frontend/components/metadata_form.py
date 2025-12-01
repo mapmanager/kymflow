@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.kymflow_core.kym_file import ExperimentMetadata
-from kymflow.kymflow_core.state import AppState
+from kymflow.core.kym_file import ExperimentMetadata
+from kymflow.core.state import AppState
 
 
 def create_metadata_form(app_state: AppState) -> None:

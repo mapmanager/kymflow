@@ -3,11 +3,11 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from nicegui import ui
 
-from kymflow.kymflow_core.enums import ThemeMode
-from kymflow.kymflow_core.plotting import image_plot_plotly
-from kymflow.kymflow_core.state import AppState
+from kymflow.core.enums import ThemeMode
+from kymflow.core.plotting import image_plot_plotly
+from kymflow.core.state import AppState
 
-from kymflow.kymflow_core.utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -97,7 +97,7 @@ jobs:
             --windowed \
             --name "KymFlow" \
             --icon "pyinstaller/macos/kymflow.icns" \
-            src/kymflow/kymflow_gui/main.py
+            src/kymflow/gui/main.py
 
       - name: Archive KymFlow.app
         run: |
@@ -149,7 +149,7 @@ jobs:
             --windowed \
             --name "KymFlow" \
             --icon "pyinstaller/macos/kymflow.icns" \
-            src/kymflow/kymflow_gui/main.py
+            src/kymflow/gui/main.py
 
       - name: Archive KymFlow.app (ARM64)
         run: |

@@ -1,3 +1,3 @@
-# kymflow_core.state
+# core.state
 
-::: kymflow_core.state
+::: core.state

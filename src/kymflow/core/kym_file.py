@@ -13,7 +13,7 @@ Example:
     Basic usage for loading and analyzing a kymograph file:
 
     ```python
-    from kymflow.kymflow_core.kym_file import KymFile
+    from kymflow.core.kym_file import KymFile
 
     kym = KymFile("/path/to/file.tif", load_image=False)
     info = kym.to_metadata_dict(include_analysis=False)

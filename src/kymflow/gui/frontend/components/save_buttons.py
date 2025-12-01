@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.kymflow_core.state import AppState, TaskState
+from kymflow.core.state import AppState, TaskState
 
 
 def create_save_buttons(app_state: AppState, task_state: TaskState) -> None:

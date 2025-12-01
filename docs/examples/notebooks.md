@@ -30,7 +30,7 @@ Notebooks are located in the `notebooks/` directory of the repository:
 ## Example Code
 
 ```python
-from kymflow.kymflow_core.kym_file import KymFile
+from kymflow.core.kym_file import KymFile
 
 # Load a kymograph file
 kym = KymFile("path/to/file.tif", load_image=False)

@@ -12,10 +12,10 @@ def _getVersionInfo() -> dict:
     # import nicegui.core.qtcore as QtCore
     import platform
     import nicegui
-    import kymflow.kymflow_core as kymflow_core
-    import kymflow.kymflow_gui as kymflow_gui
+    import kymflow.core as kymflow_core
+    import kymflow.gui as kymflow_gui
 
-    from kymflow.kymflow_core.utils.logging import get_log_file_path
+    from kymflow.core.utils.logging import get_log_file_path
 
     # retDict['SanPy version'] = __version__
     retDict["KymFlow Core version"] = kymflow_core.__version__  # noqa

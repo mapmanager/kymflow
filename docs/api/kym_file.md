@@ -1,3 +1,3 @@
-# kymflow_core.kym_file
+# core.kym_file
 
-::: kymflow_core.kym_file
+::: core.kym_file

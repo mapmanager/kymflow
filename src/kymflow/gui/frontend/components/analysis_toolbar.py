@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.kymflow_core.state import AppState, TaskState
-from kymflow.kymflow_core.tasks import run_flow_analysis
+from kymflow.core.state import AppState, TaskState
+from kymflow.core.tasks import run_flow_analysis
 
-from kymflow.kymflow_core.utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

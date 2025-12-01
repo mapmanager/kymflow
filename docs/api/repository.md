@@ -1,3 +1,3 @@
-# kymflow_core.repository
+# core.repository
 
-::: kymflow_core.repository
+::: core.repository

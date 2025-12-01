@@ -6,11 +6,11 @@ from typing import List
 
 from nicegui import ui, app
 
-from kymflow.kymflow_core.enums import ThemeMode
-from kymflow.kymflow_core.kym_file import KymFile
-from kymflow.kymflow_core.state import AppState, TaskState
-from kymflow.kymflow_core.tasks import run_batch_flow_analysis
-from kymflow.kymflow_core.utils.logging import get_log_file_path, get_logger
+from kymflow.core.enums import ThemeMode
+from kymflow.core.kym_file import KymFile
+from kymflow.core.state import AppState, TaskState
+from kymflow.core.tasks import run_batch_flow_analysis
+from kymflow.core.utils.logging import get_log_file_path, get_logger
 
 from .components.analysis_form import create_analysis_form
 from .components.analysis_toolbar import create_analysis_toolbar

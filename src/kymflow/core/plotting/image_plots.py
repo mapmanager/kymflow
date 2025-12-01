@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 import plotly.graph_objects as go
 
-from kymflow.kymflow_core.enums import ThemeMode
+from kymflow.core.enums import ThemeMode
 
 from .theme import get_theme_colors, get_theme_template
 

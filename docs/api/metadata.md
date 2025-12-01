@@ -1,4 +1,4 @@
-# kymflow_core.metadata
+# core.metadata
 
-::: kymflow_core.metadata
+::: core.metadata
 

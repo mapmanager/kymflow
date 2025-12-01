@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.kymflow_core.state import TaskState
+from kymflow.core.state import TaskState
 
 
 def create_task_progress(task_state: TaskState) -> None:

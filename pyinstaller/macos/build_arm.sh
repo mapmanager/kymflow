@@ -31,7 +31,7 @@ pip install -e '../../.[gui]'
 pip install pyinstaller
 
 # dry run gui
-# python -m kymflow_gui.main
+# python -m kymflow.gui.main
 
 # remove build and dist folders
 if [ -d "dist" ]; then
@@ -56,5 +56,5 @@ export KYMFLOW_GUI_RELOAD=0
 #   --workpath "$BUILD_DIR" \
 #   --distpath "$DIST_DIR"
 
-# nicegui-pack --windowed --name "KymFlow" --icon "kymflow_transparent.icns" ../../src/kymflow_gui/main.py
-nicegui-pack --windowed --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/kymflow_gui/main.py
+# nicegui-pack --windowed --name "KymFlow" --icon "kymflow_transparent.icns" ../../src/kymflow/gui/main.py
+nicegui-pack --windowed --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/gui/main.py

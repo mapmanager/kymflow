@@ -11,16 +11,16 @@ from pathlib import Path
 
 from nicegui import ui
 
-from kymflow.kymflow_gui.config import DEFAULT_DATA_DIR, DEFAULT_PORT, STORAGE_SECRET
-from kymflow.kymflow_gui.frontend.layout import (
+from kymflow.gui.config import DEFAULT_DATA_DIR, DEFAULT_PORT, STORAGE_SECRET
+from kymflow.gui.frontend.layout import (
     create_about_page,
     create_batch_page,
     create_main_page,
 )
 
 # IMPORTANT: configure logging at module import, so it runs in the uvicorn worker too
-from kymflow.kymflow_core.utils.logging import get_logger, setup_logging
-from kymflow.kymflow_gui import _getVersionInfo
+from kymflow.core.utils.logging import get_logger, setup_logging
+from kymflow.gui import _getVersionInfo
 
 setup_logging(
     level="INFO",

@@ -4,11 +4,11 @@ from typing import Callable, Dict, List, Optional
 
 from nicegui import ui, app
 
-from kymflow.kymflow_core.enums import SelectionOrigin
-from kymflow.kymflow_core.kym_file import KymFile
-from kymflow.kymflow_core.state import AppState
+from kymflow.core.enums import SelectionOrigin
+from kymflow.core.kym_file import KymFile
+from kymflow.core.state import AppState
 
-from kymflow.kymflow_core.utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

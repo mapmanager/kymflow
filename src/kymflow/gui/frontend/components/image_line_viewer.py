@@ -5,17 +5,17 @@ from nicegui import ui
 
 import numpy as np
 
-from kymflow.kymflow_core.enums import ThemeMode
-from kymflow.kymflow_core.kym_file import _medianFilter, _removeOutliers
-from kymflow.kymflow_core.plotting import (
+from kymflow.core.enums import ThemeMode
+from kymflow.core.kym_file import _medianFilter, _removeOutliers
+from kymflow.core.plotting import (
     plot_image_line_plotly,
     update_colorscale,
     update_contrast,
     reset_image_zoom,
 )
-from kymflow.kymflow_core.state import AppState, ImageDisplayParams
+from kymflow.core.state import AppState, ImageDisplayParams
 
-from kymflow.kymflow_core.utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
