@@ -8,9 +8,9 @@ from typing import Tuple
 import numpy as np
 from PIL import Image
 
-from .image import KymImage, array_to_pil
-from .viewport import KymViewport
-from .roi import KymRoiSet, KymRoi
+from kymflow.v2.core.image import KymImage, array_to_pil
+from kymflow.v2.core.viewport import KymViewport
+from kymflow.v2.core.roi import KymRoiSet, KymRoi
 
 
 @dataclass

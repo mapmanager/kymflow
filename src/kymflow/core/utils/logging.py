@@ -1,10 +1,12 @@
 """
-Simple, reliable logging utilities for the kymflow project.
+Simple, reliable logging utilities for the kymflow application.
 
-- Configure logging once via `setup_logging(...)` at app startup.
+- Configure logging via `setup_logging(...)` at app startup.
 - Get module-specific loggers via `get_logger(__name__)`.
+- Reconfigure anytime by calling `setup_logging(...)` again.
 
 This uses the *root logger* so it plays nicely with most frameworks.
+Logs automatically go to ~/.kymflow/logs/kymflow.log by default.
 """
 
 from __future__ import annotations
@@ -16,9 +18,6 @@ import sys
 from pathlib import Path
 from typing import Optional, Union
 
-# Internal flag to avoid double-configuration
-_CONFIGURED = False
-
 # Store the log file path for retrieval
 _LOG_FILE_PATH: Optional[Path] = None
 
@@ -29,35 +28,39 @@ def _expand_path(path: Union[str, Path]) -> Path:
 
 def setup_logging(
     level: Union[str, int] = "INFO",
-    log_file: Optional[Union[str, Path]] = None,
+    log_file: Optional[Union[str, Path]] = "~/.kymflow/logs/kymflow.log",
     max_bytes: int = 5_000_000,
     backup_count: int = 5,
 ) -> None:
     """
     Configure root logging with console + optional rotating file handler.
 
-    Calling this multiple times is safe; handlers are only added once.
+    Calling this multiple times will reconfigure logging (removes old handlers first).
 
     Parameters
     ----------
     level:
         Logging level for console (e.g. "DEBUG", "INFO").
     log_file:
-        Optional path to a log file. If None, no file handler is added.
+        Path to a log file. Defaults to "~/.kymflow/logs/kymflow.log".
+        Set to None to disable file logging (console only).
     max_bytes:
         Max size in bytes for rotating log file.
     backup_count:
         Number of rotated log files to keep.
     """
-    global _CONFIGURED
-    if _CONFIGURED:
-        return
-
     # Convert string levels like "INFO" to logging.INFO
     if isinstance(level, str):
         level = getattr(logging, level.upper(), logging.INFO)
 
     root = logging.getLogger()
+    
+    # Remove existing handlers to allow reconfiguration
+    # This prevents duplicate handlers while allowing logging to be reconfigured
+    for handler in root.handlers[:]:
+        handler.close()
+        root.removeHandler(handler)
+    
     root.setLevel(level)
 
     # -------- Formatter --------
@@ -87,8 +90,9 @@ def setup_logging(
         file_handler.setLevel(logging.DEBUG)  # capture everything to file
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
-
-    _CONFIGURED = True
+    else:
+        # Clear log file path when file logging is disabled
+        _LOG_FILE_PATH = None
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:

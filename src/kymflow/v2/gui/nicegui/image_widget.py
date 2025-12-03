@@ -71,7 +71,7 @@ class KymImageWidget:
     def __init__(
         self,
         engine: KymEngine,
-        parent: Optional[ui.element] = None,
+        parent=None,
         edge_tolerance: float = 5.0,
         cmap: str = "gray",
     ) -> None:
@@ -80,8 +80,8 @@ class KymImageWidget:
         Args:
             engine: Backend KymEngine instance providing image, viewport, and
                 ROI management.
-            parent: Optional NiceGUI parent element to contain the widget.
-                If None, the widget is created in the current context.
+            parent: Optional NiceGUI container element (e.g. ui.row(), ui.column()).
+                If None, the widget will create its own container div.
             edge_tolerance: Pixel tolerance for hit-testing ROI edges.
             cmap: Name of the Matplotlib colormap used for rendering.
         """
@@ -98,18 +98,22 @@ class KymImageWidget:
         self.last_pan_y_full: Optional[float] = None
         self.last_mouse_x_full: Optional[float] = None
         self.last_mouse_y_full: Optional[float] = None
-        self.last_image_update: float = 0.0  # simple throttle; set by caller if needed
+        self.last_image_update: float = 0.0
 
-        # For move operations we keep a copy of the ROI at drag start
         self._orig_roi_dict: Optional[dict] = None
 
         # Logical display size from the engine
         self.DISPLAY_W = self.engine.display_width
         self.DISPLAY_H = self.engine.display_height
 
-        # Build UI elements
-        with (parent or ui) as container:  # noqa: F841 - container unused, but keeps context
-            # Initial rendering of the viewport
+        # Decide which container to use: either a provided parent, or a fresh div
+        if parent is not None:
+            container = parent
+        else:
+            container = ui.element("div").classes("w-full")
+
+        # Build UI elements inside the container
+        with container:
             pil_img = self.engine.render_view_pil(
                 vmin=None,
                 vmax=None,
@@ -124,7 +128,6 @@ class KymImageWidget:
                 f"aspect-ratio: {self.engine.image.width} / {self.engine.image.height}; "
                 "object-fit: contain; border: 1px solid #666;"
             )
-            # Use NiceGUI 3.3.1 pattern: on_mouse + generic "wheel" event
             self.interactive.on_mouse(self._on_mouse)
             self.interactive.on("wheel", self._on_wheel)
 

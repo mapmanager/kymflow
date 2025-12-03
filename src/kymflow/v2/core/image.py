@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.cm as cm
 
-from .viewport import KymViewport
+from kymflow.v2.core.viewport import KymViewport
 
 
 @dataclass

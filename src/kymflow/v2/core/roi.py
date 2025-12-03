@@ -7,7 +7,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-from .image import KymImage
+from kymflow.v2.core.image import KymImage
 
 @dataclass
 class KymRoi:
