@@ -1,7 +1,6 @@
-"""Core infrastructure for modern KymFlow GUI architecture."""
+"""Core infrastructure for KymFlow GUI architecture."""
 
 from .app_context import AppContext
-from .base_page import BasePage
 
-__all__ = ["AppContext", "BasePage"]
+__all__ = ["AppContext"]
 

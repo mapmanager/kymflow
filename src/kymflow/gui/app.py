@@ -18,8 +18,8 @@ from pathlib import Path
 from nicegui import ui
 
 from kymflow.gui.config import DEFAULT_DATA_DIR, DEFAULT_PORT, STORAGE_SECRET
-from kymflow.gui.core.app_context import AppContext
-from kymflow.gui.core.navigation import build_header, inject_global_styles
+from kymflow.gui.app_context import AppContext
+from kymflow.gui.navigation import build_header, inject_global_styles
 from kymflow.core.utils.logging import setup_logging, get_logger
 
 # Import page content builders
@@ -54,7 +54,12 @@ def with_main_layout(page_title: str, page_name: str, content_builder) -> None:
     """
     ui.page_title(page_title)
     inject_global_styles()
-    build_header(context)
+    
+    # Initialize dark mode for this page
+    dark_mode = context.init_dark_mode_for_page()
+    
+    # Build header with dark mode instance
+    build_header(context, dark_mode)
     
     # Main content area
     with ui.column().classes("w-full p-4 gap-4"):

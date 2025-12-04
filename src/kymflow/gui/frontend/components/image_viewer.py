@@ -5,7 +5,7 @@ from nicegui import ui
 
 from kymflow.core.enums import ThemeMode
 from kymflow.core.plotting import image_plot_plotly
-from kymflow.core.state_v2 import AppState
+from kymflow.core.state import AppState
 
 from kymflow.core.utils.logging import get_logger
 

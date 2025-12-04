@@ -9,7 +9,6 @@ except PackageNotFoundError:  # running from source without install
 def _getVersionInfo() -> dict:
     retDict = {}
 
-    # import nicegui.core.qtcore as QtCore
     import platform
     import nicegui
     import kymflow.core as kymflow_core

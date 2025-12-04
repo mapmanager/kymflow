@@ -6,7 +6,7 @@ from pathlib import Path
 
 from nicegui import ui, app
 
-from kymflow.gui.core.app_context import AppContext
+from kymflow.gui.app_context import AppContext
 from kymflow.gui.frontend.components.folder_selector import create_folder_selector
 from kymflow.gui.frontend.components.file_table import create_file_table
 from kymflow.gui.frontend.components.analysis_toolbar import create_analysis_toolbar

@@ -6,7 +6,7 @@ from collections import deque
 
 from nicegui import ui
 
-from kymflow.gui.core.app_context import AppContext
+from kymflow.gui.app_context import AppContext
 from kymflow.core.utils.logging import get_log_file_path
 from kymflow.gui import _getVersionInfo
 

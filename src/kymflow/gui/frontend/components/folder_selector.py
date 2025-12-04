@@ -5,7 +5,7 @@ from typing import Callable, Optional
 
 from nicegui import ui
 
-from kymflow.core.state_v2 import AppState
+from kymflow.core.state import AppState
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)

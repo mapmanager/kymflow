@@ -11,7 +11,7 @@ from typing import Callable, Optional, Sequence
 
 from .kym_file import KymFile
 from .kym_flow_radon import FlowCancelled
-from .state_v2 import TaskState
+from .state import TaskState
 
 
 def run_flow_analysis(

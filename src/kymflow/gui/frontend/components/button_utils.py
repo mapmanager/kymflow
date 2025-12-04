@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from nicegui import ui
 
-from kymflow.core.state_v2 import TaskState
+from kymflow.core.state import TaskState
 
 
 def sync_action_buttons(

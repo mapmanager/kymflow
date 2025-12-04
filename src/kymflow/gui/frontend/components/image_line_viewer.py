@@ -13,7 +13,7 @@ from kymflow.core.plotting import (
     update_contrast,
     reset_image_zoom,
 )
-from kymflow.core.state_v2 import AppState, ImageDisplayParams
+from kymflow.core.state import AppState, ImageDisplayParams
 
 from kymflow.core.utils.logging import get_logger
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from kymflow.core.kym_file import AnalysisParameters
-from kymflow.core.state_v2 import AppState
+from kymflow.core.state import AppState
 
 
 def create_analysis_form(app_state: AppState) -> None:

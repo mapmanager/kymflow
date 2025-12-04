@@ -5,7 +5,7 @@ from nicegui import ui
 
 from kymflow.core.enums import ThemeMode
 from kymflow.core.plotting import line_plot_plotly
-from kymflow.core.state_v2 import AppState
+from kymflow.core.state import AppState
 
 
 def create_plot_viewer(app_state: AppState) -> None:

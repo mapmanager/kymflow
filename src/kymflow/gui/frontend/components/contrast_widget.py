@@ -9,7 +9,7 @@ from nicegui import ui
 from kymflow.core.enums import ImageDisplayOrigin, ThemeMode
 from kymflow.core.plotting.colorscales import COLORSCALE_OPTIONS
 from kymflow.core.plotting.image_plots import histogram_plot_plotly
-from kymflow.core.state_v2 import AppState, ImageDisplayParams
+from kymflow.core.state import AppState, ImageDisplayParams
 
 from kymflow.core.utils.logging import get_logger
 
