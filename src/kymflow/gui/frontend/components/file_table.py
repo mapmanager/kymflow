@@ -6,7 +6,7 @@ from nicegui import ui, app
 
 from kymflow.core.enums import SelectionOrigin
 from kymflow.core.kym_file import KymFile
-from kymflow.core.state import AppState
+from kymflow.core.state_v2 import AppState
 
 from kymflow.core.utils.logging import get_logger
 
@@ -115,7 +115,6 @@ def create_file_table(
                     table.selected = [row]
                     app_state.select_file(match, origin=SelectionOrigin.TABLE)
 
-    @app_state.file_list_changed.connect
     def _refresh() -> None:
         table.rows = _rows(app_state.files)
         if multi_select:
@@ -129,6 +128,9 @@ def create_file_table(
 
         # Restore selection after refresh from stored state
         _restore_from_state()
+    
+    # Register callback (no decorator)
+    app_state.on_file_list_changed(_refresh)
 
     def _on_select(event) -> None:
         nonlocal current_single
@@ -200,8 +202,7 @@ def create_file_table(
     table.on("selection", _on_select)
 
     if not multi_select:
-
-        @app_state.selection_changed.connect
+        
         def _on_external_selection(
             kf: Optional[KymFile],
             origin: Optional[SelectionOrigin],
@@ -223,6 +224,9 @@ def create_file_table(
             table.selected = [row]
             current_single = row["path"]
             app.storage.user[storage_key] = row["path"]
+        
+        # Register callback (no decorator)
+        app_state.on_selection_changed(_on_external_selection)
 
     # Initial restoration from session state (or optional restore_selection seed)
     if restore_selection:

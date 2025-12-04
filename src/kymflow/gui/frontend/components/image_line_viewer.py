@@ -13,7 +13,7 @@ from kymflow.core.plotting import (
     update_contrast,
     reset_image_zoom,
 )
-from kymflow.core.state import AppState, ImageDisplayParams
+from kymflow.core.state_v2 import AppState, ImageDisplayParams
 
 from kymflow.core.utils.logging import get_logger
 
@@ -102,14 +102,12 @@ def create_image_line_viewer(app_state: AppState) -> None:
         reset_image_zoom(fig, kf)
         plot.update_figure(fig)
 
-    @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         state["selected"] = kf
         _render_combined()
         # Reset to full zoom when selection changes
         _reset_zoom(force_new_uirevision=True)
 
-    @app_state.metadata_changed.connect
     def _on_metadata(kf) -> None:
         if kf is app_state.selected_file:
             _render_combined()
@@ -158,7 +156,6 @@ def create_image_line_viewer(app_state: AppState) -> None:
         """Handle filter checkbox changes - use partial update to preserve zoom."""
         _update_line_plot_partial()
 
-    @app_state.theme_changed.connect
     def _on_theme_change(mode: ThemeMode) -> None:
         """Handle theme change - requires full render."""
         state["theme"] = mode
@@ -184,7 +181,6 @@ def create_image_line_viewer(app_state: AppState) -> None:
         # Update the plot with modified figure (preserves zoom via uirevision)
         plot.update_figure(fig)
 
-    @app_state.image_display_changed.connect
     def _on_image_display_change(params: ImageDisplayParams) -> None:
         """Handle image display parameter changes from contrast widget.
 
@@ -196,7 +192,13 @@ def create_image_line_viewer(app_state: AppState) -> None:
     def _on_full_zoom() -> None:
         """Handle full zoom button click - reset image zoom to full scale."""
         _reset_zoom(force_new_uirevision=True)
-
+    
+    # Register callbacks (no decorators - explicit registration)
+    app_state.on_selection_changed(_on_selection)
+    app_state.on_metadata_changed(_on_metadata)
+    app_state.on_theme_changed(_on_theme_change)
+    app_state.on_image_display_changed(_on_image_display_change)
+    
     remove_outliers_cb.on("update:model-value", _on_filter_change)
     median_filter_cb.on("update:model-value", _on_filter_change)
     full_zoom_btn.on("click", _on_full_zoom)

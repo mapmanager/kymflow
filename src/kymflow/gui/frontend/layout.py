@@ -8,7 +8,7 @@ from nicegui import ui, app
 
 from kymflow.core.enums import ThemeMode
 from kymflow.core.kym_file import KymFile
-from kymflow.core.state import AppState, TaskState
+from kymflow.core.state_v2 import AppState, TaskState
 from kymflow.core.tasks import run_batch_flow_analysis
 from kymflow.core.utils.logging import get_log_file_path, get_logger
 

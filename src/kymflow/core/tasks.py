@@ -11,7 +11,7 @@ from typing import Callable, Optional, Sequence
 
 from .kym_file import KymFile
 from .kym_flow_radon import FlowCancelled
-from .state import TaskState
+from .state_v2 import TaskState
 
 
 def run_flow_analysis(
@@ -41,7 +41,7 @@ def run_flow_analysis(
     cancel_event = threading.Event()
 
     def _worker() -> None:
-        task_state.running = True
+        task_state.set_running(True)
         task_state.cancellable = True
         task_state.set_progress(0.0, "Starting analysis")
 
@@ -71,22 +71,16 @@ def run_flow_analysis(
                 # on_result(payload)
                 on_result(True)
         finally:
-            task_state.running = False
-            task_state.cancellable = False
-            task_state.finished.emit()
+            task_state.mark_finished()
 
     def _handle_cancel() -> None:
         cancel_event.set()
 
-    # Ensure multiple runs do not accumulate duplicate slots
-    try:
-        task_state.cancelled.disconnect(_handle_cancel)
-    except Exception:
-        pass
-    task_state.cancelled.connect(_handle_cancel)
+    # Register cancel handler (replaces connect/disconnect pattern)
+    task_state.on_cancelled(_handle_cancel)
 
     # Mark running immediately so UI can react before the thread fully starts
-    task_state.running = True
+    task_state.set_running(True)
     task_state.cancellable = True
     threading.Thread(target=_worker, daemon=True).start()
 
@@ -138,9 +132,9 @@ def run_batch_flow_analysis(
 
     def _worker() -> None:
         cancelled = False
-        per_file_task.running = True
+        per_file_task.set_running(True)
         per_file_task.cancellable = True
-        overall_task.running = True
+        overall_task.set_running(True)
         overall_task.cancellable = False
         overall_task.set_progress(0.0, f"0/{total_files} files")
 
@@ -182,13 +176,8 @@ def run_batch_flow_analysis(
             overall_progress = max(0.0, min(1.0, index / total_files))
             overall_task.set_progress(overall_progress, f"{index}/{total_files} files")
 
-        per_file_task.running = False
-        per_file_task.cancellable = False
-        per_file_task.finished.emit()
-
-        overall_task.running = False
-        overall_task.cancellable = False
-        overall_task.finished.emit()
+        per_file_task.mark_finished()
+        overall_task.mark_finished()
 
         if on_batch_complete:
             on_batch_complete(cancelled)

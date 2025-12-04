@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from nicegui import ui
 
-from kymflow.core.state import TaskState
+from kymflow.core.state_v2 import TaskState
 
 
 def sync_action_buttons(
@@ -46,10 +46,11 @@ def sync_action_buttons(
     # Set initial state
     _sync()
 
-    # Connect to task state changes
-    @task_state.events.running.connect  # type: ignore[attr-defined]
-    def _on_running_changed() -> None:
+    # Connect to task state changes (no decorator)
+    def _on_running_changed(running: bool) -> None:
         _sync()
+    
+    task_state.on_running_changed(_on_running_changed)
 
 
 def sync_cancel_button(
@@ -91,10 +92,11 @@ def sync_cancel_button(
     # Set initial state
     _sync()
 
-    # Connect to task state changes
-    @task_state.events.running.connect  # type: ignore[attr-defined]
-    def _on_running_changed() -> None:
+    # Connect to task state changes (no decorator)
+    def _on_running_changed(running: bool) -> None:
         _sync()
+    
+    task_state.on_running_changed(_on_running_changed)
 
     # Also listen to cancellable changes (though it's usually set with running)
     # This ensures we catch any edge cases

@@ -9,7 +9,7 @@ from nicegui import ui
 from kymflow.core.enums import ImageDisplayOrigin, ThemeMode
 from kymflow.core.plotting.colorscales import COLORSCALE_OPTIONS
 from kymflow.core.plotting.image_plots import histogram_plot_plotly
-from kymflow.core.state import AppState, ImageDisplayParams
+from kymflow.core.state_v2 import AppState, ImageDisplayParams
 
 from kymflow.core.utils.logging import get_logger
 
@@ -213,14 +213,16 @@ def create_contrast_widget(app_state: AppState) -> None:
         finally:
             state["updating_programmatically"] = False
 
-    @app_state.theme_changed.connect
     def _on_theme_change(mode: ThemeMode) -> None:
         """Handle theme change."""
         state["theme"] = mode
         _update_histogram()
-
-    # Connect event handlers
-    app_state.selection_changed.connect(_on_selection_change)
+    
+    # Register callbacks (no decorators - explicit registration)
+    app_state.on_selection_changed(_on_selection_change)
+    app_state.on_theme_changed(_on_theme_change)
+    
+    # Connect UI element handlers (these are safe - tied to element lifecycle)
     colorscale_select.on("update:model-value", _on_colorscale_change)
     # Throttle slider events to prevent cascading updates when dragging quickly
     # Use trailing events so we update after user stops dragging

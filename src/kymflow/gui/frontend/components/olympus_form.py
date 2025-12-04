@@ -3,7 +3,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from kymflow.core.kym_file import OlympusHeader
-from kymflow.core.state import AppState
+from kymflow.core.state_v2 import AppState
 
 
 def create_olympus_form(app_state: AppState) -> None:
@@ -60,6 +60,8 @@ def create_olympus_form(app_state: AppState) -> None:
                 else:
                     widgets[field_name].set_value(str(value))
 
-    @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         _populate_fields(kf)
+    
+    # Register callback (no decorator - explicit registration)
+    app_state.on_selection_changed(_on_selection)

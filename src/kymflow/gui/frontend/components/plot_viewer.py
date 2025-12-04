@@ -5,7 +5,7 @@ from nicegui import ui
 
 from kymflow.core.enums import ThemeMode
 from kymflow.core.plotting import line_plot_plotly
-from kymflow.core.state import AppState
+from kymflow.core.state_v2 import AppState
 
 
 def create_plot_viewer(app_state: AppState) -> None:
@@ -37,12 +37,10 @@ def create_plot_viewer(app_state: AppState) -> None:
         )
         plot.update_figure(fig)
 
-    @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         state["selected"] = kf
         _render_plot()
 
-    @app_state.metadata_changed.connect
     def _on_metadata(kf) -> None:
         if kf is app_state.selected_file:
             _render_plot()
@@ -50,10 +48,14 @@ def create_plot_viewer(app_state: AppState) -> None:
     def _on_filter_change() -> None:
         _render_plot()
 
-    @app_state.theme_changed.connect
     def _on_theme_change(mode: ThemeMode) -> None:
         state["theme"] = mode
         _render_plot()
-
+    
+    # Register callbacks (no decorators - explicit registration)
+    app_state.on_selection_changed(_on_selection)
+    app_state.on_metadata_changed(_on_metadata)
+    app_state.on_theme_changed(_on_theme_change)
+    
     remove_outliers_cb.on("update:model-value", _on_filter_change)
     median_filter_cb.on("update:model-value", _on_filter_change)

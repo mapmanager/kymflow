@@ -5,7 +5,7 @@ from nicegui import ui
 
 from kymflow.core.enums import ThemeMode
 from kymflow.core.plotting import image_plot_plotly
-from kymflow.core.state import AppState
+from kymflow.core.state_v2 import AppState
 
 from kymflow.core.utils.logging import get_logger
 
@@ -25,7 +25,6 @@ def create_image_viewer(app_state: AppState) -> None:
         fig = image_plot_plotly(image, theme)
         plot.update_figure(fig)
 
-    @app_state.selection_changed.connect
     def _on_selection(kf, origin) -> None:
         if not kf:
             state["image"] = None
@@ -36,9 +35,12 @@ def create_image_viewer(app_state: AppState) -> None:
         state["image"] = image
         _render_current()
 
-    @app_state.theme_changed.connect
     def _on_theme_change(mode: ThemeMode) -> None:
         state["theme"] = mode
         if state["image"] is None:
             return
         _render_current()
+    
+    # Register callbacks (no decorators - explicit registration)
+    app_state.on_selection_changed(_on_selection)
+    app_state.on_theme_changed(_on_theme_change)
