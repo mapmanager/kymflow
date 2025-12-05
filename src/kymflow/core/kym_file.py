@@ -35,10 +35,10 @@ import pandas as pd
 import tifffile
 # import scipy.signal
 
-from .metadata import ExperimentMetadata, OlympusHeader, AnalysisParameters
-from .kym_flow_radon import mp_analyze_flow
-from .analysis_utils import _removeOutliers, _medianFilter
-from .utils.logging import get_logger
+from kymflow.core.metadata import ExperimentMetadata, OlympusHeader, AnalysisParameters
+from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
+from kymflow.core.analysis.utils import _removeOutliers, _medianFilter
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -606,8 +606,16 @@ class KymFile:
         """
         return self._dfAnalysis is not None
 
-    def getAnalysisValue(self, key: str) -> Any:
-        """Get a value from the analysis DataFrame."""
+    def getAnalysisValue(self, key: str, remove_outliers: bool = False, median_filter: int = 0) -> np.ndarray | None:
+        """Get a value from the analysis DataFrame.
+        Args:
+            key: The column name to get the value from.
+            remove_outliers: If True, remove outliers using 2*std threshold.
+            median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
+                       If even and > 0, raises ValueError.
+        Returns:
+            The value from the analysis DataFrame.
+        """
         if self._dfAnalysis is None:
             logger.warning(f"No analysis loaded for {self.path.name}")
             return None
@@ -617,7 +625,12 @@ class KymFile:
             )
             logger.warning(f"  Columns: {self._dfAnalysis.columns}")
             return None
-        return self._dfAnalysis[key].values
+        values = self._dfAnalysis[key].values
+        if remove_outliers:
+            values = _removeOutliers(values)
+        if median_filter > 0:
+            values = _medianFilter(values, median_filter)
+        return values
 
     # ------------------------------------------------------------------
     # Convenience information

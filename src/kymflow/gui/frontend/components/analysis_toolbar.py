@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.core.state import AppState, TaskState
-from kymflow.core.tasks import run_flow_analysis
+from kymflow.gui.state import AppState
+from kymflow.core.state import TaskState
+from kymflow.gui.tasks import run_flow_analysis
 
 from kymflow.core.utils.logging import get_logger
 

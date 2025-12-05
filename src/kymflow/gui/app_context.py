@@ -12,8 +12,9 @@ from typing import Optional
 
 from nicegui import ui, app
 
-from kymflow.core.state import AppState, TaskState
-from kymflow.core.enums import ThemeMode
+from kymflow.gui.state import AppState
+from kymflow.core.state import TaskState
+from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)

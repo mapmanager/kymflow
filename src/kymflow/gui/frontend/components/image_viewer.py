@@ -3,9 +3,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from nicegui import ui
 
-from kymflow.core.enums import ThemeMode
+from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.plotting import image_plot_plotly
-from kymflow.core.state import AppState
+from kymflow.gui.state import AppState
 
 from kymflow.core.utils.logging import get_logger
 

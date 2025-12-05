@@ -7,9 +7,9 @@ from datetime import datetime
 
 import pandas as pd
 
-from .read_olympus_header import _readOlympusHeader
+from kymflow.core.read_olympus_header import _readOlympusHeader
 
-from .utils.logging import get_logger
+from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

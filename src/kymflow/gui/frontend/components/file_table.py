@@ -4,9 +4,9 @@ from typing import Callable, Dict, List, Optional
 
 from nicegui import ui, app
 
-from kymflow.core.enums import SelectionOrigin
+from kymflow.gui.events import SelectionOrigin
 from kymflow.core.kym_file import KymFile
-from kymflow.core.state import AppState
+from kymflow.gui.state import AppState
 
 from kymflow.core.utils.logging import get_logger
 

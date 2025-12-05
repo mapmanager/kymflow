@@ -5,15 +5,14 @@ from nicegui import ui
 
 import numpy as np
 
-from kymflow.core.enums import ThemeMode
-from kymflow.core.kym_file import _medianFilter, _removeOutliers
+from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.plotting import (
     plot_image_line_plotly,
     update_colorscale,
     update_contrast,
     reset_image_zoom,
 )
-from kymflow.core.state import AppState, ImageDisplayParams
+from kymflow.gui.state import AppState, ImageDisplayParams
 
 from kymflow.core.utils.logging import get_logger
 
@@ -131,13 +130,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         median_filter_size = 5 if median_filter_cb.value else 0
 
         # Re-compute filtered y-values
-        filtered_y = original_y.copy()
-        if remove_outliers:
-            filtered_y = _removeOutliers(filtered_y)
-        if median_filter_size > 0:
-            if median_filter_size % 2 == 0:
-                median_filter_size = 5  # Default to 5 if even
-            filtered_y = _medianFilter(filtered_y, median_filter_size)
+        filtered_y = state["selected"].getAnalysisValue("velocity", remove_outliers, median_filter_size)
 
         # Find the Scatter trace and update its y-values
         for trace in fig.data:

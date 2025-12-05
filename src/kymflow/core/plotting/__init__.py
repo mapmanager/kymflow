@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .image_plots import image_plot_plotly
-from .line_plots import (
+from kymflow.core.plotting.image_plots import image_plot_plotly
+from kymflow.core.plotting.line_plots import (
     line_plot_plotly,
     plot_image_line_plotly,
     reset_image_zoom,

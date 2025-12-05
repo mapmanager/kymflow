@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
-from .kym_file import KymFile, collect_metadata
+from kymflow.core.kym_file import KymFile, collect_metadata
 
 
 @dataclass

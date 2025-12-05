@@ -9,7 +9,7 @@ from nicegui import ui, app
 
 from kymflow.gui.app_context import AppContext
 from kymflow.core.kym_file import KymFile
-from kymflow.core.tasks import run_batch_flow_analysis
+from kymflow.gui.tasks import run_batch_flow_analysis
 from kymflow.gui.frontend.components.folder_selector import create_folder_selector
 from kymflow.gui.frontend.components.file_table import create_file_table
 from kymflow.gui.frontend.components.task_progress import create_task_progress

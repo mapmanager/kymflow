@@ -79,7 +79,7 @@ nav:
   - API Reference:
     - core.kym_file: api/kym_file.md
     - core.metadata: api/metadata.md
-    - core.kym_flow_radon: api/kym_flow_radon.md
+    - core.analysis.kym_flow_radon: api/kym_flow_radon.md
     - core.repository: api/repository.md
     - core.state: api/state.md
   - About: about.md

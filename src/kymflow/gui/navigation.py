@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from nicegui import ui, app
 
 if TYPE_CHECKING:
-    from .app_context import AppContext
+    from kymflow.gui.app_context import AppContext
 
 
 def open_external(url: str) -> None:

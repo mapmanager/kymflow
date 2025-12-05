@@ -1,3 +1,3 @@
-# core.kym_flow_radon
+# core.analysis.kym_flow_radon
 
-::: core.kym_flow_radon
+::: core.analysis.kym_flow_radon

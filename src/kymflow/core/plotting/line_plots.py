@@ -6,11 +6,11 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from kymflow.core.enums import ThemeMode
-from kymflow.core.kym_file import KymFile, _medianFilter, _removeOutliers
+from kymflow.core.plotting.theme import ThemeMode
+from kymflow.core.kym_file import KymFile
 
-from .colorscales import get_colorscale
-from .theme import get_theme_colors, get_theme_template
+from kymflow.core.plotting.colorscales import get_colorscale
+from kymflow.core.plotting.theme import get_theme_colors, get_theme_template
 
 from kymflow.core.utils.logging import get_logger
 
@@ -87,14 +87,10 @@ def line_plot_plotly(
         y_values.copy() if isinstance(y_values, np.ndarray) else np.array(y_values)
     )
 
-    # Apply filters
-    if remove_outliers:
-        filtered_y = _removeOutliers(filtered_y)
+    filtered_y = kf.getAnalysisValue(y, remove_outliers, median_filter)
 
-    if median_filter > 0:
-        if median_filter % 2 == 0:
-            raise ValueError(f"median_filter must be odd, got {median_filter}")
-        filtered_y = _medianFilter(filtered_y, median_filter)
+    if filtered_y is None:
+        raise ValueError(f"No data found for {y}")
 
     # Create plot
     fig = go.Figure(
@@ -275,14 +271,10 @@ def plot_image_line_plotly(
             y_values.copy() if isinstance(y_values, np.ndarray) else np.array(y_values)
         )
 
-        # Apply filters
-        if remove_outliers:
-            filtered_y = _removeOutliers(filtered_y)
+        filtered_y = kf.getAnalysisValue(y, remove_outliers, median_filter)
 
-        if median_filter > 0:
-            if median_filter % 2 == 0:
-                raise ValueError(f"median_filter must be odd, got {median_filter}")
-            filtered_y = _medianFilter(filtered_y, median_filter)
+        if filtered_y is None:
+            raise ValueError(f"No data found for {y}")
 
         fig.add_trace(
             go.Scatter(

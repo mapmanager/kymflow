@@ -20,7 +20,7 @@ def app_state(test_data_dir: Path) -> "AppState":
     Returns:
         AppState instance with test folder loaded
     """
-    from kymflow.core.state import AppState
+    from kymflow.gui.state import AppState
     
     app_state = AppState()
     if test_data_dir.exists():

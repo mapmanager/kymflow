@@ -5,9 +5,9 @@ from typing import Optional
 import numpy as np
 import plotly.graph_objects as go
 
-from kymflow.core.enums import ThemeMode
+from kymflow.core.plotting.theme import ThemeMode
 
-from .theme import get_theme_colors, get_theme_template
+from kymflow.core.plotting.theme import get_theme_colors, get_theme_template
 
 
 def image_plot_plotly(

@@ -1,6 +1,21 @@
 from __future__ import annotations
 
-from kymflow.core.enums import ThemeMode
+from enum import Enum
+
+
+class ThemeMode(str, Enum):
+    """UI theme mode.
+
+    Used by plotting functions to coordinate theme settings. Can be used
+    in scripts, notebooks, and GUI components.
+
+    Values:
+        DARK: Dark theme mode.
+        LIGHT: Light theme mode.
+    """
+
+    DARK = "dark"
+    LIGHT = "light"
 
 
 def get_theme_colors(theme: ThemeMode) -> tuple[str, str]:

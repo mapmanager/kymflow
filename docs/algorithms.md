@@ -87,7 +87,7 @@ Additional metadata is saved including:
 
 ## Implementation
 
-The algorithm is implemented in `core.kym_flow_radon` using:
+The algorithm is implemented in `core.analysis.kym_flow_radon` using:
 
 - **scikit-image**: For Radon transform computation (`skimage.transform.radon`).
 - **multiprocessing**: For parallel processing of multiple windows.

@@ -6,10 +6,11 @@ import numpy as np
 import plotly.graph_objects as go
 from nicegui import ui
 
-from kymflow.core.enums import ImageDisplayOrigin, ThemeMode
+from kymflow.gui.events import ImageDisplayOrigin
+from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.plotting.colorscales import COLORSCALE_OPTIONS
 from kymflow.core.plotting.image_plots import histogram_plot_plotly
-from kymflow.core.state import AppState, ImageDisplayParams
+from kymflow.gui.state import AppState, ImageDisplayParams
 
 from kymflow.core.utils.logging import get_logger
 
