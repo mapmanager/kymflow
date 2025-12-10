@@ -7,8 +7,6 @@ from datetime import datetime
 
 import pandas as pd
 
-from kymflow.core.read_olympus_header import _readOlympusHeader
-
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -153,211 +151,6 @@ def _generateDocs(dc: Type, print_markdown: bool = True) -> pd.DataFrame:
             print()
     
     return df
-
-
-@dataclass
-class OlympusHeader:
-    """Structured representation of Olympus microscope header metadata.
-
-    Contains acquisition parameters extracted from the Olympus .txt header file
-    that accompanies kymograph TIFF files. All fields have default values to
-    handle cases where the header file is missing.
-
-    Attributes:
-        um_per_pixel: Spatial resolution in micrometers per pixel.
-        seconds_per_line: Temporal resolution in seconds per line scan.
-        duration_seconds: Total recording duration in seconds.
-        pixels_per_line: Number of pixels in the spatial dimension.
-        num_lines: Number of line scans in the temporal dimension.
-        bits_per_pixel: Bit depth of the image data.
-        date_str: Acquisition date string from header.
-        time_str: Acquisition time string from header.
-        raw: Raw dictionary of all parsed header values.
-    """
-
-    # OlympusHeader needs defaults in case corresponding Olympus txt file is not found
-    um_per_pixel: Optional[float] = field(
-        default=1.0,
-        metadata=field_metadata(
-            editable=False,
-            label="um/pixel",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    seconds_per_line: Optional[float] = field(
-        default=0.001,  # 1 ms
-        metadata=field_metadata(
-            editable=False,
-            label="seconds/line",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    duration_seconds: Optional[float] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Duration (s)",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    pixels_per_line: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Pixels/Line",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    num_lines: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Lines",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    bits_per_pixel: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Bits/Pixel",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    date_str: Optional[str] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Date",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    time_str: Optional[str] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Time",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    raw: Dict[str, Any] = field(
-        default_factory=dict,
-        metadata=field_metadata(
-            editable=False,
-            label="Raw",
-            widget_type="text",
-            grid_span=2,  # Full width for raw dict
-            visible=False,  # Hide raw dict from form display
-        ),
-    )
-
-    @classmethod
-    def from_tif(cls, tif_path: Path) -> "OlympusHeader":
-        """Load Olympus header from accompanying .txt file.
-
-        Attempts to parse the Olympus header file that should be in the same
-        directory as the TIFF file with the same base name. Returns a header
-        with default values if the file is not found or cannot be parsed.
-
-        Args:
-            tif_path: Path to the TIFF file. The corresponding .txt file will
-                be looked up in the same directory.
-
-        Returns:
-            OlympusHeader instance with parsed values, or default values if
-            the header file is missing.
-        """
-        parsed = _readOlympusHeader(str(tif_path))
-        if not parsed:
-            return cls()
-        return cls(
-            um_per_pixel=parsed.get("umPerPixel"),
-            seconds_per_line=parsed.get("secondsPerLine"),
-            duration_seconds=parsed.get("durImage_sec"),
-            pixels_per_line=parsed.get("pixelsPerLine"),
-            num_lines=parsed.get("numLines"),
-            bits_per_pixel=parsed.get("bitsPerPixel"),
-            date_str=parsed.get("dateStr"),
-            time_str=parsed.get("timeStr"),
-            raw=parsed,
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary with renamed keys.
-
-        Returns:
-            Dictionary representation with date_str and time_str renamed to
-            date and time for compatibility with external APIs.
-        """
-        d = asdict(self)
-        # Rename keys
-        d["date"] = d.pop("date_str", None)
-        d["time"] = d.pop("time_str", None)
-        return d
-
-    @classmethod
-    def form_schema(cls) -> List[Dict[str, Any]]:
-        """Return field schema for form generation.
-
-        Generates a list of field definitions with metadata extracted from
-        the dataclass field definitions. Used by GUI frameworks to dynamically
-        generate forms without hardcoding field information.
-
-        Returns:
-            List of dictionaries, each containing field name, label, editability,
-            widget type, grid span, visibility, and field type information.
-            Fields are ordered by their declaration order in the dataclass.
-        """
-        schema = []
-        for field_obj in fields(cls):
-            meta = field_obj.metadata
-            schema.append(
-                {
-                    "name": field_obj.name,
-                    "label": meta.get(
-                        "label", field_obj.name.replace("_", " ").title()
-                    ),
-                    "editable": meta.get("editable", True),
-                    "widget_type": meta.get("widget_type", "text"),
-                    "grid_span": meta.get("grid_span", 1),
-                    "visible": meta.get("visible", True),
-                    "field_type": str(field_obj.type),
-                }
-            )
-
-        # Order is determined by the order of the fields in the dataclass
-        return schema
-
-    def get_editable_values(self) -> Dict[str, str]:
-        """Get current values for editable fields only.
-
-        Returns:
-            Dictionary mapping field names to string representations of their
-            current values. Only includes fields marked as editable in the
-            form schema. None values are converted to empty strings.
-        """
-        schema = self.form_schema()
-        values = {}
-        for field_def in schema:
-            if field_def["editable"]:
-                field_name = field_def["name"]
-                value = getattr(self, field_name)
-                # Convert to string, handling None and dict types
-                if value is None:
-                    values[field_name] = ""
-                elif isinstance(value, dict):
-                    values[field_name] = str(value)
-                else:
-                    values[field_name] = str(value)
-        return values
 
 
 @dataclass
@@ -578,24 +371,85 @@ class ExperimentMetadata:
 
 @dataclass
 class AnalysisParameters:
-    """Metadata describing analysis parameters and results.
+    """Metadata describing analysis parameters and results with ROI information.
 
-    Stores information about the analysis algorithm used, its parameters,
-    when it was run, and where results are saved. This metadata is saved
-    alongside analysis results for reproducibility.
+    Unified structure combining ROI coordinates and analysis parameters. This allows
+    a single data structure to represent both unanalyzed ROIs (analysis fields are None)
+    and analyzed ROIs (all fields populated). When ROI coordinates change, analysis
+    fields become invalid (set to None) and must be re-analyzed.
 
     Attributes:
-        algorithm: Name of the analysis algorithm (e.g., "mpRadon").
-        window_size: Number of time lines per analysis window.
-        start_pixel: Start index in space dimension (inclusive). None uses 0.
-        stop_pixel: Stop index in space dimension (exclusive). None uses full width.
-        start_line: Start index in time dimension (inclusive). None uses 0.
-        stop_line: Stop index in time dimension (exclusive). None uses full height.
-        use_multiprocessing: Whether multiprocessing was used for computation.
-        analyzed_at: Timestamp when analysis was performed.
-        result_path: Path to the saved analysis results file (CSV).
+        roi_id: Unique identifier for this ROI.
+        left: Left coordinate of ROI in full-image pixels.
+        top: Top coordinate of ROI in full-image pixels.
+        right: Right coordinate of ROI in full-image pixels.
+        bottom: Bottom coordinate of ROI in full-image pixels.
+        note: Optional note/description for this ROI.
+        algorithm: Name of the analysis algorithm (e.g., "mpRadon"). Empty string if not analyzed.
+        window_size: Number of time lines per analysis window. None if not analyzed.
+        analyzed_at: Timestamp when analysis was performed. None if not analyzed.
+        
+        Note: Pixel/line indices (start_pixel, stop_pixel, start_line, stop_line) are
+        computed on-the-fly from left/top/right/bottom during analysis and are not stored.
     """
 
+    # ROI fields (always present)
+    roi_id: int = field(
+        default=0,
+        metadata=field_metadata(
+            editable=False,
+            label="ROI ID",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    left: float = field(
+        default=0.0,
+        metadata=field_metadata(
+            editable=True,
+            label="Left",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    top: float = field(
+        default=0.0,
+        metadata=field_metadata(
+            editable=True,
+            label="Top",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    right: float = field(
+        default=0.0,
+        metadata=field_metadata(
+            editable=True,
+            label="Right",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    bottom: float = field(
+        default=0.0,
+        metadata=field_metadata(
+            editable=True,
+            label="Bottom",
+            widget_type="number",
+            grid_span=1,
+        ),
+    )
+    note: str = field(
+        default="",
+        metadata=field_metadata(
+            editable=True,
+            label="Note",
+            widget_type="text",
+            grid_span=2,
+        ),
+    )
+
+    # Analysis fields (None if ROI not analyzed or analysis invalidated)
     algorithm: str = field(
         default="",
         metadata=field_metadata(
@@ -614,51 +468,6 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    start_pixel: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Start Pixel",
-            widget_type="number",
-            grid_span=1,
-        ),
-    )
-    stop_pixel: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Stop Pixel",
-            widget_type="number",
-            grid_span=1,
-        ),
-    )
-    start_line: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Start Line",
-            widget_type="number",
-            grid_span=1,
-        ),
-    )
-    stop_line: Optional[int] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Stop Line",
-            widget_type="number",
-            grid_span=1,
-        ),
-    )
-    use_multiprocessing: bool = field(
-        default=True,
-        metadata=field_metadata(
-            editable=False,
-            label="Use Multiprocessing",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
     analyzed_at: Optional[datetime] = field(
         default=None,
         metadata=field_metadata(
@@ -668,19 +477,10 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    result_path: Optional[Path] = field(
-        default=None,
-        metadata=field_metadata(
-            editable=False,
-            label="Result Path",
-            widget_type="text",
-            grid_span=2,
-        ),
-    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
-
+        
         Returns:
             Dictionary with all analysis parameters. Datetime is converted to
             ISO format string, and Path is converted to string. All fields are
@@ -690,10 +490,47 @@ class AnalysisParameters:
         # Convert datetime to ISO format string
         if d.get("analyzed_at") is not None:
             d["analyzed_at"] = d["analyzed_at"].isoformat()
-        # Convert Path to string
-        if d.get("result_path") is not None:
-            d["result_path"] = str(d["result_path"])
         return d
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "AnalysisParameters":
+        """Create instance from dictionary, filtering unknown fields and logging warnings.
+        
+        Only fields defined in the dataclass are extracted from the payload.
+        Unknown keys are filtered out and logged as warnings to help identify
+        schema evolution issues (e.g., deprecated fields in old JSON files).
+        
+        Args:
+            payload: Dictionary containing ROI and analysis fields. Can include
+                unknown/deprecated fields that will be filtered out.
+        
+        Returns:
+            AnalysisParameters instance with values from payload, using defaults
+            for missing fields.
+        """
+        from kymflow.core.utils.logging import get_logger
+        logger = get_logger(__name__)
+        
+        # Get valid field names from dataclass
+        valid_field_names = {f.name for f in fields(cls)}
+        
+        # Separate known and unknown fields
+        known_fields = {k: v for k, v in payload.items() if k in valid_field_names}
+        unknown_fields = {k: v for k, v in payload.items() if k not in valid_field_names}
+        
+        # Log warning if unknown fields were found
+        if unknown_fields:
+            logger.warning(
+                f"AnalysisParameters.from_dict(): Ignoring unknown/deprecated fields: {list(unknown_fields.keys())}. "
+                f"This may indicate schema evolution - old data files may need migration."
+            )
+        
+        # Handle datetime conversion for analyzed_at
+        if "analyzed_at" in known_fields and known_fields["analyzed_at"]:
+            if isinstance(known_fields["analyzed_at"], str):
+                known_fields["analyzed_at"] = datetime.fromisoformat(known_fields["analyzed_at"])
+        
+        return cls(**known_fields)
 
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
@@ -726,3 +563,30 @@ class AnalysisParameters:
 
         # Order is determined by the order of the fields in the dataclass
         return schema
+
+    def has_same_coordinates(self, other: "AnalysisParameters") -> bool:
+        """Check if this ROI has the same coordinates as another ROI.
+        
+        Compares only the coordinate fields (left, top, right, bottom), ignoring
+        other fields like roi_id, note, and analysis parameters.
+        
+        Args:
+            other: Another AnalysisParameters instance to compare against.
+        
+        Returns:
+            True if coordinates are the same, False otherwise.
+        """
+        if not isinstance(other, AnalysisParameters):
+            return False
+        return (
+            self.left == other.left
+            and self.top == other.top
+            and self.right == other.right
+            and self.bottom == other.bottom
+        )
+    
+    def __str__(self) -> str:
+        """String representation of all dataclass fields."""
+        d = asdict(self)
+        parts = [f'{k}={v!r}' for k, v in d.items()]
+        return f'{self.__class__.__name__}(' + ', '.join(parts) + ')'

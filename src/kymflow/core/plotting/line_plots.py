@@ -8,9 +8,16 @@ from plotly.subplots import make_subplots
 
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.kym_file import KymFile
+from kymflow.core.metadata import AnalysisParameters
 
 from kymflow.core.plotting.colorscales import get_colorscale
 from kymflow.core.plotting.theme import get_theme_colors, get_theme_template
+from kymflow.core.plotting.roi_config import (
+    ROI_COLOR_DEFAULT,
+    ROI_COLOR_SELECTED,
+    ROI_LINE_WIDTH,
+    ROI_FILL_OPACITY,
+)
 
 from kymflow.core.utils.logging import get_logger
 
@@ -19,16 +26,18 @@ logger = get_logger(__name__)
 
 def line_plot_plotly(
     kf: Optional[KymFile],
+    roi_id: int,
     x: str,
     y: str,
     remove_outliers: bool = False,
     median_filter: int = 0,
     theme: Optional[ThemeMode] = None,
 ) -> go.Figure:
-    """Create a line plot from KymFile analysis data.
+    """Create a line plot from KymFile analysis data for a specific ROI.
 
     Args:
         kf: KymFile instance, or None for empty plot
+        roi_id: Identifier of the ROI to plot (required).
         x: Column name for x-axis data (e.g., "time")
         y: Column name for y-axis data (e.g., "velocity")
         remove_outliers: If True, remove outliers using 2*std threshold
@@ -59,9 +68,13 @@ def line_plot_plotly(
         )
         return fig
 
-    # Get data from KymFile
-    x_values = kf.getAnalysisValue(x)
-    y_values = kf.getAnalysisValue(y)
+    # Get data from KymAnalysis for specified ROI
+    if kf is None or kf.kymanalysis is None:
+        x_values = None
+        y_values = None
+    else:
+        x_values = kf.kymanalysis.get_analysis_value(roi_id, x, remove_outliers, median_filter)
+        y_values = kf.kymanalysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
 
     # Handle None data (no analysis)
     if x_values is None or y_values is None:
@@ -82,15 +95,8 @@ def line_plot_plotly(
         )
         return fig
 
-    # Prepare y data for filtering
-    filtered_y = (
-        y_values.copy() if isinstance(y_values, np.ndarray) else np.array(y_values)
-    )
-
-    filtered_y = kf.getAnalysisValue(y, remove_outliers, median_filter)
-
-    if filtered_y is None:
-        raise ValueError(f"No data found for {y}")
+    # Values are already filtered by get_analysis_value, no need to filter again
+    filtered_y = y_values
 
     # Create plot
     fig = go.Figure(
@@ -131,6 +137,7 @@ def line_plot_plotly(
 
 def plot_image_line_plotly(
     kf: Optional[KymFile],
+    roi_id: int,
     y: str = "velocity",
     remove_outliers: bool = False,
     median_filter: int = 0,
@@ -138,14 +145,17 @@ def plot_image_line_plotly(
     colorscale: str = "Gray",
     zmin: Optional[int] = None,
     zmax: Optional[int] = None,
+    selected_roi_id: Optional[int] = None,
 ) -> go.Figure:
     """Create a figure with two subplots: kymograph image (top) and line plot (bottom).
 
     The x-axes of both subplots are linked and use the same 'time' scale. The image
-    x-axis is mapped to time values to align with the line plot below.
+    x-axis is mapped to time values to align with the line plot below. ROI rectangles
+    are overlaid on the image subplot.
 
     Args:
         kf: KymFile instance, or None for empty plot
+        roi_id: Identifier of the ROI to plot in the line plot (required).
         y: Column name for y-axis data in line plot (default: "velocity")
         remove_outliers: If True, remove outliers using 2*std threshold
         median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
@@ -154,6 +164,8 @@ def plot_image_line_plotly(
         colorscale: Plotly colorscale name (default: "Gray")
         zmin: Minimum intensity for display (optional)
         zmax: Maximum intensity for display (optional)
+        selected_roi_id: Identifier of the selected ROI for highlighting (optional).
+                         If provided, this ROI will be highlighted in yellow.
 
     Returns:
         Plotly Figure with two subplots ready for display
@@ -191,9 +203,8 @@ def plot_image_line_plotly(
         return fig
 
     # Get image and calculate time for image x-axis
-    image = kf.ensure_image_loaded()
-    header = kf.acquisition_metadata
-    seconds_per_line = header.seconds_per_line or 0.001  # Default 1ms
+    image = kf.get_img_channel(channel=1)
+    seconds_per_line = kf.seconds_per_line
 
     # Calculate image time using KymFile API
     num_lines = kf.num_lines
@@ -202,8 +213,13 @@ def plot_image_line_plotly(
         # Calculate time for each line: time[i] = i * seconds_per_line
         image_time = np.arange(num_lines) * seconds_per_line
 
-    # Get analysis time values for line plot
-    analysis_time_values = kf.getAnalysisValue("time")
+    # Get analysis time values for line plot (for specified ROI)
+    if kf is None or kf.kymanalysis is None:
+        analysis_time_values = None
+        all_rois = []
+    else:
+        analysis_time_values = kf.kymanalysis.get_analysis_value(roi_id, "time", remove_outliers, median_filter)
+        all_rois = kf.kymanalysis.get_all_rois()
 
     # Plot image in top subplot (row=1)
     if image is not None and image_time is not None and len(image_time) > 0:
@@ -255,9 +271,24 @@ def plot_image_line_plotly(
         )
         fig.update_xaxes(constrain="range")
         fig.update_yaxes(constrain="range")
+        
+        # Add ROI rectangles overlay to image subplot
+        if all_rois:
+            _add_roi_overlay(
+                fig,
+                all_rois,
+                selected_roi_id,
+                image_time,
+                seconds_per_line,
+                row=1,
+                col=1,
+            )
 
-    # Get line plot data
-    y_values = kf.getAnalysisValue(y) if analysis_time_values is not None else None
+    # Get line plot data (already filtered by get_analysis_value)
+    if kf is None or kf.kymanalysis is None:
+        y_values = None
+    else:
+        y_values = kf.kymanalysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
 
     # Plot line in bottom subplot (row=2)
     # Use analysis time values (always use 'time' column from analysis)
@@ -266,15 +297,8 @@ def plot_image_line_plotly(
         and y_values is not None
         and len(analysis_time_values) > 0
     ):
-        # Prepare y data for filtering
-        filtered_y = (
-            y_values.copy() if isinstance(y_values, np.ndarray) else np.array(y_values)
-        )
-
-        filtered_y = kf.getAnalysisValue(y, remove_outliers, median_filter)
-
-        if filtered_y is None:
-            raise ValueError(f"No data found for {y}")
+        # Values are already filtered by get_analysis_value
+        filtered_y = y_values
 
         fig.add_trace(
             go.Scatter(
@@ -333,6 +357,105 @@ def plot_image_line_plotly(
     )
 
     return fig
+
+
+def _add_roi_overlay(
+    fig: go.Figure,
+    rois: list[AnalysisParameters],
+    selected_roi_id: Optional[int],
+    image_time: Optional[np.ndarray],
+    seconds_per_line: float,
+    row: int = 1,
+    col: int = 1,
+) -> None:
+    """Add ROI rectangles as overlay shapes on the image subplot.
+    
+    Args:
+        fig: Plotly figure to add shapes to.
+        rois: List of AnalysisParameters instances to draw.
+        selected_roi_id: ID of the selected ROI (will be highlighted in yellow).
+        image_time: Array of time values for x-axis mapping.
+        seconds_per_line: Time per line for converting line indices to time.
+        row: Subplot row number (default: 1 for top subplot).
+        col: Subplot column number (default: 1).
+    """
+    if image_time is None or len(image_time) == 0:
+        return
+    
+    shapes = []
+    annotations = []
+    
+    for roi in rois:
+        is_selected = (selected_roi_id is not None and roi.roi_id == selected_roi_id)
+        stroke_color = ROI_COLOR_SELECTED if is_selected else ROI_COLOR_DEFAULT
+        
+        # Convert ROI coordinates to time-space coordinates for heatmap
+        # In the heatmap: z=image.T where image.shape = (num_lines, pixels_per_line)
+        # After transpose: (pixels_per_line, num_lines) = (space, time)
+        # X-axis (horizontal) = time dimension = line indices = ROI.top/bottom
+        # Y-axis (vertical) = space dimension = pixel positions = ROI.left/right
+        
+        # X coordinates: map line indices to time values
+        # Ensure min/max ordering for rectangle
+        x0 = min(roi.top, roi.bottom) * seconds_per_line
+        x1 = max(roi.top, roi.bottom) * seconds_per_line
+        
+        # Y coordinates: left and right are pixel positions (space dimension)
+        # Ensure min/max ordering for rectangle
+        y0 = min(roi.left, roi.right)
+        y1 = max(roi.left, roi.right)
+        
+        # Add rectangle shape
+        shapes.append(
+            dict(
+                type="rect",
+                xref=f"x{row if row > 1 else ''}",
+                yref=f"y{row if row > 1 else ''}",
+                x0=x0,
+                y0=y0,
+                x1=x1,
+                y1=y1,
+                line=dict(
+                    color=stroke_color,
+                    width=ROI_LINE_WIDTH,
+                ),
+                fillcolor=stroke_color,
+                opacity=ROI_FILL_OPACITY,
+            )
+        )
+        
+        # Add label annotation (show roi_id)
+        # Position label at top-left of ROI rectangle
+        annotations.append(
+            dict(
+                x=x0,
+                y=y1,  # Top of rectangle (y1 is right, but in image coords top is max y)
+                text=f"ROI {roi.roi_id}",
+                showarrow=False,
+                xref=f"x{row if row > 1 else ''}",
+                yref=f"y{row if row > 1 else ''}",
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor=stroke_color,
+                borderwidth=1,
+                font=dict(size=10, color="black"),
+                xanchor="left",
+                yanchor="top",
+            )
+        )
+    
+    # Add shapes to layout
+    if shapes:
+        # Get existing shapes or initialize empty list
+        existing_shapes = list(fig.layout.shapes) if fig.layout.shapes else []
+        existing_shapes.extend(shapes)
+        fig.update_layout(shapes=existing_shapes)
+    
+    # Add annotations to layout
+    if annotations:
+        # Get existing annotations or initialize empty list
+        existing_annotations = list(fig.layout.annotations) if fig.layout.annotations else []
+        existing_annotations.extend(annotations)
+        fig.update_layout(annotations=existing_annotations)
 
 
 def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:

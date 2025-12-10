@@ -74,7 +74,7 @@ def run(path: str):
 
     # Step 7: Test with zmin/zmax changes using backend API
     print("\n7. Testing with contrast update using update_contrast()...")
-    image = kf.ensure_image_loaded()
+    image = kf.get_img_channel(channel=1)
     image_max = float(image.max())
     zmin = int(image_max * 0.2)
     zmax = int(image_max * 0.8)

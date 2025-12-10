@@ -5,7 +5,7 @@
 rm -rf .venv
 uv venv
 uv pip install -e ".[gui]"
-uv run python -m kymflow.gui.main
+uv run python -m kymflow.gui.app
 ```
 
 Or with uv sync
@@ -13,7 +13,7 @@ Or with uv sync
 ```bash
 rm -rf .venv
 uv sync --extra gui
-uv run python -m kymflow.gui.main
+uv run python -m kymflow.gui.app
 ```
 
 ## Install test

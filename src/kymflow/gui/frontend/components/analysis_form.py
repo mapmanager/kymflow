@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.core.kym_file import AnalysisParameters
+from kymflow.core.metadata import AnalysisParameters
 from kymflow.gui.state import AppState
 
 
@@ -39,19 +39,28 @@ def create_analysis_form(app_state: AppState) -> None:
 
             widgets[field_def["name"]] = widget
 
-    def _populate_fields(kf) -> None:
-        """Populate form fields from KymFile analysis parameters."""
-        if not kf:
+    def _populate_fields() -> None:
+        """Populate form fields from selected ROI's analysis parameters."""
+        kf = app_state.selected_file
+        roi_id = app_state.selected_roi_id
+        
+        # Clear fields if no file or no ROI selected
+        if not kf or roi_id is None or kf.kymanalysis is None:
             for widget in widgets.values():
                 widget.set_value("")
             return
 
-        analysis_params = kf.analysis_parameters
+        # Get ROI and its analysis parameters
+        roi = kf.kymanalysis.get_roi(roi_id)
+        if not roi:
+            for widget in widgets.values():
+                widget.set_value("")
+            return
 
-        # Populate all fields
+        # Populate all fields from ROI's AnalysisParameters
         for field_name, field_def in read_only_fields.items():
             if field_name in widgets:
-                value = getattr(analysis_params, field_name)
+                value = getattr(roi, field_name)
                 # Handle None, dict, datetime, and Path types
                 if value is None:
                     widgets[field_name].set_value("")
@@ -68,7 +77,16 @@ def create_analysis_form(app_state: AppState) -> None:
                     widgets[field_name].set_value(str(value))
 
     def _on_selection(kf, origin) -> None:
-        _populate_fields(kf)
+        """Handle file selection change - update form if ROI is selected."""
+        _populate_fields()
     
-    # Register callback (no decorator - explicit registration)
+    def _on_roi_selection_change(roi_id) -> None:
+        """Handle ROI selection change - update form with new ROI's parameters."""
+        _populate_fields()
+    
+    # Register callbacks (no decorator - explicit registration)
     app_state.on_selection_changed(_on_selection)
+    app_state.on_roi_selection_changed(_on_roi_selection_change)
+    
+    # Initial population if file/ROI already selected
+    _populate_fields()

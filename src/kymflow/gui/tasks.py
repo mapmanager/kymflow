@@ -19,22 +19,20 @@ def run_flow_analysis(
     task_state: TaskState,
     *,
     window_size: int = 16,
-    start_pixel: Optional[int] = None,
-    stop_pixel: Optional[int] = None,
-    on_result: Optional[Callable[[dict], None]] = None,
+    roi_id: Optional[int] = None,
+    on_result: Optional[Callable[[bool], None]] = None,
 ) -> None:
-    """Run Radon flow analysis in a background thread.
+    """Run Radon flow analysis on an ROI in a background thread.
 
     Launches the analysis in a daemon thread to avoid blocking the GUI.
     Progress updates and cancellation are handled through the task_state object.
+    If no ROI exists or roi_id is not provided, creates a default ROI (full image bounds).
 
     Args:
         kym_file: KymFile instance to analyze.
         task_state: TaskState object for progress tracking and cancellation.
         window_size: Number of time lines per analysis window. Defaults to 16.
-        start_pixel: Start index in space dimension (inclusive). If None, uses 0.
-        stop_pixel: Stop index in space dimension (exclusive). If None, uses
-            full width.
+        roi_id: Identifier of the ROI to analyze. If None, creates a default ROI.
         on_result: Optional callback function called when analysis completes
             successfully. Receives a boolean indicating success.
     """
@@ -45,6 +43,34 @@ def run_flow_analysis(
         task_state.cancellable = True
         task_state.set_progress(0.0, "Starting analysis")
 
+        # Ensure KymAnalysis is available
+        if kym_file.kymanalysis is None:
+            task_state.message = "Error: KymAnalysis not available"
+            task_state.mark_finished()
+            return
+
+        # Determine ROI to use
+        target_roi_id = roi_id
+        if target_roi_id is None:
+            # Get or create default ROI
+            all_rois = kym_file.kymanalysis.get_all_rois()
+            if all_rois:
+                # Use first ROI if available
+                target_roi_id = all_rois[0].roi_id
+                task_state.set_progress(0.0, f"Using existing ROI {target_roi_id}")
+            else:
+                # Create default ROI (full image bounds)
+                task_state.set_progress(0.0, "Creating default ROI")
+                new_roi = kym_file.kymanalysis.add_roi()  # Uses default full image bounds
+                target_roi_id = new_roi.roi_id
+                task_state.set_progress(0.0, f"Created ROI {target_roi_id}")
+
+        # Verify ROI exists
+        if target_roi_id not in kym_file.kymanalysis._rois:
+            task_state.message = f"Error: ROI {target_roi_id} not found"
+            task_state.mark_finished()
+            return
+
         def progress_cb(completed: int, total: int) -> None:
             if total:
                 pct = max(0.0, min(1.0, completed / total))
@@ -54,12 +80,12 @@ def run_flow_analysis(
             task_state.set_progress(pct, f"{completed}/{total} windows")
 
         try:
-            payload = kym_file.analyze_flow(
+            kym_file.kymanalysis.analyze_roi(
+                target_roi_id,
                 window_size,
-                start_pixel=start_pixel,
-                stop_pixel=stop_pixel,
                 progress_callback=progress_cb,
                 is_cancelled=cancel_event.is_set,
+                use_multiprocessing=True,
             )
         except FlowCancelled:
             task_state.message = "Cancelled"
@@ -68,7 +94,6 @@ def run_flow_analysis(
         else:
             task_state.message = "Done"
             if on_result:
-                # on_result(payload)
                 on_result(True)
         finally:
             task_state.mark_finished()
@@ -91,8 +116,6 @@ def run_batch_flow_analysis(
     overall_task: TaskState,
     *,
     window_size: int = 16,
-    start_pixel: Optional[int] = None,
-    stop_pixel: Optional[int] = None,
     on_file_complete: Optional[Callable[[KymFile], None]] = None,
     on_batch_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
@@ -100,16 +123,13 @@ def run_batch_flow_analysis(
 
     Processes files one at a time in a daemon thread, with progress tracking
     for both individual files and the overall batch. Supports cancellation
-    at any point.
+    at any point. Creates a default ROI (full image bounds) for each file if none exists.
 
     Args:
         kym_files: Sequence of KymFile instances to analyze.
         per_file_task: TaskState for tracking progress of the current file.
         overall_task: TaskState for tracking overall batch progress.
         window_size: Number of time lines per analysis window. Defaults to 16.
-        start_pixel: Start index in space dimension (inclusive). If None, uses 0.
-        stop_pixel: Stop index in space dimension (exclusive). If None, uses
-            full width.
         on_file_complete: Optional callback called after each file completes
             analysis. Receives the KymFile that was just analyzed.
         on_batch_complete: Optional callback called when the entire batch
@@ -141,6 +161,21 @@ def run_batch_flow_analysis(
 
             per_file_task.set_progress(0.0, f"Starting {kf.path.name}")
 
+            # Ensure KymAnalysis is available
+            if kf.kymanalysis is None:
+                per_file_task.message = f"Error: KymAnalysis not available for {kf.path.name}"
+                continue
+
+            # Get or create ROI for this file
+            all_rois = kf.kymanalysis.get_all_rois()
+            if all_rois:
+                roi_id = all_rois[0].roi_id
+            else:
+                # Create default ROI (full image bounds)
+                new_roi = kf.kymanalysis.add_roi()  # Uses default full image bounds
+                roi_id = new_roi.roi_id
+                per_file_task.set_progress(0.0, f"{kf.path.name}: Created ROI {roi_id}")
+
             def progress_cb(completed: int, total: int) -> None:
                 pct = (completed / total) if total else 0.0
                 per_file_task.set_progress(
@@ -148,15 +183,15 @@ def run_batch_flow_analysis(
                 )
 
             try:
-                kf.analyze_flow(
+                kf.kymanalysis.analyze_roi(
+                    roi_id,
                     window_size,
-                    start_pixel=start_pixel,
-                    stop_pixel=stop_pixel,
                     progress_callback=progress_cb,
                     is_cancelled=cancel_event.is_set,
+                    use_multiprocessing=True,
                 )
                 # Auto-save disabled: users should explicitly save via save buttons
-                # kf.save_analysis()
+                # kf.kymanalysis.save_analysis()
             except FlowCancelled:
                 cancelled = True
                 per_file_task.message = "Cancelled"

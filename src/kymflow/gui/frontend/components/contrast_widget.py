@@ -174,7 +174,7 @@ def create_contrast_widget(app_state: AppState) -> None:
                 return
 
             # Load image
-            image = kf.ensure_image_loaded()
+            image = kf.get_img_channel(channel=1)
             state["current_image"] = image
 
             if image is not None:

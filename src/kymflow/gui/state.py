@@ -51,6 +51,7 @@ class AppState:
         self.folder: Optional[Path] = None
         self.files: List[KymFile] = []
         self.selected_file: Optional[KymFile] = None
+        self.selected_roi_id: Optional[int] = None  # Currently selected ROI ID
         self.theme_mode: ThemeMode = ThemeMode.DARK
         self.folder_depth: int = 1
         
@@ -60,6 +61,7 @@ class AppState:
         self._metadata_changed_handlers: List[MetadataChangedHandler] = []
         self._theme_changed_handlers: List[ThemeChangedHandler] = []
         self._image_display_changed_handlers: List[ImageDisplayChangedHandler] = []
+        self._roi_selection_changed_handlers: List[Callable[[Optional[int]], None]] = []
     
     # Registration methods
     def on_file_list_changed(self, handler: FileListChangedHandler) -> None:
@@ -81,6 +83,10 @@ class AppState:
     def on_image_display_changed(self, handler: ImageDisplayChangedHandler) -> None:
         """Register callback for image display parameter changes."""
         self._image_display_changed_handlers.append(handler)
+    
+    def on_roi_selection_changed(self, handler: Callable[[Optional[int]], None]) -> None:
+        """Register callback for ROI selection changes."""
+        self._roi_selection_changed_handlers.append(handler)
     
     # State mutation methods that trigger callbacks
     def load_folder(self, folder: Path, depth: Optional[int] = None) -> FolderScanResult:
@@ -111,7 +117,18 @@ class AppState:
     ) -> None:
         """Select a file and notify handlers."""
         self.selected_file = kym_file
-        logger.info(f"select_file: calling selection_changed handlers for {kym_file}")
+        
+        # Initialize selected_roi_id to first ROI if available
+        if kym_file is not None and kym_file.kymanalysis is not None:
+            all_rois = kym_file.kymanalysis.get_all_rois()
+            if all_rois:
+                self.selected_roi_id = all_rois[0].roi_id
+            else:
+                self.selected_roi_id = None
+        else:
+            self.selected_roi_id = None
+        
+        logger.info(f"select_file: calling selection_changed handlers for {kym_file}, selected_roi_id={self.selected_roi_id}")
         for handler in list(self._selection_changed_handlers):
             try:
                 handler(kym_file, origin)
@@ -147,4 +164,14 @@ class AppState:
                 handler(kym_file)
             except Exception:
                 logger.exception("Error in metadata_changed handler")
+    
+    def select_roi(self, roi_id: Optional[int]) -> None:
+        """Select an ROI and notify handlers."""
+        self.selected_roi_id = roi_id
+        logger.info(f"select_roi: calling roi_selection_changed handlers for roi_id={roi_id}")
+        for handler in list(self._roi_selection_changed_handlers):
+            try:
+                handler(roi_id)
+            except Exception:
+                logger.exception("Error in roi_selection_changed handler")
 

@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 import numpy as np
 
-from kymflow.v2.core.image import KymImage
+if TYPE_CHECKING:
+    # KymImage is used for type hints only - may not exist in all environments
+    try:
+        from kymflow.v2.core.image import KymImage
+    except ImportError:
+        # Fallback if v2 module doesn't exist
+        KymImage = Any
 
 @dataclass
 class KymRoi:
@@ -40,7 +46,7 @@ class KymRoi:
         Args:
             image: KymImage providing width and height.
         """
-        self.clamp_to_bounds(image.width, image.height)
+        clamp_roi_to_bounds(self, image.width, image.height)
 
     def clamp_to_bounds(self, img_w: int, img_h: int) -> None:
         """Clamp ROI to [0, img_w] × [0, img_h] and fix inverted edges.
@@ -49,15 +55,7 @@ class KymRoi:
             img_w: Width of the image in pixels.
             img_h: Height of the image in pixels.
         """
-        self.left = max(0, min(img_w, self.left))
-        self.right = max(0, min(img_w, self.right))
-        self.top = max(0, min(img_h, self.top))
-        self.bottom = max(0, min(img_h, self.bottom))
-
-        if self.left > self.right:
-            self.left, self.right = self.right, self.left
-        if self.top > self.bottom:
-            self.top, self.bottom = self.bottom, self.top
+        clamp_roi_to_bounds(self, img_w, img_h)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dictionary representation of this ROI."""
@@ -174,6 +172,42 @@ class KymRoiSet:
             s._rois[roi.id] = roi
             s._next_id = max(s._next_id, roi.id + 1)
         return s
+
+
+def clamp_roi_to_bounds(roi: KymRoi, img_w: int, img_h: int) -> None:
+    """Clamp ROI coordinates to [0, img_w] × [0, img_h] and fix inverted edges.
+
+    Standalone utility function that can be used with any object having left/top/right/bottom
+    attributes (KymRoi, AnalysisParameters, etc.). Modifies the object in place.
+
+    Args:
+        roi: ROI-like object with left, top, right, bottom attributes.
+        img_w: Width of the image in pixels.
+        img_h: Height of the image in pixels.
+    """
+    roi.left = max(0, min(img_w, roi.left))
+    roi.right = max(0, min(img_w, roi.right))
+    roi.top = max(0, min(img_h, roi.top))
+    roi.bottom = max(0, min(img_h, roi.bottom))
+
+    if roi.left > roi.right:
+        roi.left, roi.right = roi.right, roi.left
+    if roi.top > roi.bottom:
+        roi.top, roi.bottom = roi.bottom, roi.top
+
+
+def clamp_roi_to_image(roi: KymRoi, image: KymImage) -> None:
+    """Clamp ROI to be fully inside the given image.
+
+    Standalone utility function. This ensures that:
+    * all coordinates are within [0, image.width] × [0, image.height]
+    * left <= right and top <= bottom (by swapping coordinates if needed)
+
+    Args:
+        roi: ROI-like object with left, top, right, bottom attributes.
+        image: KymImage providing width and height.
+    """
+    clamp_roi_to_bounds(roi, image.width, image.height)
 
 
 def point_in_roi(roi: KymRoi, x: float, y: float) -> bool:

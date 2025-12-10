@@ -149,8 +149,8 @@ def mp_analyze_flow(
     """
     start_sec = time.time()
 
-    if data.ndim != 2:
-        raise ValueError(f"data must be 2D (time, space); got shape {data.shape}")
+    # if data.ndim != 2:
+    #     raise ValueError(f"data must be 2D (time, space); got shape {data.shape}")
 
     # time axis = 0, space axis = 1
     n_time = data.shape[0]
