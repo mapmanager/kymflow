@@ -403,8 +403,8 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    left: float = field(
-        default=0.0,
+    left: int = field(
+        default=0,
         metadata=field_metadata(
             editable=True,
             label="Left",
@@ -412,8 +412,8 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    top: float = field(
-        default=0.0,
+    top: int = field(
+        default=0,
         metadata=field_metadata(
             editable=True,
             label="Top",
@@ -421,8 +421,8 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    right: float = field(
-        default=0.0,
+    right: int = field(
+        default=0,
         metadata=field_metadata(
             editable=True,
             label="Right",
@@ -430,8 +430,8 @@ class AnalysisParameters:
             grid_span=1,
         ),
     )
-    bottom: float = field(
-        default=0.0,
+    bottom: int = field(
+        default=0,
         metadata=field_metadata(
             editable=True,
             label="Bottom",
@@ -524,6 +524,11 @@ class AnalysisParameters:
                 f"AnalysisParameters.from_dict(): Ignoring unknown/deprecated fields: {list(unknown_fields.keys())}. "
                 f"This may indicate schema evolution - old data files may need migration."
             )
+        
+        # Convert float coordinates to int
+        for coord in ['left', 'top', 'right', 'bottom']:
+            if coord in known_fields and isinstance(known_fields[coord], float):
+                known_fields[coord] = int(known_fields[coord])
         
         # Handle datetime conversion for analyzed_at
         if "analyzed_at" in known_fields and known_fields["analyzed_at"]:

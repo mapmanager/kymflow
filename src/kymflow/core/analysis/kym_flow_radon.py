@@ -17,6 +17,9 @@ import numpy as np
 from multiprocessing import Pool
 from skimage.transform import radon
 
+from kymflow.core.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 class FlowCancelled(Exception):
     """Exception raised when flow analysis is cancelled.
@@ -82,6 +85,8 @@ def radon_worker(
 def mp_analyze_flow(
     data: np.ndarray,
     windowsize: int,
+    time_dim: int = 0,
+    space_dim: int = 1,
     start_pixel: Optional[int] = None,
     stop_pixel: Optional[int] = None,
     start_line: Optional[int] = None,
@@ -149,12 +154,16 @@ def mp_analyze_flow(
     """
     start_sec = time.time()
 
+    # logger.info(f'data shape: {data.shape}')
+    # logger.info(f'start_pixel: {start_pixel}, stop_pixel: {stop_pixel}')
+    # logger.info(f'start_line: {start_line}, stop_line: {stop_line}')
+
     # if data.ndim != 2:
     #     raise ValueError(f"data must be 2D (time, space); got shape {data.shape}")
 
     # time axis = 0, space axis = 1
-    n_time = data.shape[0]
-    n_space = data.shape[1]
+    n_time = data.shape[time_dim]
+    n_space = data.shape[space_dim]
 
     stepsize = int(0.25 * windowsize)
     if stepsize <= 0:
@@ -186,7 +195,7 @@ def mp_analyze_flow(
     spread_matrix_fine = np.zeros((nsteps, len(angles_fine)), dtype=np.float32)
 
     if verbose:
-        print(f"data shape (time, space): {data.shape}")
+        print(f"data shape (space, time): {data.shape}")
         print(f"  windowsize: {windowsize}, stepsize: {stepsize}")
         print(f"  n_time: {n_time}, n_space: {n_space}, nsteps: {nsteps}")
         print(f"  start_pixel: {start_pixel}, stop_pixel: {stop_pixel}")
@@ -231,6 +240,7 @@ def mp_analyze_flow(
 
                 t_start = k * stepsize
                 t_stop = k * stepsize + windowsize
+                # data_window = data[t_start:t_stop, start_pixel:stop_pixel]
                 data_window = data[t_start:t_stop, start_pixel:stop_pixel]
 
                 params = (data_window, angles, angles_fine)

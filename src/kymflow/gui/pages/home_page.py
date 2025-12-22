@@ -85,8 +85,8 @@ def build_home_content(context: AppContext) -> None:
             with ui.card().classes("flex-1"):
                 create_metadata_form(context.app_state)
             
-            with ui.card().classes("flex-1"):
-                create_olympus_form(context.app_state)
+            # with ui.card().classes("flex-1"):
+            #     create_olympus_form(context.app_state)
             
             with ui.card().classes("flex-1"):
                 create_analysis_form(context.app_state)

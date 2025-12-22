@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from kymflow.core.image_loaders.acq_image import AcqImage, AcqImageHeader
+from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils import get_data_folder
 from kymflow.core.utils.logging import get_logger, setup_logging
 
@@ -37,71 +37,37 @@ def sample_tif_files(data_dir: Path) -> list[Path]:
 
 
 @pytest.mark.requires_data
-@pytest.mark.skip(reason="no way of currently testing this")
 def test_acq_image_from_tif_path_without_loading(sample_tif_files: list[Path]) -> None:
-    """Test AcqImage initialization with TIFF path but without loading image data."""
+    """Test AcqImage initialization with TIFF path but without loading image data.
+    
+    Note: AcqImage base class no longer loads files - that's done by derived classes like KymImage.
+    This test verifies that path is stored but image data is not loaded.
+    """
     if not sample_tif_files:
         pytest.skip("No test data files available")
     
-    logger.info("Testing AcqImage with TIFF path (load_image=False)")
+    logger.info("Testing AcqImage with TIFF path (no loading in base class)")
     
     for tif_file in sample_tif_files:
         logger.info(f"Testing with file: {tif_file.name}")
         
-        acq = AcqImage(path=tif_file, load_image=False)
+        acqImage = AcqImage(path=tif_file)
         
-        # Path should be set
-        assert acq.path == Path(tif_file)
-        logger.info(f"  - Path: {acq.path}")
+        # Path should be stored in _file_path_dict
+        assert acqImage.getChannelPath(1) == Path(tif_file)
+        logger.info(f"  - Path: {acqImage.getChannelPath(1)}")
         
-        # Image data should not be loaded
-        assert acq.img_data is None
-        logger.info("  - Image data not loaded (as expected)")
+        # Image data should not be loaded (base class doesn't load files)
+        assert acqImage.getChannelData(1) is None
+        logger.info("  - Image data not loaded (as expected - base class doesn't load files)")
         
         # Shape should be None when image is not loaded
-        assert acq.shape is None
+        assert acqImage.img_shape is None
         logger.info("  - Shape is None (as expected)")
         
-        # Header should be attempted to load (may fail if TIFF doesn't have proper description)
-        assert acq.header is not None
-        logger.info(f"  - Header: x_pixels={acq.header.x_pixels}, y_pixels={acq.header.y_pixels}, z_pixels={acq.header.z_pixels}")
-
-
-@pytest.mark.requires_data
-def test_acq_image_from_tif_path_with_loading(sample_tif_files: list[Path]) -> None:
-    """Test AcqImage initialization with TIFF path and loading image data."""
-    if not sample_tif_files:
-        pytest.skip("No test data files available")
-    
-    logger.info("Testing AcqImage with TIFF path (load_image=True)")
-    
-    for tif_file in sample_tif_files:
-        logger.info(f"Testing with file: {tif_file.name}")
-        
-        acq = AcqImage(path=tif_file, load_image=True)
-        
-        # Path should be set
-        assert acq.path == Path(tif_file)
-        logger.info(f"  - Path: {acq.path}")
-        
-        # Image data should be loaded
-        assert acq.img_data is not None
-        logger.info(f"  - Image data loaded, dtype: {acq.img_data.dtype}")
-        
-        # Shape should be available
-        assert acq.shape is not None
-        assert len(acq.shape) == 3  # Should always be 3D after loading
-        logger.info(f"  - Shape: {acq.shape}")
-        
-        # Properties should work
-        assert acq.x_pixels > 0
-        assert acq.y_pixels > 0
-        assert acq.z_pixels > 0
-        logger.info(f"  - x_pixels: {acq.x_pixels}, y_pixels: {acq.y_pixels}, z_pixels: {acq.z_pixels}")
-        
-        # Header should be loaded
-        assert acq.header is not None
-        logger.info(f"  - Header: x_pixels={acq.header.x_pixels}, y_pixels={acq.header.y_pixels}, z_pixels={acq.header.z_pixels}")
+        # header.voxels and header.labels should be set to None
+        assert acqImage.header.voxels is None
+        assert acqImage.header.labels is None
 
 
 def test_acq_image_from_synthetic_2d() -> None:
@@ -112,30 +78,34 @@ def test_acq_image_from_synthetic_2d() -> None:
     img_2d = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
     logger.info(f"== Created 2D array with shape: {img_2d.shape}")
     
-    acq = AcqImage(path=None, img_data=img_2d, load_image=False)
+    acqImage = AcqImage(path=None, img_data=img_2d)
     
     # Image data should be set
-    assert acq.img_data is not None
-    logger.info(f"  - Image data shape: {acq.img_data.shape}")
+    channel_data = acqImage.getChannelData(1)
+    assert channel_data is not None
+    logger.info(f"  - Image data shape: {channel_data.shape}")
     
     # Shape should be 3D (2D gets converted to 3D)
-    assert acq.shape is not None
-    assert len(acq.shape) == 3
-    assert acq.shape == (1, 100, 200)  # Should have z=1, y=100, x=200
-    logger.info(f"  - Shape after conversion: {acq.shape}")
+    assert acqImage.img_shape is not None
+    assert len(acqImage.img_shape) == 2
+    assert acqImage.img_shape == (100, 200)  #
+    logger.info(f"  - Shape after conversion: {acqImage.img_shape}")
     
     # Properties should work
-    assert acq.x_pixels == 100
-    assert acq.y_pixels == 200
-    assert acq.z_pixels == 1
-    logger.info(f"  - x_pixels: {acq.x_pixels}, y_pixels: {acq.y_pixels}, z_pixels: {acq.z_pixels}")
+    assert acqImage.img_shape[0] == 100
+    assert acqImage.img_shape[1] == 200
+    logger.info(f"  - img_shape: {acqImage.img_shape}")
     
     # Header should be created from image data
-    assert acq.header is not None
-    assert acq.header.x_pixels == 100
-    assert acq.header.y_pixels == 200
-    assert acq.header.z_pixels == 1
-    logger.info("  - Header matches image data shape")
+    assert acqImage.header.voxels is not None
+    assert acqImage.header.labels is not None
+    assert len(acqImage.header.voxels) == acqImage.img_ndim
+    assert len(acqImage.header.labels) == acqImage.img_ndim
+    assert acqImage.header.voxels[0] == 1.0
+    assert acqImage.header.voxels[1] == 1.0
+    assert acqImage.header.labels[0] == ""
+    assert acqImage.header.labels[1] == ""
+    logger.info(f"  - header.voxels: {acqImage.header.voxels}, header.labels: {acqImage.header.labels}")
 
 
 def test_acq_image_from_synthetic_3d() -> None:
@@ -146,107 +116,61 @@ def test_acq_image_from_synthetic_3d() -> None:
     img_3d = np.random.randint(0, 255, size=(10, 100, 200), dtype=np.uint8)
     logger.info(f"== Created 3D array with shape: {img_3d.shape}")
     
-    acq = AcqImage(path=None, img_data=img_3d, load_image=False)
+    acqImage = AcqImage(path=None, img_data=img_3d)
     
     # Image data should be set
-    assert acq.img_data is not None
-    logger.info(f"  - Image data shape: {acq.img_data.shape}")
+    channel_data = acqImage.getChannelData(1)
+    assert channel_data is not None
+    logger.info(f"  - Image data shape: {channel_data.shape}")
     
     # Shape should be 3D
-    assert acq.shape is not None
-    assert len(acq.shape) == 3
-    assert acq.shape == (10, 100, 200)  # Should remain 3D
-    logger.info(f"  - Shape: {acq.shape}")
+    assert acqImage.img_shape is not None
+    assert len(acqImage.img_shape) == 3
+    assert acqImage.img_shape == (10, 100, 200)  # Should remain 3D
+    logger.info(f"  - Shape: {acqImage.img_shape}")
     
     # Properties should work
-    assert acq.x_pixels == 100
-    assert acq.y_pixels == 200
-    assert acq.z_pixels == 10
-    logger.info(f"  - x_pixels: {acq.x_pixels}, y_pixels: {acq.y_pixels}, z_pixels: {acq.z_pixels}")
+    assert acqImage.img_shape[0] == 10
+    assert acqImage.img_shape[1] == 100
+    assert acqImage.img_shape[2] == 200
+    logger.info(f"  - img_shape: {acqImage.img_shape}")
     
     # Header should be created from image data
-    assert acq.header is not None
-    assert acq.header.x_pixels == 100
-    assert acq.header.y_pixels == 200
-    assert acq.header.z_pixels == 10
-    logger.info("  - Header matches image data shape")
+    assert acqImage.header.voxels is not None
+    assert acqImage.header.labels is not None
+    assert len(acqImage.header.voxels) == acqImage.img_ndim
+    assert len(acqImage.header.labels) == acqImage.img_ndim
+    assert acqImage.header.voxels[0] == 1.0
+    assert acqImage.header.voxels[1] == 1.0
+    assert acqImage.header.voxels[2] == 1.0
+    assert acqImage.header.labels[0] == ""
+    assert acqImage.header.labels[1] == ""
+    assert acqImage.header.labels[2] == ""
+    logger.info(f"  - header.voxels: {acqImage.header.voxels}, header.labels: {acqImage.header.labels}")
 
 
 def test_acq_image_from_synthetic_4d_raises_error() -> None:
-    """Test that AcqImage raises ValueError for 4D numpy arrays when loading from file."""
+    """Test that AcqImage raises ValueError for 4D numpy arrays when passed via img_data."""
     logger.info("Testing AcqImage with synthetic 4D data (should raise error)")
     
     # Create a 4D synthetic image
     img_4d = np.random.randint(0, 255, size=(5, 10, 100, 200), dtype=np.uint8)
     logger.info(f"==Created 4D array with shape: {img_4d.shape}")
     
-    # Test loading 4D data from a file - this should raise ValueError
-    import tempfile
-    import tifffile
-    
-    with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as tmp_file:
-        tmp_path = Path(tmp_file.name)
-        tifffile.imwrite(tmp_path, img_4d)
-        
-        logger.info(f"== Created temporary 4D TIFF file: {tmp_path}")
-        
-        # Loading should raise ValueError
-        with pytest.raises(ValueError, match="Image data must be 2D or 3D"):
-            _ = AcqImage(path=tmp_path, load_image=True)  # Should raise ValueError
-            logger.info("  - ValueError raised as expected")
-        
-        # Clean up
-        tmp_path.unlink()
-        logger.info("  - Temporary file cleaned up")
+    # Test passing 4D data directly via img_data - this should raise ValueError
+    with pytest.raises(ValueError, match="Image data must be 2D or 3D"):
+        _ = AcqImage(path=None, img_data=img_4d)  # Should raise ValueError
+        logger.info("  - ValueError raised as expected")
 
 
-def test_acq_image_header_from_img_data() -> None:
-    """Test AcqImageHeader.from_img_data method."""
-    logger.info("Testing AcqImageHeader.from_img_data")
-    
-    # Test with 2D data
-    img_2d = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
-    header_2d = AcqImageHeader.from_img_data(img_2d)
-    assert header_2d.x_pixels == 200
-    assert header_2d.y_pixels == 100
-    assert header_2d.z_pixels == 1
-    logger.info(f"  - 2D data: x={header_2d.x_pixels}, y={header_2d.y_pixels}, z={header_2d.z_pixels}")
-    
-    # Test with 3D data
-    img_3d = np.random.randint(0, 255, size=(10, 100, 200), dtype=np.uint8)
-    header_3d = AcqImageHeader.from_img_data(img_3d)
-    assert header_3d.x_pixels == 100
-    assert header_3d.y_pixels == 200
-    assert header_3d.z_pixels == 10
-    logger.info(f"  - 3D data: x={header_3d.x_pixels}, y={header_3d.y_pixels}, z={header_3d.z_pixels}")
-
-
-@pytest.mark.skip(reason="no way of currently testing this")
 def test_acq_image_no_path_no_data() -> None:
-    """Test AcqImage with neither path nor image data."""
-    logger.info("Testing AcqImage with no path and no image data")
+    """Test that AcqImage raises ValueError when neither path nor image data is provided."""
+    logger.info("Testing AcqImage with no path and no image data (should raise ValueError)")
     
-    acq = AcqImage(path=None, img_data=None, load_image=False)
-    
-    # Path should be None
-    assert acq.path is None
-    logger.info("  - Path is None")
-    
-    # Image data should be None
-    assert acq.img_data is None
-    logger.info("  - Image data is None")
-    
-    # Shape should be None
-    assert acq.shape is None
-    logger.info("  - Shape is None")
-    
-    # Header should have default values
-    assert acq.header is not None
-    assert acq.header.x_pixels == 0
-    assert acq.header.y_pixels == 0
-    assert acq.header.z_pixels == 0
-    logger.info("  - Header has default values")
-
+    # Should raise ValueError when both path and img_data are None
+    with pytest.raises(ValueError, match="Either path or img_data must be provided"):
+        _ = AcqImage(path=None, img_data=None)
+        logger.info("  - ValueError raised as expected")
 
 def test_acq_image_properties_with_loaded_data() -> None:
     """Test AcqImage properties when image data is loaded."""
@@ -256,26 +180,192 @@ def test_acq_image_properties_with_loaded_data() -> None:
     img_3d = np.random.randint(0, 255, size=(5, 50, 100), dtype=np.uint8)
     logger.info(f"== Created 3D array with shape: {img_3d.shape}")
     
-    acq = AcqImage(path=None, img_data=img_3d, load_image=False)
+    acq = AcqImage(path=None, img_data=img_3d)
     logger.info(f"  created AcqImage: {acq}")
     
     # Test shape property
-    assert acq.shape == (5, 50, 100)
-    logger.info(f"  - shape: {acq.shape}")
+    assert acq.img_shape == (5, 50, 100)
+    logger.info(f"  - img_shape: {acq.img_shape}")
     
     # Test x_pixels, y_pixels, z_pixels properties
-    assert acq.x_pixels == 50
-    assert acq.y_pixels == 100
-    assert acq.z_pixels == 5
-    logger.info(f"  - x_pixels: {acq.x_pixels}, y_pixels: {acq.y_pixels}, z_pixels: {acq.z_pixels}")
+    assert acq.img_shape[0] == 5
+    assert acq.img_shape[1] == 50
+    assert acq.img_shape[2] == 100
+    logger.info(f"  - img_shape: {acq.img_shape}")
     
-    # Test header property
+    # Test header.voxels and header.labels properties
+    assert acq.header.voxels is not None
+    assert acq.header.voxels == [1.0, 1.0, 1.0]
+    assert acq.header.labels == ["", "", ""]
+    logger.info(f"  - header.voxels: {acq.header.voxels}, header.labels: {acq.header.labels}")
+
+
+def test_get_channel_keys_no_channels() -> None:
+    """Test getChannelKeys() when no channels exist."""
+    logger.info("Testing getChannelKeys() with no channels")
+    
+    # Create AcqImage with path but don't load (base class doesn't load files)
+    acq = AcqImage(path=Path("/fake/path.tif"))
+    
+    # Should return empty list
+    keys = acq.getChannelKeys()
+    assert keys == []
+    logger.info(f"  - Channel keys: {keys}")
+
+
+def test_get_channel_keys_single_channel() -> None:
+    """Test getChannelKeys() with a single channel."""
+    logger.info("Testing getChannelKeys() with single channel")
+    
+    # Create 2D synthetic image
+    img_2d = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d)
+    
+    # Should return list with channel 1
+    keys = acq.getChannelKeys()
+    assert keys == [1]
+    logger.info(f"  - Channel keys: {keys}")
+
+
+def test_get_channel_keys_multiple_channels() -> None:
+    """Test getChannelKeys() with multiple channels."""
+    logger.info("Testing getChannelKeys() with multiple channels")
+    
+    # Create 2D synthetic image for first channel
+    img_2d_1 = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d_1)
+    
+    # Add second channel
+    img_2d_2 = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
+    acq.addColorChannel(2, img_2d_2)
+    
+    # Add third channel
+    img_2d_3 = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
+    acq.addColorChannel(3, img_2d_3)
+    
+    # Should return list with channels 1, 2, 3
+    keys = acq.getChannelKeys()
+    assert set(keys) == {1, 2, 3}
+    assert len(keys) == 3
+    logger.info(f"  - Channel keys: {keys}")
+
+
+@pytest.mark.requires_data
+def test_get_channel_keys_after_loading(data_dir: Path) -> None:
+    """Test getChannelKeys() after adding image data.
+    
+    Note: AcqImage base class no longer loads files - that's done by derived classes.
+    This test verifies getChannelKeys() works with manually added data.
+    """
+    logger.info("Testing getChannelKeys() after adding image data")
+    
+    # Create synthetic image
+    img_2d = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d)
+    
+    # Should have at least channel 1
+    keys = acq.getChannelKeys()
+    assert 1 in keys
+    assert len(keys) >= 1
+    logger.info(f"  - Channel keys: {keys}")
+
+
+def test_acq_image_header_property() -> None:
+    """Test header property access."""
+    logger.info("Testing AcqImage header property")
+    
+    # Create 2D synthetic image
+    img_2d = np.random.randint(0, 255, size=(100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d)
+    
+    # Header should be accessible
     assert acq.header is not None
-    assert isinstance(acq.header, AcqImageHeader)
-    logger.info(f"  - header type: {type(acq.header)}")
+    assert acq.header.shape == (100, 200)
+    assert acq.header.ndim == 2
+    assert acq.header.voxels == [1.0, 1.0]
+    assert acq.header.labels == ["", ""]
+    logger.info(f"  - header.shape: {acq.header.shape}")
+    logger.info(f"  - header.ndim: {acq.header.ndim}")
+
+
+def test_acq_image_getRowDict_with_path() -> None:
+    """Test getRowDict() with a path that has parent folders."""
+    logger.info("Testing AcqImage getRowDict() with path")
     
-    # Test img_data property
-    assert acq.img_data is not None
-    assert np.array_equal(acq.img_data, img_3d)
-    logger.info("  - img_data matches input data")
+    # Create a path with multiple parent folders
+    # Use a temporary path structure for testing
+    test_path = Path("/a/b/c/test_file.tif")
+    
+    # Create AcqImage with path (but no data)
+    acq = AcqImage(path=test_path)
+    
+    # Get row dict
+    row_dict = acq.getRowDict()
+    
+    # Check file info
+    assert row_dict['path'] == str(test_path)
+    assert row_dict['filename'] == "test_file.tif"
+    
+    # Check parent folders (from path parts: /a/b/c/test_file.tif)
+    # parts[-1] = test_file.tif, parts[-2] = c, parts[-3] = b, parts[-4] = a
+    assert row_dict['parent1'] == "c"
+    assert row_dict['parent2'] == "b"
+    assert row_dict['parent3'] == "a"
+    
+    # Check header fields
+    assert row_dict['ndim'] is None  # No data loaded
+    assert row_dict['shape'] is None
+    assert row_dict['voxels'] is None
+    assert row_dict['voxels_units'] is None
+    assert row_dict['labels'] is None
+    assert row_dict['physical_size'] is None
+    
+    logger.info(f"  - getRowDict(): {row_dict}")
+
+
+def test_acq_image_getRowDict_with_data() -> None:
+    """Test getRowDict() with image data loaded."""
+    logger.info("Testing AcqImage getRowDict() with data")
+    
+    # Create 2D synthetic image
+    img_2d = np.random.randint(0, 255, size=(50, 75), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d)
+    
+    # Get row dict
+    row_dict = acq.getRowDict()
+    
+    # Check file info (no path, so should be None)
+    assert row_dict['path'] is None
+    assert row_dict['filename'] is None
+    assert row_dict['parent1'] is None
+    assert row_dict['parent2'] is None
+    assert row_dict['parent3'] is None
+    
+    # Check header fields (should be populated from data)
+    assert row_dict['ndim'] == 2
+    assert row_dict['shape'] == (50, 75)
+    assert row_dict['voxels'] == [1.0, 1.0]
+    assert row_dict['voxels_units'] == ["px", "px"]
+    assert row_dict['labels'] == ["", ""]
+    assert row_dict['physical_size'] == [50.0, 75.0]
+    
+    logger.info(f"  - getRowDict(): {row_dict}")
+
+
+def test_acq_image_getRowDict_shallow_path() -> None:
+    """Test getRowDict() with a path that has fewer than 3 parent folders."""
+    logger.info("Testing AcqImage getRowDict() with shallow path")
+    
+    # Create a path with only 1 parent folder
+    test_path = Path("/a/test_file.tif")
+    acq = AcqImage(path=test_path)
+    
+    row_dict = acq.getRowDict()
+    
+    # Should have parent1, but parent2 and parent3 should be None
+    assert row_dict['parent1'] == "a"
+    assert row_dict['parent2'] is None
+    assert row_dict['parent3'] is None
+    
+    logger.info(f"  - getRowDict() with shallow path: parent1={row_dict['parent1']}, parent2={row_dict['parent2']}, parent3={row_dict['parent3']}")
 

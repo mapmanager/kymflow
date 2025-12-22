@@ -13,8 +13,8 @@ import pytest
 
 from kymflow.core.kym_file import (
     KymFile,
-    collect_metadata,
-    iter_metadata,
+    # collect_metadata,
+    # iter_metadata,
 )
 from kymflow.core.metadata import ExperimentMetadata
 from kymflow.core.utils.logging import get_logger, setup_logging
@@ -68,27 +68,27 @@ def test_lazy_image_loading(sample_tif_file: Path | None) -> None:
 
     kymFile = KymFile(sample_tif_file, load_image=False)
     # Image should not be loaded until explicitly requested
-    # assert kymFile.get_img_data(channel=1) is None  # type: ignore[attr-defined]
-    image = kymFile.get_img_data(channel=1)
+    # assert kymFile.get_img_slice(channel=1) is None  # type: ignore[attr-defined]
+    image = kymFile.get_img_slice(channel=1)
     assert isinstance(image, np.ndarray)
     assert image.ndim >= 2
     logger.info("Image shape loaded: %s", image.shape)
 
 
-@pytest.mark.requires_data
-def test_iter_and_collect_metadata(
-    test_data_dir: Path, sample_tif_file: Path | None
-) -> None:
-    """Test iter_metadata and collect_metadata functions."""
-    if sample_tif_file is None:
-        pytest.skip("No test data files available")
+# @pytest.mark.requires_data
+# def test_iter_and_collect_metadata(
+#     test_data_dir: Path, sample_tif_file: Path | None
+# ) -> None:
+#     """Test iter_metadata and collect_metadata functions."""
+#     if sample_tif_file is None:
+#         pytest.skip("No test data files available")
 
-    logger.info("Iterating metadata under %s", test_data_dir)
-    entries = list(iter_metadata(test_data_dir, glob=sample_tif_file.name))
-    logger.info(f'entries:{entries}')
+#     logger.info("Iterating metadata under %s", test_data_dir)
+#     entries = list(iter_metadata(test_data_dir, glob=sample_tif_file.name))
+#     logger.info(f'entries:{entries}')
 
-    assert any(
-        entry["path"] == str(sample_tif_file) for entry in entries
-    ), "iter_metadata should return the test TIFF"
-    collected = collect_metadata(test_data_dir, glob=sample_tif_file.name)
-    assert len(entries) == len(collected)
+#     assert any(
+#         entry["path"] == str(sample_tif_file) for entry in entries
+#     ), "iter_metadata should return the test TIFF"
+#     collected = collect_metadata(test_data_dir, glob=sample_tif_file.name)
+#     assert len(entries) == len(collected)

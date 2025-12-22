@@ -14,7 +14,7 @@ from kymflow.core.metadata import (
     _generateDocs,
     AnalysisParameters,
     ExperimentMetadata,
-    OlympusHeader,
+    # OlympusHeader,
 )
 
 
@@ -38,13 +38,13 @@ def main() -> None:
         classes_to_generate = [
             ("ExperimentMetadata", ExperimentMetadata),
             ("AnalysisParameters", AnalysisParameters),
-            ("OlympusHeader", OlympusHeader),
+            # ("OlympusHeader", OlympusHeader),
         ]
     else:
         class_map = {
             "ExperimentMetadata": ExperimentMetadata,
             "AnalysisParameters": AnalysisParameters,
-            "OlympusHeader": OlympusHeader,
+            # "OlympusHeader": OlympusHeader,
         }
         classes_to_generate = [(args.class_name, class_map[args.class_name])]
     

@@ -203,9 +203,9 @@ def plot_image_line_plotly(
         return fig
 
     # Get image and calculate time for image x-axis
-    image = kf.get_img_channel(channel=1)
+    image = kf.get_img_slice(channel=1)
     seconds_per_line = kf.seconds_per_line
-
+    
     # Calculate image time using KymFile API
     num_lines = kf.num_lines
     image_time = None
@@ -213,6 +213,12 @@ def plot_image_line_plotly(
         # Calculate time for each line: time[i] = i * seconds_per_line
         image_time = np.arange(num_lines) * seconds_per_line
 
+    logger.info(f'image shape: {image.shape}')
+    logger.info(f'num_lines: {num_lines}')
+    logger.info(f'image time: {image_time}')
+    logger.info(f'seconds_per_line: {seconds_per_line}')
+    logger.info(f'num_lines: {num_lines}')
+    
     # Get analysis time values for line plot (for specified ROI)
     if kf is None or kf.kymanalysis is None:
         analysis_time_values = None
@@ -230,7 +236,8 @@ def plot_image_line_plotly(
         colorscale_value = get_colorscale(colorscale)
 
         heatmap_kwargs = {
-            "z": image.T,
+            "z": image.T,  # kym images are [time, space], transpose to plot x-axis time, y-axis space
+            # "z": image,
             "x": image_time,
             "colorscale": colorscale_value,
             "showscale": False,
@@ -252,6 +259,7 @@ def plot_image_line_plotly(
             row=1,
             col=1,
             showgrid=True,
+            showticklabels=True,
             gridcolor=grid_color,
             color=fg_color,
         )
@@ -259,7 +267,7 @@ def plot_image_line_plotly(
             title_text="Position",
             row=1,
             col=1,
-            showticklabels=False,
+            showticklabels=True,
             showgrid=False,
             color=fg_color,
         )
@@ -405,18 +413,38 @@ def _add_roi_overlay(
         y0 = min(roi.left, roi.right)
         y1 = max(roi.left, roi.right)
         
+        logger.info(f'appending: x0:{x0}, x1:{x1}, y0:{y0}, y1:{y1}')
+        # logger.info(f'  row:{row}, col:{col}')
+        # logger.info(f'  roi:{roi}')
+
+        # logger.info(f'  ROI_COLOR_SELECTED:{ROI_COLOR_SELECTED}')
+        # logger.info(f'  ROI_COLOR_DEFAULT:{ROI_COLOR_DEFAULT}')
+        # logger.info(f'  stroke_color:{stroke_color}')
+        # logger.info(f'  ROI_LINE_WIDTH:{ROI_LINE_WIDTH}')
+        # logger.info(f'  ROI_FILL_OPACITY:{ROI_FILL_OPACITY}')
+
+        # stroke_color = 'red'
+        line_color = 'red'
+
+        xref = f"x{row if row > 1 else ''}"
+        yref = f"y{row if row > 1 else ''}"
+        logger.info(f'  row:{row}')
+        logger.info(f'    xref:{xref} yref:{yref}')
+        logger.info(f'    line_color:{line_color}')
+
         # Add rectangle shape
         shapes.append(
             dict(
                 type="rect",
-                xref=f"x{row if row > 1 else ''}",
-                yref=f"y{row if row > 1 else ''}",
+                xref=xref,
+                yref=yref,
                 x0=x0,
                 y0=y0,
                 x1=x1,
                 y1=y1,
+                layer="above",  # ← Add this to render ROI on top of the heatmap
                 line=dict(
-                    color=stroke_color,
+                    color=line_color,
                     width=ROI_LINE_WIDTH,
                 ),
                 fillcolor=stroke_color,

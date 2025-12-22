@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow.core.metadata import ExperimentMetadata, OlympusHeader
+from kymflow.core.metadata import ExperimentMetadata
 
 
 def test_experiment_metadata_from_dict() -> None:
@@ -57,28 +57,3 @@ def test_experiment_metadata_to_dict() -> None:
     assert "acq_date" in d
     assert "acq_time" in d
 
-
-def test_olympus_header_from_tif_missing_file() -> None:
-    """Test OlympusHeader when .txt file is missing."""
-    # Use a non-existent file path
-    fake_path = Path("/nonexistent/path/file.tif")
-    header = OlympusHeader.from_tif(fake_path)
-    # Should return header with default values
-    assert header.um_per_pixel == 1.0
-    assert header.seconds_per_line == 0.001
-
-
-@pytest.mark.requires_data
-def test_olympus_header_from_tif_with_file(sample_tif_file: Path | None) -> None:
-    """Test OlympusHeader loading from existing .txt file."""
-    if sample_tif_file is None:
-        pytest.skip("No test data files available")
-
-    # Check if corresponding .txt file exists
-    txt_file = sample_tif_file.with_suffix(".txt")
-    if not txt_file.exists():
-        pytest.skip(f"No header file found: {txt_file}")
-
-    header = OlympusHeader.from_tif(sample_tif_file)
-    # Should have parsed values (exact values depend on test data)
-    assert header is not None

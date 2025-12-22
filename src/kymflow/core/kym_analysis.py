@@ -18,11 +18,11 @@ import pandas as pd
 from kymflow.core.analysis.kym_flow_radon import FlowCancelled, mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers
 from kymflow.core.metadata import AnalysisParameters
-from kymflow.core.roi import clamp_roi_to_bounds
+from kymflow.core.roi import clamp_coordinates, clamp_coordinates_to_size
 from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from kymflow.core.kym_file import KymFile
+    from kymflow.core.image_loaders.acq_image import AcqImage
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,7 @@ class KymAnalysis:
     change, analysis becomes invalid and must be re-run.
     
     Attributes:
-        kym_file: Reference to the parent KymFile.
+        acq_image: Reference to the parent AcqImage (typically KymImage).
         _rois: Dictionary mapping roi_id to AnalysisParameters instances.
         _df: DataFrame containing all analysis results with 'roi_id' column.
         _dirty: Flag indicating if analysis needs to be saved.
@@ -48,54 +48,24 @@ class KymAnalysis:
     
     def __init__(
         self,
-        kym_file: "KymFile",
+        acq_image: "AcqImage",
         *,
         load_analysis: bool = True,
     ) -> None:
         """Initialize KymAnalysis instance.
         
         Args:
-            kym_file: Parent KymFile instance.
+            acq_image: Parent AcqImage instance (typically KymImage).
             load_analysis: If True, automatically load analysis from disk if available.
                 Defaults to True.
         """
-        self.kym_file = kym_file
+        self.acq_image = acq_image
         self._rois: Dict[int, AnalysisParameters] = {}
         self._df: Optional[pd.DataFrame] = None
         self._dirty: bool = False
         
         if load_analysis:
             self.load_analysis()
-    
-    def _clamp_coordinates(
-        self, left: float, top: float, right: float, bottom: float
-    ) -> tuple[float, float, float, float]:
-        """Clamp ROI coordinates to image bounds.
-        
-        Helper method to validate and clamp coordinates. Returns clamped values.
-        Assumes kym_file provides valid image dimensions.
-        
-        Args:
-            left: Left coordinate.
-            top: Top coordinate.
-            right: Right coordinate.
-            bottom: Bottom coordinate.
-        
-        Returns:
-            Tuple of (clamped_left, clamped_top, clamped_right, clamped_bottom).
-        """
-        img_w = self.kym_file.pixels_per_line
-        img_h = self.kym_file.num_lines
-        
-        # Create temporary object for clamping
-        temp_roi = type('TempRoi', (), {
-            'left': left,
-            'top': top,
-            'right': right,
-            'bottom': bottom
-        })()
-        clamp_roi_to_bounds(temp_roi, img_w, img_h)
-        return temp_roi.left, temp_roi.top, temp_roi.right, temp_roi.bottom
     
     def _invalidate_roi_analysis(self, roi: AnalysisParameters) -> None:
         """Invalidate analysis for an ROI.
@@ -165,8 +135,24 @@ class KymAnalysis:
             if len(self._df) == 0:
                 self._df = None
     
+    def _get_primary_path(self) -> Path | None:
+        """Get the primary file path (first channel path).
+        
+        Returns:
+            Path for the first channel, or None if no paths are set.
+        """
+        channel_keys = self.acq_image.getChannelKeys()
+        if not channel_keys:
+            # Try to get from _file_path_dict
+            if hasattr(self.acq_image, '_file_path_dict') and self.acq_image._file_path_dict:
+                return next(iter(self.acq_image._file_path_dict.values()))
+            return None
+        # Get path for first channel
+        first_channel = min(channel_keys)
+        return self.acq_image.getChannelPath(first_channel)
+    
     def _get_analysis_folder_path(self) -> Path:
-        """Get the analysis folder path for the kym_file.
+        """Get the analysis folder path for the acq_image.
         
         Pattern: parent folder + '-analysis' suffix
         Example: 20221102/Capillary1_0001.tif -> 20221102/20221102-analysis/
@@ -174,7 +160,10 @@ class KymAnalysis:
         Returns:
             Path to the analysis folder.
         """
-        parent = self.kym_file.path.parent
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            raise ValueError("No file path available for analysis folder")
+        parent = primary_path.parent
         parent_name = parent.name
         analysis_folder_name = f"{parent_name}-analysis"
         return parent / analysis_folder_name
@@ -183,20 +172,23 @@ class KymAnalysis:
         """Get the save paths for analysis files.
         
         Returns:
-            Tuple of (csv_path, json_path) for this kym_file's analysis.
+            Tuple of (csv_path, json_path) for this acq_image's analysis.
         """
         analysis_folder = self._get_analysis_folder_path()
-        base_name = self.kym_file.path.stem
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            raise ValueError("No file path available for save paths")
+        base_name = primary_path.stem
         csv_path = analysis_folder / f"{base_name}.csv"
         json_path = analysis_folder / f"{base_name}.json"
         return csv_path, json_path
     
     def add_roi(
         self,
-        left: Optional[float] = None,
-        top: Optional[float] = None,
-        right: Optional[float] = None,
-        bottom: Optional[float] = None,
+        left: Optional[int] = None,
+        top: Optional[int] = None,
+        right: Optional[int] = None,
+        bottom: Optional[int] = None,
         note: str = "",
     ) -> AnalysisParameters:
         """Add a new ROI.
@@ -217,22 +209,22 @@ class KymAnalysis:
         """
         roi_id = self._get_next_roi_id()
         
-        # Get image dimensions for defaults
-        img_w = self.kym_file.pixels_per_line
-        img_h = self.kym_file.num_lines
+        # Get 2D image for clamping
+        img = self.acq_image.get_img_slice(channel=1)
+        img_h, img_w = img.shape
         
         # Default to full image bounds if coordinates not specified
         if left is None:
-            left = 0.0
+            left = 0
         if top is None:
-            top = 0.0
+            top = 0
         if right is None:
-            right = float(img_w)
+            right = img_w
         if bottom is None:
-            bottom = float(img_h)
+            bottom = img_h
         
         # Validate and clamp coordinates to image bounds
-        left, top, right, bottom = self._clamp_coordinates(left, top, right, bottom)
+        left, top, right, bottom = clamp_coordinates(left, top, right, bottom, img)
         
         roi_params = AnalysisParameters(
             roi_id=roi_id,
@@ -309,11 +301,11 @@ class KymAnalysis:
         
         # Validate and clamp coordinates
         if coords_changed:
-            # Clamp coordinates using helper
-            clamped_left, clamped_top, clamped_right, clamped_bottom = self._clamp_coordinates(
-                roi.left, roi.top, roi.right, roi.bottom
+            # Get 2D image for clamping
+            img = self.acq_image.get_img_slice(channel=1)
+            roi.left, roi.top, roi.right, roi.bottom = clamp_coordinates(
+                roi.left, roi.top, roi.right, roi.bottom, img
             )
-            roi.left, roi.top, roi.right, roi.bottom = clamped_left, clamped_top, clamped_right, clamped_bottom
             
             # Invalidate analysis if coordinates changed
             self._invalidate_roi_analysis(roi)
@@ -411,21 +403,21 @@ class KymAnalysis:
         roi = self._rois[roi_id]
         
         # Extract image region based on ROI coordinates
-        # Note: ROI coordinates are already validated/clamped when added/edited
-        image = self.kym_file.get_img_data(channel=channel)
-        img_w = self.kym_file.pixels_per_line
-        img_h = self.kym_file.num_lines
+        # ROI coordinates are already clamped to image bounds and properly ordered when added/edited
+        image = self.acq_image.get_img_slice(channel=channel)
         
-        # Convert ROI coordinates to pixel/line indices
-        start_pixel = int(max(0, min(roi.left, roi.right, img_w)))
-        stop_pixel = int(min(img_w, max(roi.left, roi.right)))
-        start_line = int(max(0, min(roi.top, roi.bottom, img_h)))
-        stop_line = int(min(img_h, max(roi.top, roi.bottom)))
+        # Convert ROI coordinates to pixel/line indices (already clamped and ordered)
+        start_pixel = roi.top
+        stop_pixel = roi.bottom
+        start_line = roi.left
+        stop_line = roi.right
         
         # Run analysis on the ROI region
         thetas, the_t, spread = mp_analyze_flow(
             image,
             window_size,
+            space_dim=0,  # TODO: add api to get these from acq_image
+            time_dim=1,
             start_pixel=start_pixel,
             stop_pixel=stop_pixel,
             start_line=start_line,
@@ -436,14 +428,16 @@ class KymAnalysis:
         )
         
         # Store analysis parameters in ROI
-        # header = self.kym_file.acquisition_metadata
         roi.algorithm = "mpRadon"
         roi.window_size = window_size
         roi.analyzed_at = datetime.now(timezone.utc)
         
         # Convert to physical units
-        seconds_per_line = self.kym_file.seconds_per_line
-        um_per_pixel = self.kym_file.um_per_pixel
+        # For KymImage, voxels[0] is seconds_per_line, voxels[1] is um_per_pixel
+        if self.acq_image.header.voxels is None or len(self.acq_image.header.voxels) < 2:
+            raise ValueError("Image voxels not set or invalid for kymograph analysis")
+        seconds_per_line = self.acq_image.header.voxels[0]
+        um_per_pixel = self.acq_image.header.voxels[1]
         
         drew_time = the_t * seconds_per_line
         
@@ -457,17 +451,26 @@ class KymAnalysis:
         clean_velocity = _medianFilter(clean_velocity, window_size=5)
         
         # Create DataFrame for this ROI's analysis
+        primary_path = self._get_primary_path()
+        parent_name = primary_path.parent.name if primary_path is not None else ""
+        file_name = primary_path.name if primary_path is not None else ""
+        
+        # Get shape for numLines and pntsPerLine
+        shape = self.acq_image.img_shape
+        num_lines = shape[0] if shape is not None else 0
+        pixels_per_line = shape[1] if shape is not None else 0
+        
         roi_df = pd.DataFrame({
             "roi_id": roi_id,
             "time": drew_time,
             "velocity": drew_velocity,
-            "parentFolder": self.kym_file.path.parent.name,
-            "file": self.kym_file.path.name,
+            "parentFolder": parent_name,
+            "file": file_name,
             "algorithm": "mpRadon",
             "delx": um_per_pixel,
             "delt": seconds_per_line,
-            "numLines": self.kym_file.num_lines,
-            "pntsPerLine": self.kym_file.pixels_per_line,
+            "numLines": num_lines,
+            "pntsPerLine": pixels_per_line,
             "cleanVelocity": clean_velocity,
             "absVelocity": abs(clean_velocity),
         })
@@ -493,12 +496,17 @@ class KymAnalysis:
             True if analysis was saved successfully, False if no analysis exists
             or file is not dirty.
         """
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            logger.warning("No path provided, analysis cannot be saved")
+            return False
+        
         if not self._dirty:
-            logger.info(f"Analysis does not need to be saved for {self.kym_file.path.name}")
+            logger.info(f"Analysis does not need to be saved for {primary_path.name}")
             return False
         
         if self._df is None or len(self._df) == 0:
-            logger.warning(f"No analysis to save for {self.kym_file.path.name}")
+            logger.warning(f"No analysis to save for {primary_path.name}")
             return False
         
         csv_path, json_path = self._get_save_paths()
@@ -533,14 +541,20 @@ class KymAnalysis:
         Returns:
             True if analysis was loaded successfully, False if files don't exist.
         """
+        
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            # logger.warning("No path provided, analysis cannot be loaded")
+            return False
+        
         csv_path, json_path = self._get_save_paths()
         
         if not csv_path.exists():
-            logger.info(f"No analysis CSV found for {self.kym_file.path.name}")
+            # logger.info(f"No analysis CSV found for {self.kym_file.path.name}")
             return False
         
         if not json_path.exists():
-            logger.info(f"No analysis JSON found for {self.kym_file.path.name}")
+            # logger.info(f"No analysis JSON found for {self.kym_file.path.name}")
             return False
         
         # Load CSV
@@ -553,21 +567,22 @@ class KymAnalysis:
         # Restore ROIs from JSON
         self._rois.clear()
         if "rois" in json_data:
-            img_w = self.kym_file.pixels_per_line
-            img_h = self.kym_file.num_lines
+            shape = self.acq_image.img_shape
+            img_w = shape[1] if shape is not None else 0
+            img_h = shape[0] if shape is not None else 0
             
             for roi_dict in json_data["rois"]:
-                # Store original coordinates for validation (before filtering)
-                original_left = roi_dict.get("left", 0.0)
-                original_top = roi_dict.get("top", 0.0)
-                original_right = roi_dict.get("right", 0.0)
-                original_bottom = roi_dict.get("bottom", 0.0)
+                # Store original coordinates for validation (before filtering and clamping)
+                original_left = roi_dict.get("left", 0)
+                original_top = roi_dict.get("top", 0)
+                original_right = roi_dict.get("right", 0)
+                original_bottom = roi_dict.get("bottom", 0)
                 
-                # Use from_dict() to handle unknown field filtering and datetime conversion
+                # Use from_dict() to handle unknown field filtering, datetime conversion, and float->int conversion
                 roi = AnalysisParameters.from_dict(roi_dict)
                 
                 # Validate and clamp ROI coordinates to image bounds
-                # Store original coordinates for comparison
+                # Store original coordinates for comparison (after from_dict conversion)
                 original_roi = AnalysisParameters(
                     roi_id=roi.roi_id,
                     left=roi.left,
@@ -580,10 +595,9 @@ class KymAnalysis:
                     analyzed_at=roi.analyzed_at,
                 )
                 
-                clamped_left, clamped_top, clamped_right, clamped_bottom = self._clamp_coordinates(
-                    roi.left, roi.top, roi.right, roi.bottom
+                roi.left, roi.top, roi.right, roi.bottom = clamp_coordinates_to_size(
+                    roi.left, roi.top, roi.right, roi.bottom, img_w, img_h
                 )
-                roi.left, roi.top, roi.right, roi.bottom = clamped_left, clamped_top, clamped_right, clamped_bottom
                 
                 # Log warning if coordinates were modified
                 if not roi.has_same_coordinates(original_roi):
@@ -596,6 +610,8 @@ class KymAnalysis:
                         f"(image size: {img_w}x{img_h}). "
                         f"If coordinates were changed, analysis may be invalid."
                     )
+                    logger.warning(f'original_roi:{original_roi}')
+                    logger.warning(f'roi:{roi}')
                     # Invalidate analysis if coordinates were changed
                     self._invalidate_roi_analysis(roi)
                 

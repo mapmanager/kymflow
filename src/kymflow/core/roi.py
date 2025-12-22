@@ -16,7 +16,7 @@ if TYPE_CHECKING:
         KymImage = Any
 
 @dataclass
-class KymRoi:
+class ROI:
     """Axis-aligned rectangular ROI in full-image pixel coordinates.
 
     Coordinates are expressed in the coordinate system of the full image
@@ -31,22 +31,24 @@ class KymRoi:
     id: int
     name: str = ""
     note: str = ""
-    left: float = 0.0
-    top: float = 0.0
-    right: float = 0.0
-    bottom: float = 0.0
+    left: int = 0
+    top: int = 0
+    right: int = 0
+    bottom: int = 0
 
-    def clamp_to_image(self, image: KymImage) -> None:
+    def clamp_to_image(self, img: np.ndarray) -> None:
         """Clamp ROI to be fully inside the given image.
 
         This ensures that:
-        * all coordinates are within [0, image.width] × [0, image.height]
+        * all coordinates are within [0, img.shape[1]] × [0, img.shape[0]]
         * left <= right and top <= bottom (by swapping coordinates if needed)
 
         Args:
-            image: KymImage providing width and height.
+            img: 2D numpy array.
         """
-        clamp_roi_to_bounds(self, image.width, image.height)
+        self.left, self.top, self.right, self.bottom = clamp_coordinates(
+            self.left, self.top, self.right, self.bottom, img
+        )
 
     def clamp_to_bounds(self, img_w: int, img_h: int) -> None:
         """Clamp ROI to [0, img_w] × [0, img_h] and fix inverted edges.
@@ -55,27 +57,34 @@ class KymRoi:
             img_w: Width of the image in pixels.
             img_h: Height of the image in pixels.
         """
-        clamp_roi_to_bounds(self, img_w, img_h)
+        self.left, self.top, self.right, self.bottom = clamp_coordinates_to_size(
+            self.left, self.top, self.right, self.bottom, img_w, img_h
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dictionary representation of this ROI."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "KymRoi":
-        """Create a KymRoi from a dictionary produced by to_dict().
+    def from_dict(cls, data: dict[str, Any]) -> "ROI":
+        """Create a ROI from a dictionary produced by to_dict().
 
         Args:
-            data: Dictionary with fields matching the KymRoi dataclass.
+            data: Dictionary with fields matching the ROI dataclass.
+                Float coordinates will be converted to int.
 
         Returns:
-            A new KymRoi instance initialized from the dictionary.
+            A new ROI instance initialized from the dictionary.
         """
+        # Convert float coordinates to int if present
+        for coord in ['left', 'top', 'right', 'bottom']:
+            if coord in data and isinstance(data[coord], float):
+                data[coord] = int(data[coord])
         return cls(**data)
 
 
-class KymRoiSet:
-    """Container and manager for multiple KymRoi instances.
+class RoiSet:
+    """Container and manager for multiple ROI instances.
 
     This class owns the ROIs, assigns unique integer IDs, and preserves
     creation order (via an internal dict).
@@ -83,18 +92,18 @@ class KymRoiSet:
 
     def __init__(self) -> None:
         """Initialize an empty ROI set with an internal ID counter."""
-        self._rois: dict[int, KymRoi] = {}
+        self._rois: dict[int, ROI] = {}
         self._next_id: int = 1
 
     def create_roi(
         self,
-        left: float,
-        top: float,
-        right: float,
-        bottom: float,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
         name: str = "",
         note: str = "",
-    ) -> KymRoi:
+    ) -> ROI:
         """Create a new ROI, assign a unique id, and store it in the set.
 
         Args:
@@ -106,9 +115,9 @@ class KymRoiSet:
             note: Optional free-form note.
 
         Returns:
-            The newly created KymRoi instance.
+            The newly created ROI instance.
         """
-        roi = KymRoi(
+        roi = ROI(
             id=self._next_id,
             name=name,
             note=note,
@@ -129,18 +138,18 @@ class KymRoiSet:
         """
         self._rois.pop(roi_id, None)
 
-    def get(self, roi_id: int) -> KymRoi | None:
+    def get(self, roi_id: int) -> ROI | None:
         """Return the ROI with the given id, or None if not present.
 
         Args:
             roi_id: Identifier of the ROI to retrieve.
 
         Returns:
-            The KymRoi instance or None.
+            The ROI instance or None.
         """
         return self._rois.get(roi_id)
 
-    def __iter__(self) -> Iterable[KymRoi]:
+    def __iter__(self) -> Iterable[ROI]:
         """Iterate over ROIs in creation order."""
         return iter(self._rois.values())
 
@@ -152,65 +161,128 @@ class KymRoiSet:
         """Serialize all ROIs to a list of dictionaries for JSON storage.
 
         Returns:
-            A list of dictionaries, each compatible with `KymRoi.from_dict`.
+            A list of dictionaries, each compatible with `ROI.from_dict`.
         """
         return [roi.to_dict() for roi in self._rois.values()]
 
     @classmethod
-    def from_list(cls, data: list[dict[str, Any]]) -> "KymRoiSet":
+    def from_list(cls, data: list[dict[str, Any]]) -> "RoiSet":
         """Create a ROI set from a list of ROI dictionaries.
 
         Args:
-            data: List of dictionaries, each produced by `KymRoi.to_dict`.
+            data: List of dictionaries, each produced by `ROI.to_dict`.
 
         Returns:
-            A new KymRoiSet containing all deserialized ROIs.
+            A new RoiSet containing all deserialized ROIs.
         """
         s = cls()
         for d in data:
-            roi = KymRoi.from_dict(d)
+            roi = ROI.from_dict(d)
             s._rois[roi.id] = roi
             s._next_id = max(s._next_id, roi.id + 1)
         return s
 
 
-def clamp_roi_to_bounds(roi: KymRoi, img_w: int, img_h: int) -> None:
-    """Clamp ROI coordinates to [0, img_w] × [0, img_h] and fix inverted edges.
-
-    Standalone utility function that can be used with any object having left/top/right/bottom
-    attributes (KymRoi, AnalysisParameters, etc.). Modifies the object in place.
-
+def clamp_coordinates(
+    left: int, top: int, right: int, bottom: int,
+    img: np.ndarray
+) -> tuple[int, int, int, int]:
+    """Clamp coordinates to be within bounds of img.shape (H, W).
+    
     Args:
-        roi: ROI-like object with left, top, right, bottom attributes.
+        left: Left coordinate.
+        top: Top coordinate.
+        right: Right coordinate.
+        bottom: Bottom coordinate.
+        img: 2D numpy array (enforces 2D).
+    
+    Returns:
+        Tuple of (clamped_left, clamped_top, clamped_right, clamped_bottom) as int.
+    
+    Raises:
+        ValueError: If img is not 2D.
+    """
+    if img.ndim != 2:
+        raise ValueError(f"Expected a 2D image, got ndim {img.ndim}")
+    
+    height, width = img.shape
+    
+    def clamp(v: int, lo: int, hi: int) -> int:
+        return max(lo, min(hi, v))
+    
+    left = clamp(left, 0, width)
+    right = clamp(right, 0, width)
+    top = clamp(top, 0, height)
+    bottom = clamp(bottom, 0, height)
+    
+    # Ensure non-inverted coordinates
+    if left > right:
+        left, right = right, left
+    if top > bottom:
+        top, bottom = bottom, top
+    
+    return left, top, right, bottom
+
+
+def clamp_coordinates_to_size(
+    left: int, top: int, right: int, bottom: int,
+    img_w: int, img_h: int
+) -> tuple[int, int, int, int]:
+    """Clamp coordinates to [0, img_w] × [0, img_h] and fix inverted edges.
+    
+    Helper function for cases where we only have width/height metadata
+    (e.g., loading from JSON without image data).
+    
+    Args:
+        left: Left coordinate.
+        top: Top coordinate.
+        right: Right coordinate.
+        bottom: Bottom coordinate.
         img_w: Width of the image in pixels.
         img_h: Height of the image in pixels.
+    
+    Returns:
+        Tuple of (clamped_left, clamped_top, clamped_right, clamped_bottom) as int.
     """
-    roi.left = max(0, min(img_w, roi.left))
-    roi.right = max(0, min(img_w, roi.right))
-    roi.top = max(0, min(img_h, roi.top))
-    roi.bottom = max(0, min(img_h, roi.bottom))
+    def clamp(v: int, lo: int, hi: int) -> int:
+        return max(lo, min(hi, v))
+    
+    left = clamp(left, 0, img_w)
+    right = clamp(right, 0, img_w)
+    top = clamp(top, 0, img_h)
+    bottom = clamp(bottom, 0, img_h)
+    
+    # Ensure non-inverted coordinates
+    if left > right:
+        left, right = right, left
+    if top > bottom:
+        top, bottom = bottom, top
+    
+    return left, top, right, bottom
 
-    if roi.left > roi.right:
-        roi.left, roi.right = roi.right, roi.left
-    if roi.top > roi.bottom:
-        roi.top, roi.bottom = roi.bottom, roi.top
 
-
-def clamp_roi_to_image(roi: KymRoi, image: KymImage) -> None:
-    """Clamp ROI to be fully inside the given image.
-
-    Standalone utility function. This ensures that:
-    * all coordinates are within [0, image.width] × [0, image.height]
-    * left <= right and top <= bottom (by swapping coordinates if needed)
-
+def roi_rect_is_equal(roi1: ROI, roi2: ROI) -> bool:
+    """Check if two ROIs have the same coordinates.
+    
+    Compares only the coordinate fields (left, top, right, bottom),
+    ignoring other fields like id, name, note.
+    
     Args:
-        roi: ROI-like object with left, top, right, bottom attributes.
-        image: KymImage providing width and height.
+        roi1: First ROI to compare.
+        roi2: Second ROI to compare.
+    
+    Returns:
+        True if coordinates are equal, False otherwise.
     """
-    clamp_roi_to_bounds(roi, image.width, image.height)
+    return (
+        roi1.left == roi2.left
+        and roi1.top == roi2.top
+        and roi1.right == roi2.right
+        and roi1.bottom == roi2.bottom
+    )
 
 
-def point_in_roi(roi: KymRoi, x: float, y: float) -> bool:
+def point_in_roi(roi: ROI, x: int, y: int) -> bool:
     """Return True if point (x, y) lies inside or on the boundary of roi.
 
     Args:
@@ -225,11 +297,11 @@ def point_in_roi(roi: KymRoi, x: float, y: float) -> bool:
 
 
 def hit_test_rois(
-    rois: KymRoiSet,
-    x: float,
-    y: float,
-    edge_tol: float = 5.0,
-) -> tuple[KymRoi | None, str | None]:
+    rois: RoiSet,
+    x: int,
+    y: int,
+    edge_tol: int = 5,
+) -> tuple[ROI | None, str | None]:
     """Hit-test a collection of ROIs at point (x, y) in full-image coordinates.
 
     This function checks the four edges of each ROI with a tolerance and then
@@ -244,7 +316,7 @@ def hit_test_rois(
 
     Returns:
         A tuple (roi, mode) where:
-            roi: The hit KymRoi instance, or None if nothing was hit.
+            roi: The hit ROI instance, or None if nothing was hit.
             mode: One of:
                 'resizing_left',
                 'resizing_right',

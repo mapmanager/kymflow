@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow.core.repository import FolderScanResult, scan_folder, metadata_table
+from kymflow.core.repository import FolderScanResult, scan_folder  #, metadata_table
 
 
 @pytest.mark.requires_data
@@ -23,16 +23,16 @@ def test_scan_folder(test_data_dir: Path) -> None:
         assert all(f.path.suffix == ".tif" for f in result.files)
 
 
-@pytest.mark.requires_data
-def test_metadata_table(test_data_dir: Path) -> None:
-    """Test getting metadata table for folder."""
-    metadata = metadata_table(test_data_dir)
-    assert isinstance(metadata, list)
-    # Each entry should be a dict with expected keys
-    if metadata:
-        entry = metadata[0]
-        assert "path" in entry
-        assert "filename" in entry
+# @pytest.mark.requires_data
+# def test_metadata_table(test_data_dir: Path) -> None:
+#     """Test getting metadata table for folder."""
+#     metadata = metadata_table(test_data_dir)
+#     assert isinstance(metadata, list)
+#     # Each entry should be a dict with expected keys
+#     if metadata:
+#         entry = metadata[0]
+#         assert "path" in entry
+#         assert "filename" in entry
 
 
 def test_scan_folder_with_depth() -> None:

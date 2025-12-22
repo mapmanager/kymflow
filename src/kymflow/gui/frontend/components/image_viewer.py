@@ -31,7 +31,7 @@ def create_image_viewer(app_state: AppState) -> None:
             plot.update_figure(go.Figure())
             return
         logger.info("Selection changed, loading image")
-        image = kf.get_img_channel(channel=1)
+        image = kf.get_img_slice(channel=1)
         state["image"] = image
         _render_current()
 

@@ -122,38 +122,42 @@ class OlympusHeader:
         ),
     )
 
-    @classmethod
-    def from_tif(cls, tif_path: Path) -> "OlympusHeader":
-        """Load Olympus header from accompanying .txt file.
+    # @classmethod
+    # def from_tif(cls, tif_path: Path) -> "OlympusHeader" | None:
+    #     """Load Olympus header from accompanying .txt file.
 
-        Attempts to parse the Olympus header file that should be in the same
-        directory as the TIFF file with the same base name.
+    #     Attempts to parse the Olympus header file that should be in the same
+    #     directory as the TIFF file with the same base name.
         
-        Returns a header
-        with default values if the file is not found or cannot be parsed.
+    #     Returns None if the file is not found or cannot be parsed.
 
-        Args:
-            tif_path: Path to the TIFF file. The corresponding .txt file will
-                be looked up in the same directory.
+    #     Args:
+    #         tif_path: Path to the TIFF file. The corresponding .txt file will
+    #             be looked up in the same directory.
 
-        Returns:
-            OlympusHeader instance with parsed values,
-            or default values if the header file is missing.
-        """
-        parsed = _readOlympusHeader(str(tif_path))
-        if not parsed:
-            return cls()
-        return cls(
-            um_per_pixel=parsed.get("umPerPixel"),
-            seconds_per_line=parsed.get("secondsPerLine"),
-            duration_seconds=parsed.get("durImage_sec"),
-            pixels_per_line=parsed.get("pixelsPerLine"),
-            num_lines=parsed.get("numLines"),
-            bits_per_pixel=parsed.get("bitsPerPixel"),
-            date_str=parsed.get("dateStr"),
-            time_str=parsed.get("timeStr"),
-            raw=parsed,
-        )
+    #     Returns:
+    #         OlympusHeader instance with parsed values,
+    #         or None if the header file is missing.
+    #     """
+    #     parsed = _readOlympusHeader(str(tif_path))
+    #     if parsed is None:
+    #         logger.warning(f'>>> no parsed header found for tif_path:"{tif_path}"')
+    #         logger.warning('     returning None')
+
+    #         # return cls()
+    #         return None
+
+    #     return cls(
+    #         um_per_pixel=parsed.get("umPerPixel"),
+    #         seconds_per_line=parsed.get("secondsPerLine"),
+    #         duration_seconds=parsed.get("durImage_sec"),
+    #         pixels_per_line=parsed.get("pixelsPerLine"),
+    #         num_lines=parsed.get("numLines"),
+    #         bits_per_pixel=parsed.get("bitsPerPixel"),
+    #         date_str=parsed.get("dateStr"),
+    #         time_str=parsed.get("timeStr"),
+    #         raw=parsed,
+    #     )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary with renamed keys.
@@ -224,7 +228,71 @@ class OlympusHeader:
                     values[field_name] = str(value)
         return values
 
-def _readOlympusHeader(tifPath):
+"""
+{'bitsPerPixel': 12,
+ 'dateStr': '11/02/2022',
+ 'durImage_sec': 35.099,
+ 'numLines': 30000,
+ 'pixelsPerLine': 38,
+ 'secondsPerLine': 0.0011699666666666665,
+ 'timeStr': '12:30:15',
+ 'umPerPixel': 0.284}
+2025-12-11 08:33:46 [WARNING] kymflow.core.image_loaders.kym_image:35:__init__: LOADED OLYMPUS HEADER DICT:
+{'bitsPerPixel': 12,
+ 'dateStr': '11/02/2022',
+ 'durImage_sec': 34.379,
+ 'numLines': 30000,
+ 'pixelsPerLine': 25,
+ 'secondsPerLine': 0.0011459666666666665,
+ 'timeStr': '12:33:11',
+ 'umPerPixel': 0.331}
+"""
+
+def _get_channel_from_tif_filename(tifPath: str) -> int | None:
+    """Get the channel number from the TIFF file name.
+    """
+    tifFileName = os.path.basename(tifPath)
+    if '_C001T' in tifFileName:
+        return 1
+    elif '_C002T' in tifFileName:
+        return 2
+    elif '_C003T' in tifFileName:
+        return 3
+    return None
+
+def _find_olympus_txt_file(tifPath: str | Path) -> str | None:
+    """Find the Olympus .txt file corresponding to the given TIFF file.
+
+    Two Channel files are like:
+      cell 01_C001T001.tif
+      cell 01_C002T001.tif
+
+    Returns:
+        Path to the Olympus .txt file.
+        None if the .txt file is not found.
+    """
+    _tifFilename = os.path.basename(tifPath)
+    channel = _get_channel_from_tif_filename(tifPath)
+
+    if channel is None:
+        # single channel txt file matches tif file
+        olympusTxtPath = os.path.splitext(tifPath)[0] + ".txt"
+    else:
+        chStub = f"_C{channel:03d}" # pad channel number with zeros to 3 digits
+
+        # replace everything in name after chStub
+        chStubIndex = _tifFilename.find(chStub)
+        olympusTxtFile = _tifFilename[0:chStubIndex] + ".txt"
+        olympusTxtPath = os.path.join(os.path.split(tifPath)[0], olympusTxtFile)
+    
+    if not os.path.isfile(olympusTxtPath):
+        logger.warning(f"did not find Olympus header: {olympusTxtPath}")
+        return None
+
+    
+    return olympusTxtPath
+
+def _readOlympusHeader(tifPath: str | Path) -> dict | None:
     """Read and parse Olympus header from accompanying .txt file.
 
     Parses the Olympus header file that should be in the same directory as
@@ -257,11 +325,14 @@ def _readOlympusHeader(tifPath):
         Returns None if the .txt file is not found.
     """
 
-    txtPath = os.path.splitext(tifPath)[0] + ".txt"
-    if not os.path.isfile(txtPath):
-        # logger.warning(f"did not find Olympus header: {txtPath}")
-        return
+    olympusTxtPath = _find_olympus_txt_file(tifPath)
+    logger.info(f'olympusTxtPath:{olympusTxtPath}')
 
+    if olympusTxtPath is None:
+        return None
+
+    logger.info(f'reading olympus header from: {olympusTxtPath}')
+    
     retDict = {
         "dateStr": None,
         "timeStr": None,
@@ -271,13 +342,23 @@ def _readOlympusHeader(tifPath):
         "pixelsPerLine": None,
         "numLines": None,
         "bitsPerPixel": None,
+        "olympusTxtPath": olympusTxtPath,
     }
 
     pixelsPerLine = None
 
-    with open(txtPath) as f:
+    with open(olympusTxtPath) as f:
         for line in f:
             line = line.strip()
+
+            # abb 20251216
+            # "Channel Dimension"	"1 [Ch]"
+            if line.startswith('"Channel Dimension"'):
+                _oneLine = line.replace('"', '')
+                _oneLine = _oneLine.split()
+                print('_oneLine:', _oneLine)
+                channel = _oneLine[2]
+                retDict["numChannels"] = int(channel)
 
             # "X Dimension"	"38, 0.0 - 10.796 [um], 0.284 [um/pixel]"
             if line.startswith('"X Dimension"'):
@@ -333,4 +414,44 @@ def _readOlympusHeader(tifPath):
     if retDict["umPerPixel"] is None:
         logger.error("did not get umPerPixel")
 
+    # abb 20251216
+    # now that we have numChannels, we can find the other channel tif files
+    _givenChannelNumber = _get_channel_from_tif_filename(tifPath)  # 1 based channel number
+    _channelDict = {}
+    if _givenChannelNumber is None:
+        # no channel number in filename
+        _channelDict = {1: tifPath}
+    else:
+        _channelDict = {_givenChannelNumber: tifPath}
+        _chStub = f"C{_givenChannelNumber:03d}" # pad channel number with zeros to 3 digits
+        tifFileName = os.path.basename(tifPath)
+        for channelIdx in range(retDict["numChannels"]):
+            channelNumber = channelIdx + 1
+            if channelNumber == _givenChannelNumber:
+                continue
+            else:
+                otherChannelTifPath = os.path.join(os.path.split(tifPath)[0], tifFileName.replace(_chStub, f"C{channelNumber:03d}"))
+                if not os.path.isfile(otherChannelTifPath):
+                    logger.warning(f"did not find Olympus otherChannelTifPath: {otherChannelTifPath}")
+                    _channelDict[channelNumber] = None
+                else:
+                    _channelDict[channelNumber] = otherChannelTifPath
+
+    retDict['tifChannelPaths'] = _channelDict
+
     return retDict
+
+if __name__ == '__main__':
+    # tifPath = "/Users/cudmore/Sites/kymflow_outer/kymflow/data/2-channel kymographs/cell 01/cell 01_C001T001.tif"
+    tifPath = "/Users/cudmore/Sites/kymflow_outer/kymflow/data/2-channel kymographs/cell 01/cell 01_C002T001.tif"
+    # tifPath = '/Users/cudmore/Sites/kymflow_outer/kymflow/data/Capillary1_0001.tif'
+
+    # txtPath = _find_olympus_txt_file(tifPath)
+    # print('txtPath:', txtPath)
+
+    from kymflow.core.utils.logging import setup_logging
+    setup_logging()
+    
+    retDict = _readOlympusHeader(tifPath)
+    from pprint import pprint
+    pprint(retDict, sort_dicts=False, width=300)

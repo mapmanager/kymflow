@@ -2,65 +2,181 @@
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 import numpy as np
+import tifffile
 
 from kymflow.core.image_loaders.acq_image import AcqImage
-from kymflow.core.image_loaders.read_olympus_header import OlympusHeader
+from kymflow.core.image_loaders.img_acq_header import ImgAcqHeader
+from kymflow.core.image_loaders.read_olympus_header import _readOlympusHeader  # OlympusHeader
 
 from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
+if TYPE_CHECKING:
+    from kymflow.core.kym_analysis import KymAnalysis
+
 class KymImage(AcqImage):
     """KymImage is a subclass of AcqImage that represents a kymograph image.
+
+    Rows in np array are time, columns are space.
     """
 
-    def __init__(self, path: str | Path | None,
+    def __init__(self, path: str | Path | None = None,
                  img_data: np.ndarray | None = None,
+                 channel: int = 1,
                  load_image: bool = False,
                  ):
-        super().__init__(path=path, img_data=img_data, load_image=load_image)
+        
+        # Call super().__init__ with simple pattern (matches AcqImage)
+        super().__init__(path=path, img_data=img_data, channel=channel)
 
-        # self._olympus_header: OlympusHeader = OlympusHeader()  # header is default values
+        # Legacy properties for backward compatibility (use acq_image api exclusively)
+        self.seconds_per_line = 0.001
+        self.um_per_pixel = 1.0
 
-        # try and load Olympus header from txt file if it exists
-        _olympus_header = OlympusHeader.from_tif(self.path)
+        # KymAnalysis (lazy initialization)
+        self._kym_analysis: "KymAnalysis" | None = None
 
-        # from pprint import pprint
-        # pprint(_olympus_header)
+        # Try and load Olympus header from txt file if it exists
+        # This discovers additional channels and sets header metadata
+        if path is not None:
+            path_obj = Path(path)
+            _olympusDict = _readOlympusHeader(path_obj)
+            if _olympusDict is not None:
+                logger.info('>>> _olympusDict:')
+                from pprint import pprint
+                pprint(_olympusDict)
 
-        # assign AcqImage properties from olympus header
-        self.header.x_pixels = _olympus_header.num_lines
-        self.header.y_pixels = _olympus_header.pixels_per_line
-        self.header.seconds_per_line = _olympus_header.seconds_per_line
-        self.header.um_per_pixel = _olympus_header.um_per_pixel
+                numLines = _olympusDict['numLines']
+                pixelsPerLine = _olympusDict['pixelsPerLine']
+                
+                seconds_per_line = _olympusDict['secondsPerLine']
+                um_per_pixel = _olympusDict['umPerPixel']
+                
+                # Create fully-formed header and assign directly
+                self._header = ImgAcqHeader(
+                    shape=(numLines, pixelsPerLine),
+                    ndim=2,  # kymographs are always 2D
+                    voxels=[seconds_per_line, um_per_pixel],
+                    voxels_units=["s", "um"],
+                    labels=["time (s)", "space (um)"],
+                    physical_size=None  # Will be computed
+                )
+                # Compute physical_size
+                self._header.physical_size = self._header.compute_physical_size()
+                # Validate consistency
+                self._header._validate_consistency()
 
+                # Update legacy properties
+                self.seconds_per_line = seconds_per_line
+                self.um_per_pixel = um_per_pixel
+                
+                # Discover and add additional channels from Olympus header
+                # _readOlympusHeader returns 'tifChannelPaths' dict mapping channel numbers to paths
+                if 'tifChannelPaths' in _olympusDict:
+                    tif_channel_paths = _olympusDict['tifChannelPaths']
+                    for ch_num, ch_path in tif_channel_paths.items():
+                        if ch_path is not None:
+                            # Store path in _file_path_dict
+                            self._file_path_dict[ch_num] = Path(ch_path)
+                            # If this channel already has data, validate shape
+                            if self.getChannelData(ch_num) is not None:
+                                loaded_shape = self.getChannelData(ch_num).shape
+                                if loaded_shape[0] != numLines or loaded_shape[1] != pixelsPerLine:
+                                    raise ValueError(f"Image data shape mismatch for channel {ch_num}: {loaded_shape} != {numLines}x{pixelsPerLine}")
+                
+                # Validate shape if image data is already loaded for the initial channel
+                if self.getChannelData(channel) is not None:
+                    loaded_shape = self.getChannelData(channel).shape
+                    if loaded_shape[0] != numLines or loaded_shape[1] != pixelsPerLine:
+                        raise ValueError(f"Image data shape mismatch: {loaded_shape} != {numLines}x{pixelsPerLine}")
+            
+            # Load image data if requested (only if path was provided and img_data was not)
+            if load_image and img_data is None:
+                # Load the initial channel if it has a path and no data yet
+                initial_channel_path = self.getChannelPath(channel)
+                if initial_channel_path is not None and self.getChannelData(channel) is None:
+                    self.addColorChannel(channel, None, path=initial_channel_path, load_image=True)
+                
+                # Load all discovered channels
+                for ch_num in self._file_path_dict.keys():
+                    if ch_num != channel and self.getChannelData(ch_num) is None:
+                        ch_path = self.getChannelPath(ch_num)
+                        if ch_path is not None:
+                            self.addColorChannel(ch_num, None, path=ch_path, load_image=True)
+
+    def _load_channel_from_path(self, channel: int, path: Path) -> bool:
+        """Load image data from TIFF file path for a specific channel.
+        
+        Loads a single 2D TIFF file with shape [num_lines, num_pixels].
+        Validates that the loaded image is 2D and matches expected shape from header.
+        
+        Args:
+            channel: Channel number (1-based integer key).
+            path: File path to load from.
+            
+        Returns:
+            True if loading succeeded, False otherwise.
+        """
+        try:
+            img_array = tifffile.imread(path)
+            
+            # Validate it's 2D
+            if img_array.ndim != 2:
+                logger.error(f"KymImage expects 2D images, got {img_array.ndim}D from {path}")
+                return False
+            
+            # Validate shape matches header if header is set
+            if self._header.shape is not None:
+                expected_shape = self._header.shape
+                if img_array.shape != expected_shape:
+                    logger.warning(
+                        f"Loaded image shape {img_array.shape} doesn't match header shape {expected_shape} "
+                        f"for channel {channel} from {path}"
+                    )
+                    # Still allow it, but log warning
+            
+            # Add the channel with loaded data
+            self._imgData[channel] = img_array
+            logger.info(f"Loaded image data for channel {channel}: {img_array.shape} from {path}")
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Failed to load TIFF from {path} for channel {channel}: {e}")
+            return False
+    
+    @property
+    def kymanalysis(self) -> "KymAnalysis":
+        """Get KymAnalysis instance (lazy initialization).
+        
+        Returns:
+            KymAnalysis instance for this KymImage.
+        """
+        if self._kym_analysis is None:
+            from kymflow.core.kym_analysis import KymAnalysis
+            self._kym_analysis = KymAnalysis(self)
+        return self._kym_analysis
+    
+    def __str__(self):
+        paths_str = ", ".join([f"ch{k}:{v.name}" for k, v in self._file_path_dict.items()])
+        return f"KymImage paths=[{paths_str}], shape={self.img_shape}, seconds_per_line={self.seconds_per_line} um_per_pixel={self.um_per_pixel}"
 
     @property
     def num_lines(self) -> int:
         """Number of lines scanned.
         """
-        if self.img_data is None:
-            return None
-        return self.x_pixels
+        return self.img_shape[0]
     
     @property
     def pixels_per_line(self) -> int:
         """Number of pixels per line.
         """
-        if self.img_data is None:
-            return None
-        return self.y_pixels
+        return self.img_shape[1]
 
     @property
     def image_dur(self) -> float:
         """Image duration (s).
         """
-        return self.num_lines * self.header.seconds_per_line
-
-    @property
-    def seconds_per_line(self) -> float:
-        return self.header.seconds_per_line
-
-    @property
-    def um_per_pixel(self) -> float:
-        return self.header.um_per_pixel
+        return self.num_lines * self.seconds_per_line

@@ -16,6 +16,8 @@ dependencies = [
     "scikit-image>=0.24.0",
     "plotly>=6.5.0",
     "matplotlib>=3.9.4",
+    "pydantic>=2.10.0",
+    "tomlkit>=0.12.0",
 ]
 
 license = { file = "LICENSE" }

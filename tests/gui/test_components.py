@@ -26,10 +26,10 @@ def app_state_with_file() -> tuple[AppState, KymFile]:
         tifffile.imwrite(test_file, test_image)
         
         kym_file = KymFile(test_file, load_image=True)
-        kym_file._header.pixels_per_line = 200
-        kym_file._header.num_lines = 100
-        kym_file._header.seconds_per_line = 0.001
-        kym_file._header.um_per_pixel = 1.0
+        # kym_file.pixels_per_line = 200
+        # kym_file.num_lines = 100
+        # kym_file.seconds_per_line = 0.001
+        # kym_file.um_per_pixel = 1.0
         
         app_state = AppState()
         app_state.files = [kym_file]
@@ -136,10 +136,10 @@ def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymFile]) -
         tifffile.imwrite(test_file2, test_image2)
         
         kym_file2 = KymFile(test_file2, load_image=True)
-        kym_file2._header.pixels_per_line = 150
-        kym_file2._header.num_lines = 80
-        kym_file2._header.seconds_per_line = 0.001
-        kym_file2._header.um_per_pixel = 1.0
+        # kym_file2.kym_image.pixels_per_line = 150
+        # kym_file2.kym_image.num_lines = 80
+        # kym_file2.kym_image.seconds_per_line = 0.001
+        # kym_file2.kym_image.um_per_pixel = 1.0
         
         # Add both files to app_state
         app_state.files = [kym_file, kym_file2]

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.core.kym_file import OlympusHeader
+# from kymflow.core.kym_file import OlympusHeader
+from kymflow.core.image_loaders.read_olympus_header import OlympusHeader
 from kymflow.gui.state import AppState
 
 
