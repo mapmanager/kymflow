@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from kymflow.core.plotting.theme import ThemeMode
-from kymflow.core.kym_file import KymFile
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.metadata import AnalysisParameters
 
 from kymflow.core.plotting.colorscales import get_colorscale
@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 
 
 def line_plot_plotly(
-    kf: Optional[KymFile],
+    kf: Optional[KymImage],
     roi_id: int,
     x: str,
     y: str,
@@ -136,7 +136,7 @@ def line_plot_plotly(
 
 
 def plot_image_line_plotly(
-    kf: Optional[KymFile],
+    kf: Optional[KymImage],
     roi_id: int,
     y: str = "velocity",
     remove_outliers: bool = False,
@@ -520,12 +520,16 @@ def update_contrast(
         )
 
 
-def reset_image_zoom(fig: go.Figure, kf: Optional[KymFile]) -> None:
+def reset_image_zoom(fig: go.Figure, kf: Optional[KymImage]) -> None:
     """Reset the zoom to full scale for the kymograph image subplot."""
     if kf is None:
         return
 
-    duration_seconds = kf.duration_seconds
+    duration_seconds = None
+    if kf.header.physical_size and len(kf.header.physical_size) > 0:
+        duration_seconds = kf.header.physical_size[0]
+    if duration_seconds is None:
+        return
     pixels_per_line = kf.pixels_per_line
 
     # logger.info(f"reset_image_zoom: duration_seconds: {duration_seconds} pixels_per_line: {pixels_per_line}")

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     except ImportError:
         # Fallback if v2 module doesn't exist
         KymImage = Any
+    from kymflow.core.image_loaders.acq_image import AcqImage
 
 @dataclass
 class ROI:
@@ -26,9 +27,14 @@ class ROI:
     * top  <= bottom
 
     These invariants are enforced by `clamp_to_image` (or `clamp_to_bounds`).
+    
+    Each ROI is associated with a specific channel and z (plane/slice) coordinate.
+    For 2D images, z is always 0. For 3D images, z is in [0, num_slices-1].
     """
 
     id: int
+    channel: int = 1
+    z: int = 0
     name: str = ""
     note: str = ""
     left: int = 0
@@ -72,14 +78,22 @@ class ROI:
         Args:
             data: Dictionary with fields matching the ROI dataclass.
                 Float coordinates will be converted to int.
+                Missing channel/z will default to 1/0 for backward compatibility.
 
         Returns:
             A new ROI instance initialized from the dictionary.
         """
         # Convert float coordinates to int if present
-        for coord in ['left', 'top', 'right', 'bottom']:
+        for coord in ['left', 'top', 'right', 'bottom', 'channel', 'z']:
             if coord in data and isinstance(data[coord], float):
                 data[coord] = int(data[coord])
+        
+        # Backward compatibility: default channel=1, z=0 if not present
+        if 'channel' not in data:
+            data['channel'] = 1
+        if 'z' not in data:
+            data['z'] = 0
+        
         return cls(**data)
 
 
@@ -87,13 +101,79 @@ class RoiSet:
     """Container and manager for multiple ROI instances.
 
     This class owns the ROIs, assigns unique integer IDs, and preserves
-    creation order (via an internal dict).
+    creation order (via an internal dict). Holds a reference to AcqImage
+    for bounds validation.
     """
 
-    def __init__(self) -> None:
-        """Initialize an empty ROI set with an internal ID counter."""
+    def __init__(self, acq_image: "AcqImage") -> None:
+        """Initialize an empty ROI set with an internal ID counter.
+        
+        Args:
+            acq_image: Reference to AcqImage instance for bounds validation.
+        """
+        self.acq_image = acq_image
         self._rois: dict[int, ROI] = {}
         self._next_id: int = 1
+    
+    def _get_bounds(self, channel: int) -> tuple[int, int, int]:
+        """Get image bounds (width, height, num_slices) for validation.
+        
+        Queries bounds from AcqImage header. Bounds are never stored in RoiSet.
+        
+        Args:
+            channel: Channel number (for validation, all channels share same shape).
+            
+        Returns:
+            Tuple of (img_w, img_h, num_slices).
+            
+        Raises:
+            ValueError: If bounds cannot be determined (shape is None).
+        """
+        shape = self.acq_image.img_shape
+        if shape is None:
+            raise ValueError(
+                "Cannot determine image bounds: header.shape is None. "
+                "Image data must be loaded or header must be populated."
+            )
+        
+        ndim = self.acq_image.img_ndim
+        if ndim is None:
+            raise ValueError(
+                "Cannot determine image bounds: header.ndim is None. "
+                "Image data must be loaded or header must be populated."
+            )
+        
+        if ndim == 2:
+            img_h, img_w = shape
+            num_slices = 1
+        elif ndim == 3:
+            num_slices, img_h, img_w = shape
+        else:
+            raise ValueError(f"Unsupported image ndim: {ndim} (must be 2 or 3)")
+        
+        return (img_w, img_h, num_slices)
+    
+    def _validate_channel(self, channel: int) -> None:
+        """Validate that channel exists in AcqImage.
+        
+        Args:
+            channel: Channel number to validate.
+            
+        Raises:
+            ValueError: If channel doesn't exist.
+        """
+        channel_keys = self.acq_image.getChannelKeys()
+        if channel_keys and channel in channel_keys:
+            return
+        
+        # Also check _file_path_dict for channels that may not have loaded data
+        if hasattr(self.acq_image, '_file_path_dict') and channel in self.acq_image._file_path_dict:
+            return
+        
+        raise ValueError(
+            f"Channel {channel} does not exist. "
+            f"Available channels: {channel_keys if channel_keys else list(self.acq_image._file_path_dict.keys()) if hasattr(self.acq_image, '_file_path_dict') else 'none'}"
+        )
 
     def create_roi(
         self,
@@ -101,24 +181,65 @@ class RoiSet:
         top: int,
         right: int,
         bottom: int,
+        channel: int = 1,
+        z: int = 0,
         name: str = "",
         note: str = "",
     ) -> ROI:
         """Create a new ROI, assign a unique id, and store it in the set.
+
+        Validates channel exists and z coordinate is valid. Clamps coordinates
+        to current image bounds.
 
         Args:
             left: Left coordinate in full-image pixels.
             top: Top coordinate in full-image pixels.
             right: Right coordinate in full-image pixels.
             bottom: Bottom coordinate in full-image pixels.
+            channel: Channel number (defaults to 1).
+            z: Image plane/slice number (defaults to 0). For 2D images, must be 0.
             name: Optional human-readable name.
             note: Optional free-form note.
 
         Returns:
             The newly created ROI instance.
+
+        Raises:
+            ValueError: If channel doesn't exist or z coordinate is invalid.
         """
+        from kymflow.core.utils.logging import get_logger
+        logger = get_logger(__name__)
+        
+        # Validate channel exists
+        self._validate_channel(channel)
+        
+        # Get bounds for validation
+        img_w, img_h, num_slices = self._get_bounds(channel)
+        
+        # Validate and clamp z coordinate
+        if num_slices == 1:
+            # 2D image: z must be 0
+            if z != 0:
+                logger.warning(f"z coordinate {z} invalid for 2D image, clamping to 0")
+                z = 0
+        else:
+            # 3D image: z must be in [0, num_slices-1]
+            if z < 0:
+                logger.warning(f"z coordinate {z} is negative, clamping to 0")
+                z = 0
+            elif z >= num_slices:
+                logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
+                z = num_slices - 1
+        
+        # Clamp coordinates to image bounds
+        left, top, right, bottom = clamp_coordinates_to_size(
+            left, top, right, bottom, img_w, img_h
+        )
+        
         roi = ROI(
             id=self._next_id,
+            channel=channel,
+            z=z,
             name=name,
             note=note,
             left=left,
@@ -130,6 +251,93 @@ class RoiSet:
         self._next_id += 1
         return roi
 
+    def edit_roi(
+        self,
+        roi_id: int,
+        *,
+        left: int | None = None,
+        top: int | None = None,
+        right: int | None = None,
+        bottom: int | None = None,
+        channel: int | None = None,
+        z: int | None = None,
+        name: str | None = None,
+        note: str | None = None,
+    ) -> None:
+        """Edit ROI coordinates or attributes.
+
+        Validates channel and z if changed. Clamps coordinates to current image bounds.
+
+        Args:
+            roi_id: Identifier of the ROI to edit.
+            left: New left coordinate (optional).
+            top: New top coordinate (optional).
+            right: New right coordinate (optional).
+            bottom: New bottom coordinate (optional).
+            channel: New channel number (optional).
+            z: New z (plane) coordinate (optional).
+            name: New name (optional).
+            note: New note (optional).
+
+        Raises:
+            ValueError: If ROI not found, channel doesn't exist, or z coordinate is invalid.
+        """
+        from kymflow.core.utils.logging import get_logger
+        logger = get_logger(__name__)
+        
+        if roi_id not in self._rois:
+            raise ValueError(f"ROI {roi_id} not found")
+        
+        roi = self._rois[roi_id]
+        
+        # Update channel if provided
+        if channel is not None:
+            self._validate_channel(channel)
+            roi.channel = channel
+        
+        # Get bounds for validation (use current or new channel)
+        current_channel = channel if channel is not None else roi.channel
+        img_w, img_h, num_slices = self._get_bounds(current_channel)
+        
+        # Validate and clamp z coordinate if provided
+        if z is not None:
+            if num_slices == 1:
+                # 2D image: z must be 0
+                if z != 0:
+                    logger.warning(f"z coordinate {z} invalid for 2D image, clamping to 0")
+                    z = 0
+            else:
+                # 3D image: z must be in [0, num_slices-1]
+                if z < 0:
+                    logger.warning(f"z coordinate {z} is negative, clamping to 0")
+                    z = 0
+                elif z >= num_slices:
+                    logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
+                    z = num_slices - 1
+            roi.z = z
+        
+        # Update coordinates if provided
+        new_left = left if left is not None else roi.left
+        new_top = top if top is not None else roi.top
+        new_right = right if right is not None else roi.right
+        new_bottom = bottom if bottom is not None else roi.bottom
+        
+        # Clamp coordinates to image bounds
+        clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
+            new_left, new_top, new_right, new_bottom, img_w, img_h
+        )
+        
+        roi.left = clamped_left
+        roi.top = clamped_top
+        roi.right = clamped_right
+        roi.bottom = clamped_bottom
+        
+        # Update name and note if provided
+        if name is not None:
+            roi.name = name
+        if note is not None:
+            roi.note = note
+    
     def delete(self, roi_id: int) -> None:
         """Remove the ROI with the given id, if it exists.
 
@@ -148,6 +356,79 @@ class RoiSet:
             The ROI instance or None.
         """
         return self._rois.get(roi_id)
+    
+    def get_by_channel(self, channel: int) -> list[ROI]:
+        """Get all ROIs for a specific channel.
+
+        Args:
+            channel: Channel number to filter by.
+
+        Returns:
+            List of ROIs for the specified channel.
+        """
+        return [roi for roi in self._rois.values() if roi.channel == channel]
+    
+    def get_by_z(self, z: int) -> list[ROI]:
+        """Get all ROIs for a specific z (plane) coordinate.
+
+        Args:
+            z: Z (plane) coordinate to filter by.
+
+        Returns:
+            List of ROIs for the specified z coordinate.
+        """
+        return [roi for roi in self._rois.values() if roi.z == z]
+    
+    def revalidate_all(self) -> int:
+        """Revalidate and clamp all ROIs to current image bounds.
+
+        This is an optional utility method. Bounds validation normally happens
+        automatically in create_roi(), edit_roi(), and during load_metadata().
+
+        Returns:
+            Number of ROIs that were clamped (modified).
+        """
+        from kymflow.core.utils.logging import get_logger
+        logger = get_logger(__name__)
+        
+        clamped_count = 0
+        
+        for roi in self._rois.values():
+            try:
+                img_w, img_h, num_slices = self._get_bounds(roi.channel)
+                
+                # Validate and clamp z
+                original_z = roi.z
+                if num_slices == 1:
+                    if roi.z != 0:
+                        roi.z = 0
+                        clamped_count += 1
+                else:
+                    if roi.z < 0:
+                        roi.z = 0
+                        clamped_count += 1
+                    elif roi.z >= num_slices:
+                        roi.z = num_slices - 1
+                        clamped_count += 1
+                
+                # Clamp coordinates
+                clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
+                    roi.left, roi.top, roi.right, roi.bottom, img_w, img_h
+                )
+                
+                if (roi.left != clamped_left or roi.top != clamped_top or
+                    roi.right != clamped_right or roi.bottom != clamped_bottom or
+                    roi.z != original_z):
+                    roi.left = clamped_left
+                    roi.top = clamped_top
+                    roi.right = clamped_right
+                    roi.bottom = clamped_bottom
+                    clamped_count += 1
+                    
+            except ValueError as e:
+                logger.warning(f"Could not revalidate ROI {roi.id}: {e}")
+        
+        return clamped_count
 
     def __iter__(self) -> Iterable[ROI]:
         """Iterate over ROIs in creation order."""
@@ -166,16 +447,17 @@ class RoiSet:
         return [roi.to_dict() for roi in self._rois.values()]
 
     @classmethod
-    def from_list(cls, data: list[dict[str, Any]]) -> "RoiSet":
+    def from_list(cls, data: list[dict[str, Any]], acq_image: "AcqImage") -> "RoiSet":
         """Create a ROI set from a list of ROI dictionaries.
 
         Args:
             data: List of dictionaries, each produced by `ROI.to_dict`.
+            acq_image: Reference to AcqImage instance for bounds validation.
 
         Returns:
             A new RoiSet containing all deserialized ROIs.
         """
-        s = cls()
+        s = cls(acq_image)
         for d in data:
             roi = ROI.from_dict(d)
             s._rois[roi.id] = roi

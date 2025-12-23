@@ -15,7 +15,7 @@ from kymflow.gui.frontend.components.save_buttons import create_save_buttons
 from kymflow.gui.frontend.components.contrast_widget import create_contrast_widget
 from kymflow.gui.frontend.components.image_line_viewer import create_image_line_viewer
 from kymflow.gui.frontend.components.metadata_form import create_metadata_form
-from kymflow.gui.frontend.components.olympus_form import create_olympus_form
+# from kymflow.gui.frontend.components.olympus_form import create_olympus_form  # Deprecated
 from kymflow.gui.frontend.components.analysis_form import create_analysis_form
 
 

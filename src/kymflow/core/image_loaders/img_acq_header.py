@@ -7,7 +7,7 @@ for acquired images. This includes shape, dimensions, voxel information, and lab
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 
 @dataclass
@@ -149,6 +149,71 @@ class ImgAcqHeader:
         
         return [s * v for s, v in zip(self.shape, self.voxels)]
     
+    # ------------------------------------------------------------------
+    # New helper methods for AcqImage
+    # ------------------------------------------------------------------
+    def set_shape_ndim(self, shape: Tuple[int, ...] | None, ndim: int | None) -> None:
+        """Set shape and ndim with consistency validation."""
+        if shape is not None:
+            self.shape = shape
+            if ndim is None:
+                ndim = len(shape)
+        self.ndim = ndim
+        # Validate current state
+        self._validate_consistency()
+
+    def init_defaults_from_shape(self) -> None:
+        """Initialize default voxels/units/labels based on ndim if not set."""
+        if self.ndim is None:
+            return
+        # Only initialize if currently None
+        if self.voxels is None:
+            self.voxels = [1.0] * self.ndim
+        if self.voxels_units is None:
+            self.voxels_units = ["px"] * self.ndim
+        if self.labels is None:
+            self.labels = [""] * self.ndim
+        # Compute physical size
+        self.physical_size = self.compute_physical_size()
+        # Validate
+        self._validate_consistency()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize header to a dictionary for metadata save."""
+        return {
+            "shape": list(self.shape) if self.shape is not None else None,
+            "ndim": self.ndim,
+            "voxels": self.voxels,
+            "voxels_units": self.voxels_units,
+            "labels": self.labels,
+            "physical_size": self.physical_size,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ImgAcqHeader":
+        """Deserialize header from a dictionary."""
+        header = cls()
+        if not data:
+            return header
+        if "shape" in data:
+            header.shape = tuple(data["shape"]) if data["shape"] is not None else None
+        if "ndim" in data:
+            header.ndim = data["ndim"]
+        if "voxels" in data:
+            header.voxels = data["voxels"]
+        if "voxels_units" in data:
+            header.voxels_units = data["voxels_units"]
+        if "labels" in data:
+            header.labels = data["labels"]
+        if "physical_size" in data:
+            header.physical_size = data["physical_size"]
+        # If physical_size missing but shape+voxels present, compute
+        if header.physical_size is None:
+            header.physical_size = header.compute_physical_size()
+        # Validate consistency
+        header._validate_consistency()
+        return header
+
     @classmethod
     def from_data(cls, shape: Tuple[int, ...], ndim: int) -> ImgAcqHeader:
         """Create header from image data shape and ndim.

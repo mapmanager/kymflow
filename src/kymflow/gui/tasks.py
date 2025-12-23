@@ -9,13 +9,13 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional, Sequence
 
-from kymflow.core.kym_file import KymFile
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.analysis.kym_flow_radon import FlowCancelled
 from kymflow.core.state import TaskState
 
 
 def run_flow_analysis(
-    kym_file: KymFile,
+    kym_file: KymImage,
     task_state: TaskState,
     *,
     window_size: int = 16,
@@ -29,7 +29,7 @@ def run_flow_analysis(
     If no ROI exists or roi_id is not provided, creates a default ROI (full image bounds).
 
     Args:
-        kym_file: KymFile instance to analyze.
+        kym_file: KymImage instance to analyze.
         task_state: TaskState object for progress tracking and cancellation.
         window_size: Number of time lines per analysis window. Defaults to 16.
         roi_id: Identifier of the ROI to analyze. If None, creates a default ROI.
@@ -111,12 +111,12 @@ def run_flow_analysis(
 
 
 def run_batch_flow_analysis(
-    kym_files: Sequence[KymFile],
+    kym_files: Sequence[KymImage],
     per_file_task: TaskState,
     overall_task: TaskState,
     *,
     window_size: int = 16,
-    on_file_complete: Optional[Callable[[KymFile], None]] = None,
+        on_file_complete: Optional[Callable[[KymImage], None]] = None,
     on_batch_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
     """Run flow analysis sequentially for multiple files in a background thread.
@@ -126,12 +126,12 @@ def run_batch_flow_analysis(
     at any point. Creates a default ROI (full image bounds) for each file if none exists.
 
     Args:
-        kym_files: Sequence of KymFile instances to analyze.
+        kym_files: Sequence of KymImage instances to analyze.
         per_file_task: TaskState for tracking progress of the current file.
         overall_task: TaskState for tracking overall batch progress.
         window_size: Number of time lines per analysis window. Defaults to 16.
         on_file_complete: Optional callback called after each file completes
-            analysis. Receives the KymFile that was just analyzed.
+            analysis. Receives the KymImage that was just analyzed.
         on_batch_complete: Optional callback called when the entire batch
             completes. Receives a boolean indicating if the batch was cancelled.
     """

@@ -13,19 +13,19 @@ import numpy as np
 import pytest
 import tifffile
 
-from kymflow.core.kym_file import KymFile
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui.state import AppState
 
 
 @pytest.fixture
-def app_state_with_file() -> tuple[AppState, KymFile]:
+def app_state_with_file() -> tuple[AppState, KymImage]:
     """Create an AppState with a test file loaded."""
     with tempfile.TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "test.tif"
         test_image = np.zeros((100, 200), dtype=np.uint16)
         tifffile.imwrite(test_file, test_image)
         
-        kym_file = KymFile(test_file, load_image=True)
+        kym_file = KymImage(test_file, load_image=True)
         # kym_file.pixels_per_line = 200
         # kym_file.num_lines = 100
         # kym_file.seconds_per_line = 0.001
@@ -38,7 +38,7 @@ def app_state_with_file() -> tuple[AppState, KymFile]:
         return app_state, kym_file
 
 
-def test_analysis_form_populates_from_roi(app_state_with_file: tuple[AppState, KymFile]) -> None:
+def test_analysis_form_populates_from_roi(app_state_with_file: tuple[AppState, KymImage]) -> None:
     """Test that analysis form logic works with ROI-based parameters.
     
     This is a unit test of the underlying logic. Full GUI testing would require
@@ -72,7 +72,7 @@ def test_analysis_form_populates_from_roi(app_state_with_file: tuple[AppState, K
     assert roi_after.top == 10.0
 
 
-def test_analysis_form_handles_no_roi(app_state_with_file: tuple[AppState, KymFile]) -> None:
+def test_analysis_form_handles_no_roi(app_state_with_file: tuple[AppState, KymImage]) -> None:
     """Test that analysis form handles case when no ROI is selected."""
     app_state, kym_file = app_state_with_file
     
@@ -83,7 +83,7 @@ def test_analysis_form_handles_no_roi(app_state_with_file: tuple[AppState, KymFi
     assert kym_file.kymanalysis.get_roi(999) is None
 
 
-def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymFile]) -> None:
+def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymImage]) -> None:
     """Test save buttons logic works with ROI-based analysis."""
     app_state, kym_file = app_state_with_file
     
@@ -113,7 +113,7 @@ def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymFil
         assert callable(kym_file.kymanalysis.save_analysis)
 
 
-def test_save_buttons_logic_no_analysis(app_state_with_file: tuple[AppState, KymFile]) -> None:
+def test_save_buttons_logic_no_analysis(app_state_with_file: tuple[AppState, KymImage]) -> None:
     """Test save buttons logic when no analysis exists."""
     app_state, kym_file = app_state_with_file
     
@@ -125,7 +125,7 @@ def test_save_buttons_logic_no_analysis(app_state_with_file: tuple[AppState, Kym
     assert not kym_file.kymanalysis.has_analysis(roi.roi_id)
 
 
-def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymFile]) -> None:
+def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymImage]) -> None:
     """Test save all logic works with multiple files."""
     app_state, kym_file = app_state_with_file
     
@@ -135,7 +135,7 @@ def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymFile]) -
         test_image2 = np.zeros((80, 150), dtype=np.uint16)
         tifffile.imwrite(test_file2, test_image2)
         
-        kym_file2 = KymFile(test_file2, load_image=True)
+        kym_file2 = KymImage(test_file2, load_image=True)
         # kym_file2.kym_image.pixels_per_line = 150
         # kym_file2.kym_image.num_lines = 80
         # kym_file2.kym_image.seconds_per_line = 0.001

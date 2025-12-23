@@ -8,7 +8,7 @@ from typing import List
 from nicegui import ui, app
 
 from kymflow.gui.app_context import AppContext
-from kymflow.core.kym_file import KymFile
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui.tasks import run_batch_flow_analysis
 from kymflow.gui.frontend.components.folder_selector import create_folder_selector
 from kymflow.gui.frontend.components.file_table import create_file_table
@@ -31,7 +31,7 @@ def build_batch_content(context: AppContext) -> None:
     """
     # Track current folder and selected files for this page load
     current_folder = {"path": context.default_folder}
-    selected_files: dict[str, List[KymFile]] = {"files": []}
+    selected_files: dict[str, List[KymImage]] = {"files": []}
     
     def _on_folder_changed(folder: Path) -> None:
         """Callback when folder is changed via folder selector."""
@@ -103,7 +103,7 @@ def build_batch_content(context: AppContext) -> None:
     # Selection label
     selected_label = ui.label("Selected: 0 files").classes("text-sm text-gray-400")
     
-    def _update_selection(files: List[KymFile]) -> None:
+    def _update_selection(files: List[KymImage]) -> None:
         selected_files["files"] = files
         selected_label.set_text(f"Selected: {len(files)} file(s)")
     

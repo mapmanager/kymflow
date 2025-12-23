@@ -2,12 +2,17 @@
 """
 
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Any
 import numpy as np
 
 from kymflow.core.image_loaders.img_acq_header import ImgAcqHeader
 from kymflow.core.metadata import ExperimentMetadata
 from kymflow.core.utils.logging import get_logger
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kymflow.core.roi import RoiSet
+
 logger = get_logger(__name__)
 
 class AcqImage:
@@ -39,12 +44,11 @@ class AcqImage:
         # Experimental metadata
         self._experiment_metadata = ExperimentMetadata()
         
+        # ROI set (lazy initialization)
+        self._roi_set: "RoiSet" | None = None
+        
         if img_data is not None:
             self.addColorChannel(channel, img_data)
-
-        if self._imgData:
-            if not self._validate_and_initialize_metadata():
-                logger.error("Failed to validate and initialize metadata")
     
     def _get_representative_path(self) -> Path | None:
         """Get a representative path from _file_path_dict.
@@ -62,6 +66,15 @@ class AcqImage:
         if 1 in self._file_path_dict:
             return self._file_path_dict[1]
         return next(iter(self._file_path_dict.values()))
+    
+    @property
+    def path(self) -> Path | None:
+        """Get representative path (backward compatibility).
+        
+        Returns:
+            Representative path from _file_path_dict, or None if no path available.
+        """
+        return self._get_representative_path()
     
     def _compute_parents_from_path(self, path: Path) -> tuple[str | None, str | None, str | None]:
         """Compute parent folder names from a path.
@@ -120,65 +133,6 @@ class AcqImage:
             return None
         return next(iter(self._imgData.values()))
     
-    def _validate_header_field(self, field_name: str, value: list | Tuple, expected_ndim: int | None = None) -> None:
-        """Validate that a header field value matches ndim.
-        
-        Args:
-            field_name: Name of the field being validated (for error messages).
-            value: The value to validate (list or tuple).
-            expected_ndim: Expected ndim value. If None, uses self._header.ndim.
-            
-        Raises:
-            ValueError: If value length doesn't match expected_ndim.
-        """
-        if expected_ndim is None:
-            expected_ndim = self._header.ndim
-        
-        if expected_ndim is not None and len(value) != expected_ndim:
-            raise ValueError(f"{field_name} length {len(value)} doesn't match ndim {expected_ndim}")
-
-    def _validate_and_initialize_metadata(self) -> bool:
-        """Validate image dimensions and initialize default metadata.
-        
-        Returns:
-            True if validation and initialization succeeded, False otherwise.
-        """
-        if not self._imgData:
-            return False
-        
-        # Get shape from any channel (all channels share the same shape)
-        representative = self._get_representative_channel()
-        if representative is None:
-            return False
-        ndim = representative.ndim
-        if ndim not in (2, 3):
-            logger.error(f"Image data must be 2D or 3D, got {ndim}D")
-            return False
-        
-        # Set header fields from loaded data with explicit validation
-        shape = representative.shape
-        self._header.shape = shape
-        self._header.ndim = ndim
-        
-        # Initialize default metadata with validation
-        default_voxels = [1.0] * ndim
-        default_units = ["px"] * ndim
-        default_labels = [""] * ndim
-        
-        self._header.voxels = default_voxels
-        self._header.voxels_units = default_units
-        self._header.labels = default_labels
-        self._header.physical_size = self._header.compute_physical_size()
-        
-        # Validate consistency
-        try:
-            self._header._validate_consistency()
-        except ValueError as e:
-            logger.error(f"Header validation failed: {e}")
-            return False
-        
-        return True
-
     def __str__(self):
         paths_str = ", ".join([f"ch{k}:{v}" for k, v in self._file_path_dict.items()])
         voxels_str = self._header.voxels if self._header.voxels else None
@@ -211,8 +165,11 @@ class AcqImage:
             if not self._load_channel_from_path(color_channel, Path(path)):
                 logger.warning(f"Failed to load image from path for channel {color_channel}")
                 return
-            # After loading, imgData should be in _imgData, so we can skip the rest
-            return
+            # After loading, retrieve the data and continue metadata setup
+            imgData = self._imgData.get(color_channel)
+            if imgData is None:
+                logger.warning(f"Image data missing for channel {color_channel} after load")
+                return
         
         # If imgData is None, we can't proceed
         if imgData is None:
@@ -238,12 +195,9 @@ class AcqImage:
         
         # Set header fields when first channel is added
         if len(self._imgData) == 1:
-            # Set shape and ndim directly
-            self._header.shape = imgData.shape
-            self._header.ndim = imgData.ndim
-            # Initialize metadata
-            if not self._validate_and_initialize_metadata():
-                logger.error(f"Failed to validate and initialize metadata for channel {color_channel}")
+            # Set shape/ndim and initialize defaults via header helpers
+            self._header.set_shape_ndim(imgData.shape, imgData.ndim)
+            self._header.init_defaults_from_shape()
     
     def _load_channel_from_path(self, channel: int, path: Path) -> bool:
         """Load image data from path for a specific channel.
@@ -274,49 +228,28 @@ class AcqImage:
     def img_shape(self) -> Tuple[int, ...] | None:
         """Shape of image data.
         
-        Returns shape from header field if set, otherwise from loaded image data.
+        Returns shape from header field (no fallback to data).
         """
-        # First check header field (available without loading data)
-        if self._header.shape is not None:
-            return self._header.shape
-        
-        # Fall back to actual data if available
-        representative = self._get_representative_channel()
-        if representative is None:
-            return None
-        # Get shape from any channel (all channels share the same shape)
-        return representative.shape
+        return self._header.shape
 
     @property
     def img_ndim(self) -> int | None:
         """Number of dimension in image.
         
-        Returns ndim from header field if set, otherwise from loaded image data.
+        Returns ndim from header field.
         """
-        # First check header field (available without loading data)
-        if self._header.ndim is not None:
-            return self._header.ndim
-        
-        # Fall back to actual data if available
-        representative = self._get_representative_channel()
-        if representative is None:
-            return None
-        # Get ndim from any channel (all channels share the same shape)
-        return representative.ndim
+        return self._header.ndim
 
     @property
     def img_num_slices(self) -> int | None:
-        if not self._imgData:
-            return None
         ndim = self.img_ndim
         if ndim is None:
             return None
         if ndim == 2:
             return 1
-        elif ndim == 3:
+        if ndim == 3:
             return self.img_shape[0] if self.img_shape else None
-        else:
-            raise ValueError(f"Image data must be 2D or 3D, got {ndim}D")
+        raise ValueError(f"Image data must be 2D or 3D, got {ndim}D")
 
     @property
     def experiment_metadata(self) -> ExperimentMetadata:
@@ -413,4 +346,195 @@ class AcqImage:
             'physical_size': self._header.physical_size,
         }
         return result
+    
+    def update_experiment_metadata(self, **fields: Any) -> None:
+        """Update stored experimental metadata fields.
+        
+        Updates one or more fields in the experiment metadata. Unknown fields
+        are silently ignored.
+        
+        Args:
+            **fields: Keyword arguments mapping field names to new values.
+                Only fields that exist in ExperimentMetadata are updated.
+        """
+        for key, value in fields.items():
+            if hasattr(self._experiment_metadata, key):
+                setattr(self._experiment_metadata, key, value)
+    
+    @property
+    def rois(self) -> "RoiSet":
+        """Get RoiSet instance (lazy initialization).
+        
+        Returns:
+            RoiSet instance for managing ROIs associated with this image.
+        """
+        if self._roi_set is None:
+            from kymflow.core.roi import RoiSet
+            self._roi_set = RoiSet(self)  # Pass self as acq_image reference
+        return self._roi_set
+    
+    def _get_metadata_path(self) -> Path | None:
+        """Get metadata file path from representative image path.
+        
+        Returns:
+            Path to metadata JSON file (same name as image, .json extension),
+            or None if no image path is available.
+        """
+        representative_path = self._get_representative_path()
+        if representative_path is None:
+            return None
+        return representative_path.with_suffix('.json')
+    
+    def save_metadata(self, path: Path | None = None) -> bool:
+        """Save combined metadata to JSON file.
+        
+        Saves header, experiment_metadata, and ROIs to a JSON file with the
+        same name as the image file (different extension).
+        
+        Args:
+            path: Optional path override. If None, uses same name as image file.
+            
+        Returns:
+            True if saved successfully, False if no path available.
+        """
+        metadata_path = path if path is not None else self._get_metadata_path()
+        if metadata_path is None:
+            logger.warning("No path available for saving metadata")
+            return False
+        
+        import json
+        
+        # Prepare header dict
+        header_dict = self._header.to_dict()
+        
+        # Prepare experiment metadata dict
+        experiment_dict = self._experiment_metadata.to_dict()
+        
+        # Prepare ROIs list
+        rois_list = self.rois.to_list()
+        
+        # Combine into metadata structure
+        metadata = {
+            "version": "1.0",
+            "header": header_dict,
+            "experiment_metadata": experiment_dict,
+            "rois": rois_list,
+        }
+        
+        # Save to JSON file
+        try:
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2, default=str)
+            logger.info(f"Saved metadata to {metadata_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save metadata to {metadata_path}: {e}")
+            return False
+    
+    def load_metadata(self, path: Path | None = None) -> bool:
+        """Load combined metadata from JSON file.
+        
+        Loads header, experiment_metadata, and ROIs from a JSON file. After
+        loading ROIs, validates and clamps each ROI to current image bounds
+        (ROIs from JSON may be out of bounds).
+        
+        Args:
+            path: Optional path override. If None, uses same name as image file.
+            
+        Returns:
+            True if loaded successfully, False if file doesn't exist.
+        """
+        metadata_path = path if path is not None else self._get_metadata_path()
+        if metadata_path is None:
+            logger.warning("No path available for loading metadata")
+            return False
+        
+        if not metadata_path.exists():
+            logger.info(f"Metadata file does not exist: {metadata_path}")
+            return False
+        
+        import json
+        
+        try:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            
+            # Load header fields
+            if "header" in metadata:
+                self._header = ImgAcqHeader.from_dict(metadata["header"])
+            
+            # Load experiment metadata
+            if "experiment_metadata" in metadata:
+                self._experiment_metadata = ExperimentMetadata.from_dict(metadata["experiment_metadata"])
+            
+            # Load ROIs
+            if "rois" in metadata:
+                rois_data = metadata["rois"]
+                # Use RoiSet.from_list() to create RoiSet with ROIs
+                from kymflow.core.roi import RoiSet
+                self._roi_set = RoiSet.from_list(rois_data, self)
+                
+                # Validate and clamp each ROI to current image bounds
+                # Store original values before clamping for warning messages
+                clamped_count = 0
+                for roi in self._roi_set:
+                    try:
+                        img_w, img_h, num_slices = self._roi_set._get_bounds(roi.channel)
+                        
+                        # Store original values
+                        original_left = roi.left
+                        original_top = roi.top
+                        original_right = roi.right
+                        original_bottom = roi.bottom
+                        original_z = roi.z
+                        
+                        # Validate and clamp z
+                        if num_slices == 1:
+                            if roi.z != 0:
+                                roi.z = 0
+                        else:
+                            if roi.z < 0:
+                                roi.z = 0
+                            elif roi.z >= num_slices:
+                                roi.z = num_slices - 1
+                        
+                        # Clamp coordinates
+                        from kymflow.core.roi import clamp_coordinates_to_size
+                        clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
+                            roi.left, roi.top, roi.right, roi.bottom, img_w, img_h
+                        )
+                        
+                        # Check if anything was clamped
+                        was_clamped = (
+                            original_left != clamped_left or
+                            original_top != clamped_top or
+                            original_right != clamped_right or
+                            original_bottom != clamped_bottom or
+                            original_z != roi.z
+                        )
+                        
+                        if was_clamped:
+                            roi.left = clamped_left
+                            roi.top = clamped_top
+                            roi.right = clamped_right
+                            roi.bottom = clamped_bottom
+                            clamped_count += 1
+                            logger.warning(
+                                f"ROI {roi.id} coordinates were clamped on load. "
+                                f"Original: left={original_left}, top={original_top}, right={original_right}, bottom={original_bottom}, z={original_z}. "
+                                f"Clamped to: left={clamped_left}, top={clamped_top}, right={clamped_right}, bottom={clamped_bottom}, z={roi.z} "
+                                f"(image size: {img_w}x{img_h}, num_slices: {num_slices})"
+                            )
+                    except ValueError as e:
+                        logger.warning(f"Could not validate ROI {roi.id} on load: {e}")
+                
+                if clamped_count > 0:
+                    logger.info(f"Clamped {clamped_count} ROI(s) to current image bounds during load")
+            
+            logger.info(f"Loaded metadata from {metadata_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to load metadata from {metadata_path}: {e}")
+            return False
 

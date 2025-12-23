@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional
 from nicegui import ui, app
 
 from kymflow.gui.events import SelectionOrigin
-from kymflow.core.kym_file import KymFile
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui.state import AppState
 
 from kymflow.core.utils.logging import get_logger
@@ -13,15 +13,15 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _rows(files: List[KymFile]) -> List[Dict]:
-    return [f.summary_row() for f in files]
+def _rows(files) -> List[Dict]:
+    return [f.getRowDict() for f in files]
 
 
 def create_file_table(
     app_state: AppState,
     *,
     selection_mode: str = "single",
-    on_selection_change: Optional[Callable[[List[KymFile]], None]] = None,
+    on_selection_change: Optional[Callable[[List[KymImage]], None]] = None,
     restore_selection: Optional[List[str]] = None,
 ) -> None:
     multi_select = selection_mode == "multiple"
@@ -54,21 +54,10 @@ def create_file_table(
         else:
             current_single = str(stored) if stored else None
 
-    # Get column visibility schema from backend (reuses existing form schemas)
-    column_visibility = KymFile.table_column_schema()
-
-    # Configure columns based on schema
+    # Configure columns (column visibility will be handled in future aggrid migration)
+    # Set width and alignment for narrow columns (checkmark columns)
     for column in table.columns:
         col_name = column["name"]
-
-        # Check visibility from schema (defaults to True if not in schema)
-        if not column_visibility.get(col_name, True):
-            column["classes"] = "hidden"
-            column["headerClasses"] = "hidden"
-            table.update()
-            continue
-
-        # Set width and alignment for narrow columns (checkmark columns)
         if col_name in [
             "File Name",
             "Analyzed",
@@ -93,7 +82,7 @@ def create_file_table(
                 row for row in table.rows if row.get("path") in selected_paths
             ]
             if on_selection_change is not None:
-                matches: List[KymFile] = []
+                matches: List[KymImage] = []
                 for path in selected_paths:
                     match = next(
                         (f for f in app_state.files if str(f.path) == path), None
@@ -163,7 +152,7 @@ def create_file_table(
             ]
 
             if on_selection_change is not None:
-                matches: List[KymFile] = []
+                matches: List[KymImage] = []
                 for path in selected_paths:
                     match = next(
                         (f for f in app_state.files if str(f.path) == path), None
@@ -204,7 +193,7 @@ def create_file_table(
     if not multi_select:
         
         def _on_external_selection(
-            kf: Optional[KymFile],
+            kf: Optional[KymImage],
             origin: Optional[SelectionOrigin],
         ) -> None:
             if origin is SelectionOrigin.TABLE:

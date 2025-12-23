@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from kymflow.core.kym_file import KymFile
-from kymflow.core.repository import FolderScanResult, scan_folder
+from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.gui.events import ImageDisplayOrigin, SelectionOrigin
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.utils.logging import get_logger
@@ -33,9 +33,9 @@ class ImageDisplayParams:
 
 
 # Type aliases for callbacks
-SelectionChangedHandler = Callable[[Optional[KymFile], Optional[SelectionOrigin]], None]
+SelectionChangedHandler = Callable[[Optional[KymImage], Optional[SelectionOrigin]], None]
 FileListChangedHandler = Callable[[], None]
-MetadataChangedHandler = Callable[[KymFile], None]
+MetadataChangedHandler = Callable[[KymImage], None]
 ThemeChangedHandler = Callable[[ThemeMode], None]
 ImageDisplayChangedHandler = Callable[[ImageDisplayParams], None]
 
@@ -49,8 +49,9 @@ class AppState:
     
     def __init__(self):
         self.folder: Optional[Path] = None
-        self.files: List[KymFile] = []
-        self.selected_file: Optional[KymFile] = None
+        # Initialize with empty folder - will be replaced when load_folder() is called
+        self.files: AcqImageList[KymImage] = AcqImageList(path=Path("."), image_cls=KymImage, file_extension=".tif", depth=1)
+        self.selected_file: Optional[KymImage] = None
         self.selected_roi_id: Optional[int] = None  # Currently selected ROI ID
         self.theme_mode: ThemeMode = ThemeMode.DARK
         self.folder_depth: int = 1
@@ -89,13 +90,17 @@ class AppState:
         self._roi_selection_changed_handlers.append(handler)
     
     # State mutation methods that trigger callbacks
-    def load_folder(self, folder: Path, depth: Optional[int] = None) -> FolderScanResult:
+    def load_folder(self, folder: Path, depth: Optional[int] = None) -> None:
         """Scan folder for kymograph files and update app state."""
         if depth is None:
             depth = self.folder_depth
-        result = scan_folder(folder, depth=depth)
-        self.folder = result.folder
-        self.files = result.files
+        self.files = AcqImageList(
+            path=folder,
+            image_cls=KymImage,
+            file_extension=".tif",
+            depth=depth
+        )
+        self.folder = self.files.folder
         
         logger.info("load_folder: calling file_list_changed handlers")
         for handler in list(self._file_list_changed_handlers):
@@ -104,15 +109,14 @@ class AppState:
             except Exception:
                 logger.exception("Error in file_list_changed handler")
         
-        if self.files:
+        if len(self.files) > 0:
             self.select_file(self.files[0])
         else:
             self.select_file(None)
-        return result
     
     def select_file(
         self,
-        kym_file: Optional[KymFile],
+        kym_file: Optional[KymImage],
         origin: Optional[SelectionOrigin] = None,
     ) -> None:
         """Select a file and notify handlers."""
@@ -157,7 +161,7 @@ class AppState:
             except Exception:
                 logger.exception("Error in image_display_changed handler")
     
-    def update_metadata(self, kym_file: KymFile) -> None:
+    def update_metadata(self, kym_file: KymImage) -> None:
         """Notify handlers that metadata was updated."""
         for handler in list(self._metadata_changed_handlers):
             try:

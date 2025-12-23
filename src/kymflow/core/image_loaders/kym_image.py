@@ -164,19 +164,62 @@ class KymImage(AcqImage):
         return f"KymImage paths=[{paths_str}], shape={self.img_shape}, seconds_per_line={self.seconds_per_line} um_per_pixel={self.um_per_pixel}"
 
     @property
-    def num_lines(self) -> int:
+    def num_lines(self) -> int | None:
         """Number of lines scanned.
+        
+        Returns None if shape is not available (no header and no loaded data).
         """
+        if self.img_shape is None:
+            return None
         return self.img_shape[0]
     
     @property
-    def pixels_per_line(self) -> int:
+    def pixels_per_line(self) -> int | None:
         """Number of pixels per line.
+        
+        Returns None if shape is not available (no header and no loaded data).
         """
+        if self.img_shape is None:
+            return None
         return self.img_shape[1]
 
     @property
-    def image_dur(self) -> float:
+    def image_dur(self) -> float | None:
         """Image duration (s).
+        
+        Returns None if num_lines is not available.
         """
+        if self.num_lines is None:
+            return None
         return self.num_lines * self.seconds_per_line
+    
+    def getRowDict(self) -> dict:
+        """Get dictionary with header, file, and analysis information for table/row display.
+        
+        Overrides base class method to add analysis-specific fields matching summary_row() keys.
+        This ensures compatibility with file_table.py which expects these specific keys.
+        
+        Returns:
+            Dictionary containing file info, header fields, and analysis status.
+        """
+        # Get representative path for folder hierarchy
+        representative_path = self._get_representative_path()
+        
+        # Map to summary_row() keys and add analysis fields
+        result = {
+            "File Name": representative_path.name if representative_path is not None else None,
+            "Analyzed": "✓" if self.kymanalysis.has_analysis() else "",
+            "Saved": "✓" if not self.kymanalysis._dirty else "",
+            "Num ROIS": self.kymanalysis.num_rois,
+            "Parent Folder": representative_path.parent.name if representative_path is not None else None,
+            "Grandparent Folder": representative_path.parent.parent.name if representative_path is not None and len(representative_path.parent.parts) > 0 else None,
+            "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",
+            "lines": self.num_lines if self.num_lines is not None else "-",
+            "duration (s)": self.header.physical_size[0] if self.header.physical_size and len(self.header.physical_size) > 0 else "-",
+            "ms/line": round(self.seconds_per_line * 1000, 2) if self.seconds_per_line is not None else "-",
+            "um/pixel": self.um_per_pixel if self.um_per_pixel is not None else "-",
+            "note": self.experiment_metadata.note or "-",
+            "path": str(representative_path) if representative_path is not None else None,  # special case, not in any schema
+        }
+        
+        return result
