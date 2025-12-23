@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Tuple, Any
 import numpy as np
 
-from kymflow.core.image_loaders.img_acq_header import ImgAcqHeader
+from kymflow.core.image_loaders.acq_image_header import AcqImgHeader
 from kymflow.core.metadata import ExperimentMetadata
 from kymflow.core.utils.logging import get_logger
 from typing import TYPE_CHECKING
@@ -30,7 +30,7 @@ class AcqImage:
             raise ValueError("Either path or img_data must be provided")
         
         # Initialize header (empty, will be populated during init)
-        self._header = ImgAcqHeader()
+        self._header = AcqImgHeader()
         
         # Per-channel file paths
         self._file_path_dict: dict[int, Path] = {}
@@ -216,11 +216,11 @@ class AcqImage:
         return False
 
     @property
-    def header(self) -> ImgAcqHeader:
+    def header(self) -> AcqImgHeader:
         """Get the image acquisition header.
         
         Returns:
-            ImgAcqHeader instance containing shape, ndim, voxels, labels, etc.
+            AcqImgHeader instance containing shape, ndim, voxels, labels, etc.
         """
         return self._header
         
@@ -461,7 +461,7 @@ class AcqImage:
             
             # Load header fields
             if "header" in metadata:
-                self._header = ImgAcqHeader.from_dict(metadata["header"])
+                self._header = AcqImgHeader.from_dict(metadata["header"])
             
             # Load experiment metadata
             if "experiment_metadata" in metadata:

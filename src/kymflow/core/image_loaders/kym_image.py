@@ -7,7 +7,7 @@ import numpy as np
 import tifffile
 
 from kymflow.core.image_loaders.acq_image import AcqImage
-from kymflow.core.image_loaders.img_acq_header import ImgAcqHeader
+from kymflow.core.image_loaders.acq_image_header import AcqImgHeader
 from kymflow.core.image_loaders.read_olympus_header import _readOlympusHeader  # OlympusHeader
 
 from kymflow.core.utils.logging import get_logger
@@ -55,7 +55,7 @@ class KymImage(AcqImage):
                 um_per_pixel = _olympusDict['umPerPixel']
                 
                 # Create fully-formed header and assign directly
-                self._header = ImgAcqHeader(
+                self._header = AcqImgHeader(
                     shape=(numLines, pixelsPerLine),
                     ndim=2,  # kymographs are always 2D
                     voxels=[seconds_per_line, um_per_pixel],
