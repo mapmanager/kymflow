@@ -1,0 +1,502 @@
+"""Kymograph ROI-based flow analysis.
+
+This module provides KymAnalysis for managing ROIs and performing per-ROI
+flow analysis on kymograph images. All analysis is ROI-based - each ROI
+must be explicitly defined before analysis.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+
+import numpy as np
+import pandas as pd
+
+from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
+from kymflow.core.analysis.utils import _medianFilter, _removeOutliers
+from kymflow.core.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from kymflow.core.image_loaders.acq_image import AcqImage
+
+logger = get_logger(__name__)
+
+ProgressCallback = Callable[[int, int], Any]
+CancelCallback = Callable[[], bool]
+
+
+@dataclass
+class RoiAnalysisMetadata:
+    """Analysis metadata for a specific ROI.
+
+    ROI geometry (left/top/right/bottom, channel, z) lives in AcqImage.rois.
+    This stores only analysis state/results metadata.
+    """
+
+    roi_id: int
+    algorithm: str = "mpRadon"
+    window_size: int | None = None
+    analyzed_at: str | None = None  # ISO-8601 UTC string
+    roi_revision_at_analysis: int = 0
+
+
+class KymAnalysis:
+    """Manages ROIs and performs flow analysis on kymograph images.
+    
+    KymAnalysis provides a unified API for managing ROIs and their associated
+    analysis results. ROI geometry lives in AcqImage.rois; KymAnalysis stores
+    only analysis state/results metadata. When ROI coordinates change, analysis
+    becomes invalid and must be re-run.
+    
+    Attributes:
+        acq_image: Reference to the parent AcqImage (typically KymImage).
+        _analysis_metadata: Dictionary mapping roi_id to RoiAnalysisMetadata instances.
+        _df: DataFrame containing all analysis results with 'roi_id' column.
+        _dirty: Flag indicating if analysis needs to be saved.
+        num_rois: Property returning the number of ROIs.
+    """
+    
+    def __init__(
+        self,
+        acq_image: "AcqImage",
+    ) -> None:
+        """Initialize KymAnalysis instance.
+        
+        Automatically attempts to load analysis from disk if available.
+        If path is None or files don't exist, analysis remains empty.
+        
+        Args:
+            acq_image: Parent AcqImage instance (typically KymImage).
+        """
+        self.acq_image = acq_image
+        # ROI geometry lives in acq_image.rois; KymAnalysis stores only analysis state/results.
+        self._analysis_metadata: Dict[int, RoiAnalysisMetadata] = {}
+        self._df: Optional[pd.DataFrame] = None
+        self._dirty: bool = False
+        
+        # Always try to load analysis (handles path=None gracefully)
+        self.load_analysis()
+    
+    def _filter_df_by_roi(self, df: pd.DataFrame, roi_id: int) -> pd.DataFrame:
+        """Filter DataFrame to rows for a specific ROI.
+        
+        Args:
+            df: DataFrame to filter.
+            roi_id: ROI ID to filter by.
+        
+        Returns:
+            Filtered DataFrame with only rows for the specified ROI.
+        """
+        if 'roi_id' not in df.columns:
+            return pd.DataFrame()  # Return empty DataFrame if no roi_id column
+        return df[df['roi_id'] == roi_id].copy()
+    
+    @property
+    def num_rois(self) -> int:
+        """Number of ROIs on the parent image (single source of truth)."""
+        return self.acq_image.rois.numRois()
+
+    def has_analysis(self, roi_id: int | None = None) -> bool:
+        """Return True if analysis exists for any ROI (or for a specific ROI)."""
+        if roi_id is None:
+            return bool(self._analysis_metadata)
+        return roi_id in self._analysis_metadata
+
+    def get_analysis_metadata(self, roi_id: int) -> RoiAnalysisMetadata | None:
+        """Return analysis metadata for roi_id, or None if not analyzed."""
+        return self._analysis_metadata.get(roi_id)
+
+    def is_stale(self, roi_id: int) -> bool:
+        """Return True if roi_id is missing analysis or ROI has changed since analysis."""
+        roi = self.acq_image.rois.get(roi_id)
+        if roi is None:
+            return True
+        meta = self._analysis_metadata.get(roi_id)
+        if meta is None:
+            return True
+        return roi.revision != meta.roi_revision_at_analysis
+
+    def invalidate(self, roi_id: int) -> None:
+        """Drop analysis (df rows + metadata) for a specific ROI."""
+        self._analysis_metadata.pop(roi_id, None)
+        self._remove_roi_data_from_df(roi_id)
+        self._dirty = True
+    
+    def _remove_roi_data_from_df(self, roi_id: int) -> None:
+        """Remove all rows for a specific ROI from the analysis DataFrame.
+        
+        Helper method to centralize DataFrame filtering logic. If the DataFrame
+        becomes empty after removal, sets it to None.
+        
+        Args:
+            roi_id: ROI ID whose data should be removed.
+        """
+        if self._df is not None and 'roi_id' in self._df.columns:
+            self._df = self._df[self._df['roi_id'] != roi_id].copy()
+            # If DataFrame is now empty, set to None
+            if len(self._df) == 0:
+                self._df = None
+    
+    def _get_primary_path(self) -> Path | None:
+        """Get the primary file path (representative path from any channel).
+        
+        Returns:
+            Representative path from acq_image, or None if no path available.
+        """
+        return self.acq_image.path
+    
+    def _get_analysis_folder_path(self) -> Path:
+        """Get the analysis folder path for the acq_image.
+        
+        Pattern: parent folder + '-analysis' suffix
+        Example: 20221102/Capillary1_0001.tif -> 20221102/20221102-analysis/
+        
+        Returns:
+            Path to the analysis folder.
+        """
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            raise ValueError("No file path available for analysis folder")
+        parent = primary_path.parent
+        parent_name = parent.name
+        analysis_folder_name = f"{parent_name}-analysis"
+        return parent / analysis_folder_name
+    
+    def _get_save_paths(self) -> tuple[Path, Path]:
+        """Get the save paths for analysis files.
+        
+        Returns:
+            Tuple of (csv_path, json_path) for this acq_image's analysis.
+        """
+        analysis_folder = self._get_analysis_folder_path()
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            raise ValueError("No file path available for save paths")
+        base_name = primary_path.stem
+        csv_path = analysis_folder / f"{base_name}.csv"
+        json_path = analysis_folder / f"{base_name}.json"
+        return csv_path, json_path
+    
+    def analyze_roi(
+        self,
+        roi_id: int,
+        window_size: int,
+        *,
+        progress_callback: Optional[ProgressCallback] = None,
+        is_cancelled: Optional[CancelCallback] = None,
+        use_multiprocessing: bool = True,
+    ) -> None:
+        """Run flow analysis on a specific ROI.
+        
+        Performs Radon-based flow analysis on the image region defined by the ROI
+        coordinates. Results are stored in the analysis DataFrame with a 'roi_id'
+        column. Analysis metadata is stored in RoiAnalysisMetadata.
+        
+        Args:
+            roi_id: Identifier of the ROI to analyze.
+            window_size: Number of time lines per analysis window. Must be a multiple of 4.
+            progress_callback: Optional callback function(completed, total) for progress.
+            is_cancelled: Optional callback function() -> bool to check for cancellation.
+            use_multiprocessing: If True, use multiprocessing for parallel computation.
+        
+        Raises:
+            ValueError: If roi_id is not found or window_size is invalid.
+            FlowCancelled: If analysis is cancelled via is_cancelled callback.
+        """
+        roi = self.acq_image.rois.get(roi_id)
+        if roi is None:
+            raise ValueError(f"ROI {roi_id} not found")
+
+        channel = roi.channel
+        
+        # Extract image region based on ROI coordinates
+        # ROI coordinates are already clamped to image bounds and properly ordered when added/edited
+        image = self.acq_image.get_img_slice(channel=channel)
+        
+        # Convert ROI coordinates to pixel/line indices (already clamped and ordered)
+        start_pixel = roi.top
+        stop_pixel = roi.bottom
+        start_line = roi.left
+        stop_line = roi.right
+        
+        # Run analysis on the ROI region
+        thetas, the_t, spread = mp_analyze_flow(
+            image,
+            window_size,
+            space_dim=0,  # TODO: add api to get these from acq_image
+            time_dim=1,
+            start_pixel=start_pixel,
+            stop_pixel=stop_pixel,
+            start_line=start_line,
+            stop_line=stop_line,
+            progress_callback=progress_callback,
+            is_cancelled=is_cancelled,
+            use_multiprocessing=use_multiprocessing,
+        )
+        
+        # Record analysis metadata (geometry lives in acq_image.rois)
+        self._analysis_metadata[roi_id] = RoiAnalysisMetadata(
+            roi_id=roi_id,
+            algorithm="mpRadon",
+            window_size=window_size,
+            analyzed_at=datetime.now(timezone.utc).isoformat(),
+            roi_revision_at_analysis=roi.revision,
+        )
+        
+        # Convert to physical units using KymImage properties
+        # KymImage knows which dimension is which
+        seconds_per_line = self.acq_image.seconds_per_line
+        um_per_pixel = self.acq_image.um_per_pixel
+        
+        drew_time = the_t * seconds_per_line
+        
+        # Convert radians to angle and then to velocity
+        _rad = np.deg2rad(thetas)
+        drew_velocity = (um_per_pixel / seconds_per_line) * np.tan(_rad)
+        drew_velocity = drew_velocity / 1000  # mm/s
+        
+        # Apply filtering
+        clean_velocity = _removeOutliers(drew_velocity)
+        clean_velocity = _medianFilter(clean_velocity, window_size=5)
+        
+        # Create DataFrame for this ROI's analysis
+        primary_path = self._get_primary_path()
+        parent_name = primary_path.parent.name if primary_path is not None else ""
+        file_name = primary_path.name if primary_path is not None else ""
+        
+        # Get shape for numLines and pntsPerLine
+        shape = self.acq_image.img_shape
+        num_lines = shape[0] if shape is not None else 0
+        pixels_per_line = shape[1] if shape is not None else 0
+        
+        roi_df = pd.DataFrame({
+            "roi_id": roi_id,
+            "time": drew_time,
+            "velocity": drew_velocity,
+            "parentFolder": parent_name,
+            "file": file_name,
+            "algorithm": "mpRadon",
+            "delx": um_per_pixel,
+            "delt": seconds_per_line,
+            "numLines": num_lines,
+            "pntsPerLine": pixels_per_line,
+            "cleanVelocity": clean_velocity,
+            "absVelocity": abs(clean_velocity),
+        })
+        
+        # Append to main DataFrame (or create if first analysis)
+        if self._df is None:
+            self._df = roi_df
+        else:
+            # Remove old data for this ROI if it exists
+            self._remove_roi_data_from_df(roi_id)
+            # Append new data
+            self._df = pd.concat([self._df, roi_df], ignore_index=True)
+        
+        self._dirty = True
+    
+    def save_analysis(self) -> bool:
+        """Save analysis results to CSV and JSON files.
+        
+        Saves the analysis DataFrame (with all ROI analyses) to CSV and ROI data
+        with analysis parameters to JSON. Also saves ROIs and metadata via AcqImage.
+        Only saves if dirty.
+        
+        Returns:
+            True if analysis was saved successfully, False if no analysis exists
+            or file is not dirty.
+        """
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            logger.warning("No path provided, analysis cannot be saved")
+            return False
+        
+        if not self._dirty:
+            logger.info(f"Analysis does not need to be saved for {primary_path.name}")
+            return False
+        
+        if self._df is None or len(self._df) == 0:
+            logger.warning(f"No analysis to save for {primary_path.name}")
+            return False
+        
+        # Save ROIs and metadata first (ensures ROIs are persisted)
+        # This saves header, experiment_metadata, and ROIs to metadata.json
+        metadata_saved = self.acq_image.save_metadata()
+        if not metadata_saved:
+            logger.warning("Failed to save metadata (ROIs), but continuing with analysis save")
+        
+        csv_path, json_path = self._get_save_paths()
+        
+        # Create analysis folder if it doesn't exist
+        analysis_folder = csv_path.parent
+        analysis_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Save CSV
+        self._df.to_csv(csv_path, index=False)
+        logger.info(f"Saved analysis CSV to {csv_path}")
+        
+        # Reconcile to current ROIs (single source of truth)
+        current_roi_ids = {roi.id for roi in self.acq_image.rois}
+        if self._df is not None and 'roi_id' in self._df.columns:
+            self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
+        self._analysis_metadata = {
+            rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
+        }
+
+        # Prepare JSON data (analysis metadata only; no ROI geometry)
+        json_data = {
+            "version": "2.0",
+            "analysis_metadata": {
+                str(rid): {
+                    "roi_id": meta.roi_id,
+                    "algorithm": meta.algorithm,
+                    "window_size": meta.window_size,
+                    "analyzed_at": meta.analyzed_at,
+                    "roi_revision_at_analysis": meta.roi_revision_at_analysis,
+                }
+                for rid, meta in self._analysis_metadata.items()
+            },
+        }
+        
+        # Save JSON
+        with open(json_path, "w") as f:
+            json.dump(json_data, f, indent=2, default=str)
+        logger.info(f"Saved analysis metadata to {json_path}")
+        
+        self._dirty = False
+        return True
+    
+    def load_analysis(self) -> bool:
+        """Load analysis results from CSV and JSON files.
+        
+        Loads the analysis DataFrame from CSV and restores ROIs with their
+        analysis parameters from JSON.
+        
+        Returns:
+            True if analysis was loaded successfully, False if files don't exist.
+        """
+        
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            # logger.warning("No path provided, analysis cannot be loaded")
+            return False
+        
+        csv_path, json_path = self._get_save_paths()
+        
+        if not csv_path.exists():
+            if primary_path:
+                logger.info(f"No analysis CSV found for {primary_path.name}")
+            else:
+                logger.info("No analysis CSV found (no path available)")
+            logger.info(f"  csv_path:{csv_path}")
+            return False
+        
+        if not json_path.exists():
+            if primary_path:
+                logger.info(f"No analysis JSON found for {primary_path.name}")
+            else:
+                logger.info("No analysis JSON found (no path available)")
+            logger.info(f"  json_path:{json_path}")
+            return False
+        
+        # Load CSV
+        self._df = pd.read_csv(csv_path)
+        
+        # Load JSON
+        with open(json_path, "r") as f:
+            json_data = json.load(f)
+        
+        # Load analysis metadata (v2.0 only). We do not recreate ROIs here.
+        if json_data.get("version") != "2.0" or "analysis_metadata" not in json_data:
+            logger.warning(
+                f"Unsupported analysis JSON schema for {primary_path.name}. "
+                "Expected version='2.0' with key 'analysis_metadata'."
+            )
+            return False
+
+        self._analysis_metadata.clear()
+        for key, meta in json_data.get("analysis_metadata", {}).items():
+            try:
+                roi_id = int(meta.get("roi_id", key))
+                self._analysis_metadata[roi_id] = RoiAnalysisMetadata(
+                    roi_id=roi_id,
+                    algorithm=str(meta.get("algorithm", "mpRadon")),
+                    window_size=meta.get("window_size"),
+                    analyzed_at=meta.get("analyzed_at"),
+                    roi_revision_at_analysis=int(meta.get("roi_revision_at_analysis", 0)),
+                )
+            except Exception as e:
+                logger.warning(f"Skipping invalid analysis metadata entry {key}: {e}")
+
+        # Reconcile to current ROIs
+        current_roi_ids = {roi.id for roi in self.acq_image.rois}
+        self._analysis_metadata = {
+            rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
+        }
+        if self._df is not None and 'roi_id' in self._df.columns:
+            self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
+        
+        self._dirty = False
+        return True
+    
+    def get_analysis(self, roi_id: Optional[int] = None) -> Optional[pd.DataFrame]:
+        """Get analysis DataFrame, optionally filtered by ROI.
+        
+        Args:
+            roi_id: If provided, return only data for this ROI. If None, return all data.
+        
+        Returns:
+            DataFrame with analysis results, or None if no analysis exists.
+        """
+        if self._df is None:
+            return None
+        
+        if roi_id is None:
+            return self._df.copy()
+        
+        return self._filter_df_by_roi(self._df, roi_id)
+    
+    def get_analysis_value(
+        self,
+        roi_id: int,
+        key: str,
+        remove_outliers: bool = False,
+        median_filter: int = 0,
+    ) -> Optional[np.ndarray]:
+        """Get a specific analysis value for an ROI.
+        
+        Args:
+            roi_id: Identifier of the ROI.
+            key: Column name to retrieve (e.g., "velocity", "time").
+            remove_outliers: If True, remove outliers using 2*std threshold.
+            median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
+        
+        Returns:
+            Array of values for the specified key, or None if not found.
+        """
+        roi_df = self.get_analysis(roi_id=roi_id)
+        if roi_df is None:
+            logger.warning(f"No analysis found for ROI {roi_id}, requested key was:{key}")
+            return None
+        
+        if key not in roi_df.columns:
+            logger.warning(f"Key {key} not found in analysis DataFrame for ROI {roi_id}")
+            return None
+        
+        values = roi_df[key].values
+        if remove_outliers:
+            values = _removeOutliers(values)
+        if median_filter > 0:
+            values = _medianFilter(values, median_filter)
+        return values
+    
+    def __str__(self) -> str:
+        """String representation."""
+        roi_ids = [roi.id for roi in self.acq_image.rois]
+        analyzed = sorted(self._analysis_metadata.keys())
+        return f"KymAnalysis(roi_ids={roi_ids}, analyzed={analyzed}, dirty={self._dirty})"
+
