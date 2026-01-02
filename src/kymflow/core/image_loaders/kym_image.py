@@ -14,7 +14,7 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from kymflow.core.kym_analysis import KymAnalysis
+    from kymflow.core.image_loaders.kym_analysis import KymAnalysis
 
 class KymImage(AcqImage):
     """KymImage is a subclass of AcqImage that represents a kymograph image.
@@ -30,13 +30,6 @@ class KymImage(AcqImage):
         
         # Call super().__init__ with simple pattern (matches AcqImage)
         super().__init__(path=path, img_data=img_data, channel=channel)
-
-        # Legacy properties for backward compatibility (use acq_image api exclusively)
-        self.seconds_per_line = 0.001
-        self.um_per_pixel = 1.0
-
-        # KymAnalysis (lazy initialization)
-        self._kym_analysis: "KymAnalysis" | None = None
 
         # Try and load Olympus header from txt file if it exists
         # This discovers additional channels and sets header metadata
@@ -67,10 +60,6 @@ class KymImage(AcqImage):
                 self._header.physical_size = self._header.compute_physical_size()
                 # Validate consistency
                 self._header._validate_consistency()
-
-                # Update legacy properties
-                self.seconds_per_line = seconds_per_line
-                self.um_per_pixel = um_per_pixel
                 
                 # Discover and add additional channels from Olympus header
                 # _readOlympusHeader returns 'tifChannelPaths' dict mapping channel numbers to paths
@@ -105,6 +94,14 @@ class KymImage(AcqImage):
                         ch_path = self.getChannelPath(ch_num)
                         if ch_path is not None:
                             self.addColorChannel(ch_num, None, path=ch_path, load_image=True)
+
+            # Load metadata (ROIs) if it exists - must happen before analysis loading
+            # since analysis reconciles to existing ROIs
+            self.load_metadata()
+        
+        # Always create KymAnalysis (it handles path=None and missing files gracefully)
+        from kymflow.core.image_loaders.kym_analysis import KymAnalysis
+        self._kym_analysis: "KymAnalysis" = KymAnalysis(self)
 
     def _load_channel_from_path(self, channel: int, path: Path) -> bool:
         """Load image data from TIFF file path for a specific channel.
@@ -147,16 +144,17 @@ class KymImage(AcqImage):
             logger.warning(f"Failed to load TIFF from {path} for channel {channel}: {e}")
             return False
     
-    @property
-    def kymanalysis(self) -> "KymAnalysis":
-        """Get KymAnalysis instance (lazy initialization).
+    def get_kym_analysis(self) -> "KymAnalysis":
+        """Get KymAnalysis instance.
         
         Returns:
             KymAnalysis instance for this KymImage.
+            
+        Raises:
+            ValueError: If KymAnalysis was not initialized (should never happen).
         """
         if self._kym_analysis is None:
-            from kymflow.core.kym_analysis import KymAnalysis
-            self._kym_analysis = KymAnalysis(self)
+            raise ValueError("KymAnalysis was not initialized in __init__()")
         return self._kym_analysis
     
     def __str__(self):
@@ -184,6 +182,28 @@ class KymImage(AcqImage):
         return self.img_shape[1]
 
     @property
+    def seconds_per_line(self) -> float:
+        """Temporal resolution in seconds per line scan.
+        
+        Returns:
+            Seconds per line from header.voxels[0], or default 0.001 if not set.
+        """
+        if self.header.voxels is None or len(self.header.voxels) < 1:
+            return 0.001  # Default fallback
+        return self.header.voxels[0]
+
+    @property
+    def um_per_pixel(self) -> float:
+        """Spatial resolution in micrometers per pixel.
+        
+        Returns:
+            Micrometers per pixel from header.voxels[1], or default 1.0 if not set.
+        """
+        if self.header.voxels is None or len(self.header.voxels) < 2:
+            return 1.0  # Default fallback
+        return self.header.voxels[1]
+
+    @property
     def image_dur(self) -> float | None:
         """Image duration (s).
         
@@ -208,9 +228,9 @@ class KymImage(AcqImage):
         # Map to summary_row() keys and add analysis fields
         result = {
             "File Name": representative_path.name if representative_path is not None else None,
-            "Analyzed": "✓" if self.kymanalysis.has_analysis() else "",
-            "Saved": "✓" if not self.kymanalysis._dirty else "",
-            "Num ROIS": self.kymanalysis.num_rois,
+            "Analyzed": "✓" if self.get_kym_analysis().has_analysis() else "",
+            "Saved": "✓" if not self.get_kym_analysis()._dirty else "",
+            "Num ROIS": self.rois.numRois(),
             "Parent Folder": representative_path.parent.name if representative_path is not None else None,
             "Grandparent Folder": representative_path.parent.parent.name if representative_path is not None and len(representative_path.parent.parts) > 0 else None,
             "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",

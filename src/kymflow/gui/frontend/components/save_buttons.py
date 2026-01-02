@@ -16,17 +16,14 @@ def create_save_buttons(app_state: AppState, task_state: TaskState) -> None:
             ui.notify("No file selected", color="warning")
             return
 
-        if kf.kymanalysis is None:
-            ui.notify(f"No analysis data for {kf.path.name}", color="warning")
-            return
-
         # Check if any ROI has analysis
-        if not kf.kymanalysis.has_analysis():
+        kym_analysis = kf.get_kym_analysis()
+        if not kym_analysis.has_analysis():
             ui.notify(f"No analysis found for {kf.path.name}", color="warning")
             return
 
         try:
-            success = kf.kymanalysis.save_analysis()
+            success = kym_analysis.save_analysis()
             if success:
                 ui.notify(f"Saved {kf.path.name}", color="positive")
                 app_state.refresh_file_rows()
@@ -46,17 +43,14 @@ def create_save_buttons(app_state: AppState, task_state: TaskState) -> None:
         error_count = 0
 
         for kf in app_state.files:
-            if kf.kymanalysis is None:
-                skipped_count += 1
-                continue
-
             # Check if any ROI has analysis
-            if not kf.kymanalysis.has_analysis():
+            kym_analysis = kf.get_kym_analysis()
+            if not kym_analysis.has_analysis():
                 skipped_count += 1
                 continue
 
             try:
-                success = kf.kymanalysis.save_analysis()
+                success = kym_analysis.save_analysis()
                 if success:
                     saved_count += 1
                 else:

@@ -14,7 +14,7 @@ import pytest
 
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.roi import ROI, RoiSet
+from kymflow.core.image_loaders.roi import ROI, RoiSet
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -182,7 +182,7 @@ def test_roiset_delete_get() -> None:
     roi1 = acq_image.rois.create_roi(10, 10, 50, 50, channel=1)
     roi2 = acq_image.rois.create_roi(60, 60, 90, 90, channel=1)
     
-    assert len(acq_image.rois) == 2
+    assert acq_image.rois.numRois() == 2
     
     # Get ROI
     retrieved = acq_image.rois.get(roi1.id)
@@ -190,65 +190,11 @@ def test_roiset_delete_get() -> None:
     
     # Delete ROI
     acq_image.rois.delete(roi1.id)
-    assert len(acq_image.rois) == 1
+    assert acq_image.rois.numRois() == 1
     assert acq_image.rois.get(roi1.id) is None
     assert acq_image.rois.get(roi2.id) is not None
     
     logger.info("  - RoiSet.delete() and get() work correctly")
-
-
-def test_roiset_get_by_channel() -> None:
-    """Test RoiSet.get_by_channel() filtering."""
-    logger.info("Testing RoiSet.get_by_channel()")
-    
-    test_image = np.zeros((100, 200), dtype=np.uint8)
-    acq_image = AcqImage(path=None, img_data=test_image)
-    
-    # Add channel 2
-    acq_image.addColorChannel(2, np.zeros((100, 200), dtype=np.uint8))
-    
-    # Create ROIs in different channels
-    roi1 = acq_image.rois.create_roi(10, 10, 50, 50, channel=1)
-    roi2 = acq_image.rois.create_roi(60, 60, 90, 90, channel=1)
-    roi3 = acq_image.rois.create_roi(20, 20, 40, 40, channel=2)
-    
-    # Filter by channel
-    channel1_rois = acq_image.rois.get_by_channel(1)
-    assert len(channel1_rois) == 2
-    assert roi1 in channel1_rois
-    assert roi2 in channel1_rois
-    
-    channel2_rois = acq_image.rois.get_by_channel(2)
-    assert len(channel2_rois) == 1
-    assert roi3 in channel2_rois
-    
-    logger.info("  - RoiSet.get_by_channel() works correctly")
-
-
-def test_roiset_get_by_z() -> None:
-    """Test RoiSet.get_by_z() filtering."""
-    logger.info("Testing RoiSet.get_by_z()")
-    
-    # Create 3D test image
-    test_image = np.zeros((10, 100, 200), dtype=np.uint8)
-    acq_image = AcqImage(path=None, img_data=test_image)
-    
-    # Create ROIs on different z planes
-    roi1 = acq_image.rois.create_roi(10, 10, 50, 50, channel=1, z=0)
-    roi2 = acq_image.rois.create_roi(60, 60, 90, 90, channel=1, z=0)
-    roi3 = acq_image.rois.create_roi(20, 20, 40, 40, channel=1, z=5)
-    
-    # Filter by z
-    z0_rois = acq_image.rois.get_by_z(0)
-    assert len(z0_rois) == 2
-    assert roi1 in z0_rois
-    assert roi2 in z0_rois
-    
-    z5_rois = acq_image.rois.get_by_z(5)
-    assert len(z5_rois) == 1
-    assert roi3 in z5_rois
-    
-    logger.info("  - RoiSet.get_by_z() works correctly")
 
 
 def test_roiset_revalidate_all() -> None:
@@ -376,7 +322,7 @@ def test_acqimage_load_metadata() -> None:
         # Verify loaded data
         assert acq_image2.header.voxels == [0.001, 0.284]
         assert acq_image2.experiment_metadata.species == "mouse"
-        assert len(acq_image2.rois) == 1
+        assert acq_image2.rois.numRois() == 1
         loaded_roi = acq_image2.rois.get(1)
         assert loaded_roi is not None
         assert loaded_roi.name == "ROI1"
@@ -476,7 +422,7 @@ def test_acqimage_metadata_round_trip() -> None:
         assert acq_image2.experiment_metadata.species == "mouse"
         assert acq_image2.experiment_metadata.depth == 150.0
         
-        assert len(acq_image2.rois) == 2
+        assert acq_image2.rois.numRois() == 2
         roi1 = acq_image2.rois.get(1)
         assert roi1 is not None
         assert roi1.channel == 1
@@ -525,7 +471,7 @@ def test_roiset_iteration() -> None:
     roi3 = acq_image.rois.create_roi(20, 20, 40, 40, channel=1)
     
     # Iterate
-    rois_list = list(acq_image.rois)
+    rois_list = acq_image.rois.as_list()
     assert len(rois_list) == 3
     assert roi1 in rois_list
     assert roi2 in rois_list

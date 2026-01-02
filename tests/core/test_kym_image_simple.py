@@ -23,7 +23,7 @@ def test_get_analysis_folder_path(sample_tif_file: Path | None) -> None:
         pytest.skip("No test data files available")
 
     kymFile = KymImage(sample_tif_file, load_image=False)
-    analysis_path = kymFile.kymanalysis._get_analysis_folder_path()
+    analysis_path = kymFile.get_kym_analysis()._get_analysis_folder_path()
     logger.info(f"Analysis folder path: {analysis_path}")
     
     # Verify the path structure
@@ -66,11 +66,11 @@ def test_save_analysis_without_analysis(sample_tif_file: Path | None) -> None:
     
     # save_analysis() will only save if analysis has been performed
     # This just verifies the method exists and doesn't crash
-    result = kymFile.kymanalysis.save_analysis()  # Should return False and not raise an error
+    result = kymFile.get_kym_analysis().save_analysis()  # Should return False and not raise an error
     assert result is False  # No analysis to save
     
     # The analysis folder path can be checked
-    analysis_folder = kymFile.kymanalysis._get_analysis_folder_path()
+    analysis_folder = kymFile.get_kym_analysis()._get_analysis_folder_path()
     logger.info(f"Analysis folder would be: {analysis_folder}")
 
 
@@ -116,10 +116,10 @@ def test_analyze_and_save_analysis(sample_tif_file: Path | None) -> None:
 @pytest.mark.skip(reason="Needs API update - uses old analyze_flow/save_analysis API. Update after KymAnalysis API is finalized.")
 @pytest.mark.requires_data
 def test_analysis_parameters_all_fields_saved(sample_tif_file: Path | None) -> None:
-    """Test that all AnalysisParameters fields are saved to JSON file.
+    """Test that all ROI and analysis metadata fields are saved to JSON file.
     
-    TODO: Update to use new KymAnalysis API - now saves ROIs with analysis parameters
-    in unified JSON structure.
+    TODO: Update to use new KymAnalysis API - now saves ROIs in metadata.json
+    and analysis metadata in analysis JSON structure.
     """
     pytest.skip("Test needs to be updated to use new KymAnalysis API")
 

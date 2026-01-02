@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 
-from kymflow.core.metadata import (
+from kymflow.core.image_loaders.metadata import (
     _generateDocs,
     AnalysisParameters,
     ExperimentMetadata,

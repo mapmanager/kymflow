@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.metadata import AnalysisParameters
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -27,7 +26,7 @@ def test_kymanalysis_initialization(test_data_dir: Path) -> None:
         pytest.skip("No test TIFF files found")
     
     kym_image = KymImage(tif_files[0], load_image=False)
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     assert kym_analysis is not None
     assert kym_analysis.acq_image == kym_image
@@ -40,23 +39,20 @@ def test_kymanalysis_add_roi() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=False)
-    kym_analysis = kym_image.kymanalysis
     
     # Add an ROI
-    roi = kym_analysis.add_roi(left=10, top=20, right=50, bottom=80, note="Test ROI")
+    roi = kym_image.rois.create_roi(left=10, top=20, right=50, bottom=80, note="Test ROI")
     
-    assert roi.roi_id == 1
+    assert roi.id == 1
     assert roi.left == 10
     assert roi.top == 20
     assert roi.right == 50
     assert roi.bottom == 80
     assert roi.note == "Test ROI"
-    assert roi.algorithm == ""  # Not analyzed yet
-    assert roi.analyzed_at is None
     
     # Verify ROI is in the collection
-    assert kym_analysis.num_rois == 1
-    assert kym_analysis.get_roi(1) == roi
+    assert kym_image.rois.numRois() == 1
+    assert kym_image.rois.get(1) == roi
 
 
 def test_kymanalysis_roi_coordinates_clamped() -> None:
@@ -64,10 +60,9 @@ def test_kymanalysis_roi_coordinates_clamped() -> None:
     test_image = np.zeros((100, 200), dtype=np.uint16)  # 100 lines, 200 pixels
     
     kym_image = KymImage(img_data=test_image, load_image=False)
-    kym_analysis = kym_image.kymanalysis
     
     # Try to add ROI outside bounds
-    roi = kym_analysis.add_roi(left=-10, top=-5, right=250, bottom=150)
+    roi = kym_image.rois.create_roi(left=-10, top=-5, right=250, bottom=150)
     
     # Coordinates should be clamped
     assert roi.left >= 0
@@ -81,20 +76,19 @@ def test_kymanalysis_delete_roi() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=False)
-    kym_analysis = kym_image.kymanalysis
     
     # Add multiple ROIs
-    roi1 = kym_analysis.add_roi(10, 10, 50, 50)
-    roi2 = kym_analysis.add_roi(60, 60, 90, 90)
+    roi1 = kym_image.rois.create_roi(10, 10, 50, 50)
+    roi2 = kym_image.rois.create_roi(60, 60, 90, 90)
     
-    assert kym_analysis.num_rois == 2
+    assert kym_image.rois.numRois() == 2
     
     # Delete one ROI
-    kym_analysis.delete_roi(roi1.roi_id)
+    kym_image.rois.delete(roi1.id)
     
-    assert kym_analysis.num_rois == 1
-    assert kym_analysis.get_roi(roi1.roi_id) is None
-    assert kym_analysis.get_roi(roi2.roi_id) is not None
+    assert kym_image.rois.numRois() == 1
+    assert kym_image.rois.get(roi1.id) is None
+    assert kym_image.rois.get(roi2.id) is not None
 
 
 def test_kymanalysis_edit_roi_coordinates_invalidates_analysis() -> None:
@@ -102,23 +96,27 @@ def test_kymanalysis_edit_roi_coordinates_invalidates_analysis() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=True)
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi = kym_analysis.add_roi(10, 10, 50, 50)
-    kym_analysis.analyze_roi(roi.roi_id, window_size=16, use_multiprocessing=False)
+    roi = kym_image.rois.create_roi(10, 10, 50, 50)
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     
     # Verify analysis exists
-    assert roi.analyzed_at is not None
-    assert roi.algorithm == "mpRadon"
+    assert kym_analysis.has_analysis(roi.id)
+    meta = kym_analysis.get_analysis_metadata(roi.id)
+    assert meta is not None
+    assert meta.analyzed_at is not None
+    assert meta.algorithm == "mpRadon"
     
     # Edit coordinates - should invalidate analysis
-    kym_analysis.edit_roi(roi.roi_id, left=15)
+    kym_image.rois.edit_roi(roi.id, left=15)
     
     assert roi.left == 15
-    assert roi.analyzed_at is None  # Analysis invalidated
-    assert roi.algorithm == ""
-    assert not kym_analysis.has_analysis(roi.roi_id)
+    # Analysis should be stale after coordinate change
+    assert kym_analysis.is_stale(roi.id) is True
+    # Metadata may still exist but is stale
+    assert not kym_analysis.has_analysis(roi.id) or kym_analysis.is_stale(roi.id)
 
 
 def test_kymanalysis_edit_roi_note_preserves_analysis() -> None:
@@ -126,21 +124,27 @@ def test_kymanalysis_edit_roi_note_preserves_analysis() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=True)
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi = kym_analysis.add_roi(10, 10, 50, 50, note="Original note")
-    kym_analysis.analyze_roi(roi.roi_id, window_size=16, use_multiprocessing=False)
+    roi = kym_image.rois.create_roi(10, 10, 50, 50, note="Original note")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     
-    original_analyzed_at = roi.analyzed_at
+    original_meta = kym_analysis.get_analysis_metadata(roi.id)
+    assert original_meta is not None
+    original_analyzed_at = original_meta.analyzed_at
     
     # Edit note - should preserve analysis
-    kym_analysis.edit_roi(roi.roi_id, note="Updated note")
+    kym_image.rois.edit_roi(roi.id, note="Updated note")
     
     assert roi.note == "Updated note"
-    assert roi.analyzed_at == original_analyzed_at  # Analysis preserved
-    assert roi.algorithm == "mpRadon"
-    assert kym_analysis.has_analysis(roi.roi_id)
+    # Analysis should still be valid (not stale)
+    assert kym_analysis.is_stale(roi.id) is False
+    meta = kym_analysis.get_analysis_metadata(roi.id)
+    assert meta is not None
+    assert meta.analyzed_at == original_analyzed_at  # Analysis preserved
+    assert meta.algorithm == "mpRadon"
+    assert kym_analysis.has_analysis(roi.id)
 
 
 @pytest.mark.requires_data
@@ -164,27 +168,41 @@ def test_kymanalysis_save_and_load_analysis(test_data_dir: Path) -> None:
     # if not kym_file.um_per_pixel:
     #     kym_file.um_per_pixel = 1.0
     
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi1 = kym_analysis.add_roi(10, 10, 50, 50, note="ROI 1")
-    kym_analysis.analyze_roi(roi1.roi_id, window_size=16, use_multiprocessing=False)
+    roi1 = kym_image.rois.create_roi(10, 10, 50, 50, note="ROI 1")
+    kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
     
-    # Save analysis
-    saved = kym_analysis.save_analysis()
-    assert saved is True
+    # Save metadata (ROIs are saved in metadata.json)
+    saved_metadata = kym_image.save_metadata()
+    assert saved_metadata is True
     
-    # Create new KymFile and KymAnalysis to test loading
+    # Save analysis (analysis metadata is saved in analysis JSON)
+    saved_analysis = kym_analysis.save_analysis()
+    assert saved_analysis is True
+    
+    # Create new KymImage to test loading
     kym_image2 = KymImage(tif_files[0], load_image=False)
-    kym_analysis2 = kym_image2.kymanalysis
     
-    # Should have loaded ROI
-    assert kym_analysis2.num_rois == 1
-    loaded_roi = kym_analysis2.get_roi(roi1.roi_id)
+    # Load metadata first (this loads ROIs)
+    # IMPORTANT: Load metadata BEFORE accessing kymanalysis, because
+    # KymAnalysis.__init__() auto-loads analysis and reconciles to existing ROIs
+    loaded_metadata = kym_image2.load_metadata()
+    assert loaded_metadata is True
+    assert kym_image2.rois.numRois() == 1
+    loaded_roi = kym_image2.rois.get(roi1.id)
     assert loaded_roi is not None
     assert loaded_roi.note == "ROI 1"
-    assert loaded_roi.analyzed_at is not None
-    assert kym_analysis2.has_analysis(roi1.roi_id)
+    
+    # Now access kymanalysis - it will auto-load analysis and reconcile to loaded ROIs
+    kym_analysis2 = kym_image2.get_kym_analysis()
+    
+    # Analysis metadata should be loaded (auto-loaded by KymAnalysis.__init__)
+    assert kym_analysis2.has_analysis(roi1.id)
+    meta = kym_analysis2.get_analysis_metadata(roi1.id)
+    assert meta is not None
+    assert meta.analyzed_at is not None
 
 
 def test_kymanalysis_multi_roi_analysis() -> None:
@@ -192,29 +210,29 @@ def test_kymanalysis_multi_roi_analysis() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=True)
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze multiple ROIs
-    roi1 = kym_analysis.add_roi(10, 10, 30, 30, note="ROI 1")
-    roi2 = kym_analysis.add_roi(50, 50, 70, 70, note="ROI 2")
+    roi1 = kym_image.rois.create_roi(10, 10, 30, 30, note="ROI 1")
+    roi2 = kym_image.rois.create_roi(50, 50, 70, 70, note="ROI 2")
     
-    kym_analysis.analyze_roi(roi1.roi_id, window_size=16, use_multiprocessing=False)
-    kym_analysis.analyze_roi(roi2.roi_id, window_size=16, use_multiprocessing=False)
+    kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+    kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
     
     # Check that both have analysis
-    assert kym_analysis.has_analysis(roi1.roi_id)
-    assert kym_analysis.has_analysis(roi2.roi_id)
+    assert kym_analysis.has_analysis(roi1.id)
+    assert kym_analysis.has_analysis(roi2.id)
     
     # Get analysis for specific ROI
-    roi1_df = kym_analysis.get_analysis(roi_id=roi1.roi_id)
+    roi1_df = kym_analysis.get_analysis(roi_id=roi1.id)
     assert roi1_df is not None
-    assert all(roi1_df['roi_id'] == roi1.roi_id)
+    assert all(roi1_df['roi_id'] == roi1.id)
     
     # Get all analysis
     all_df = kym_analysis.get_analysis()
     assert all_df is not None
-    assert len(all_df[all_df['roi_id'] == roi1.roi_id]) > 0
-    assert len(all_df[all_df['roi_id'] == roi2.roi_id]) > 0
+    assert len(all_df[all_df['roi_id'] == roi1.id]) > 0
+    assert len(all_df[all_df['roi_id'] == roi2.id]) > 0
 
 
 def test_kymanalysis_get_analysis_value() -> None:
@@ -222,15 +240,15 @@ def test_kymanalysis_get_analysis_value() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=True)
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi = kym_analysis.add_roi(10, 10, 50, 50)
-    kym_analysis.analyze_roi(roi.roi_id, window_size=16, use_multiprocessing=False)
+    roi = kym_image.rois.create_roi(10, 10, 50, 50)
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     
     # Get analysis values
-    time_values = kym_analysis.get_analysis_value(roi.roi_id, "time")
-    velocity_values = kym_analysis.get_analysis_value(roi.roi_id, "velocity")
+    time_values = kym_analysis.get_analysis_value(roi.id, "time")
+    velocity_values = kym_analysis.get_analysis_value(roi.id, "velocity")
     
     assert time_values is not None
     assert velocity_values is not None
@@ -242,25 +260,19 @@ def test_kymanalysis_dirty_flag() -> None:
     test_image = np.zeros((100, 100), dtype=np.uint16)
     
     kym_image = KymImage(img_data=test_image, load_image=False)
-    kym_analysis = kym_image.kymanalysis
+    kym_analysis = kym_image.get_kym_analysis()
     
     # Initially should not be dirty (if no analysis loaded)
-    # After adding ROI, should be dirty
-    kym_analysis.add_roi(10, 10, 50, 50)
-    assert kym_analysis._dirty is True
-    
-    # After saving, should not be dirty
-    kym_analysis.save_analysis()  # May fail if no analysis, but should clear dirty if it succeeds
-    # Actually, save_analysis returns False if no analysis, so dirty might stay True
+    # Adding ROI doesn't set dirty flag (ROIs are separate from analysis)
+    kym_image.rois.create_roi(10, 10, 50, 50)
+    # Dirty flag is only set when analysis is performed or modified
     
     # After analyzing, should be dirty
-    # kym_file.pixels_per_line = 100
-    # kym_file.num_lines = 100
-    # kym_file.seconds_per_line = 0.001
-    # kym_file.um_per_pixel = 1.0
     kym_image.get_img_slice(channel=1)
     
-    kym_analysis.analyze_roi(1, window_size=16, use_multiprocessing=False)
+    roi = kym_image.rois.get(1)
+    assert roi is not None
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     assert kym_analysis._dirty is True
     
     # After saving, should not be dirty
@@ -269,34 +281,4 @@ def test_kymanalysis_dirty_flag() -> None:
         assert kym_analysis._dirty is False
 
 
-def test_analysis_parameters_has_same_coordinates() -> None:
-    """Test that has_same_coordinates() method works correctly."""
-    # Create ROIs with same coordinates but different IDs/notes
-    roi1 = AnalysisParameters(roi_id=1, left=10, top=20, right=50, bottom=80, note="ROI 1")
-    roi2 = AnalysisParameters(roi_id=2, left=10, top=20, right=50, bottom=80, note="ROI 2")
-    
-    # Same coordinates should return True
-    assert roi1.has_same_coordinates(roi2) is True
-    assert roi2.has_same_coordinates(roi1) is True  # Should be symmetric
-    
-    # Different coordinates should return False
-    roi3 = AnalysisParameters(roi_id=1, left=15, top=20, right=50, bottom=80, note="ROI 1")
-    assert roi1.has_same_coordinates(roi3) is False
-    
-    # Test with different top coordinate
-    roi4 = AnalysisParameters(roi_id=1, left=10, top=25, right=50, bottom=80, note="ROI 1")
-    assert roi1.has_same_coordinates(roi4) is False
-    
-    # Test with different right coordinate
-    roi5 = AnalysisParameters(roi_id=1, left=10, top=20, right=55, bottom=80, note="ROI 1")
-    assert roi1.has_same_coordinates(roi5) is False
-    
-    # Test with different bottom coordinate
-    roi6 = AnalysisParameters(roi_id=1, left=10, top=20, right=50, bottom=85, note="ROI 1")
-    assert roi1.has_same_coordinates(roi6) is False
-    
-    # Test that __eq__ still works for full comparison
-    assert roi1 != roi2  # Different IDs/notes
-    roi1_copy = AnalysisParameters(roi_id=1, left=10, top=20, right=50, bottom=80, note="ROI 1")
-    assert roi1 == roi1_copy  # All fields same
 

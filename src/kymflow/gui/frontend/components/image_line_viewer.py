@@ -52,19 +52,20 @@ def create_image_line_viewer(app_state: AppState) -> None:
     def _update_roi_dropdown() -> None:
         """Update ROI dropdown options based on current file."""
         kf = state["selected"]
-        if kf is None or kf.kymanalysis is None:
+        if kf is None:
             roi_select.options = []
             roi_select.set_value(None)
             return
         
-        all_rois = kf.kymanalysis.get_all_rois()
-        options = [{"label": f"ROI {roi.roi_id}", "value": roi.roi_id} for roi in all_rois]
+        all_rois = kf.rois.as_list()
+        options = [{"label": f"ROI {roi.id}", "value": roi.id} for roi in all_rois]
         roi_select.options = options
         
         # Select first ROI if none selected or current selection is invalid
-        if app_state.selected_roi_id is None or app_state.selected_roi_id not in [roi.roi_id for roi in all_rois]:
-            if all_rois:
-                first_roi_id = all_rois[0].roi_id
+        roi_ids = kf.rois.get_roi_ids()
+        if app_state.selected_roi_id is None or app_state.selected_roi_id not in roi_ids:
+            if roi_ids:
+                first_roi_id = roi_ids[0]
                 app_state.select_roi(first_roi_id)
                 roi_select.set_value(first_roi_id)
             else:
@@ -118,18 +119,20 @@ def create_image_line_viewer(app_state: AppState) -> None:
             )
 
         # Store original unfiltered y-values for partial updates
-        if kf is not None and kf.kymanalysis is not None and roi_id is not None:
-            time_values = kf.kymanalysis.get_analysis_value(roi_id, "time")
-            y_values = kf.kymanalysis.get_analysis_value(roi_id, "velocity")
+        if kf is not None and roi_id is not None:
+            kym_analysis = kf.get_kym_analysis()
+            if kym_analysis.has_analysis(roi_id):
+                time_values = kym_analysis.get_analysis_value(roi_id, "time")
+                y_values = kym_analysis.get_analysis_value(roi_id, "velocity")
+            else:
+                time_values = None
+                y_values = None
             if time_values is not None and y_values is not None:
                 state["original_time_values"] = np.array(time_values).copy()
                 state["original_y_values"] = np.array(y_values).copy()
             else:
                 state["original_time_values"] = None
                 state["original_y_values"] = None
-        else:
-            state["original_time_values"] = None
-            state["original_y_values"] = None
 
         # Store figure reference
         _set_uirevision(fig)
@@ -200,7 +203,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         kf = state["selected"]
         roi_id = app_state.selected_roi_id
         
-        if kf is None or kf.kymanalysis is None or roi_id is None:
+        if kf is None or roi_id is None:
             # No data available, do full render
             _render_combined()
             return
@@ -210,7 +213,13 @@ def create_image_line_viewer(app_state: AppState) -> None:
         median_filter_size = 5 if median_filter_cb.value else 0
 
         # Re-compute filtered y-values using KymAnalysis API
-        filtered_y = kf.kymanalysis.get_analysis_value(
+        kym_analysis = kf.get_kym_analysis()
+        if not kym_analysis.has_analysis(roi_id):
+            # No analysis available, do full render
+            _render_combined()
+            return
+        
+        filtered_y = kym_analysis.get_analysis_value(
             roi_id, "velocity", remove_outliers, median_filter_size
         )
 

@@ -1,4 +1,4 @@
-from kymflow.core.kym_file import KymFile
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
     plot_image_line_plotly,
     update_colorscale,
@@ -15,7 +15,7 @@ def run(path: str):
     """Test script to verify uirevision preserves axis ranges when updating colorscale.
 
     Test flow:
-    1. Load KymFile and create initial figure
+    1. Load KymImage and create initial figure
     2. Programmatically set x-axis ranges to simulate user zoom
     3. Update colorscale using update_traces()
     4. Verify that axis ranges are preserved (uirevision working)
@@ -24,32 +24,39 @@ def run(path: str):
     print("Testing Plotly uirevision for preserving zoom/pan state")
     print("=" * 80)
 
-    # Step 1: Load KymFile from path
-    print("\n1. Loading KymFile...")
-    kf = KymFile(path, load_image=True)
+    # Step 1: Load KymImage from path
+    print("\n1. Loading KymImage...")
+    kymImage = KymImage(path, load_image=True)
     print(f"   Loaded: {path}")
 
-    allAnalysisParameters = kf.kymanalysis.get_all_rois()
-    # for analysisParameter in allAnalysisParameters:
-    #     print(f"   AnalysisParameter: {analysisParameter}")
+    # Get all ROI IDs (using new API)
+    roi_ids = kymImage.rois.get_roi_ids()
+    if not roi_ids:
+        raise ValueError("No ROIs found. Please create at least one ROI first.")
+    
+    # Use first ROI
+    first_roi_id = roi_ids[0]
+    one_roi = kymImage.rois.get(first_roi_id)
+    one_roi_id = first_roi_id
+    logger.info(f'one_roi: {one_roi}')
+    logger.info(f'one_roi_id: {one_roi_id}')
+    
+    # Commented out loop for iterating over all ROIs:
+    # for roi in all_rois:
+    #     print(f"   ROI: {roi}")
     #     fig = plot_image_line_plotly(
     #         kf,
-    #         roi_id=analysisParameter.roi_id,
+    #         roi_id=roi.id,
     #         y="velocity",
     #         remove_outliers=True,
     #         median_filter=5,)
     #     fig.show(config={"scrollZoom": True})
-
-    oneAnalysisParameter = allAnalysisParameters[0]
-    oneRoiID = oneAnalysisParameter.roi_id
-    logger.info(f'oneAnalysisParameter:{oneAnalysisParameter}')
-    logger.info(f'oneRoiID:{oneRoiID}')
     
     # Step 2: Create initial figure with default settings
     print("\n2. Creating initial figure with default settings (colorscale='Gray')...")
     fig = plot_image_line_plotly(
-        kf,
-        roi_id=oneRoiID,
+        kymImage,
+        roi_id=one_roi_id,
         y="velocity",
         remove_outliers=True,
         median_filter=5,
@@ -93,7 +100,7 @@ def run(path: str):
 
     # Step 7: Test with zmin/zmax changes using backend API
     print("\n7. Testing with contrast update using update_contrast()...")
-    image = kf.get_img_slice(channel=1)
+    image = kymImage.get_img_slice(channel=1)
     image_max = float(image.max())
     zmin = int(image_max * 0.2)
     zmax = int(image_max * 0.8)

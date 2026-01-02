@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Tuple, List
 
-from kymflow.core.metadata import field_metadata
+from kymflow.core.image_loaders.metadata import field_metadata
 
 
 @dataclass

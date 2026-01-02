@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.core.metadata import ExperimentMetadata
+from kymflow.core.image_loaders.metadata import ExperimentMetadata
 from kymflow.gui.state import AppState
 
 

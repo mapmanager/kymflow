@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow.core.metadata import ExperimentMetadata
+from kymflow.core.image_loaders.metadata import ExperimentMetadata
 
 
 def test_experiment_metadata_from_dict() -> None:

@@ -47,29 +47,32 @@ def test_analysis_form_populates_from_roi(app_state_with_file: tuple[AppState, K
     app_state, kym_file = app_state_with_file
     
     # Create ROI with analysis
-    roi = kym_file.kymanalysis.add_roi(left=10, top=10, right=50, bottom=50)
+    roi = kym_file.rois.create_roi(left=10, top=10, right=50, bottom=50)
     
     # Analyze the ROI
-    kym_file.kymanalysis.analyze_roi(
-        roi.roi_id,
+    kym_file.get_kym_analysis().analyze_roi(
+        roi.id,
         window_size=16,
         use_multiprocessing=False,
     )
     
     # Set selected ROI
-    app_state.selected_roi_id = roi.roi_id
+    app_state.selected_roi_id = roi.id
     
-    # Verify ROI has analysis parameters
-    roi_after = kym_file.kymanalysis.get_roi(roi.roi_id)
+    # Verify ROI exists and has analysis metadata
+    roi_after = kym_file.rois.get(roi.id)
     assert roi_after is not None
-    assert roi_after.algorithm is not None
-    assert roi_after.window_size == 16
+    kym_analysis = kym_file.get_kym_analysis()
+    meta = kym_analysis.get_analysis_metadata(roi.id)
+    assert meta is not None
+    assert meta.algorithm is not None
+    assert meta.window_size == 16
     
     # Verify form would be able to access these parameters
     # (Actual form population requires NiceGUI UI components)
-    assert roi_after.roi_id == roi.roi_id
-    assert roi_after.left == 10.0
-    assert roi_after.top == 10.0
+    assert roi_after.id == roi.id
+    assert roi_after.left == 10
+    assert roi_after.top == 10
 
 
 def test_analysis_form_handles_no_roi(app_state_with_file: tuple[AppState, KymImage]) -> None:
@@ -79,8 +82,8 @@ def test_analysis_form_handles_no_roi(app_state_with_file: tuple[AppState, KymIm
     # No ROI selected
     app_state.selected_roi_id = None
     
-    # Verify that kymanalysis.get_roi() returns None for invalid ROI
-    assert kym_file.kymanalysis.get_roi(999) is None
+    # Verify that rois.get() returns None for invalid ROI
+    assert kym_file.rois.get(999) is None
 
 
 def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymImage]) -> None:
@@ -88,16 +91,17 @@ def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymIma
     app_state, kym_file = app_state_with_file
     
     # Create ROI and analyze
-    roi = kym_file.kymanalysis.add_roi()
-    kym_file.kymanalysis.analyze_roi(
-        roi.roi_id,
+    roi = kym_file.rois.create_roi()
+    kym_file.get_kym_analysis().analyze_roi(
+        roi.id,
         window_size=16,
         use_multiprocessing=False,
     )
     
     # Verify has_analysis() works
-    assert kym_file.kymanalysis.has_analysis()
-    assert kym_file.kymanalysis.has_analysis(roi.roi_id)
+    kym_analysis = kym_file.get_kym_analysis()
+    assert kym_analysis.has_analysis()
+    assert kym_analysis.has_analysis(roi.id)
     
     # Verify save_analysis() works
     # Save to temporary location
@@ -109,8 +113,8 @@ def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymIma
         # Save should work (save_analysis uses kym_file.path to determine save location)
         # But we can't easily test this without mocking the file path structure
         # So we just verify the methods exist and work
-        assert hasattr(kym_file.kymanalysis, 'save_analysis')
-        assert callable(kym_file.kymanalysis.save_analysis)
+        assert hasattr(kym_analysis, 'save_analysis')
+        assert callable(kym_analysis.save_analysis)
 
 
 def test_save_buttons_logic_no_analysis(app_state_with_file: tuple[AppState, KymImage]) -> None:
@@ -118,11 +122,12 @@ def test_save_buttons_logic_no_analysis(app_state_with_file: tuple[AppState, Kym
     app_state, kym_file = app_state_with_file
     
     # Create ROI but don't analyze
-    roi = kym_file.kymanalysis.add_roi()
+    roi = kym_file.rois.create_roi()
     
     # Verify has_analysis() returns False
-    assert not kym_file.kymanalysis.has_analysis()
-    assert not kym_file.kymanalysis.has_analysis(roi.roi_id)
+    kym_analysis = kym_file.get_kym_analysis()
+    assert not kym_analysis.has_analysis()
+    assert not kym_analysis.has_analysis(roi.id)
 
 
 def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymImage]) -> None:
@@ -145,15 +150,15 @@ def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymImage]) 
         app_state.files = [kym_file, kym_file2]
         
         # Analyze first file
-        roi1 = kym_file.kymanalysis.add_roi()
-        kym_file.kymanalysis.analyze_roi(roi1.roi_id, window_size=16, use_multiprocessing=False)
+        roi1 = kym_file.rois.create_roi()
+        kym_file.get_kym_analysis().analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
         
         # Don't analyze second file
-        roi2 = kym_file2.kymanalysis.add_roi()
+        roi2 = kym_file2.rois.create_roi()
         
         # Verify has_analysis() logic
-        assert kym_file.kymanalysis.has_analysis()
-        assert not kym_file2.kymanalysis.has_analysis()
+        assert kym_file.get_kym_analysis().has_analysis()
+        assert not kym_file2.get_kym_analysis().has_analysis()
         
         # Files with analysis should be savable
         # Files without analysis should be skipped

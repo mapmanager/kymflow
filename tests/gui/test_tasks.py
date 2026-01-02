@@ -42,7 +42,7 @@ def test_run_flow_analysis_creates_roi_if_none_exists(sample_kym_file: KymImage)
         result_received["success"] = success
     
     # Ensure no ROIs exist
-    assert sample_kym_file.kymanalysis.num_rois == 0
+    assert len(sample_kym_file.rois) == 0
     
     # Run analysis (should create ROI automatically)
     run_flow_analysis(
@@ -59,19 +59,20 @@ def test_run_flow_analysis_creates_roi_if_none_exists(sample_kym_file: KymImage)
         time.sleep(0.1)
     
     # Check that ROI was created
-    all_rois = sample_kym_file.kymanalysis.get_all_rois()
-    assert len(all_rois) == 1
+    roi_ids = sample_kym_file.rois.get_roi_ids()
+    assert len(roi_ids) == 1
     
     # Check that ROI has full image bounds
-    roi = all_rois[0]
-    assert roi.left == 0.0
-    assert roi.top == 0.0
-    assert roi.right == 200.0
-    assert roi.bottom == 100.0
+    roi = sample_kym_file.rois.get(roi_ids[0])
+    assert roi is not None
+    assert roi.left == 0
+    assert roi.top == 0
+    assert roi.right == 200
+    assert roi.bottom == 100
     
     # Check that analysis was performed
     assert task_state.message == "Done"
-    assert sample_kym_file.kymanalysis.has_analysis(roi.roi_id)
+    assert sample_kym_file.get_kym_analysis().has_analysis(roi.id)
 
 
 def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
@@ -83,8 +84,8 @@ def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
         result_received["success"] = success
     
     # Create an ROI with specific coordinates
-    roi = sample_kym_file.kymanalysis.add_roi(left=10, top=10, right=50, bottom=50, note="Test ROI")
-    roi_id = roi.roi_id
+    roi = sample_kym_file.rois.create_roi(left=10, top=10, right=50, bottom=50, note="Test ROI")
+    roi_id = roi.id
     
     # Run analysis (should use existing ROI)
     run_flow_analysis(
@@ -102,13 +103,13 @@ def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
         time.sleep(0.1)
     
     # Check that only one ROI exists (no new one created)
-    all_rois = sample_kym_file.kymanalysis.get_all_rois()
-    assert len(all_rois) == 1
-    assert all_rois[0].roi_id == roi_id
+    roi_ids = sample_kym_file.rois.get_roi_ids()
+    assert len(roi_ids) == 1
+    assert roi_ids[0] == roi_id
     
     # Check that analysis was performed on the correct ROI
     assert task_state.message == "Done"
-    assert sample_kym_file.kymanalysis.has_analysis(roi_id)
+    assert sample_kym_file.get_kym_analysis().has_analysis(roi_id)
 
 
 def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None:
@@ -138,8 +139,8 @@ def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None
             pass
         
         # Ensure no ROIs exist
-        assert sample_kym_file.kymanalysis.num_rois == 0
-        assert kym_file2.kymanalysis.num_rois == 0
+        assert sample_kym_file.rois.numRois() == 0
+        assert kym_file2.rois.numRois() == 0
         
         # Run batch analysis
         run_batch_flow_analysis(
@@ -158,13 +159,13 @@ def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None
             time.sleep(0.1)
         
         # Check that ROIs were created for each file
-        assert sample_kym_file.kymanalysis.num_rois == 1
-        assert kym_file2.kymanalysis.num_rois == 1
+        assert sample_kym_file.rois.numRois() == 1
+        assert kym_file2.rois.numRois() == 1
         
         # Check that analysis was performed
         assert overall_task.message == "2/2 files"
-        assert sample_kym_file.kymanalysis.has_analysis()
-        assert kym_file2.kymanalysis.has_analysis()
+        assert sample_kym_file.get_kym_analysis().has_analysis()
+        assert kym_file2.get_kym_analysis().has_analysis()
 
 
 def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
@@ -172,14 +173,14 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
     task_state = TaskState()
     
     # Create ROI
-    roi = sample_kym_file.kymanalysis.add_roi()
+    roi = sample_kym_file.rois.create_roi()
     
     # Start analysis
     run_flow_analysis(
         sample_kym_file,
         task_state,
         window_size=16,
-        roi_id=roi.roi_id,
+        roi_id=roi.id,
     )
     
     # Wait a bit for analysis to start

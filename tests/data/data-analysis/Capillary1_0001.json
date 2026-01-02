@@ -1,37 +1,26 @@
 {
-  "rois": [
-    {
+  "version": "2.0",
+  "analysis_metadata": {
+    "1": {
       "roi_id": 1,
-      "left": 0,
-      "top": 0,
-      "right": 38,
-      "bottom": 30000,
-      "note": "Full Image",
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2025-12-23T15:03:47.148295+00:00"
+      "analyzed_at": "2026-01-02T23:53:49.383357+00:00",
+      "roi_revision_at_analysis": 0
     },
-    {
+    "2": {
       "roi_id": 2,
-      "left": 9,
-      "top": 7500,
-      "right": 28,
-      "bottom": 22500,
-      "note": "Center Region",
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2025-12-23T15:03:48.142179+00:00"
+      "analyzed_at": "2026-01-02T23:53:49.897515+00:00",
+      "roi_revision_at_analysis": 0
     },
-    {
+    "3": {
       "roi_id": 3,
-      "left": 0,
-      "top": 7500,
-      "right": 12,
-      "bottom": 7500,
-      "note": "Left Region",
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2025-12-23T15:03:49.208536+00:00"
+      "analyzed_at": "2026-01-02T23:53:50.513576+00:00",
+      "roi_revision_at_analysis": 0
     }
-  ]
+  }
 }

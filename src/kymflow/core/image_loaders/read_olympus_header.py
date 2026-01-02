@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 from dataclasses import asdict, fields
 
-from kymflow.core.metadata import field_metadata
+from kymflow.core.image_loaders.metadata import field_metadata
 
 from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)

@@ -6,12 +6,12 @@ from typing import Tuple, Any
 import numpy as np
 
 from kymflow.core.image_loaders.acq_image_header import AcqImgHeader
-from kymflow.core.metadata import ExperimentMetadata
+from kymflow.core.image_loaders.metadata import ExperimentMetadata
 from kymflow.core.utils.logging import get_logger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from kymflow.core.roi import RoiSet
+    from kymflow.core.image_loaders.roi import RoiSet
 
 logger = get_logger(__name__)
 
@@ -369,7 +369,7 @@ class AcqImage:
             RoiSet instance for managing ROIs associated with this image.
         """
         if self._roi_set is None:
-            from kymflow.core.roi import RoiSet
+            from kymflow.core.image_loaders.roi import RoiSet
             self._roi_set = RoiSet(self)  # Pass self as acq_image reference
         return self._roi_set
     
@@ -471,7 +471,7 @@ class AcqImage:
             if "rois" in metadata:
                 rois_data = metadata["rois"]
                 # Use RoiSet.from_list() to create RoiSet with ROIs
-                from kymflow.core.roi import RoiSet
+                from kymflow.core.image_loaders.roi import RoiSet
                 self._roi_set = RoiSet.from_list(rois_data, self)
                 
                 # Validate and clamp each ROI to current image bounds
@@ -499,7 +499,7 @@ class AcqImage:
                                 roi.z = num_slices - 1
                         
                         # Clamp coordinates
-                        from kymflow.core.roi import clamp_coordinates_to_size
+                        from kymflow.core.image_loaders.roi import clamp_coordinates_to_size
                         clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
                             roi.left, roi.top, roi.right, roi.bottom, img_w, img_h
                         )

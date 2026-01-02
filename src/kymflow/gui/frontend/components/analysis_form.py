@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from kymflow.core.metadata import AnalysisParameters
+from kymflow.core.image_loaders.metadata import AnalysisParameters
 from kymflow.gui.state import AppState
 
 
@@ -45,13 +45,14 @@ def create_analysis_form(app_state: AppState) -> None:
         roi_id = app_state.selected_roi_id
         
         # Clear fields if no file or no ROI selected
-        if not kf or roi_id is None or kf.kymanalysis is None:
+        if not kf or roi_id is None:
             for widget in widgets.values():
                 widget.set_value("")
             return
 
-        # Get ROI and its analysis parameters
-        roi = kf.kymanalysis.get_roi(roi_id)
+        # Get ROI and its analysis metadata
+        roi = kf.rois.get(roi_id)
+        kym_analysis = kf.get_kym_analysis()
         if not roi:
             for widget in widgets.values():
                 widget.set_value("")

@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.metadata import AnalysisParameters
+from kymflow.core.image_loaders.roi import ROI
 
 from kymflow.core.plotting.colorscales import get_colorscale
 from kymflow.core.plotting.theme import get_theme_colors, get_theme_template
@@ -69,12 +69,17 @@ def line_plot_plotly(
         return fig
 
     # Get data from KymAnalysis for specified ROI
-    if kf is None or kf.kymanalysis is None:
+    if kf is None:
         x_values = None
         y_values = None
     else:
-        x_values = kf.kymanalysis.get_analysis_value(roi_id, x, remove_outliers, median_filter)
-        y_values = kf.kymanalysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
+        kym_analysis = kf.get_kym_analysis()
+        if not kym_analysis.has_analysis(roi_id):
+            x_values = None
+            y_values = None
+        else:
+            x_values = kym_analysis.get_analysis_value(roi_id, x, remove_outliers, median_filter)
+            y_values = kym_analysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
 
     # Handle None data (no analysis)
     if x_values is None or y_values is None:
@@ -220,12 +225,16 @@ def plot_image_line_plotly(
     logger.info(f'num_lines: {num_lines}')
     
     # Get analysis time values for line plot (for specified ROI)
-    if kf is None or kf.kymanalysis is None:
+    if kf is None:
         analysis_time_values = None
         all_rois = []
     else:
-        analysis_time_values = kf.kymanalysis.get_analysis_value(roi_id, "time", remove_outliers, median_filter)
-        all_rois = kf.kymanalysis.get_all_rois()
+        kym_analysis = kf.get_kym_analysis()
+        if not kym_analysis.has_analysis(roi_id):
+            analysis_time_values = None
+        else:
+            analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time", remove_outliers, median_filter)
+        all_rois = kf.rois.as_list()
 
     # Plot image in top subplot (row=1)
     if image is not None and image_time is not None and len(image_time) > 0:
@@ -293,10 +302,14 @@ def plot_image_line_plotly(
             )
 
     # Get line plot data (already filtered by get_analysis_value)
-    if kf is None or kf.kymanalysis is None:
+    if kf is None:
         y_values = None
     else:
-        y_values = kf.kymanalysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
+        kym_analysis = kf.get_kym_analysis()
+        if not kym_analysis.has_analysis(roi_id):
+            y_values = None
+        else:
+            y_values = kym_analysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
 
     # Plot line in bottom subplot (row=2)
     # Use analysis time values (always use 'time' column from analysis)
@@ -369,7 +382,7 @@ def plot_image_line_plotly(
 
 def _add_roi_overlay(
     fig: go.Figure,
-    rois: list[AnalysisParameters],
+    rois: list[ROI],
     selected_roi_id: Optional[int],
     image_time: Optional[np.ndarray],
     seconds_per_line: float,
@@ -380,7 +393,7 @@ def _add_roi_overlay(
     
     Args:
         fig: Plotly figure to add shapes to.
-        rois: List of AnalysisParameters instances to draw.
+        rois: List of ROI instances to draw.
         selected_roi_id: ID of the selected ROI (will be highlighted in yellow).
         image_time: Array of time values for x-axis mapping.
         seconds_per_line: Time per line for converting line indices to time.
@@ -394,7 +407,7 @@ def _add_roi_overlay(
     annotations = []
     
     for roi in rois:
-        is_selected = (selected_roi_id is not None and roi.roi_id == selected_roi_id)
+        is_selected = (selected_roi_id is not None and roi.id == selected_roi_id)
         stroke_color = ROI_COLOR_SELECTED if is_selected else ROI_COLOR_DEFAULT
         
         # Convert ROI coordinates to time-space coordinates for heatmap
@@ -458,7 +471,7 @@ def _add_roi_overlay(
             dict(
                 x=x0,
                 y=y1,  # Top of rectangle (y1 is right, but in image coords top is max y)
-                text=f"ROI {roi.roi_id}",
+                text=f"ROI {roi.id}",
                 showarrow=False,
                 xref=f"x{row if row > 1 else ''}",
                 yref=f"y{row if row > 1 else ''}",

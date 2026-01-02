@@ -123,10 +123,10 @@ class AppState:
         self.selected_file = kym_file
         
         # Initialize selected_roi_id to first ROI if available
-        if kym_file is not None and kym_file.kymanalysis is not None:
-            all_rois = kym_file.kymanalysis.get_all_rois()
-            if all_rois:
-                self.selected_roi_id = all_rois[0].roi_id
+        if kym_file is not None:
+            roi_ids = kym_file.rois.get_roi_ids()
+            if roi_ids:
+                self.selected_roi_id = roi_ids[0]
             else:
                 self.selected_roi_id = None
         else:

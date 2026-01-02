@@ -43,30 +43,24 @@ def run_flow_analysis(
         task_state.cancellable = True
         task_state.set_progress(0.0, "Starting analysis")
 
-        # Ensure KymAnalysis is available
-        if kym_file.kymanalysis is None:
-            task_state.message = "Error: KymAnalysis not available"
-            task_state.mark_finished()
-            return
-
         # Determine ROI to use
         target_roi_id = roi_id
         if target_roi_id is None:
             # Get or create default ROI
-            all_rois = kym_file.kymanalysis.get_all_rois()
-            if all_rois:
+            roi_ids = kym_file.rois.get_roi_ids()
+            if roi_ids:
                 # Use first ROI if available
-                target_roi_id = all_rois[0].roi_id
+                target_roi_id = roi_ids[0]
                 task_state.set_progress(0.0, f"Using existing ROI {target_roi_id}")
             else:
                 # Create default ROI (full image bounds)
                 task_state.set_progress(0.0, "Creating default ROI")
-                new_roi = kym_file.kymanalysis.add_roi()  # Uses default full image bounds
-                target_roi_id = new_roi.roi_id
+                new_roi = kym_file.rois.create_roi()  # Uses default full image bounds
+                target_roi_id = new_roi.id
                 task_state.set_progress(0.0, f"Created ROI {target_roi_id}")
 
         # Verify ROI exists
-        if target_roi_id not in kym_file.kymanalysis._rois:
+        if kym_file.rois.get(target_roi_id) is None:
             task_state.message = f"Error: ROI {target_roi_id} not found"
             task_state.mark_finished()
             return
@@ -80,7 +74,7 @@ def run_flow_analysis(
             task_state.set_progress(pct, f"{completed}/{total} windows")
 
         try:
-            kym_file.kymanalysis.analyze_roi(
+            kym_file.get_kym_analysis().analyze_roi(
                 target_roi_id,
                 window_size,
                 progress_callback=progress_cb,
@@ -161,19 +155,14 @@ def run_batch_flow_analysis(
 
             per_file_task.set_progress(0.0, f"Starting {kf.path.name}")
 
-            # Ensure KymAnalysis is available
-            if kf.kymanalysis is None:
-                per_file_task.message = f"Error: KymAnalysis not available for {kf.path.name}"
-                continue
-
             # Get or create ROI for this file
-            all_rois = kf.kymanalysis.get_all_rois()
-            if all_rois:
-                roi_id = all_rois[0].roi_id
+            roi_ids = kf.rois.get_roi_ids()
+            if roi_ids:
+                roi_id = roi_ids[0]
             else:
                 # Create default ROI (full image bounds)
-                new_roi = kf.kymanalysis.add_roi()  # Uses default full image bounds
-                roi_id = new_roi.roi_id
+                new_roi = kf.rois.create_roi()  # Uses default full image bounds
+                roi_id = new_roi.id
                 per_file_task.set_progress(0.0, f"{kf.path.name}: Created ROI {roi_id}")
 
             def progress_cb(completed: int, total: int) -> None:
@@ -183,7 +172,7 @@ def run_batch_flow_analysis(
                 )
 
             try:
-                kf.kymanalysis.analyze_roi(
+                kf.get_kym_analysis().analyze_roi(
                     roi_id,
                     window_size,
                     progress_callback=progress_cb,
@@ -191,7 +180,7 @@ def run_batch_flow_analysis(
                     use_multiprocessing=True,
                 )
                 # Auto-save disabled: users should explicitly save via save buttons
-                # kf.kymanalysis.save_analysis()
+                # kf.get_kym_analysis().save_analysis()
             except FlowCancelled:
                 cancelled = True
                 per_file_task.message = "Cancelled"

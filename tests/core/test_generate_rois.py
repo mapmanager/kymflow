@@ -83,7 +83,7 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     logger.info(kym_image)
 
     # Delete any existing ROIs (start fresh)
-    deleted_count = kym_image.kymanalysis.clear_all_rois()
+    deleted_count = kym_image.rois.clear()
     logger.info(f"Deleted {deleted_count} existing ROI(s)")
     
     # Get image dimensions for ROI creation
@@ -100,8 +100,14 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     numLines = kym_image.num_lines  # height (num lines / time dimension)
     
     # ROI 1: Full image (default)
-    roi1 = kym_image.kymanalysis.add_roi(note="Full Image")
-    logger.info(f"Created ROI {roi1.roi_id}: Full image (0, 0, {pixelsPerLine}, {numLines})")
+    roi1 = kym_image.rois.create_roi(
+        left=0,
+        top=0,
+        right=pixelsPerLine,
+        bottom=numLines,
+        note="Full Image",
+    )
+    logger.info(f"Created ROI {roi1.id}: Full image (0, 0, {pixelsPerLine}, {numLines})")
     
     # ROI 2: Center region
     # Coordinates will be automatically clamped to image bounds by add_roi()
@@ -109,26 +115,26 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     center_h = numLines // 2
     quarter_w = pixelsPerLine // 4
     quarter_h = numLines // 4
-    roi2 = kym_image.kymanalysis.add_roi(
+    roi2 = kym_image.rois.create_roi(
         left=quarter_w,
         top=quarter_h,
         right=center_w + quarter_w,
         bottom=center_h + quarter_h,
         note="Center Region"
     )
-    logger.info(f"Created ROI {roi2.roi_id}: Center region ({quarter_w}, {quarter_h}, {center_w + quarter_w}, {center_h + quarter_h})")
+    logger.info(f"Created ROI {roi2.id}: Center region ({quarter_w}, {quarter_h}, {center_w + quarter_w}, {center_h + quarter_h})")
     
     # ROI 3: Left region
     # Coordinates will be automatically clamped to image bounds by add_roi()
     third_w = pixelsPerLine // 3
-    roi3 = kym_image.kymanalysis.add_roi(
+    roi3 = kym_image.rois.create_roi(
         left=0,
         top=numLines // 4,
         right=third_w,
         bottom=numLines // 4,
         note="Left Region"
     )
-    logger.info(f"Created ROI {roi3.roi_id}: Left region (0, {numLines // 4}, {third_w}, {3 * numLines // 4})")
+    logger.info(f"Created ROI {roi3.id}: Left region (0, {numLines // 4}, {third_w}, {3 * numLines // 4})")
     
     # Run analysis on each ROI
     window_size = 16
@@ -137,43 +143,43 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     logger.info("="*60)
     
     # Analyze ROI 1
-    logger.info(f"\nAnalyzing ROI {roi1.roi_id}...")
-    kym_image.kymanalysis.analyze_roi(
-        roi1.roi_id,
+    logger.info(f"\nAnalyzing ROI {roi1.id}...")
+    kym_image.get_kym_analysis().analyze_roi(
+        roi1.id,
         window_size,
-        progress_callback=create_progress_callback(roi1.roi_id, "Full Image"),
+        progress_callback=create_progress_callback(roi1.id, "Full Image"),
         use_multiprocessing=True,
     )
-    logger.info(f"✓ ROI {roi1.roi_id} analysis complete")
+    logger.info(f"✓ ROI {roi1.id} analysis complete")
     
     # Analyze ROI 2
-    logger.info(f"\nAnalyzing ROI {roi2.roi_id}...")
-    kym_image.kymanalysis.analyze_roi(
-        roi2.roi_id,
+    logger.info(f"\nAnalyzing ROI {roi2.id}...")
+    kym_image.get_kym_analysis().analyze_roi(
+        roi2.id,
         window_size,
-        progress_callback=create_progress_callback(roi2.roi_id, "Center Region"),
+        progress_callback=create_progress_callback(roi2.id, "Center Region"),
         use_multiprocessing=True,
     )
-    logger.info(f"✓ ROI {roi2.roi_id} analysis complete")
+    logger.info(f"✓ ROI {roi2.id} analysis complete")
     
     # Analyze ROI 3
-    logger.info(f"\nAnalyzing ROI {roi3.roi_id}...")
-    kym_image.kymanalysis.analyze_roi(
-        roi3.roi_id,
+    logger.info(f"\nAnalyzing ROI {roi3.id}...")
+    kym_image.get_kym_analysis().analyze_roi(
+        roi3.id,
         window_size,
-        progress_callback=create_progress_callback(roi3.roi_id, "Left Region"),
+        progress_callback=create_progress_callback(roi3.id, "Left Region"),
         use_multiprocessing=True,
     )
-    logger.info(f"✓ ROI {roi3.roi_id} analysis complete")
+    logger.info(f"✓ ROI {roi3.id} analysis complete")
     
     # Save analysis
     logger.info("="*60)
     logger.info("Saving analysis...")
     logger.info("="*60)
     
-    success = kym_image.kymanalysis.save_analysis()
+    success = kym_image.get_kym_analysis().save_analysis()
     if success:
-        csv_path, json_path = kym_image.kymanalysis._get_save_paths()
+        csv_path, json_path = kym_image.get_kym_analysis()._get_save_paths()
         logger.info(f"✓ Analysis saved to:")
         logger.info(f"  CSV: {csv_path}")
         logger.info(f"  JSON: {json_path}")
