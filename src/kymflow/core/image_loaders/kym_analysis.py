@@ -177,8 +177,8 @@ class KymAnalysis:
         if primary_path is None:
             raise ValueError("No file path available for save paths")
         base_name = primary_path.stem
-        csv_path = analysis_folder / f"{base_name}.csv"
-        json_path = analysis_folder / f"{base_name}.json"
+        csv_path = analysis_folder / f"{base_name}_kymanalysis.csv"
+        json_path = analysis_folder / f"{base_name}_kymanalysis.json"
         return csv_path, json_path
     
     def analyze_roi(
