@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING, Any, Iterable
 
 import numpy as np
 
+from kymflow.core.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     # KymImage is used for type hints only - may not exist in all environments
     try:
@@ -124,14 +128,12 @@ class RoiSet:
         self._rois: dict[int, ROI] = {}
         self._next_id: int = 1
     
-    def _get_bounds(self, channel: int) -> tuple[int, int, int]:
+    def _get_bounds(self) -> tuple[int, int, int]:
         """Get image bounds (width, height, num_slices) for validation.
         
-        Queries bounds from AcqImage header. Bounds are never stored in RoiSet.
+        Queries bounds from AcqImage header. All channels share the same shape.
+        Bounds are never stored in RoiSet.
         
-        Args:
-            channel: Channel number (for validation, all channels share same shape).
-            
         Returns:
             Tuple of (img_w, img_h, num_slices).
             
@@ -216,29 +218,19 @@ class RoiSet:
         Raises:
             ValueError: If channel doesn't exist or z coordinate is invalid.
         """
-        from kymflow.core.utils.logging import get_logger
-        logger = get_logger(__name__)
-        
         # Validate channel exists
         self._validate_channel(channel)
         
         # Get bounds for validation
-        img_w, img_h, num_slices = self._get_bounds(channel)
+        img_w, img_h, num_slices = self._get_bounds()
         
-        # Validate and clamp z coordinate
-        if num_slices == 1:
-            # 2D image: z must be 0
-            if z != 0:
-                logger.warning(f"z coordinate {z} invalid for 2D image, clamping to 0")
-                z = 0
-        else:
-            # 3D image: z must be in [0, num_slices-1]
-            if z < 0:
-                logger.warning(f"z coordinate {z} is negative, clamping to 0")
-                z = 0
-            elif z >= num_slices:
-                logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
-                z = num_slices - 1
+        # Clamp z to valid range [0, num_slices-1]
+        if z < 0:
+            logger.warning(f"z coordinate {z} is negative, clamping to 0")
+            z = 0
+        elif z >= num_slices:
+            logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
+            z = num_slices - 1
         
         # Clamp coordinates to image bounds
         left, top, right, bottom = clamp_coordinates_to_size(
@@ -291,9 +283,6 @@ class RoiSet:
         Raises:
             ValueError: If ROI not found, channel doesn't exist, or z coordinate is invalid.
         """
-        from kymflow.core.utils.logging import get_logger
-        logger = get_logger(__name__)
-        
         if roi_id not in self._rois:
             raise ValueError(f"ROI {roi_id} not found")
         
@@ -307,25 +296,18 @@ class RoiSet:
             self._validate_channel(channel)
             roi.channel = channel
         
-        # Get bounds for validation (use current or new channel)
-        current_channel = channel if channel is not None else roi.channel
-        img_w, img_h, num_slices = self._get_bounds(current_channel)
+        # Get bounds for validation
+        img_w, img_h, num_slices = self._get_bounds()
         
         # Validate and clamp z coordinate if provided
         if z is not None:
-            if num_slices == 1:
-                # 2D image: z must be 0
-                if z != 0:
-                    logger.warning(f"z coordinate {z} invalid for 2D image, clamping to 0")
-                    z = 0
-            else:
-                # 3D image: z must be in [0, num_slices-1]
-                if z < 0:
-                    logger.warning(f"z coordinate {z} is negative, clamping to 0")
-                    z = 0
-                elif z >= num_slices:
-                    logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
-                    z = num_slices - 1
+            # Clamp z to valid range [0, num_slices-1]
+            if z < 0:
+                logger.warning(f"z coordinate {z} is negative, clamping to 0")
+                z = 0
+            elif z >= num_slices:
+                logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
+                z = num_slices - 1
             roi.z = z
         
         # Update coordinates if provided
@@ -409,28 +391,20 @@ class RoiSet:
         Returns:
             Number of ROIs that were clamped (modified).
         """
-        from kymflow.core.utils.logging import get_logger
-        logger = get_logger(__name__)
-        
         clamped_count = 0
         
         for roi in self._rois.values():
             try:
-                img_w, img_h, num_slices = self._get_bounds(roi.channel)
+                img_w, img_h, num_slices = self._get_bounds()
                 
                 # Validate and clamp z
                 original_z = roi.z
-                if num_slices == 1:
-                    if roi.z != 0:
-                        roi.z = 0
-                        clamped_count += 1
-                else:
-                    if roi.z < 0:
-                        roi.z = 0
-                        clamped_count += 1
-                    elif roi.z >= num_slices:
-                        roi.z = num_slices - 1
-                        clamped_count += 1
+                if roi.z < 0:
+                    roi.z = 0
+                    clamped_count += 1
+                elif roi.z >= num_slices:
+                    roi.z = num_slices - 1
+                    clamped_count += 1
                 
                 # Clamp coordinates
                 clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(

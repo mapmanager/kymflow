@@ -275,6 +275,7 @@ class KymAnalysis:
         
         roi_df = pd.DataFrame({
             "roi_id": roi_id,
+            "channel": roi.channel,
             "time": drew_time,
             "velocity": drew_velocity,
             "parentFolder": parent_name,
