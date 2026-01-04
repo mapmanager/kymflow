@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -151,6 +150,7 @@ def plot_image_line_plotly(
     zmin: Optional[int] = None,
     zmax: Optional[int] = None,
     theme: Optional[ThemeMode] = ThemeMode.LIGHT,
+    transpose: bool = False,
 ) -> go.Figure:
     """Create a figure with two subplots: kymograph image (top) and line plot (bottom).
 
@@ -216,19 +216,17 @@ def plot_image_line_plotly(
         fig.update_layout(**layout_dict)
         return fig
 
-    # Get image and calculate physical units for axes
     image = kf.get_img_slice(channel=channel)
-    seconds_per_line = kf.seconds_per_line
-    um_per_pixel = kf.um_per_pixel
-    num_lines = kf.num_lines
-    pixels_per_line = kf.pixels_per_line
-    image_time = np.arange(num_lines) * seconds_per_line
-    image_space = np.arange(pixels_per_line) * um_per_pixel
 
     # Early return if image is missing or invalid
-    if image is None or len(image_time) == 0:
+    if image is None:
         fig.update_layout(**layout_dict)
         return fig
+
+    # physical units for axes
+    dim0_arange = kf.get_dim_arange(0)  # First dimension (rows)
+    dim1_arange = kf.get_dim_arange(1)  # Second dimension (columns)
+
 
     # logger.info(f'image shape: {image.shape}')
     # logger.info(f'num_lines: {num_lines}')
@@ -239,7 +237,7 @@ def plot_image_line_plotly(
     # Get analysis data for line plot (for specified ROI)
     kym_analysis = kf.get_kym_analysis()
     if kym_analysis.has_analysis(selected_roi_id):
-        analysis_time_values = kym_analysis.get_analysis_value(selected_roi_id, "time", remove_outliers, median_filter)
+        analysis_time_values = kym_analysis.get_analysis_value(selected_roi_id, "time")
         y_values = kym_analysis.get_analysis_value(selected_roi_id, yStat, remove_outliers, median_filter)
     else:
         analysis_time_values = None
@@ -253,10 +251,9 @@ def plot_image_line_plotly(
     colorscale_value = get_colorscale(colorscale)
 
     heatmap_kwargs = {
-        "z": image.T,  # kym images are [time, space], transpose to plot x-axis time, y-axis space
-        # "z": image,
-        "x": image_time,
-        "y": image_space,
+        "z": image.transpose() if transpose else image,
+        "x": dim0_arange,
+        "y": dim1_arange,
         "colorscale": colorscale_value,
         "showscale": False,
         **({"zmin": zmin} if zmin is not None else {}),
@@ -303,6 +300,7 @@ def plot_image_line_plotly(
         fig,
         kf,
         selected_roi_id,
+        transpose,
         row=1,
         col=1,
     )
@@ -368,6 +366,7 @@ def _add_roi_overlay(
     fig: go.Figure,
     kf: KymImage,
     selected_roi_id: Optional[int],
+    transpose: bool,
     row: int = 1,
     col: int = 1,
 ) -> None:
@@ -377,6 +376,7 @@ def _add_roi_overlay(
         fig: Plotly figure to add shapes to.
         kf: KymImage instance to get ROIs from.
         selected_roi_id: ID of the selected ROI (will be highlighted in yellow).
+        transpose: If True, swap x/y coordinates to match transposed image.
         row: Subplot row number (default: 1 for top subplot).
         col: Subplot column number (default: 1).
     """
@@ -393,21 +393,21 @@ def _add_roi_overlay(
         
         # Get ROI coordinates in physical units
         # Returns (left_um, top_s, right_um, bottom_s)
+        # left/right = dim1 (space), top/bottom = dim0 (time)
         left_um, top_s, right_um, bottom_s = kf.get_roi_physical_coords(roi.id)
         
-        # Convert to time-space coordinates for heatmap
-        # In the heatmap: z=image.T where image.shape = (num_lines, pixels_per_line)
-        # After transpose: (pixels_per_line, num_lines) = (space, time)
-        # X-axis (horizontal) = time dimension (seconds)
-        # Y-axis (vertical) = space dimension (micrometers)
-        
-        # X coordinates: time dimension (ensure min/max ordering)
-        x0 = min(top_s, bottom_s)
-        x1 = max(top_s, bottom_s)
-        
-        # Y coordinates: space dimension (ensure min/max ordering)
-        y0 = min(left_um, right_um)
-        y1 = max(left_um, right_um)
+        if transpose:
+            # When transposed: x-axis = dim1 (space), y-axis = dim0 (time)
+            x0 = min(left_um, right_um)
+            x1 = max(left_um, right_um)
+            y0 = min(top_s, bottom_s)
+            y1 = max(top_s, bottom_s)
+        else:
+            # When not transposed: x-axis = dim0 (time), y-axis = dim1 (space)
+            x0 = min(top_s, bottom_s)
+            x1 = max(top_s, bottom_s)
+            y0 = min(left_um, right_um)
+            y1 = max(left_um, right_um)
         
         logger.info(f'appending: x0:{x0}, x1:{x1}, y0:{y0}, y1:{y1}')
         # logger.info(f'  row:{row}, col:{col}')

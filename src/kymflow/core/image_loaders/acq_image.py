@@ -375,6 +375,26 @@ class AcqImage:
             self._roi_set = RoiSet(self)  # Pass self as acq_image reference
         return self._roi_set
     
+    def get_dim_arange(self, dim: int) -> np.ndarray:
+        """Get arange array for a specific dimension in physical units.
+        
+        Args:
+            dim: Dimension index (0 for first dimension, 1 for second dimension).
+        
+        Returns:
+            Array of physical unit values for the specified dimension.
+            For dim=0: np.arange(shape[0]) * voxels[0]
+            For dim=1: np.arange(shape[1]) * voxels[1]
+        """
+        shape = self.img_shape
+        if shape is None or dim >= len(shape):
+            raise ValueError(f"Cannot get arange for dimension {dim}: shape is {shape}")
+        
+        if self._header.voxels is None or dim >= len(self._header.voxels):
+            raise ValueError(f"Cannot get arange for dimension {dim}: voxels is {self._header.voxels}")
+        
+        return np.arange(shape[dim]) * self._header.voxels[dim]
+    
     def get_roi_physical_coords(self, roi_id: int) -> tuple[float, float, float, float]:
         """Get ROI coordinates in physical units.
         

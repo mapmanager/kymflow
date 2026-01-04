@@ -62,6 +62,7 @@ def run(path: str):
         median_filter=5,
         colorscale="Gray",
         selected_roi_id=one_roi_id,
+        transpose=True,
     )
 
     # fig.show(config={"scrollZoom": True})
