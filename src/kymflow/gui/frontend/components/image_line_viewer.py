@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from nicegui import ui
 
 import numpy as np
+from typing import Optional
 
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.plotting import (
@@ -94,7 +95,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
             # No ROI selected - show empty plot
             fig = plot_image_line_plotly(
                 kf=kf,
-                roi_id=0,  # Dummy value, will result in empty plot
+                # roi_id=0,  # Dummy value, will result in empty plot
                 y="velocity",
                 remove_outliers=remove_outliers_cb.value,
                 median_filter=median_filter_size,
@@ -107,7 +108,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         else:
             fig = plot_image_line_plotly(
                 kf=kf,
-                roi_id=roi_id,
+                # roi_id=roi_id,
                 y="velocity",
                 remove_outliers=remove_outliers_cb.value,
                 median_filter=median_filter_size,

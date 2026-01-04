@@ -4,9 +4,9 @@
 from pathlib import Path
 from typing import Tuple, Any
 import numpy as np
+import json
 
-from kymflow.core.image_loaders.acq_image_header import AcqImgHeader
-from kymflow.core.image_loaders.metadata import ExperimentMetadata
+from kymflow.core.image_loaders.metadata import ExperimentMetadata, AcqImgHeader
 from kymflow.core.utils.logging import get_logger
 from typing import TYPE_CHECKING
 
@@ -360,6 +360,8 @@ class AcqImage:
         for key, value in fields.items():
             if hasattr(self._experiment_metadata, key):
                 setattr(self._experiment_metadata, key, value)
+            else:
+                logger.warning(f"Unknown field '{key}' in experiment metadata")
     
     @property
     def rois(self) -> "RoiSet":
@@ -372,6 +374,43 @@ class AcqImage:
             from kymflow.core.image_loaders.roi import RoiSet
             self._roi_set = RoiSet(self)  # Pass self as acq_image reference
         return self._roi_set
+    
+    def get_roi_physical_coords(self, roi_id: int) -> tuple[float, float, float, float]:
+        """Get ROI coordinates in physical units.
+        
+        Converts ROI pixel coordinates to physical units using header.voxels.
+        For 2D images: top/bottom use voxels[0], left/right use voxels[1].
+        For 3D images: same mapping applies to the 2D slice.
+        
+        Args:
+            roi_id: ROI identifier.
+        
+        Returns:
+            Tuple of (left, top, right, bottom) in physical units.
+            Units depend on header.voxels_units (e.g., ['s', 'um'] for kymographs).
+        
+        Raises:
+            ValueError: If ROI not found, or header.voxels is None/incomplete.
+        """
+        roi = self.rois.get(roi_id)
+        if roi is None:
+            raise ValueError(f"ROI {roi_id} not found")
+        
+        if self._header.voxels is None:
+            raise ValueError("header.voxels is None - cannot convert to physical units")
+        
+        if len(self._header.voxels) < 2:
+            raise ValueError(f"header.voxels has {len(self._header.voxels)} elements, need at least 2 for 2D coordinates")
+        
+        # Convert coordinates:
+        # top/bottom (rows, first dimension) -> voxels[0]
+        # left/right (columns, second dimension) -> voxels[1]
+        left_physical = roi.left * self._header.voxels[1]
+        top_physical = roi.top * self._header.voxels[0]
+        right_physical = roi.right * self._header.voxels[1]
+        bottom_physical = roi.bottom * self._header.voxels[0]
+        
+        return (left_physical, top_physical, right_physical, bottom_physical)
     
     def _get_metadata_path(self) -> Path | None:
         """Get metadata file path from representative image path.
@@ -401,9 +440,7 @@ class AcqImage:
         if metadata_path is None:
             logger.warning("No path available for saving metadata")
             return False
-        
-        import json
-        
+                
         # Prepare header dict
         header_dict = self._header.to_dict()
         
@@ -452,9 +489,7 @@ class AcqImage:
         if not metadata_path.exists():
             logger.info(f"Metadata file does not exist: {metadata_path}")
             return False
-        
-        import json
-        
+                
         try:
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
@@ -479,7 +514,7 @@ class AcqImage:
                 clamped_count = 0
                 for roi in self._roi_set:
                     try:
-                        img_w, img_h, num_slices = self._roi_set._get_bounds(roi.channel)
+                        img_w, img_h, num_slices = self._roi_set._get_bounds()
                         
                         # Store original values
                         original_left = roi.left
@@ -488,15 +523,13 @@ class AcqImage:
                         original_bottom = roi.bottom
                         original_z = roi.z
                         
-                        # Validate and clamp z
-                        if num_slices == 1:
-                            if roi.z != 0:
-                                roi.z = 0
-                        else:
-                            if roi.z < 0:
-                                roi.z = 0
-                            elif roi.z >= num_slices:
-                                roi.z = num_slices - 1
+                        # Clamp z to valid range [0, num_slices-1]
+                        if roi.z < 0:
+                            logger.warning(f"ROI {roi.id} z coordinate {roi.z} is negative, clamping to 0")
+                            roi.z = 0
+                        elif roi.z >= num_slices:
+                            logger.warning(f"ROI {roi.id} z coordinate {roi.z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
+                            roi.z = num_slices - 1
                         
                         # Clamp coordinates
                         from kymflow.core.image_loaders.roi import clamp_coordinates_to_size

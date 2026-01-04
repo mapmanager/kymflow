@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from kymflow.core.image_loaders.acq_image_header import AcqImgHeader
+from kymflow.core.image_loaders.metadata import AcqImgHeader
 
 
 def test_acq_img_header_default_initialization() -> None:

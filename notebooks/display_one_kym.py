@@ -56,11 +56,12 @@ def run(path: str):
     print("\n2. Creating initial figure with default settings (colorscale='Gray')...")
     fig = plot_image_line_plotly(
         kymImage,
-        roi_id=one_roi_id,
-        y="velocity",
+        # roi_id=one_roi_id,
+        yStat="velocity",
         remove_outliers=True,
         median_filter=5,
         colorscale="Gray",
+        selected_roi_id=one_roi_id,
     )
 
     # fig.show(config={"scrollZoom": True})

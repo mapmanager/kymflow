@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kymflow.core.image_loaders.read_olympus_header import _readOlympusHeader
+from kymflow.core.image_loaders.olympus_header.read_olympus_header import _readOlympusHeader
 
 from kymflow.core.utils.logging import get_logger, setup_logging
 

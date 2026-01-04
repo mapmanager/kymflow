@@ -7,8 +7,8 @@ import numpy as np
 import tifffile
 
 from kymflow.core.image_loaders.acq_image import AcqImage
-from kymflow.core.image_loaders.acq_image_header import AcqImgHeader
-from kymflow.core.image_loaders.read_olympus_header import _readOlympusHeader  # OlympusHeader
+from kymflow.core.image_loaders.metadata import AcqImgHeader
+from kymflow.core.image_loaders.olympus_header.read_olympus_header import _readOlympusHeader  # OlympusHeader
 
 from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
@@ -37,6 +37,7 @@ class KymImage(AcqImage):
             path_obj = Path(path)
             _olympusDict = _readOlympusHeader(path_obj)
             if _olympusDict is not None:
+
                 logger.info('>>> _olympusDict:')
                 from pprint import pprint
                 pprint(_olympusDict)

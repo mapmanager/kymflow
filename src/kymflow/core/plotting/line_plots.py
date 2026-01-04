@@ -8,7 +8,6 @@ from plotly.subplots import make_subplots
 
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.roi import ROI
 
 from kymflow.core.plotting.colorscales import get_colorscale
 from kymflow.core.plotting.theme import get_theme_colors, get_theme_template
@@ -33,7 +32,7 @@ def line_plot_plotly(
     median_filter: int = 0,
     theme: Optional[ThemeMode] = None,
 ) -> go.Figure:
-    """Create a line plot from KymFile analysis data for a specific ROI.
+    """Create a line plot from KymImage analysis data for a specific ROI.
 
     Args:
         kf: KymFile instance, or None for empty plot
@@ -57,6 +56,7 @@ def line_plot_plotly(
 
     template = get_theme_template(theme)
     bg_color, fg_color = get_theme_colors(theme)
+    font_dict = {"color": fg_color}
 
     # Handle None KymFile
     if kf is None:
@@ -91,7 +91,7 @@ def line_plot_plotly(
             y=0.5,
             xref="paper",
             yref="paper",
-            font=dict(color=fg_color),
+            font=font_dict,
         )
         fig.update_layout(
             template=template,
@@ -123,7 +123,7 @@ def line_plot_plotly(
         template=template,
         paper_bgcolor=bg_color,
         plot_bgcolor=bg_color,
-        font=dict(color=fg_color),
+        font=font_dict,
         xaxis=dict(
             title=x_label,
             color=fg_color,
@@ -142,15 +142,15 @@ def line_plot_plotly(
 
 def plot_image_line_plotly(
     kf: Optional[KymImage],
-    roi_id: int,
-    y: str = "velocity",
+    channel: int = 1,
+    yStat: str = "velocity",
     remove_outliers: bool = False,
     median_filter: int = 0,
-    theme: Optional[ThemeMode] = None,
     colorscale: str = "Gray",
+    selected_roi_id: Optional[int] = None,
     zmin: Optional[int] = None,
     zmax: Optional[int] = None,
-    selected_roi_id: Optional[int] = None,
+    theme: Optional[ThemeMode] = ThemeMode.LIGHT,
 ) -> go.Figure:
     """Create a figure with two subplots: kymograph image (top) and line plot (bottom).
 
@@ -159,8 +159,7 @@ def plot_image_line_plotly(
     are overlaid on the image subplot.
 
     Args:
-        kf: KymFile instance, or None for empty plot
-        roi_id: Identifier of the ROI to plot in the line plot (required).
+        kf: KymImage instance, or None for empty plot
         y: Column name for y-axis data in line plot (default: "velocity")
         remove_outliers: If True, remove outliers using 2*std threshold
         median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
@@ -179,12 +178,16 @@ def plot_image_line_plotly(
         ValueError: If median_filter > 0 and not odd
     """
     # Default to LIGHT theme
-    if theme is None:
-        theme = ThemeMode.LIGHT
+    # if theme is None:
+    #     theme = ThemeMode.LIGHT
 
     template = get_theme_template(theme)
     bg_color, fg_color = get_theme_colors(theme)
+    font_dict = {"color": fg_color}
     grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
+    
+    # Configurable plot height
+    plot_height = 600  # 800
 
     # Create subplots with 2 rows, shared x-axis
     fig = make_subplots(
@@ -192,139 +195,128 @@ def plot_image_line_plotly(
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.025,
-        row_heights=[0.5, 0.5],  # Image gets 60%, line plot gets 40%
+        row_heights=[0.6, 0.4],  # Image gets 60%, line plot gets 40%
         # subplot_titles=("Kymograph", "Velocity vs Time"),
     )
 
+    # Common layout parameters
+    layout_dict = {
+        "template": template,
+        "paper_bgcolor": bg_color,
+        "plot_bgcolor": bg_color,
+        "font": font_dict,
+        "height": plot_height,
+        "showlegend": False,
+        "margin": dict(l=10, r=10, t=10, b=10),
+        "uirevision": "kymflow-plot",
+    }
+
     # Handle None KymFile
     if kf is None:
-        fig.update_layout(
-            template=template,
-            paper_bgcolor=bg_color,
-            plot_bgcolor=bg_color,
-            font=dict(color=fg_color),
-            uirevision="kymflow-plot",  # Preserve zoom/pan state
-        )
+        fig.update_layout(**layout_dict)
         return fig
 
-    # Get image and calculate time for image x-axis
-    image = kf.get_img_slice(channel=1)
+    # Get image and calculate physical units for axes
+    image = kf.get_img_slice(channel=channel)
     seconds_per_line = kf.seconds_per_line
-    
-    # Calculate image time using KymFile API
+    um_per_pixel = kf.um_per_pixel
     num_lines = kf.num_lines
-    image_time = None
-    if image is not None and num_lines is not None:
-        # Calculate time for each line: time[i] = i * seconds_per_line
-        image_time = np.arange(num_lines) * seconds_per_line
+    pixels_per_line = kf.pixels_per_line
+    image_time = np.arange(num_lines) * seconds_per_line
+    image_space = np.arange(pixels_per_line) * um_per_pixel
 
-    logger.info(f'image shape: {image.shape}')
-    logger.info(f'num_lines: {num_lines}')
-    logger.info(f'image time: {image_time}')
-    logger.info(f'seconds_per_line: {seconds_per_line}')
-    logger.info(f'num_lines: {num_lines}')
+    # Early return if image is missing or invalid
+    if image is None or len(image_time) == 0:
+        fig.update_layout(**layout_dict)
+        return fig
+
+    # logger.info(f'image shape: {image.shape}')
+    # logger.info(f'num_lines: {num_lines}')
+    # logger.info(f'image time: {image_time}')
+    # logger.info(f'seconds_per_line: {seconds_per_line}')
+    # logger.info(f'num_lines: {num_lines}')
     
-    # Get analysis time values for line plot (for specified ROI)
-    if kf is None:
-        analysis_time_values = None
-        all_rois = []
+    # Get analysis data for line plot (for specified ROI)
+    kym_analysis = kf.get_kym_analysis()
+    if kym_analysis.has_analysis(selected_roi_id):
+        analysis_time_values = kym_analysis.get_analysis_value(selected_roi_id, "time", remove_outliers, median_filter)
+        y_values = kym_analysis.get_analysis_value(selected_roi_id, yStat, remove_outliers, median_filter)
     else:
-        kym_analysis = kf.get_kym_analysis()
-        if not kym_analysis.has_analysis(roi_id):
-            analysis_time_values = None
-        else:
-            analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time", remove_outliers, median_filter)
-        all_rois = kf.rois.as_list()
+        analysis_time_values = None
+        y_values = None
 
     # Plot image in top subplot (row=1)
-    if image is not None and image_time is not None and len(image_time) > 0:
-        # Image shape: (num_lines, pixels_per_line)
-        # After transpose in heatmap z=image.T: (pixels_per_line, num_lines)
-        # X-axis corresponds to num_lines (time dimension), so we use image_time
-        # Get colorscale (may be string or custom list)
-        colorscale_value = get_colorscale(colorscale)
+    # Image shape: (num_lines, pixels_per_line)
+    # After transpose in heatmap z=image.T: (pixels_per_line, num_lines)
+    # X-axis corresponds to num_lines (time dimension), so we use image_time
+    # Get colorscale (may be string or custom list)
+    colorscale_value = get_colorscale(colorscale)
 
-        heatmap_kwargs = {
-            "z": image.T,  # kym images are [time, space], transpose to plot x-axis time, y-axis space
-            # "z": image,
-            "x": image_time,
-            "colorscale": colorscale_value,
-            "showscale": False,
-        }
-        if zmin is not None:
-            heatmap_kwargs["zmin"] = zmin
-        if zmax is not None:
-            heatmap_kwargs["zmax"] = zmax
+    heatmap_kwargs = {
+        "z": image.T,  # kym images are [time, space], transpose to plot x-axis time, y-axis space
+        # "z": image,
+        "x": image_time,
+        "y": image_space,
+        "colorscale": colorscale_value,
+        "showscale": False,
+        **({"zmin": zmin} if zmin is not None else {}),
+        **({"zmax": zmax} if zmax is not None else {}),
+    }
 
-        fig.add_trace(
-            go.Heatmap(**heatmap_kwargs),
-            row=1,
-            col=1,
-        )
+    fig.add_trace(
+        go.Heatmap(**heatmap_kwargs),
+        row=1,
+        col=1,
+    )
 
-        # Configure top subplot axes
-        fig.update_xaxes(
-            # title_text="Time (s)",
-            row=1,
-            col=1,
-            showgrid=True,
-            showticklabels=True,
-            gridcolor=grid_color,
-            color=fg_color,
-        )
-        fig.update_yaxes(
-            title_text="Position",
-            row=1,
-            col=1,
-            showticklabels=True,
-            showgrid=False,
-            color=fg_color,
-        )
+    # Configure top subplot axes using header labels
+    x_label = kf.header.labels[0]  # Time dimension
+    y_label = kf.header.labels[1]  # Space dimension
+    fig.update_xaxes(
+        title_text=x_label,
+        row=1,
+        col=1,
+        showgrid=True,
+        showticklabels=True,
+        gridcolor=grid_color,
+        color=fg_color,
+    )
+    fig.update_yaxes(
+        title_text=y_label,
+        row=1,
+        col=1,
+        showticklabels=True,
+        showgrid=False,
+        color=fg_color,
+    )
 
-        # trying to independently zoom x and y axis
-        fig.update_layout(
-            dragmode="zoom",
-            modebar_add=["zoomInX", "zoomOutX", "zoomInY", "zoomOutY"],
-        )
-        fig.update_xaxes(constrain="range")
-        fig.update_yaxes(constrain="range")
-        
-        # Add ROI rectangles overlay to image subplot
-        if all_rois:
-            _add_roi_overlay(
-                fig,
-                all_rois,
-                selected_roi_id,
-                image_time,
-                seconds_per_line,
-                row=1,
-                col=1,
-            )
+    # Configure zoom behavior for independent x and y axis zooming
+    fig.update_layout(
+        dragmode="zoom",
+        modebar_add=["zoomInX", "zoomOutX", "zoomInY", "zoomOutY"],
+    )
+    fig.update_xaxes(constrain="range")
+    fig.update_yaxes(constrain="range")
+    
+    # Add ROI rectangles overlay to image subplot
+    _add_roi_overlay(
+        fig,
+        kf,
+        selected_roi_id,
+        row=1,
+        col=1,
+    )
 
-    # Get line plot data (already filtered by get_analysis_value)
-    if kf is None:
-        y_values = None
-    else:
-        kym_analysis = kf.get_kym_analysis()
-        if not kym_analysis.has_analysis(roi_id):
-            y_values = None
-        else:
-            y_values = kym_analysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
-
-    # Plot line in bottom subplot (row=2)
-    # Use analysis time values (always use 'time' column from analysis)
+    # Plot line plot if analysis data is available
     if (
         analysis_time_values is not None
         and y_values is not None
         and len(analysis_time_values) > 0
     ):
-        # Values are already filtered by get_analysis_value
-        filtered_y = y_values
-
         fig.add_trace(
             go.Scatter(
                 x=analysis_time_values,
-                y=filtered_y,
+                y=y_values,
                 mode="lines",
             ),
             row=2,
@@ -332,7 +324,8 @@ def plot_image_line_plotly(
         )
 
         # Determine y-axis label
-        y_label = "Velocity (mm/s)" if y == "velocity" else y.replace("_", " ").title()
+        # y_label = "Velocity (mm/s)" if y == "velocity" else y.replace("_", " ").title()
+        # y_label = yStat
 
         # Configure bottom subplot axes
         fig.update_xaxes(
@@ -344,7 +337,7 @@ def plot_image_line_plotly(
             color=fg_color,
         )
         fig.update_yaxes(
-            title_text=y_label,
+            title_text=yStat,
             row=2,
             col=1,
             showgrid=True,
@@ -360,32 +353,21 @@ def plot_image_line_plotly(
             y=0.5,
             xref="x2",
             yref="y2",
-            font=dict(color=fg_color),
+            font=font_dict,
             row=2,
             col=1,
         )
 
-    # Update overall layout with tight margins
-    fig.update_layout(
-        template=template,
-        paper_bgcolor=bg_color,
-        plot_bgcolor=bg_color,
-        font=dict(color=fg_color),
-        height=800,  # Taller figure for subplots
-        showlegend=False,
-        margin=dict(l=10, r=10, t=10, b=10),  # Tight margins similar to single plot
-        uirevision="kymflow-plot",  # Preserve zoom/pan state when updating traces
-    )
+    # Update overall layout (merged from early return case)
+    fig.update_layout(**layout_dict)
 
     return fig
 
 
 def _add_roi_overlay(
     fig: go.Figure,
-    rois: list[ROI],
+    kf: KymImage,
     selected_roi_id: Optional[int],
-    image_time: Optional[np.ndarray],
-    seconds_per_line: float,
     row: int = 1,
     col: int = 1,
 ) -> None:
@@ -393,38 +375,39 @@ def _add_roi_overlay(
     
     Args:
         fig: Plotly figure to add shapes to.
-        rois: List of ROI instances to draw.
+        kf: KymImage instance to get ROIs from.
         selected_roi_id: ID of the selected ROI (will be highlighted in yellow).
-        image_time: Array of time values for x-axis mapping.
-        seconds_per_line: Time per line for converting line indices to time.
         row: Subplot row number (default: 1 for top subplot).
         col: Subplot column number (default: 1).
     """
-    if image_time is None or len(image_time) == 0:
+    all_rois = kf.rois.as_list()
+    if not all_rois:
         return
     
     shapes = []
     annotations = []
     
-    for roi in rois:
-        is_selected = (selected_roi_id is not None and roi.id == selected_roi_id)
+    for roi in all_rois:
+        is_selected = roi.id == selected_roi_id
         stroke_color = ROI_COLOR_SELECTED if is_selected else ROI_COLOR_DEFAULT
         
-        # Convert ROI coordinates to time-space coordinates for heatmap
+        # Get ROI coordinates in physical units
+        # Returns (left_um, top_s, right_um, bottom_s)
+        left_um, top_s, right_um, bottom_s = kf.get_roi_physical_coords(roi.id)
+        
+        # Convert to time-space coordinates for heatmap
         # In the heatmap: z=image.T where image.shape = (num_lines, pixels_per_line)
         # After transpose: (pixels_per_line, num_lines) = (space, time)
-        # X-axis (horizontal) = time dimension = line indices = ROI.top/bottom
-        # Y-axis (vertical) = space dimension = pixel positions = ROI.left/right
+        # X-axis (horizontal) = time dimension (seconds)
+        # Y-axis (vertical) = space dimension (micrometers)
         
-        # X coordinates: map line indices to time values
-        # Ensure min/max ordering for rectangle
-        x0 = min(roi.top, roi.bottom) * seconds_per_line
-        x1 = max(roi.top, roi.bottom) * seconds_per_line
+        # X coordinates: time dimension (ensure min/max ordering)
+        x0 = min(top_s, bottom_s)
+        x1 = max(top_s, bottom_s)
         
-        # Y coordinates: left and right are pixel positions (space dimension)
-        # Ensure min/max ordering for rectangle
-        y0 = min(roi.left, roi.right)
-        y1 = max(roi.left, roi.right)
+        # Y coordinates: space dimension (ensure min/max ordering)
+        y0 = min(left_um, right_um)
+        y1 = max(left_um, right_um)
         
         logger.info(f'appending: x0:{x0}, x1:{x1}, y0:{y0}, y1:{y1}')
         # logger.info(f'  row:{row}, col:{col}')

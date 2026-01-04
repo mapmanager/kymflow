@@ -12,9 +12,8 @@ import argparse
 
 from kymflow.core.image_loaders.metadata import (
     _generateDocs,
-    AnalysisParameters,
+    AcqImgHeader,
     ExperimentMetadata,
-    # OlympusHeader,
 )
 
 
@@ -26,7 +25,7 @@ def main() -> None:
     parser.add_argument(
         "--class",
         dest="class_name",
-        choices=["OlympusHeader", "ExperimentMetadata", "AnalysisParameters", "all"],
+        choices=["OlympusHeader", "ExperimentMetadata", "AcqImgHeader", "all"],
         default="all",
         help="Dataclass to generate docs for (default: all)",
     )
@@ -37,13 +36,15 @@ def main() -> None:
     if args.class_name == "all":
         classes_to_generate = [
             ("ExperimentMetadata", ExperimentMetadata),
-            ("AnalysisParameters", AnalysisParameters),
+            ("AcqImgHeader", AcqImgHeader),
+            # ("AnalysisParameters", AnalysisParameters),
             # ("OlympusHeader", OlympusHeader),
         ]
     else:
         class_map = {
             "ExperimentMetadata": ExperimentMetadata,
-            "AnalysisParameters": AnalysisParameters,
+            "AcqImgHeader": AcqImgHeader,
+            # "AnalysisParameters": AnalysisParameters,
             # "OlympusHeader": OlympusHeader,
         }
         classes_to_generate = [(args.class_name, class_map[args.class_name])]
