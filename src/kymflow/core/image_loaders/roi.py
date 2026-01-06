@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import TYPE_CHECKING, Any, Iterable
 
 import numpy as np
@@ -21,16 +21,77 @@ if TYPE_CHECKING:
     from kymflow.core.image_loaders.acq_image import AcqImage
 
 @dataclass
+class RoiBounds:
+    """Axis-aligned rectangular bounds in pixel coordinates.
+    
+    Represents the bounds of an ROI using explicit dimension indices.
+    For a 2D image with shape (H, W):
+    - dim0_start/dim0_stop: start/stop indices in dimension 0 (rows/height)
+    - dim1_start/dim1_stop: start/stop indices in dimension 1 (columns/width)
+    
+    This is the atomic unit for all coordinate operations in the ROI API.
+    """
+    dim0_start: int
+    dim0_stop: int
+    dim1_start: int
+    dim1_stop: int
+
+@dataclass
+class RoiBoundsFloat:
+    """Axis-aligned rectangular bounds in physical units (float coordinates).
+    
+    Similar to RoiBounds but with float values for physical coordinate conversions.
+    """
+    dim0_start: float
+    dim0_stop: float
+    dim1_start: float
+    dim1_stop: float
+
+@dataclass
+class ImageBounds:
+    """Image bounds including 2D dimensions and 3D slice information.
+    
+    Used for full image metadata including 3D structure.
+    For 2D images: num_slices = 1
+    For 3D images: num_slices = number of slices
+    
+    Fields:
+        width: Width of image in pixels (dimension 1, columns)
+        height: Height of image in pixels (dimension 0, rows)
+        num_slices: Number of slices/planes (1 for 2D images)
+    """
+    width: int      # dim1 (columns)
+    height: int     # dim0 (rows)
+    num_slices: int
+
+@dataclass
+class ImageSize:
+    """2D image dimensions for coordinate clamping operations.
+    
+    Used for 2D coordinate clamping (doesn't include 3D slice info).
+    
+    Fields:
+        width: Width of image in pixels (dimension 1, columns)
+        height: Height of image in pixels (dimension 0, rows)
+    """
+    width: int      # dim1 (columns)
+    height: int     # dim0 (rows)
+
+@dataclass
 class ROI:
     """Axis-aligned rectangular ROI in full-image pixel coordinates.
 
     Coordinates are expressed in the coordinate system of the full image
     (not the zoomed view). By convention:
 
-    * left <= right
-    * top  <= bottom
+    * bounds.dim0_start <= bounds.dim0_stop
+    * bounds.dim1_start <= bounds.dim1_stop
 
     These invariants are enforced by `clamp_to_image` (or `clamp_to_bounds`).
+    
+    For a 2D image with shape (H, W):
+    - bounds.dim0_start/dim0_stop: start/stop indices in dimension 0 (rows/height)
+    - bounds.dim1_start/dim1_stop: start/stop indices in dimension 1 (columns/width)
     
     Each ROI is associated with a specific channel and z (plane/slice) coordinate.
     For 2D images, z is always 0. For 3D images, z is in [0, num_slices-1].
@@ -41,10 +102,7 @@ class ROI:
     z: int = 0
     name: str = ""
     note: str = ""
-    left: int = 0
-    top: int = 0
-    right: int = 0
-    bottom: int = 0
+    bounds: RoiBounds = field(default_factory=lambda: RoiBounds(dim0_start=0, dim0_stop=0, dim1_start=0, dim1_stop=0))
     # Increments when ROI geometry (or channel/z) changes. Used to mark analysis as stale.
     revision: int = 0
 
@@ -52,39 +110,38 @@ class ROI:
         """Clamp ROI to be fully inside the given image.
 
         This ensures that:
-        * all coordinates are within [0, img.shape[1]] × [0, img.shape[0]]
-        * left <= right and top <= bottom (by swapping coordinates if needed)
+        * all coordinates are within [0, img.shape[0]] × [0, img.shape[1]]
+        * bounds.dim0_start <= bounds.dim0_stop and bounds.dim1_start <= bounds.dim1_stop (by swapping coordinates if needed)
 
         Args:
             img: 2D numpy array.
         """
-        self.left, self.top, self.right, self.bottom = clamp_coordinates(
-            self.left, self.top, self.right, self.bottom, img
-        )
+        self.bounds = clamp_coordinates(self.bounds, img)
 
-    def clamp_to_bounds(self, img_w: int, img_h: int) -> None:
-        """Clamp ROI to [0, img_w] × [0, img_h] and fix inverted edges.
+    def clamp_to_bounds(self, size: "ImageSize") -> None:
+        """Clamp ROI to [0, size.height] × [0, size.width] and fix inverted edges.
 
         Args:
-            img_w: Width of the image in pixels.
-            img_h: Height of the image in pixels.
+            size: ImageSize with width and height dimensions.
         """
-        self.left, self.top, self.right, self.bottom = clamp_coordinates_to_size(
-            self.left, self.top, self.right, self.bottom, img_w, img_h
-        )
+        self.bounds = clamp_coordinates_to_size(self.bounds, size)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dictionary representation of this ROI."""
-        return asdict(self)
+        result = asdict(self)
+        # Flatten bounds for JSON serialization (convert RoiBounds to dict)
+        bounds_dict = result.pop('bounds')
+        result.update(bounds_dict)
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ROI":
         """Create a ROI from a dictionary produced by to_dict().
 
         Args:
-            data: Dictionary with fields matching the ROI dataclass.
+            data: Dictionary with flattened bounds fields (dim0_start, dim0_stop, etc.).
                 Float coordinates will be converted to int.
-                Missing channel/z will default to 1/0 for backward compatibility.
+                Missing channel/z will default to 1/0.
 
         Returns:
             A new ROI instance initialized from the dictionary.
@@ -92,21 +149,30 @@ class ROI:
         # Work on a copy so we don't mutate the caller's dict.
         data = dict(data)
 
-        # Convert float coordinates to int if present
-        for coord in ['left', 'top', 'right', 'bottom', 'channel', 'z']:
-            if coord in data and isinstance(data[coord], float):
-                data[coord] = int(data[coord])
+        # Extract flattened bounds fields
+        bounds = RoiBounds(
+            dim0_start=int(data.pop('dim0_start', 0)),
+            dim0_stop=int(data.pop('dim0_stop', 0)),
+            dim1_start=int(data.pop('dim1_start', 0)),
+            dim1_stop=int(data.pop('dim1_stop', 0)),
+        )
         
-        # Backward compatibility: default channel=1, z=0 if not present
+        # Convert float channel/z to int if present
+        for field_name in ['channel', 'z']:
+            if field_name in data and isinstance(data[field_name], float):
+                data[field_name] = int(data[field_name])
+        
+        # Default channel=1, z=0 if not present
         if 'channel' not in data:
             data['channel'] = 1
         if 'z' not in data:
             data['z'] = 0
 
-        # Backward compatibility: default revision to 0 if not present
+        # Default revision to 0 if not present
         if 'revision' not in data:
             data['revision'] = 0
         
+        data['bounds'] = bounds
         return cls(**data)
 
 
@@ -128,41 +194,18 @@ class RoiSet:
         self._rois: dict[int, ROI] = {}
         self._next_id: int = 1
     
-    def _get_bounds(self) -> tuple[int, int, int]:
-        """Get image bounds (width, height, num_slices) for validation.
+    def _get_image_bounds(self) -> "ImageBounds":
+        """Get image bounds from AcqImage.
         
-        Queries bounds from AcqImage header. All channels share the same shape.
-        Bounds are never stored in RoiSet.
+        Delegates to AcqImage.get_image_bounds() for consistency.
         
         Returns:
-            Tuple of (img_w, img_h, num_slices).
+            ImageBounds with width, height, and num_slices.
             
         Raises:
-            ValueError: If bounds cannot be determined (shape is None).
+            ValueError: If bounds cannot be determined.
         """
-        shape = self.acq_image.img_shape
-        if shape is None:
-            raise ValueError(
-                "Cannot determine image bounds: header.shape is None. "
-                "Image data must be loaded or header must be populated."
-            )
-        
-        ndim = self.acq_image.img_ndim
-        if ndim is None:
-            raise ValueError(
-                "Cannot determine image bounds: header.ndim is None. "
-                "Image data must be loaded or header must be populated."
-            )
-        
-        if ndim == 2:
-            img_h, img_w = shape
-            num_slices = 1
-        elif ndim == 3:
-            num_slices, img_h, img_w = shape
-        else:
-            raise ValueError(f"Unsupported image ndim: {ndim} (must be 2 or 3)")
-        
-        return (img_w, img_h, num_slices)
+        return self.acq_image.get_image_bounds()
     
     def _validate_channel(self, channel: int) -> None:
         """Validate that channel exists in AcqImage.
@@ -177,21 +220,14 @@ class RoiSet:
         if channel_keys and channel in channel_keys:
             return
         
-        # Also check _file_path_dict for channels that may not have loaded data
-        if hasattr(self.acq_image, '_file_path_dict') and channel in self.acq_image._file_path_dict:
-            return
-        
         raise ValueError(
             f"Channel {channel} does not exist. "
-            f"Available channels: {channel_keys if channel_keys else list(self.acq_image._file_path_dict.keys()) if hasattr(self.acq_image, '_file_path_dict') else 'none'}"
+            f"Available channels: {channel_keys if channel_keys else 'none'}"
         )
 
     def create_roi(
         self,
-        left: int,
-        top: int,
-        right: int,
-        bottom: int,
+        bounds: RoiBounds,
         channel: int = 1,
         z: int = 0,
         name: str = "",
@@ -203,10 +239,7 @@ class RoiSet:
         to current image bounds.
 
         Args:
-            left: Left coordinate in full-image pixels.
-            top: Top coordinate in full-image pixels.
-            right: Right coordinate in full-image pixels.
-            bottom: Bottom coordinate in full-image pixels.
+            bounds: RoiBounds defining the ROI coordinates.
             channel: Channel number (defaults to 1).
             z: Image plane/slice number (defaults to 0). For 2D images, must be 0.
             name: Optional human-readable name.
@@ -222,20 +255,19 @@ class RoiSet:
         self._validate_channel(channel)
         
         # Get bounds for validation
-        img_w, img_h, num_slices = self._get_bounds()
+        image_bounds = self._get_image_bounds()
         
         # Clamp z to valid range [0, num_slices-1]
         if z < 0:
             logger.warning(f"z coordinate {z} is negative, clamping to 0")
             z = 0
-        elif z >= num_slices:
-            logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
-            z = num_slices - 1
+        elif z >= image_bounds.num_slices:
+            logger.warning(f"z coordinate {z} exceeds num_slices {image_bounds.num_slices}, clamping to {image_bounds.num_slices-1}")
+            z = image_bounds.num_slices - 1
         
         # Clamp coordinates to image bounds
-        left, top, right, bottom = clamp_coordinates_to_size(
-            left, top, right, bottom, img_w, img_h
-        )
+        size = ImageSize(width=image_bounds.width, height=image_bounds.height)
+        clamped_bounds = clamp_coordinates_to_size(bounds, size)
         
         roi = ROI(
             id=self._next_id,
@@ -243,10 +275,7 @@ class RoiSet:
             z=z,
             name=name,
             note=note,
-            left=left,
-            top=top,
-            right=right,
-            bottom=bottom,
+            bounds=clamped_bounds,
         )
         self._rois[roi.id] = roi
         self._next_id += 1
@@ -256,10 +285,7 @@ class RoiSet:
         self,
         roi_id: int,
         *,
-        left: int | None = None,
-        top: int | None = None,
-        right: int | None = None,
-        bottom: int | None = None,
+        bounds: RoiBounds | None = None,
         channel: int | None = None,
         z: int | None = None,
         name: str | None = None,
@@ -271,10 +297,7 @@ class RoiSet:
 
         Args:
             roi_id: Identifier of the ROI to edit.
-            left: New left coordinate (optional).
-            top: New top coordinate (optional).
-            right: New right coordinate (optional).
-            bottom: New bottom coordinate (optional).
+            bounds: New RoiBounds (optional). If None, coordinates are unchanged.
             channel: New channel number (optional).
             z: New z (plane) coordinate (optional).
             name: New name (optional).
@@ -287,9 +310,8 @@ class RoiSet:
             raise ValueError(f"ROI {roi_id} not found")
         
         roi = self._rois[roi_id]
-        old_geom = (roi.left, roi.top, roi.right, roi.bottom, roi.channel, roi.z)
-
-        old_geom = (roi.left, roi.top, roi.right, roi.bottom, roi.channel, roi.z)
+        old_bounds = roi.bounds
+        old_geom = (old_bounds.dim0_start, old_bounds.dim0_stop, old_bounds.dim1_start, old_bounds.dim1_stop, roi.channel, roi.z)
         
         # Update channel if provided
         if channel is not None:
@@ -297,7 +319,7 @@ class RoiSet:
             roi.channel = channel
         
         # Get bounds for validation
-        img_w, img_h, num_slices = self._get_bounds()
+        image_bounds = self._get_image_bounds()
         
         # Validate and clamp z coordinate if provided
         if z is not None:
@@ -305,26 +327,17 @@ class RoiSet:
             if z < 0:
                 logger.warning(f"z coordinate {z} is negative, clamping to 0")
                 z = 0
-            elif z >= num_slices:
-                logger.warning(f"z coordinate {z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
-                z = num_slices - 1
+            elif z >= image_bounds.num_slices:
+                logger.warning(f"z coordinate {z} exceeds num_slices {image_bounds.num_slices}, clamping to {image_bounds.num_slices-1}")
+                z = image_bounds.num_slices - 1
             roi.z = z
         
         # Update coordinates if provided
-        new_left = left if left is not None else roi.left
-        new_top = top if top is not None else roi.top
-        new_right = right if right is not None else roi.right
-        new_bottom = bottom if bottom is not None else roi.bottom
-        
-        # Clamp coordinates to image bounds
-        clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
-            new_left, new_top, new_right, new_bottom, img_w, img_h
-        )
-        
-        roi.left = clamped_left
-        roi.top = clamped_top
-        roi.right = clamped_right
-        roi.bottom = clamped_bottom
+        if bounds is not None:
+            # Clamp coordinates to image bounds
+            size = ImageSize(width=image_bounds.width, height=image_bounds.height)
+            clamped_bounds = clamp_coordinates_to_size(bounds, size)
+            roi.bounds = clamped_bounds
         
         # Update name and note if provided
         if name is not None:
@@ -332,7 +345,7 @@ class RoiSet:
         if note is not None:
             roi.note = note
 
-        new_geom = (roi.left, roi.top, roi.right, roi.bottom, roi.channel, roi.z)
+        new_geom = (roi.bounds.dim0_start, roi.bounds.dim0_stop, roi.bounds.dim1_start, roi.bounds.dim1_stop, roi.channel, roi.z)
         if new_geom != old_geom:
             roi.revision += 1
     
@@ -395,29 +408,27 @@ class RoiSet:
         
         for roi in self._rois.values():
             try:
-                img_w, img_h, num_slices = self._get_bounds()
+                image_bounds = self._get_image_bounds()
                 
                 # Validate and clamp z
                 original_z = roi.z
                 if roi.z < 0:
                     roi.z = 0
                     clamped_count += 1
-                elif roi.z >= num_slices:
-                    roi.z = num_slices - 1
+                elif roi.z >= image_bounds.num_slices:
+                    roi.z = image_bounds.num_slices - 1
                     clamped_count += 1
                 
                 # Clamp coordinates
-                clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
-                    roi.left, roi.top, roi.right, roi.bottom, img_w, img_h
-                )
+                size = ImageSize(width=image_bounds.width, height=image_bounds.height)
+                clamped_bounds = clamp_coordinates_to_size(roi.bounds, size)
                 
-                if (roi.left != clamped_left or roi.top != clamped_top or
-                    roi.right != clamped_right or roi.bottom != clamped_bottom or
+                if (roi.bounds.dim0_start != clamped_bounds.dim0_start or
+                    roi.bounds.dim0_stop != clamped_bounds.dim0_stop or
+                    roi.bounds.dim1_start != clamped_bounds.dim1_start or
+                    roi.bounds.dim1_stop != clamped_bounds.dim1_stop or
                     roi.z != original_z):
-                    roi.left = clamped_left
-                    roi.top = clamped_top
-                    roi.right = clamped_right
-                    roi.bottom = clamped_bottom
+                    roi.bounds = clamped_bounds
                     clamped_count += 1
                     
             except ValueError as e:
@@ -465,20 +476,17 @@ class RoiSet:
 
 
 def clamp_coordinates(
-    left: int, top: int, right: int, bottom: int,
+    bounds: RoiBounds,
     img: np.ndarray
-) -> tuple[int, int, int, int]:
+) -> RoiBounds:
     """Clamp coordinates to be within bounds of img.shape (H, W).
     
     Args:
-        left: Left coordinate.
-        top: Top coordinate.
-        right: Right coordinate.
-        bottom: Bottom coordinate.
+        bounds: RoiBounds to clamp.
         img: 2D numpy array (enforces 2D).
     
     Returns:
-        Tuple of (clamped_left, clamped_top, clamped_right, clamped_bottom) as int.
+        Clamped RoiBounds.
     
     Raises:
         ValueError: If img is not 2D.
@@ -491,99 +499,105 @@ def clamp_coordinates(
     def clamp(v: int, lo: int, hi: int) -> int:
         return max(lo, min(hi, v))
     
-    left = clamp(left, 0, width)
-    right = clamp(right, 0, width)
-    top = clamp(top, 0, height)
-    bottom = clamp(bottom, 0, height)
+    dim1_start = clamp(bounds.dim1_start, 0, width)
+    dim1_stop = clamp(bounds.dim1_stop, 0, width)
+    dim0_start = clamp(bounds.dim0_start, 0, height)
+    dim0_stop = clamp(bounds.dim0_stop, 0, height)
     
     # Ensure non-inverted coordinates
-    if left > right:
-        left, right = right, left
-    if top > bottom:
-        top, bottom = bottom, top
+    if dim1_start > dim1_stop:
+        dim1_start, dim1_stop = dim1_stop, dim1_start
+    if dim0_start > dim0_stop:
+        dim0_start, dim0_stop = dim0_stop, dim0_start
     
-    return left, top, right, bottom
+    return RoiBounds(
+        dim0_start=dim0_start,
+        dim0_stop=dim0_stop,
+        dim1_start=dim1_start,
+        dim1_stop=dim1_stop,
+    )
 
 
 def clamp_coordinates_to_size(
-    left: int, top: int, right: int, bottom: int,
-    img_w: int, img_h: int
-) -> tuple[int, int, int, int]:
-    """Clamp coordinates to [0, img_w] × [0, img_h] and fix inverted edges.
+    bounds: RoiBounds,
+    size: ImageSize
+) -> RoiBounds:
+    """Clamp coordinates to [0, size.width] × [0, size.height] and fix inverted edges.
     
     Helper function for cases where we only have width/height metadata
     (e.g., loading from JSON without image data).
     
     Args:
-        left: Left coordinate.
-        top: Top coordinate.
-        right: Right coordinate.
-        bottom: Bottom coordinate.
-        img_w: Width of the image in pixels.
-        img_h: Height of the image in pixels.
+        bounds: RoiBounds to clamp.
+        size: ImageSize with width and height dimensions.
     
     Returns:
-        Tuple of (clamped_left, clamped_top, clamped_right, clamped_bottom) as int.
+        Clamped RoiBounds.
     """
     def clamp(v: int, lo: int, hi: int) -> int:
         return max(lo, min(hi, v))
     
-    left = clamp(left, 0, img_w)
-    right = clamp(right, 0, img_w)
-    top = clamp(top, 0, img_h)
-    bottom = clamp(bottom, 0, img_h)
+    dim1_start = clamp(bounds.dim1_start, 0, size.width)
+    dim1_stop = clamp(bounds.dim1_stop, 0, size.width)
+    dim0_start = clamp(bounds.dim0_start, 0, size.height)
+    dim0_stop = clamp(bounds.dim0_stop, 0, size.height)
     
     # Ensure non-inverted coordinates
-    if left > right:
-        left, right = right, left
-    if top > bottom:
-        top, bottom = bottom, top
+    if dim1_start > dim1_stop:
+        dim1_start, dim1_stop = dim1_stop, dim1_start
+    if dim0_start > dim0_stop:
+        dim0_start, dim0_stop = dim0_stop, dim0_start
     
-    return left, top, right, bottom
+    return RoiBounds(
+        dim0_start=dim0_start,
+        dim0_stop=dim0_stop,
+        dim1_start=dim1_start,
+        dim1_stop=dim1_stop,
+    )
 
 
-def roi_rect_is_equal(roi1: ROI, roi2: ROI) -> bool:
-    """Check if two ROIs have the same coordinates.
-    
-    Compares only the coordinate fields (left, top, right, bottom),
-    ignoring other fields like id, name, note.
+def roi_rect_is_equal(bounds1: RoiBounds, bounds2: RoiBounds) -> bool:
+    """Check if two RoiBounds have the same coordinates.
     
     Args:
-        roi1: First ROI to compare.
-        roi2: Second ROI to compare.
+        bounds1: First RoiBounds to compare.
+        bounds2: Second RoiBounds to compare.
     
     Returns:
         True if coordinates are equal, False otherwise.
     """
     return (
-        roi1.left == roi2.left
-        and roi1.top == roi2.top
-        and roi1.right == roi2.right
-        and roi1.bottom == roi2.bottom
+        bounds1.dim0_start == bounds2.dim0_start
+        and bounds1.dim0_stop == bounds2.dim0_stop
+        and bounds1.dim1_start == bounds2.dim1_start
+        and bounds1.dim1_stop == bounds2.dim1_stop
     )
 
 
-def point_in_roi(roi: ROI, x: int, y: int) -> bool:
-    """Return True if point (x, y) lies inside or on the boundary of roi.
+def point_in_roi(bounds: RoiBounds, dim0_coord: int, dim1_coord: int) -> bool:
+    """Return True if point (dim0_coord, dim1_coord) lies inside or on the boundary of bounds.
 
     Args:
-        roi: ROI to test against.
-        x: X coordinate in full-image pixels.
-        y: Y coordinate in full-image pixels.
+        bounds: RoiBounds to test against.
+        dim0_coord: Coordinate in dimension 0 (rows/height).
+        dim1_coord: Coordinate in dimension 1 (columns/width).
 
     Returns:
-        True if the point is inside the ROI or on its edges, False otherwise.
+        True if the point is inside the bounds or on its edges, False otherwise.
     """
-    return roi.left <= x <= roi.right and roi.top <= y <= roi.bottom
+    return (
+        bounds.dim0_start <= dim0_coord <= bounds.dim0_stop
+        and bounds.dim1_start <= dim1_coord <= bounds.dim1_stop
+    )
 
 
 def hit_test_rois(
     rois: RoiSet,
-    x: int,
-    y: int,
+    dim0_coord: int,
+    dim1_coord: int,
     edge_tol: int = 5,
 ) -> tuple[ROI | None, str | None]:
-    """Hit-test a collection of ROIs at point (x, y) in full-image coordinates.
+    """Hit-test a collection of ROIs at point (dim0_coord, dim1_coord) in full-image coordinates.
 
     This function checks the four edges of each ROI with a tolerance and then
     the interior area. It iterates over ROIs in reverse creation order
@@ -591,42 +605,51 @@ def hit_test_rois(
 
     Args:
         rois: Collection of ROIs to test.
-        x: X coordinate in full-image pixels.
-        y: Y coordinate in full-image pixels.
+        dim0_coord: Coordinate in dimension 0 (rows/height).
+        dim1_coord: Coordinate in dimension 1 (columns/width).
         edge_tol: Tolerance in pixels to treat a point as "on an edge".
 
     Returns:
         A tuple (roi, mode) where:
             roi: The hit ROI instance, or None if nothing was hit.
             mode: One of:
-                'resizing_left',
-                'resizing_right',
-                'resizing_top',
-                'resizing_bottom',
+                'resizing_dim1_start' (was 'resizing_left'),
+                'resizing_dim1_stop' (was 'resizing_right'),
+                'resizing_dim0_start' (was 'resizing_top'),
+                'resizing_dim0_stop' (was 'resizing_bottom'),
                 'moving',
                 or None if no hit occurred.
     """
     # Reverse the creation order to hit "topmost" ROIs first.
     for roi in reversed(rois.as_list()):
-        left = roi.left
-        right = roi.right
-        top = roi.top
-        bottom = roi.bottom
+        bounds = roi.bounds
 
-        near_left = abs(x - left) <= edge_tol and top <= y <= bottom
-        near_right = abs(x - right) <= edge_tol and top <= y <= bottom
-        near_top = abs(y - top) <= edge_tol and left <= x <= right
-        near_bottom = abs(y - bottom) <= edge_tol and left <= x <= right
+        near_dim1_start = (
+            abs(dim1_coord - bounds.dim1_start) <= edge_tol
+            and bounds.dim0_start <= dim0_coord <= bounds.dim0_stop
+        )
+        near_dim1_stop = (
+            abs(dim1_coord - bounds.dim1_stop) <= edge_tol
+            and bounds.dim0_start <= dim0_coord <= bounds.dim0_stop
+        )
+        near_dim0_start = (
+            abs(dim0_coord - bounds.dim0_start) <= edge_tol
+            and bounds.dim1_start <= dim1_coord <= bounds.dim1_stop
+        )
+        near_dim0_stop = (
+            abs(dim0_coord - bounds.dim0_stop) <= edge_tol
+            and bounds.dim1_start <= dim1_coord <= bounds.dim1_stop
+        )
 
-        if near_left:
-            return roi, "resizing_left"
-        if near_right:
-            return roi, "resizing_right"
-        if near_top:
-            return roi, "resizing_top"
-        if near_bottom:
-            return roi, "resizing_bottom"
-        if point_in_roi(roi, x, y):
+        if near_dim1_start:
+            return roi, "resizing_dim1_start"
+        if near_dim1_stop:
+            return roi, "resizing_dim1_stop"
+        if near_dim0_start:
+            return roi, "resizing_dim0_start"
+        if near_dim0_stop:
+            return roi, "resizing_dim0_stop"
+        if point_in_roi(bounds, dim0_coord, dim1_coord):
             return roi, "moving"
 
     return None, None

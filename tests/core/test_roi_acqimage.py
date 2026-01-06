@@ -14,7 +14,7 @@ import pytest
 
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.roi import ROI, RoiSet
+from kymflow.core.image_loaders.roi import ROI, RoiSet, RoiBounds, ImageBounds, ImageSize
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -26,18 +26,20 @@ def test_roi_with_channel_and_z() -> None:
     logger.info("Testing ROI with channel and z attributes")
     
     # Create ROI with channel and z
-    roi = ROI(id=1, channel=2, z=5, left=10, top=20, right=50, bottom=80)
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = ROI(id=1, channel=2, z=5, bounds=bounds)
     
     assert roi.id == 1
     assert roi.channel == 2
     assert roi.z == 5
-    assert roi.left == 10
-    assert roi.top == 20
-    assert roi.right == 50
-    assert roi.bottom == 80
+    assert roi.bounds.dim0_start == 20
+    assert roi.bounds.dim0_stop == 80
+    assert roi.bounds.dim1_start == 10
+    assert roi.bounds.dim1_stop == 50
     
-    # Test backward compatibility (defaults)
-    roi2 = ROI(id=2, left=10, top=20, right=50, bottom=80)
+    # Test defaults
+    bounds2 = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi2 = ROI(id=2, bounds=bounds2)
     assert roi2.channel == 1  # Default
     assert roi2.z == 0  # Default
     
@@ -48,25 +50,26 @@ def test_roi_to_dict_from_dict() -> None:
     """Test ROI serialization with channel and z."""
     logger.info("Testing ROI to_dict/from_dict with channel and z")
     
-    roi = ROI(id=1, channel=2, z=5, left=10, top=20, right=50, bottom=80, name="test", note="note")
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = ROI(id=1, channel=2, z=5, bounds=bounds, name="test", note="note")
     
     # Serialize
     roi_dict = roi.to_dict()
     assert roi_dict["id"] == 1
     assert roi_dict["channel"] == 2
     assert roi_dict["z"] == 5
-    assert roi_dict["left"] == 10
+    assert roi_dict["dim1_start"] == 10
     
     # Deserialize
     roi2 = ROI.from_dict(roi_dict)
     assert roi2.id == 1
     assert roi2.channel == 2
     assert roi2.z == 5
-    assert roi2.left == 10
+    assert roi2.bounds.dim1_start == 10
     
-    # Test backward compatibility (missing channel/z)
-    roi_dict_old = {"id": 1, "left": 10, "top": 20, "right": 50, "bottom": 80}
-    roi3 = ROI.from_dict(roi_dict_old)
+    # Test defaults (missing channel/z)
+    roi_dict_minimal = {"id": 1, "dim0_start": 20, "dim0_stop": 80, "dim1_start": 10, "dim1_stop": 50}
+    roi3 = ROI.from_dict(roi_dict_minimal)
     assert roi3.channel == 1  # Default
     assert roi3.z == 0  # Default
     
@@ -82,22 +85,24 @@ def test_roiset_create_roi() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Create ROI
-    roi = acq_image.rois.create_roi(left=10, top=20, right=50, bottom=80, channel=1, z=0)
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
     
     assert roi.id == 1
     assert roi.channel == 1
     assert roi.z == 0
-    assert roi.left == 10
-    assert roi.top == 20
-    assert roi.right == 50
-    assert roi.bottom == 80
+    assert roi.bounds.dim0_start == 20
+    assert roi.bounds.dim0_stop == 80
+    assert roi.bounds.dim1_start == 10
+    assert roi.bounds.dim1_stop == 50
     
     # Test that coordinates are clamped
-    roi2 = acq_image.rois.create_roi(left=-10, top=-5, right=250, bottom=150, channel=1)
-    assert roi2.left >= 0
-    assert roi2.top >= 0
-    assert roi2.right <= 200
-    assert roi2.bottom <= 100
+    bounds2 = RoiBounds(dim0_start=-5, dim0_stop=150, dim1_start=-10, dim1_stop=250)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1)
+    assert roi2.bounds.dim0_start >= 0
+    assert roi2.bounds.dim0_stop <= 100
+    assert roi2.bounds.dim1_start >= 0
+    assert roi2.bounds.dim1_stop <= 200
     
     logger.info("  - RoiSet.create_roi() works correctly with bounds validation")
 
@@ -111,16 +116,17 @@ def test_roiset_create_roi_3d() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Create ROI on slice 5
-    roi = acq_image.rois.create_roi(left=10, top=20, right=50, bottom=80, channel=1, z=5)
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=5)
     
     assert roi.z == 5
     
     # Test z clamping (z too high)
-    roi2 = acq_image.rois.create_roi(left=10, top=20, right=50, bottom=80, channel=1, z=15)
+    roi2 = acq_image.rois.create_roi(bounds=bounds, channel=1, z=15)
     assert roi2.z == 9  # Clamped to num_slices-1
     
     # Test z clamping (z negative)
-    roi3 = acq_image.rois.create_roi(left=10, top=20, right=50, bottom=80, channel=1, z=-1)
+    roi3 = acq_image.rois.create_roi(bounds=bounds, channel=1, z=-1)
     assert roi3.z == 0  # Clamped to 0
     
     logger.info("  - RoiSet.create_roi() works correctly with 3D images")
@@ -134,7 +140,8 @@ def test_roiset_create_roi_2d_z_validation() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Try to create ROI with z != 0 (should be clamped to 0)
-    roi = acq_image.rois.create_roi(left=10, top=20, right=50, bottom=80, channel=1, z=5)
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=5)
     assert roi.z == 0  # Clamped to 0 for 2D
     
     logger.info("  - z coordinate correctly clamped to 0 for 2D images")
@@ -148,17 +155,20 @@ def test_roiset_edit_roi() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Create ROI
-    roi = acq_image.rois.create_roi(left=10, top=20, right=50, bottom=80, channel=1)
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1)
     
     # Edit coordinates
-    acq_image.rois.edit_roi(roi.id, left=15, top=25)
-    assert roi.left == 15
-    assert roi.top == 25
+    new_bounds = RoiBounds(dim0_start=25, dim0_stop=80, dim1_start=15, dim1_stop=50)
+    acq_image.rois.edit_roi(roi.id, bounds=new_bounds)
+    assert roi.bounds.dim0_start == 25
+    assert roi.bounds.dim1_start == 15
     
     # Edit with out-of-bounds coordinates (should be clamped)
-    acq_image.rois.edit_roi(roi.id, right=250, bottom=150)
-    assert roi.right <= 200
-    assert roi.bottom <= 100
+    out_of_bounds = RoiBounds(dim0_start=20, dim0_stop=150, dim1_start=10, dim1_stop=250)
+    acq_image.rois.edit_roi(roi.id, bounds=out_of_bounds)
+    assert roi.bounds.dim0_stop <= 100
+    assert roi.bounds.dim1_stop <= 200
     
     # Edit channel
     acq_image.rois.edit_roi(roi.id, channel=1)  # Same channel, should work
@@ -179,8 +189,10 @@ def test_roiset_delete_get() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Create multiple ROIs
-    roi1 = acq_image.rois.create_roi(10, 10, 50, 50, channel=1)
-    roi2 = acq_image.rois.create_roi(60, 60, 90, 90, channel=1)
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1)
     
     assert acq_image.rois.numRois() == 2
     
@@ -205,18 +217,20 @@ def test_roiset_revalidate_all() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Create ROIs (should be valid)
-    roi1 = acq_image.rois.create_roi(10, 10, 50, 50, channel=1)
-    roi2 = acq_image.rois.create_roi(60, 60, 90, 90, channel=1)
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1)
     
     # Manually set invalid coordinates (simulating corrupted data)
-    roi1.left = -10
-    roi1.right = 250
+    roi1.bounds.dim1_start = -10
+    roi1.bounds.dim1_stop = 250
     
     # Revalidate
     clamped_count = acq_image.rois.revalidate_all()
     assert clamped_count > 0
-    assert roi1.left >= 0
-    assert roi1.right <= 200
+    assert roi1.bounds.dim1_start >= 0
+    assert roi1.bounds.dim1_stop <= 200
     
     logger.info("  - RoiSet.revalidate_all() works correctly")
 
@@ -229,8 +243,9 @@ def test_roiset_invalid_channel() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Try to create ROI with non-existent channel
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     with pytest.raises(ValueError, match="Channel.*does not exist"):
-        acq_image.rois.create_roi(10, 10, 50, 50, channel=99)
+        acq_image.rois.create_roi(bounds=bounds, channel=99)
     
     logger.info("  - Invalid channel correctly raises ValueError")
 
@@ -248,8 +263,9 @@ def test_roiset_no_bounds() -> None:
         acq_image = AcqImage(path=test_file)
         
         # Try to create ROI (should fail because shape is None)
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         with pytest.raises(ValueError, match="Cannot determine image bounds"):
-            acq_image.rois.create_roi(10, 10, 50, 50, channel=1)
+            acq_image.rois.create_roi(bounds=bounds, channel=1)
     
     logger.info("  - Missing bounds correctly raises ValueError")
 
@@ -271,8 +287,10 @@ def test_acqimage_save_metadata() -> None:
         acq_image.experiment_metadata.region = "cortex"
         
         # Create some ROIs
-        acq_image.rois.create_roi(10, 10, 50, 50, channel=1, name="ROI1")
-        acq_image.rois.create_roi(60, 60, 90, 90, channel=1, name="ROI2")
+        bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        acq_image.rois.create_roi(bounds=bounds1, channel=1, name="ROI1")
+        bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+        acq_image.rois.create_roi(bounds=bounds2, channel=1, name="ROI2")
         
         # Save metadata
         saved = acq_image.save_metadata()
@@ -309,7 +327,8 @@ def test_acqimage_load_metadata() -> None:
         # Set metadata and create ROIs
         acq_image.header.voxels = [0.001, 0.284]
         acq_image.experiment_metadata.species = "mouse"
-        acq_image.rois.create_roi(10, 10, 50, 50, channel=1, name="ROI1")
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        acq_image.rois.create_roi(bounds=bounds, channel=1, name="ROI1")
         
         # Save
         acq_image.save_metadata()
@@ -326,7 +345,7 @@ def test_acqimage_load_metadata() -> None:
         loaded_roi = acq_image2.rois.get(1)
         assert loaded_roi is not None
         assert loaded_roi.name == "ROI1"
-        assert loaded_roi.left == 10
+        assert loaded_roi.bounds.dim1_start == 10
         
         logger.info("  - AcqImage.load_metadata() works correctly")
 
@@ -356,10 +375,10 @@ def test_acqimage_load_metadata_clamps_rois() -> None:
                     "z": 0,
                     "name": "",
                     "note": "",
-                    "left": -10,  # Out of bounds
-                    "top": -5,   # Out of bounds
-                    "right": 250,  # Out of bounds
-                    "bottom": 150,  # Out of bounds
+                    "dim0_start": -5,   # Out of bounds
+                    "dim0_stop": 150,   # Out of bounds
+                    "dim1_start": -10,  # Out of bounds
+                    "dim1_stop": 250,   # Out of bounds
                 }
             ]
         }
@@ -374,10 +393,10 @@ def test_acqimage_load_metadata_clamps_rois() -> None:
         # Verify ROI was clamped
         roi = acq_image.rois.get(1)
         assert roi is not None
-        assert roi.left >= 0
-        assert roi.top >= 0
-        assert roi.right <= 200
-        assert roi.bottom <= 100
+        assert roi.bounds.dim1_start >= 0
+        assert roi.bounds.dim0_start >= 0
+        assert roi.bounds.dim1_stop <= 200
+        assert roi.bounds.dim0_stop <= 100
         
         logger.info("  - load_metadata() correctly clamps out-of-bounds ROIs")
 
@@ -405,8 +424,10 @@ def test_acqimage_metadata_round_trip() -> None:
         
         # Create ROIs with different channels and z
         acq_image.addColorChannel(2, np.zeros((100, 200), dtype=np.uint8))
-        acq_image.rois.create_roi(10, 10, 50, 50, channel=1, z=0, name="ROI1", note="note1")
-        acq_image.rois.create_roi(60, 60, 90, 90, channel=2, z=0, name="ROI2", note="note2")
+        bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        acq_image.rois.create_roi(bounds=bounds1, channel=1, z=0, name="ROI1", note="note1")
+        bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+        acq_image.rois.create_roi(bounds=bounds2, channel=2, z=0, name="ROI2", note="note2")
         
         # Save
         acq_image.save_metadata()
@@ -466,9 +487,12 @@ def test_roiset_iteration() -> None:
     acq_image = AcqImage(path=None, img_data=test_image)
     
     # Create multiple ROIs
-    roi1 = acq_image.rois.create_roi(10, 10, 50, 50, channel=1)
-    roi2 = acq_image.rois.create_roi(60, 60, 90, 90, channel=1)
-    roi3 = acq_image.rois.create_roi(20, 20, 40, 40, channel=1)
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1)
+    bounds3 = RoiBounds(dim0_start=20, dim0_stop=40, dim1_start=20, dim1_stop=40)
+    roi3 = acq_image.rois.create_roi(bounds=bounds3, channel=1)
     
     # Iterate
     rois_list = acq_image.rois.as_list()
@@ -478,4 +502,86 @@ def test_roiset_iteration() -> None:
     assert roi3 in rois_list
     
     logger.info("  - RoiSet iteration works correctly")
+
+
+def test_image_bounds_dataclass() -> None:
+    """Test ImageBounds dataclass."""
+    logger.info("Testing ImageBounds dataclass")
+    
+    from kymflow.core.image_loaders.roi import ImageBounds
+    
+    # Create ImageBounds
+    bounds = ImageBounds(width=200, height=100, num_slices=1)
+    assert bounds.width == 200
+    assert bounds.height == 100
+    assert bounds.num_slices == 1
+    
+    # Test 3D
+    bounds_3d = ImageBounds(width=200, height=100, num_slices=10)
+    assert bounds_3d.num_slices == 10
+    
+    logger.info("  - ImageBounds dataclass works correctly")
+
+
+def test_image_size_dataclass() -> None:
+    """Test ImageSize dataclass."""
+    logger.info("Testing ImageSize dataclass")
+    
+    from kymflow.core.image_loaders.roi import ImageSize
+    
+    # Create ImageSize
+    size = ImageSize(width=200, height=100)
+    assert size.width == 200
+    assert size.height == 100
+    
+    logger.info("  - ImageSize dataclass works correctly")
+
+
+def test_acqimage_get_image_bounds() -> None:
+    """Test AcqImage.get_image_bounds() method."""
+    logger.info("Testing AcqImage.get_image_bounds()")
+    
+    from kymflow.core.image_loaders.roi import ImageBounds
+    
+    # Test 2D image
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    bounds = acq_image.get_image_bounds()
+    assert isinstance(bounds, ImageBounds)
+    assert bounds.width == 200
+    assert bounds.height == 100
+    assert bounds.num_slices == 1
+    
+    # Test 3D image
+    test_image_3d = np.zeros((10, 100, 200), dtype=np.uint8)
+    acq_image_3d = AcqImage(path=None, img_data=test_image_3d)
+    
+    bounds_3d = acq_image_3d.get_image_bounds()
+    assert bounds_3d.width == 200
+    assert bounds_3d.height == 100
+    assert bounds_3d.num_slices == 10
+    
+    logger.info("  - AcqImage.get_image_bounds() works correctly")
+
+
+def test_clamp_coordinates_to_size_with_imagesize() -> None:
+    """Test clamp_coordinates_to_size() with ImageSize parameter."""
+    logger.info("Testing clamp_coordinates_to_size() with ImageSize")
+    
+    from kymflow.core.image_loaders.roi import clamp_coordinates_to_size, ImageSize, RoiBounds
+    
+    # Create ImageSize
+    size = ImageSize(width=200, height=100)
+    
+    # Test clamping
+    bounds = RoiBounds(dim0_start=-10, dim0_stop=150, dim1_start=-5, dim1_stop=250)
+    clamped = clamp_coordinates_to_size(bounds, size)
+    
+    assert clamped.dim0_start >= 0
+    assert clamped.dim0_stop <= 100
+    assert clamped.dim1_start >= 0
+    assert clamped.dim1_stop <= 200
+    
+    logger.info("  - clamp_coordinates_to_size() with ImageSize works correctly")
 

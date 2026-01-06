@@ -146,6 +146,7 @@ def plot_image_line_plotly(
     remove_outliers: bool = False,
     median_filter: int = 0,
     colorscale: str = "Gray",
+    plot_rois: bool = True,
     selected_roi_id: Optional[int] = None,
     zmin: Optional[int] = None,
     zmax: Optional[int] = None,
@@ -223,10 +224,13 @@ def plot_image_line_plotly(
         fig.update_layout(**layout_dict)
         return fig
 
-    # physical units for axes
+    # physical units for image axes
     dim0_arange = kf.get_dim_arange(0)  # First dimension (rows)
     dim1_arange = kf.get_dim_arange(1)  # Second dimension (columns)
 
+    # import numpy as np
+    # logger.info(f'dim0_arange: min:{np.min(dim0_arange)}, max:{np.max(dim0_arange)}')
+    # logger.info(f'dim1_arange: min:{np.min(dim1_arange)}, max:{np.max(dim1_arange)}')
 
     # logger.info(f'image shape: {image.shape}')
     # logger.info(f'num_lines: {num_lines}')
@@ -234,15 +238,6 @@ def plot_image_line_plotly(
     # logger.info(f'seconds_per_line: {seconds_per_line}')
     # logger.info(f'num_lines: {num_lines}')
     
-    # Get analysis data for line plot (for specified ROI)
-    kym_analysis = kf.get_kym_analysis()
-    if kym_analysis.has_analysis(selected_roi_id):
-        analysis_time_values = kym_analysis.get_analysis_value(selected_roi_id, "time")
-        y_values = kym_analysis.get_analysis_value(selected_roi_id, yStat, remove_outliers, median_filter)
-    else:
-        analysis_time_values = None
-        y_values = None
-
     # Plot image in top subplot (row=1)
     # Image shape: (num_lines, pixels_per_line)
     # After transpose in heatmap z=image.T: (pixels_per_line, num_lines)
@@ -252,8 +247,8 @@ def plot_image_line_plotly(
 
     heatmap_kwargs = {
         "z": image.transpose() if transpose else image,
-        "x": dim0_arange,
-        "y": dim1_arange,
+        "x": dim0_arange if transpose else dim1_arange,
+        "y": dim1_arange if transpose else dim0_arange,
         "colorscale": colorscale_value,
         "showscale": False,
         **({"zmin": zmin} if zmin is not None else {}),
@@ -267,8 +262,8 @@ def plot_image_line_plotly(
     )
 
     # Configure top subplot axes using header labels
-    x_label = kf.header.labels[0]  # Time dimension
-    y_label = kf.header.labels[1]  # Space dimension
+    x_label = kf.header.labels[0] if transpose else kf.header.labels[1]  # Time dimension
+    y_label = kf.header.labels[1] if transpose else kf.header.labels[0]  # Space dimension
     fig.update_xaxes(
         title_text=x_label,
         row=1,
@@ -296,21 +291,36 @@ def plot_image_line_plotly(
     fig.update_yaxes(constrain="range")
     
     # Add ROI rectangles overlay to image subplot
-    _add_roi_overlay(
-        fig,
-        kf,
-        selected_roi_id,
-        transpose,
-        row=1,
-        col=1,
-    )
+    if plot_rois:
+        _add_roi_overlay(
+            fig,
+            kf,
+            selected_roi_id,
+            transpose,
+            row=1,
+            col=1,
+        )
 
     # Plot line plot if analysis data is available
+    # Get analysis data for line plot (for specified ROI)
+    kym_analysis = kf.get_kym_analysis()
+    if kym_analysis.has_analysis(selected_roi_id):
+        analysis_time_values = kym_analysis.get_analysis_value(selected_roi_id, "time")
+        y_values = kym_analysis.get_analysis_value(selected_roi_id, yStat, remove_outliers, median_filter)
+    else:
+        analysis_time_values = None
+        y_values = None
+
     if (
         analysis_time_values is not None
         and y_values is not None
         and len(analysis_time_values) > 0
     ):
+        import numpy as np
+        logger.info('=== add_trace()')
+        logger.info(f'analysis_time_values: n:{len(y_values)} min:{np.min(analysis_time_values)}, max:{np.max(analysis_time_values)}')
+        logger.info(f'y_values: n:{len(y_values)} min:{np.min(y_values)}, max:{np.max(y_values)}')
+
         fig.add_trace(
             go.Scatter(
                 x=analysis_time_values,
@@ -356,11 +366,10 @@ def plot_image_line_plotly(
             col=1,
         )
 
-    # Update overall layout (merged from early return case)
+    # Update overall layout
     fig.update_layout(**layout_dict)
 
     return fig
-
 
 def _add_roi_overlay(
     fig: go.Figure,
@@ -380,6 +389,7 @@ def _add_roi_overlay(
         row: Subplot row number (default: 1 for top subplot).
         col: Subplot column number (default: 1).
     """
+        
     all_rois = kf.rois.as_list()
     if not all_rois:
         return
@@ -392,24 +402,26 @@ def _add_roi_overlay(
         stroke_color = ROI_COLOR_SELECTED if is_selected else ROI_COLOR_DEFAULT
         
         # Get ROI coordinates in physical units
-        # Returns (left_um, top_s, right_um, bottom_s)
-        # left/right = dim1 (space), top/bottom = dim0 (time)
-        left_um, top_s, right_um, bottom_s = kf.get_roi_physical_coords(roi.id)
+        # Returns RoiBoundsFloat with dim0 (time) and dim1 (space) coordinates
+        bounds_physical = kf.get_roi_physical_coords(roi.id)
         
         if transpose:
-            # When transposed: x-axis = dim1 (space), y-axis = dim0 (time)
-            x0 = min(left_um, right_um)
-            x1 = max(left_um, right_um)
-            y0 = min(top_s, bottom_s)
-            y1 = max(top_s, bottom_s)
+            # When transposed: image is transposed, coordinates map directly
+            # x-axis = dim0 (time), y-axis = dim1 (space)
+            x0 = min(bounds_physical.dim0_start, bounds_physical.dim0_stop)
+            x1 = max(bounds_physical.dim0_start, bounds_physical.dim0_stop)
+            y0 = min(bounds_physical.dim1_start, bounds_physical.dim1_stop)
+            y1 = max(bounds_physical.dim1_start, bounds_physical.dim1_stop)
         else:
-            # When not transposed: x-axis = dim0 (time), y-axis = dim1 (space)
-            x0 = min(top_s, bottom_s)
-            x1 = max(top_s, bottom_s)
-            y0 = min(left_um, right_um)
-            y1 = max(left_um, right_um)
+            # When not transposed: need to swap coordinates
+            # x-axis = dim1 (space), y-axis = dim0 (time)
+            x0 = min(bounds_physical.dim1_start, bounds_physical.dim1_stop)
+            x1 = max(bounds_physical.dim1_start, bounds_physical.dim1_stop)
+            y0 = min(bounds_physical.dim0_start, bounds_physical.dim0_stop)
+            y1 = max(bounds_physical.dim0_start, bounds_physical.dim0_stop)
         
-        logger.info(f'appending: x0:{x0}, x1:{x1}, y0:{y0}, y1:{y1}')
+        # logger.info(f'appending roi.id:{roi.id} x0:{x0}, x1:{x1}, y0:{y0}, y1:{y1}')
+
         # logger.info(f'  row:{row}, col:{col}')
         # logger.info(f'  roi:{roi}')
 
@@ -420,13 +432,14 @@ def _add_roi_overlay(
         # logger.info(f'  ROI_FILL_OPACITY:{ROI_FILL_OPACITY}')
 
         # stroke_color = 'red'
-        line_color = 'red'
+        # line_color = 'red'
 
         xref = f"x{row if row > 1 else ''}"
         yref = f"y{row if row > 1 else ''}"
-        logger.info(f'  row:{row}')
-        logger.info(f'    xref:{xref} yref:{yref}')
-        logger.info(f'    line_color:{line_color}')
+
+        # logger.info(f'  row:{row}')
+        # logger.info(f'    xref:{xref} yref:{yref}')
+        # logger.info(f'    line_color:{line_color}')
 
         # Add rectangle shape
         shapes.append(
@@ -440,10 +453,10 @@ def _add_roi_overlay(
                 y1=y1,
                 layer="above",  # ← Add this to render ROI on top of the heatmap
                 line=dict(
-                    color=line_color,
+                    color=stroke_color,
                     width=ROI_LINE_WIDTH,
                 ),
-                fillcolor=stroke_color,
+                # fillcolor=stroke_color,
                 opacity=ROI_FILL_OPACITY,
             )
         )

@@ -55,7 +55,21 @@ def run_flow_analysis(
             else:
                 # Create default ROI (full image bounds)
                 task_state.set_progress(0.0, "Creating default ROI")
-                new_roi = kym_file.rois.create_roi()  # Uses default full image bounds
+                from kymflow.core.image_loaders.roi import RoiBounds
+                shape = kym_file.img_shape
+                if shape is None:
+                    task_state.message = "Error: Cannot determine image shape for default ROI"
+                    task_state.mark_finished()
+                    return
+                # For 2D images: shape is (H, W) = (dim0, dim1)
+                if len(shape) == 2:
+                    img_h, img_w = shape
+                    bounds = RoiBounds(dim0_start=0, dim0_stop=img_h, dim1_start=0, dim1_stop=img_w)
+                else:
+                    # For 3D images: shape is (num_slices, H, W)
+                    num_slices, img_h, img_w = shape
+                    bounds = RoiBounds(dim0_start=0, dim0_stop=img_h, dim1_start=0, dim1_stop=img_w)
+                new_roi = kym_file.rois.create_roi(bounds=bounds)
                 target_roi_id = new_roi.id
                 task_state.set_progress(0.0, f"Created ROI {target_roi_id}")
 
@@ -161,7 +175,20 @@ def run_batch_flow_analysis(
                 roi_id = roi_ids[0]
             else:
                 # Create default ROI (full image bounds)
-                new_roi = kf.rois.create_roi()  # Uses default full image bounds
+                from kymflow.core.image_loaders.roi import RoiBounds
+                shape = kf.img_shape
+                if shape is None:
+                    per_file_task.message = f"Error: Cannot determine image shape for {kf.path.name}"
+                    continue
+                # For 2D images: shape is (H, W) = (dim0, dim1)
+                if len(shape) == 2:
+                    img_h, img_w = shape
+                    bounds = RoiBounds(dim0_start=0, dim0_stop=img_h, dim1_start=0, dim1_stop=img_w)
+                else:
+                    # For 3D images: shape is (num_slices, H, W)
+                    num_slices, img_h, img_w = shape
+                    bounds = RoiBounds(dim0_start=0, dim0_stop=img_h, dim1_start=0, dim1_stop=img_w)
+                new_roi = kf.rois.create_roi(bounds=bounds)
                 roi_id = new_roi.id
                 per_file_task.set_progress(0.0, f"{kf.path.name}: Created ROI {roi_id}")
 

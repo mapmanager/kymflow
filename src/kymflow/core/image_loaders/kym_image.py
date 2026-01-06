@@ -28,8 +28,9 @@ class KymImage(AcqImage):
                  load_image: bool = False,
                  ):
         
-        # Call super().__init__ with simple pattern (matches AcqImage)
-        super().__init__(path=path, img_data=img_data, channel=channel)
+        # Call super().__init__ with load_image=False since KymImage handles its own loading
+        # after header discovery (which may discover additional channels)
+        super().__init__(path=path, img_data=img_data, channel=channel, load_image=False)
 
         # Try and load Olympus header from txt file if it exists
         # This discovers additional channels and sets header metadata
@@ -38,9 +39,9 @@ class KymImage(AcqImage):
             _olympusDict = _readOlympusHeader(path_obj)
             if _olympusDict is not None:
 
-                logger.info('>>> _olympusDict:')
-                from pprint import pprint
-                pprint(_olympusDict)
+                # logger.info('>>> _olympusDict:')
+                # from pprint import pprint
+                # pprint(_olympusDict)
 
                 numLines = _olympusDict['numLines']
                 pixelsPerLine = _olympusDict['pixelsPerLine']

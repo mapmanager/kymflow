@@ -90,35 +90,18 @@ def create_image_line_viewer(app_state: AppState) -> None:
         zmin = display_params.zmin if display_params else None
         zmax = display_params.zmax if display_params else None
 
-        # Require valid roi_id for plotting
-        if roi_id is None:
-            # No ROI selected - show empty plot
-            fig = plot_image_line_plotly(
-                kf=kf,
-                # roi_id=0,  # Dummy value, will result in empty plot
-                y="velocity",
-                remove_outliers=remove_outliers_cb.value,
-                median_filter=median_filter_size,
-                theme=theme,
-                colorscale=colorscale,
-                zmin=zmin,
-                zmax=zmax,
-                selected_roi_id=None,
-            )
-        else:
-            fig = plot_image_line_plotly(
-                kf=kf,
-                # roi_id=roi_id,
-                y="velocity",
-                remove_outliers=remove_outliers_cb.value,
-                median_filter=median_filter_size,
-                theme=theme,
-                colorscale=colorscale,
-                zmin=zmin,
-                zmax=zmax,
-                selected_roi_id=roi_id,
-            )
-
+        fig = plot_image_line_plotly(
+            kf=kf,
+            # roi_id=0,  # Dummy value, will result in empty plot
+            yStat="velocity",
+            remove_outliers=remove_outliers_cb.value,
+            median_filter=median_filter_size,
+            theme=theme,
+            colorscale=colorscale,
+            zmin=zmin,
+            zmax=zmax,
+            selected_roi_id=None,
+        )
         # Store original unfiltered y-values for partial updates
         if kf is not None and roi_id is not None:
             kym_analysis = kf.get_kym_analysis()
@@ -141,6 +124,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         try:
             plot.update_figure(fig)
         except RuntimeError as e:
+            logger.error(f"Error updating figure: {e}")
             if "deleted" not in str(e).lower():
                 raise
             # Client deleted, silently ignore
@@ -160,6 +144,7 @@ def create_image_line_viewer(app_state: AppState) -> None:
         try:
             plot.update_figure(fig)
         except RuntimeError as e:
+            logger.error(f"Error updating figure: {e}")
             if "deleted" not in str(e).lower():
                 raise
             # Client deleted, silently ignore

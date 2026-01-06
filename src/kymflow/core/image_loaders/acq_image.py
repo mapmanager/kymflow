@@ -10,8 +10,12 @@ from kymflow.core.image_loaders.metadata import ExperimentMetadata, AcqImgHeader
 from kymflow.core.utils.logging import get_logger
 from typing import TYPE_CHECKING
 
+from kymflow.core.image_loaders.roi import RoiBoundsFloat
+
 if TYPE_CHECKING:
-    from kymflow.core.image_loaders.roi import RoiSet
+    from kymflow.core.image_loaders.roi import RoiSet, ImageBounds
+else:
+    from kymflow.core.image_loaders.roi import RoiBoundsFloat
 
 logger = get_logger(__name__)
 
@@ -25,6 +29,7 @@ class AcqImage:
     def __init__(self, path: str | Path | None,
                  img_data: np.ndarray | None = None,
                  channel: int = 1,
+                 load_image: bool = False,
                  ):
         if path is None and img_data is None:
             raise ValueError("Either path or img_data must be provided")
@@ -49,6 +54,9 @@ class AcqImage:
         
         if img_data is not None:
             self.addColorChannel(channel, img_data)
+        elif load_image and path is not None:
+            # Load image data if requested (derived classes implement _load_channel_from_path)
+            self.addColorChannel(channel, None, path=path, load_image=True)
     
     def _get_representative_path(self) -> Path | None:
         """Get a representative path from _file_path_dict.
@@ -199,6 +207,45 @@ class AcqImage:
             self._header.set_shape_ndim(imgData.shape, imgData.ndim)
             self._header.init_defaults_from_shape()
     
+    def load_channel(self, channel: int) -> bool:
+        """Load image data for a specific channel from file path.
+        
+        This is a template method that derived classes should rely on.
+        Derived classes must override `_load_channel_from_path()` to implement
+        format-specific loading logic.
+        
+        This method is idempotent - if channel data already exists, it returns
+        True without reloading.
+        
+        Args:
+            channel: Channel number (1-based integer key).
+            
+        Returns:
+            True if loading succeeded or channel already loaded, False otherwise.
+        """
+        # Idempotent check: if channel data already exists, return True
+        if self.getChannelData(channel) is not None:
+            return True
+        
+        # Get channel path
+        path = self.getChannelPath(channel)
+        if path is None:
+            logger.error(f"load_channel({channel}): No file path available for channel {channel}")
+            return False
+        
+        # Load via addColorChannel which calls _load_channel_from_path()
+        try:
+            self.addColorChannel(channel, None, path=path, load_image=True)
+            # Verify it was loaded
+            if self.getChannelData(channel) is not None:
+                return True
+            else:
+                logger.error(f"load_channel({channel}): Failed to load image data from {path}")
+                return False
+        except Exception as e:
+            logger.error(f"load_channel({channel}): Exception while loading from {path}: {e}")
+            return False
+    
     def _load_channel_from_path(self, channel: int, path: Path) -> bool:
         """Load image data from path for a specific channel.
         
@@ -212,7 +259,7 @@ class AcqImage:
         Returns:
             True if loading succeeded, False otherwise.
         """
-        logger.warning("_load_channel_from_path() not implemented in base class. Derived classes should override this.")
+        logger.error("_load_channel_from_path() not implemented in base class. Derived classes must override this.")
         return False
 
     @property
@@ -250,6 +297,43 @@ class AcqImage:
         if ndim == 3:
             return self.img_shape[0] if self.img_shape else None
         raise ValueError(f"Image data must be 2D or 3D, got {ndim}D")
+    
+    def get_image_bounds(self) -> "ImageBounds":
+        """Get image bounds including 2D dimensions and 3D slice information.
+        
+        Queries bounds from header. All channels share the same shape.
+        
+        Returns:
+            ImageBounds with width, height, and num_slices.
+            
+        Raises:
+            ValueError: If bounds cannot be determined (shape is None).
+        """
+        from kymflow.core.image_loaders.roi import ImageBounds
+        
+        shape = self.img_shape
+        if shape is None:
+            raise ValueError(
+                "Cannot determine image bounds: header.shape is None. "
+                "Image data must be loaded or header must be populated."
+            )
+        
+        ndim = self.img_ndim
+        if ndim is None:
+            raise ValueError(
+                "Cannot determine image bounds: header.ndim is None. "
+                "Image data must be loaded or header must be populated."
+            )
+        
+        if ndim == 2:
+            img_h, img_w = shape
+            num_slices = 1
+        elif ndim == 3:
+            num_slices, img_h, img_w = shape
+        else:
+            raise ValueError(f"Unsupported image ndim: {ndim} (must be 2 or 3)")
+        
+        return ImageBounds(width=img_w, height=img_h, num_slices=num_slices)
 
     @property
     def experiment_metadata(self) -> ExperimentMetadata:
@@ -281,11 +365,20 @@ class AcqImage:
     def getChannelKeys(self) -> list[int]:
         """Get a list of available channel keys.
         
+        Returns all channel keys that either have file paths (can be loaded) or
+        have loaded image data. This covers both:
+        - Path-based images: Returns channels with file paths (whether loaded or not)
+        - Synthetic/test images: Returns channels with loaded image data
+        
         Returns:
-            List of channel keys (integers) that are available in _imgData.
+            List of channel keys (integers) that have file paths or loaded data.
             Returns an empty list if no channels exist.
         """
-        return list(self._imgData.keys())
+        # Union of channels with paths and channels with data
+        # For path-based images: _file_path_dict contains all available channels
+        # For synthetic images: _imgData contains the channels
+        all_keys = set(self._file_path_dict.keys()) | set(self._imgData.keys())
+        return sorted(list(all_keys))
     
     def get_img_slice(self, slice_num: int = 0, channel: int = 1) -> np.ndarray | None:
         """Get image slice from specified channel.
@@ -301,8 +394,12 @@ class AcqImage:
             ValueError: If channel doesn't exist or slice number is out of range.
         """
         if channel not in self._imgData:
-            raise ValueError(f"Channel {channel} not found. Available channels: {list(self._imgData.keys())}")
-        
+            # raise ValueError(f"Channel {channel} not found. Available channels: {list(self._imgData.keys())}")
+            # logger.error(f"Channel {channel} not found. Available channels: {list(self._imgData.keys())}")
+            logger.error(f"Channel {channel} not found. Available channels: {self.getChannelKeys()}")
+            logger.error(f"  path:{self.getChannelPath(channel)}")
+            return None
+
         channel_data = self._imgData[channel]
         ndim = self.img_ndim
         
@@ -395,18 +492,18 @@ class AcqImage:
         
         return np.arange(shape[dim]) * self._header.voxels[dim]
     
-    def get_roi_physical_coords(self, roi_id: int) -> tuple[float, float, float, float]:
+    def get_roi_physical_coords(self, roi_id: int) -> RoiBoundsFloat:
         """Get ROI coordinates in physical units.
         
         Converts ROI pixel coordinates to physical units using header.voxels.
-        For 2D images: top/bottom use voxels[0], left/right use voxels[1].
+        For 2D images: dim0_start/dim0_stop use voxels[0], dim1_start/dim1_stop use voxels[1].
         For 3D images: same mapping applies to the 2D slice.
         
         Args:
             roi_id: ROI identifier.
         
         Returns:
-            Tuple of (left, top, right, bottom) in physical units.
+            RoiBoundsFloat with coordinates in physical units.
             Units depend on header.voxels_units (e.g., ['s', 'um'] for kymographs).
         
         Raises:
@@ -423,14 +520,19 @@ class AcqImage:
             raise ValueError(f"header.voxels has {len(self._header.voxels)} elements, need at least 2 for 2D coordinates")
         
         # Convert coordinates:
-        # top/bottom (rows, first dimension) -> voxels[0]
-        # left/right (columns, second dimension) -> voxels[1]
-        left_physical = roi.left * self._header.voxels[1]
-        top_physical = roi.top * self._header.voxels[0]
-        right_physical = roi.right * self._header.voxels[1]
-        bottom_physical = roi.bottom * self._header.voxels[0]
+        # dim0_start/dim0_stop (rows, first dimension) -> voxels[0]
+        # dim1_start/dim1_stop (columns, second dimension) -> voxels[1]
+        dim0_start_physical = roi.bounds.dim0_start * self._header.voxels[0]
+        dim0_stop_physical = roi.bounds.dim0_stop * self._header.voxels[0]
+        dim1_start_physical = roi.bounds.dim1_start * self._header.voxels[1]
+        dim1_stop_physical = roi.bounds.dim1_stop * self._header.voxels[1]
         
-        return (left_physical, top_physical, right_physical, bottom_physical)
+        return RoiBoundsFloat(
+            dim0_start=dim0_start_physical,
+            dim0_stop=dim0_stop_physical,
+            dim1_start=dim1_start_physical,
+            dim1_stop=dim1_stop_physical,
+        )
     
     def _get_metadata_path(self) -> Path | None:
         """Get metadata file path from representative image path.
@@ -507,7 +609,7 @@ class AcqImage:
             return False
         
         if not metadata_path.exists():
-            logger.info(f"Metadata file does not exist: {metadata_path}")
+            # logger.info(f"Metadata file does not exist: {metadata_path}")
             return False
                 
         try:
@@ -532,51 +634,46 @@ class AcqImage:
                 # Validate and clamp each ROI to current image bounds
                 # Store original values before clamping for warning messages
                 clamped_count = 0
+                image_bounds = self.get_image_bounds()
+                
                 for roi in self._roi_set:
                     try:
-                        img_w, img_h, num_slices = self._roi_set._get_bounds()
-                        
                         # Store original values
-                        original_left = roi.left
-                        original_top = roi.top
-                        original_right = roi.right
-                        original_bottom = roi.bottom
+                        original_bounds = roi.bounds
                         original_z = roi.z
                         
                         # Clamp z to valid range [0, num_slices-1]
                         if roi.z < 0:
                             logger.warning(f"ROI {roi.id} z coordinate {roi.z} is negative, clamping to 0")
                             roi.z = 0
-                        elif roi.z >= num_slices:
-                            logger.warning(f"ROI {roi.id} z coordinate {roi.z} exceeds num_slices {num_slices}, clamping to {num_slices-1}")
-                            roi.z = num_slices - 1
+                        elif roi.z >= image_bounds.num_slices:
+                            logger.warning(f"ROI {roi.id} z coordinate {roi.z} exceeds num_slices {image_bounds.num_slices}, clamping to {image_bounds.num_slices-1}")
+                            roi.z = image_bounds.num_slices - 1
                         
                         # Clamp coordinates
-                        from kymflow.core.image_loaders.roi import clamp_coordinates_to_size
-                        clamped_left, clamped_top, clamped_right, clamped_bottom = clamp_coordinates_to_size(
-                            roi.left, roi.top, roi.right, roi.bottom, img_w, img_h
-                        )
+                        from kymflow.core.image_loaders.roi import clamp_coordinates_to_size, ImageSize
+                        size = ImageSize(width=image_bounds.width, height=image_bounds.height)
+                        clamped_bounds = clamp_coordinates_to_size(original_bounds, size)
                         
                         # Check if anything was clamped
                         was_clamped = (
-                            original_left != clamped_left or
-                            original_top != clamped_top or
-                            original_right != clamped_right or
-                            original_bottom != clamped_bottom or
+                            original_bounds.dim0_start != clamped_bounds.dim0_start or
+                            original_bounds.dim0_stop != clamped_bounds.dim0_stop or
+                            original_bounds.dim1_start != clamped_bounds.dim1_start or
+                            original_bounds.dim1_stop != clamped_bounds.dim1_stop or
                             original_z != roi.z
                         )
                         
                         if was_clamped:
-                            roi.left = clamped_left
-                            roi.top = clamped_top
-                            roi.right = clamped_right
-                            roi.bottom = clamped_bottom
+                            roi.bounds = clamped_bounds
                             clamped_count += 1
                             logger.warning(
                                 f"ROI {roi.id} coordinates were clamped on load. "
-                                f"Original: left={original_left}, top={original_top}, right={original_right}, bottom={original_bottom}, z={original_z}. "
-                                f"Clamped to: left={clamped_left}, top={clamped_top}, right={clamped_right}, bottom={clamped_bottom}, z={roi.z} "
-                                f"(image size: {img_w}x{img_h}, num_slices: {num_slices})"
+                                f"Original: dim0_start={original_bounds.dim0_start}, dim0_stop={original_bounds.dim0_stop}, "
+                                f"dim1_start={original_bounds.dim1_start}, dim1_stop={original_bounds.dim1_stop}, z={original_z}. "
+                                f"Clamped to: dim0_start={clamped_bounds.dim0_start}, dim0_stop={clamped_bounds.dim0_stop}, "
+                                f"dim1_start={clamped_bounds.dim1_start}, dim1_stop={clamped_bounds.dim1_stop}, z={roi.z} "
+                                f"(image size: {image_bounds.width}x{image_bounds.height}, num_slices: {image_bounds.num_slices})"
                             )
                     except ValueError as e:
                         logger.warning(f"Could not validate ROI {roi.id} on load: {e}")
@@ -584,7 +681,7 @@ class AcqImage:
                 if clamped_count > 0:
                     logger.info(f"Clamped {clamped_count} ROI(s) to current image bounds during load")
             
-            logger.info(f"Loaded metadata from {metadata_path}")
+            # logger.info(f"Loaded metadata from {metadata_path}")
             return True
             
         except Exception as e:

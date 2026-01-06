@@ -20,6 +20,7 @@ import sys
 import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.core.utils import get_data_folder
 # Configure logging to show INFO level messages to console
@@ -100,41 +101,42 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     numLines = kym_image.num_lines  # height (num lines / time dimension)
     
     # ROI 1: Full image (default)
-    roi1 = kym_image.rois.create_roi(
-        left=0,
-        top=0,
-        right=pixelsPerLine,
-        bottom=numLines,
-        note="Full Image",
+    # For kymographs: dim0 = time (rows), dim1 = space (columns)
+    bounds1 = RoiBounds(
+        dim0_start=0,
+        dim0_stop=numLines,  # time dimension (rows)
+        dim1_start=0,
+        dim1_stop=pixelsPerLine,  # space dimension (columns)
     )
-    logger.info(f"Created ROI {roi1.id}: Full image (0, 0, {pixelsPerLine}, {numLines})")
+    roi1 = kym_image.rois.create_roi(bounds=bounds1, note="Full Image")
+    logger.info(f"Created ROI {roi1.id}: Full image (dim0: 0-{numLines}, dim1: 0-{pixelsPerLine})")
     
     # ROI 2: Center region
-    # Coordinates will be automatically clamped to image bounds by add_roi()
+    # Coordinates will be automatically clamped to image bounds by create_roi()
     center_w = pixelsPerLine // 2
     center_h = numLines // 2
     quarter_w = pixelsPerLine // 4
     quarter_h = numLines // 4
-    roi2 = kym_image.rois.create_roi(
-        left=quarter_w,
-        top=quarter_h,
-        right=center_w + quarter_w,
-        bottom=center_h + quarter_h,
-        note="Center Region"
+    bounds2 = RoiBounds(
+        dim0_start=quarter_h,
+        dim0_stop=center_h + quarter_h,
+        dim1_start=quarter_w,
+        dim1_stop=center_w + quarter_w,
     )
-    logger.info(f"Created ROI {roi2.id}: Center region ({quarter_w}, {quarter_h}, {center_w + quarter_w}, {center_h + quarter_h})")
+    roi2 = kym_image.rois.create_roi(bounds=bounds2, note="Center Region")
+    logger.info(f"Created ROI {roi2.id}: Center region (dim0: {quarter_h}-{center_h + quarter_h}, dim1: {quarter_w}-{center_w + quarter_w})")
     
     # ROI 3: Left region
-    # Coordinates will be automatically clamped to image bounds by add_roi()
+    # Coordinates will be automatically clamped to image bounds by create_roi()
     third_w = pixelsPerLine // 3
-    roi3 = kym_image.rois.create_roi(
-        left=0,
-        top=numLines // 4,
-        right=third_w,
-        bottom=numLines // 4,
-        note="Left Region"
+    bounds3 = RoiBounds(
+        dim0_start=numLines // 3,
+        dim0_stop=3 * numLines // 3,
+        dim1_start=0,
+        dim1_stop=third_w,
     )
-    logger.info(f"Created ROI {roi3.id}: Left region (0, {numLines // 4}, {third_w}, {3 * numLines // 4})")
+    roi3 = kym_image.rois.create_roi(bounds=bounds3, note="Left Region")
+    logger.info(f"Created ROI {roi3.id}: Left region (dim0: {numLines // 4}-{3 * numLines // 4}, dim1: 0-{third_w})")
     
     # Run analysis on each ROI
     window_size = 16

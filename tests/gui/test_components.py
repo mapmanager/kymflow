@@ -14,6 +14,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.gui.state import AppState
 
 
@@ -47,7 +48,8 @@ def test_analysis_form_populates_from_roi(app_state_with_file: tuple[AppState, K
     app_state, kym_file = app_state_with_file
     
     # Create ROI with analysis
-    roi = kym_file.rois.create_roi(left=10, top=10, right=50, bottom=50)
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_file.rois.create_roi(bounds=bounds)
     
     # Analyze the ROI
     kym_file.get_kym_analysis().analyze_roi(
@@ -71,8 +73,8 @@ def test_analysis_form_populates_from_roi(app_state_with_file: tuple[AppState, K
     # Verify form would be able to access these parameters
     # (Actual form population requires NiceGUI UI components)
     assert roi_after.id == roi.id
-    assert roi_after.left == 10
-    assert roi_after.top == 10
+    assert roi_after.bounds.dim0_start == 10
+    assert roi_after.bounds.dim1_start == 10
 
 
 def test_analysis_form_handles_no_roi(app_state_with_file: tuple[AppState, KymImage]) -> None:
@@ -91,7 +93,8 @@ def test_save_buttons_logic_with_roi(app_state_with_file: tuple[AppState, KymIma
     app_state, kym_file = app_state_with_file
     
     # Create ROI and analyze
-    roi = kym_file.rois.create_roi()
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_file.rois.create_roi(bounds=bounds)
     kym_file.get_kym_analysis().analyze_roi(
         roi.id,
         window_size=16,
@@ -122,7 +125,8 @@ def test_save_buttons_logic_no_analysis(app_state_with_file: tuple[AppState, Kym
     app_state, kym_file = app_state_with_file
     
     # Create ROI but don't analyze
-    roi = kym_file.rois.create_roi()
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_file.rois.create_roi(bounds=bounds)
     
     # Verify has_analysis() returns False
     kym_analysis = kym_file.get_kym_analysis()
@@ -150,11 +154,13 @@ def test_save_buttons_all_files(app_state_with_file: tuple[AppState, KymImage]) 
         app_state.files = [kym_file, kym_file2]
         
         # Analyze first file
-        roi1 = kym_file.rois.create_roi()
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi1 = kym_file.rois.create_roi(bounds=bounds)
         kym_file.get_kym_analysis().analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
         
         # Don't analyze second file
-        roi2 = kym_file2.rois.create_roi()
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi2 = kym_file2.rois.create_roi(bounds=bounds)
         
         # Verify has_analysis() logic
         assert kym_file.get_kym_analysis().has_analysis()

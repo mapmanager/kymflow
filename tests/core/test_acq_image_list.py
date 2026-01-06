@@ -426,3 +426,103 @@ def test_acq_image_list_getitem_and_iter() -> None:
         
         logger.info("  - __getitem__ and __iter__ work correctly")
 
+
+def test_acq_image_list_load_image_data(temp_folder_with_tif_files: Path) -> None:
+    """Test AcqImageList.load_image_data() method."""
+    logger.info("Testing AcqImageList.load_image_data()")
+    
+    image_list = AcqImageList(
+        path=temp_folder_with_tif_files,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=1
+    )
+    
+    if len(image_list) == 0:
+        pytest.skip("No images found in test folder")
+    
+    # Get first image (should not have image data loaded yet)
+    first_image = image_list[0]
+    assert first_image.getChannelData(1) is None, "Image data should not be loaded initially"
+    
+    # Load image data using AcqImageList API
+    success = image_list.load_image_data(0, channel=1)
+    assert success, "load_image_data() should succeed"
+    
+    # Verify image data is now loaded
+    image_data = first_image.getChannelData(1)
+    assert image_data is not None, "Image data should be loaded after load_image_data()"
+    assert isinstance(image_data, np.ndarray), "Image data should be a numpy array"
+    
+    logger.info("  - load_image_data() works correctly")
+
+
+def test_acq_image_list_load_all_channels(temp_folder_with_tif_files: Path) -> None:
+    """Test AcqImageList.load_all_channels() method."""
+    logger.info("Testing AcqImageList.load_all_channels()")
+    
+    image_list = AcqImageList(
+        path=temp_folder_with_tif_files,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=1
+    )
+    
+    if len(image_list) == 0:
+        pytest.skip("No images found in test folder")
+    
+    # Get first image
+    first_image = image_list[0]
+    
+    # Load all channels using AcqImageList API
+    load_results = image_list.load_all_channels(0)
+    
+    # Verify results
+    assert isinstance(load_results, dict), "load_all_channels() should return a dict"
+    
+    # At least channel 1 should be loaded (if file exists)
+    if len(load_results) > 0:
+        assert 1 in load_results, "Channel 1 should be in results"
+        # Channel 1 should succeed if file exists
+        if first_image.getChannelPath(1) is not None:
+            assert load_results[1], "Channel 1 should load successfully"
+    
+    logger.info(f"  - load_all_channels() works correctly, loaded {len(load_results)} channels")
+
+
+def test_kym_image_load_channel_idempotent(temp_folder_with_tif_files: Path) -> None:
+    """Test that KymImage.load_channel() is idempotent."""
+    logger.info("Testing KymImage.load_channel() idempotent behavior")
+    
+    image_list = AcqImageList(
+        path=temp_folder_with_tif_files,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=1
+    )
+    
+    if len(image_list) == 0:
+        pytest.skip("No images found in test folder")
+    
+    first_image = image_list[0]
+    
+    # First load should succeed
+    success1 = first_image.load_channel(1)
+    
+    # Get the image data after first load
+    data_after_first = first_image.getChannelData(1)
+    
+    # Second load should also succeed (idempotent)
+    success2 = first_image.load_channel(1)
+    
+    # Get the image data after second load
+    data_after_second = first_image.getChannelData(1)
+    
+    # Data should be the same (not reloaded)
+    if data_after_first is not None:
+        assert data_after_second is not None, "Data should still exist after second load"
+        assert np.array_equal(data_after_first, data_after_second), "Data should be identical (idempotent)"
+        assert success1 == success2, "Both loads should return same success status"
+    
+    logger.info("  - load_channel() is idempotent")
+

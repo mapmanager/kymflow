@@ -33,7 +33,7 @@ CancelCallback = Callable[[], bool]
 class RoiAnalysisMetadata:
     """Analysis metadata for a specific ROI.
 
-    ROI geometry (left/top/right/bottom, channel, z) lives in AcqImage.rois.
+    ROI geometry (dim0_start/dim0_stop/dim1_start/dim1_stop, channel, z) lives in AcqImage.rois.
     This stores only analysis state/results metadata.
     """
 
@@ -217,22 +217,17 @@ class KymAnalysis:
         # ROI coordinates are already clamped to image bounds and properly ordered when added/edited
         image = self.acq_image.get_img_slice(channel=channel)
         
-        # Convert ROI coordinates to pixel/line indices (already clamped and ordered)
-        start_pixel = roi.top
-        stop_pixel = roi.bottom
-        start_line = roi.left
-        stop_line = roi.right
+        logger.info(f'calling mp_analyze_flow() with roi {roi_id}:')
+        print(roi)
         
         # Run analysis on the ROI region
         thetas, the_t, spread = mp_analyze_flow(
             image,
             window_size,
-            space_dim=0,  # TODO: add api to get these from acq_image
-            time_dim=1,
-            start_pixel=start_pixel,
-            stop_pixel=stop_pixel,
-            start_line=start_line,
-            stop_line=stop_line,
+            dim0_start=roi.bounds.dim0_start,
+            dim0_stop=roi.bounds.dim0_stop,
+            dim1_start=roi.bounds.dim1_start,
+            dim1_stop=roi.bounds.dim1_stop,
             progress_callback=progress_callback,
             is_cancelled=is_cancelled,
             use_multiprocessing=use_multiprocessing,
@@ -389,19 +384,19 @@ class KymAnalysis:
         csv_path, json_path = self._get_save_paths()
         
         if not csv_path.exists():
-            if primary_path:
-                logger.info(f"No analysis CSV found for {primary_path.name}")
-            else:
-                logger.info("No analysis CSV found (no path available)")
-            logger.info(f"  csv_path:{csv_path}")
+            # if primary_path:
+            #     logger.info(f"No analysis CSV found for {primary_path.name}")
+            # else:
+            #     logger.info("No analysis CSV found (no path available)")
+            # logger.info(f"  csv_path:{csv_path}")
             return False
         
         if not json_path.exists():
-            if primary_path:
-                logger.info(f"No analysis JSON found for {primary_path.name}")
-            else:
-                logger.info("No analysis JSON found (no path available)")
-            logger.info(f"  json_path:{json_path}")
+            # if primary_path:
+            #     logger.info(f"No analysis JSON found for {primary_path.name}")
+            # else:
+            #     logger.info("No analysis JSON found (no path available)")
+            # logger.info(f"  json_path:{json_path}")
             return False
         
         # Load CSV
@@ -480,6 +475,10 @@ class KymAnalysis:
             Array of values for the specified key, or None if not found.
         """
         roi_df = self.get_analysis(roi_id=roi_id)
+
+        # logger.info('roi_df:')
+        # print(roi_df)
+
         if roi_df is None:
             logger.warning(f"No analysis found for ROI {roi_id}, requested key was:{key}")
             return None
@@ -489,10 +488,15 @@ class KymAnalysis:
             return None
         
         values = roi_df[key].values
+
+        # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
+        # print(values)
+
         if remove_outliers:
             values = _removeOutliers(values)
         if median_filter > 0:
             values = _medianFilter(values, median_filter)
+        
         return values
     
     def __str__(self) -> str:

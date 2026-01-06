@@ -11,6 +11,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.state import TaskState
 from kymflow.gui.tasks import run_batch_flow_analysis, run_flow_analysis
 
@@ -42,7 +43,7 @@ def test_run_flow_analysis_creates_roi_if_none_exists(sample_kym_file: KymImage)
         result_received["success"] = success
     
     # Ensure no ROIs exist
-    assert len(sample_kym_file.rois) == 0
+    assert sample_kym_file.rois.numRois() == 0
     
     # Run analysis (should create ROI automatically)
     run_flow_analysis(
@@ -65,10 +66,10 @@ def test_run_flow_analysis_creates_roi_if_none_exists(sample_kym_file: KymImage)
     # Check that ROI has full image bounds
     roi = sample_kym_file.rois.get(roi_ids[0])
     assert roi is not None
-    assert roi.left == 0
-    assert roi.top == 0
-    assert roi.right == 200
-    assert roi.bottom == 100
+    assert roi.bounds.dim0_start == 0
+    assert roi.bounds.dim1_start == 0
+    assert roi.bounds.dim0_stop == 100
+    assert roi.bounds.dim1_stop == 200
     
     # Check that analysis was performed
     assert task_state.message == "Done"
@@ -84,7 +85,8 @@ def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
         result_received["success"] = success
     
     # Create an ROI with specific coordinates
-    roi = sample_kym_file.rois.create_roi(left=10, top=10, right=50, bottom=50, note="Test ROI")
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = sample_kym_file.rois.create_roi(bounds=bounds, note="Test ROI")
     roi_id = roi.id
     
     # Run analysis (should use existing ROI)
@@ -173,7 +175,8 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
     task_state = TaskState()
     
     # Create ROI
-    roi = sample_kym_file.rois.create_roi()
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = sample_kym_file.rois.create_roi(bounds=bounds)
     
     # Start analysis
     run_flow_analysis(

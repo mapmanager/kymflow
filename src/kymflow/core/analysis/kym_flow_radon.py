@@ -85,12 +85,10 @@ def radon_worker(
 def mp_analyze_flow(
     data: np.ndarray,
     windowsize: int,
-    time_dim: int = 0,
-    space_dim: int = 1,
-    start_pixel: Optional[int] = None,
-    stop_pixel: Optional[int] = None,
-    start_line: Optional[int] = None,
-    stop_line: Optional[int] = None,
+    dim0_start: Optional[int],
+    dim0_stop: Optional[int],
+    dim1_start: Optional[int],
+    dim1_stop: Optional[int],
     *,
     verbose: bool = False,
     progress_callback: Optional[Callable[[int, int], Any]] = None,
@@ -154,35 +152,32 @@ def mp_analyze_flow(
     """
     start_sec = time.time()
 
-    # logger.info(f'data shape: {data.shape}')
-    # logger.info(f'start_pixel: {start_pixel}, stop_pixel: {stop_pixel}')
-    # logger.info(f'start_line: {start_line}, stop_line: {stop_line}')
-
     # if data.ndim != 2:
     #     raise ValueError(f"data must be 2D (time, space); got shape {data.shape}")
 
+    if dim0_start is None:
+        start_pixel = 0
+    if dim0_stop is None:
+        dim0_stop = data.shape[0]
+    if dim1_start is None:
+        dim1_start = 0
+    if dim1_stop is None:
+        dim1_stop = data.shape[1]
+
     # time axis = 0, space axis = 1
-    n_time = data.shape[time_dim]
-    n_space = data.shape[space_dim]
+    n_time = dim0_stop - dim0_start  # data.shape[1]
+    # n_space = dim1_stop - dim1_start  # data.shape[0]
 
     stepsize = int(0.25 * windowsize)
     if stepsize <= 0:
         raise ValueError(f"windowsize too small to compute stepsize: {windowsize}")
 
+    # nsteps from number of time lines in data
     nsteps = math.floor(n_time / stepsize) - 3
     if nsteps <= 0:
         raise ValueError(
             f"Invalid nsteps={nsteps}. Check windowsize={windowsize} and data.shape={data.shape}"
         )
-
-    if start_pixel is None:
-        start_pixel = 0
-    if stop_pixel is None:
-        stop_pixel = n_space
-    if start_line is None:
-        start_line = 0
-    if stop_line is None:
-        stop_line = n_time
 
     # Coarse and fine angle grids (degrees)
     angles = np.arange(180, dtype=np.float32)  # 0..179 degrees
@@ -194,11 +189,13 @@ def mp_analyze_flow(
     the_t = np.ones(nsteps, dtype=np.float32) * np.nan
     spread_matrix_fine = np.zeros((nsteps, len(angles_fine)), dtype=np.float32)
 
+    verbose = False
     if verbose:
-        print(f"data shape (space, time): {data.shape}")
+        print(f"=== mp_analyze_flow data shape (space, time): {data.shape}")
         print(f"  windowsize: {windowsize}, stepsize: {stepsize}")
-        print(f"  n_time: {n_time}, n_space: {n_space}, nsteps: {nsteps}")
-        print(f"  start_pixel: {start_pixel}, stop_pixel: {stop_pixel}")
+        # print(f"  n_time: {n_time}, n_space: {n_space}, nsteps: {nsteps}")
+        print(f"  dim0_start: {dim0_start}, dim0_stop: {dim0_stop}")
+        print(f"  dim1_start: {dim1_start}, dim1_stop: {dim1_stop}")
 
     completed = 0
     last_emit = 0
@@ -236,12 +233,16 @@ def mp_analyze_flow(
                     )
 
                 # Center time index for this window
-                the_t[k] = 1 + k * stepsize + windowsize / 2.0
+                # the_t[k] = 1 + k * stepsize + windowsize / 2.0
+                the_t[k] = dim0_start + (k * stepsize) + (windowsize / 2.0)
 
-                t_start = k * stepsize
-                t_stop = k * stepsize + windowsize
+                # t_start = k * stepsize
+                # t_stop = k * stepsize + windowsize
+                t_start = dim0_start + (k * stepsize)
+                t_stop = t_start + windowsize
+
                 # data_window = data[t_start:t_stop, start_pixel:stop_pixel]
-                data_window = data[t_start:t_stop, start_pixel:stop_pixel]
+                data_window = data[t_start:t_stop, dim1_start:dim1_stop]
 
                 params = (data_window, angles, angles_fine)
                 result = pool.apply_async(radon_worker, params)
@@ -273,7 +274,8 @@ def mp_analyze_flow(
 
             t_start = k * stepsize
             t_stop = k * stepsize + windowsize
-            data_window = data[t_start:t_stop, start_pixel:stop_pixel]
+            # data_window = data[t_start:t_stop, start_pixel:stop_pixel]
+            data_window = data[t_start:t_stop, dim1_start:dim1_stop]
 
             worker_theta, worker_spread_fine = radon_worker(
                 data_window, angles, angles_fine

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -41,13 +42,14 @@ def test_kymanalysis_add_roi() -> None:
     kym_image = KymImage(img_data=test_image, load_image=False)
     
     # Add an ROI
-    roi = kym_image.rois.create_roi(left=10, top=20, right=50, bottom=80, note="Test ROI")
+    bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
     
     assert roi.id == 1
-    assert roi.left == 10
-    assert roi.top == 20
-    assert roi.right == 50
-    assert roi.bottom == 80
+    assert roi.bounds.dim0_start == 20
+    assert roi.bounds.dim0_stop == 80
+    assert roi.bounds.dim1_start == 10
+    assert roi.bounds.dim1_stop == 50
     assert roi.note == "Test ROI"
     
     # Verify ROI is in the collection
@@ -62,13 +64,14 @@ def test_kymanalysis_roi_coordinates_clamped() -> None:
     kym_image = KymImage(img_data=test_image, load_image=False)
     
     # Try to add ROI outside bounds
-    roi = kym_image.rois.create_roi(left=-10, top=-5, right=250, bottom=150)
+    bounds = RoiBounds(dim0_start=-5, dim0_stop=150, dim1_start=-10, dim1_stop=250)
+    roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Coordinates should be clamped
-    assert roi.left >= 0
-    assert roi.top >= 0
-    assert roi.right <= 200
-    assert roi.bottom <= 100
+    assert roi.bounds.dim0_start >= 0
+    assert roi.bounds.dim0_stop <= 100
+    assert roi.bounds.dim1_start >= 0
+    assert roi.bounds.dim1_stop <= 200
 
 
 def test_kymanalysis_delete_roi() -> None:
@@ -78,8 +81,10 @@ def test_kymanalysis_delete_roi() -> None:
     kym_image = KymImage(img_data=test_image, load_image=False)
     
     # Add multiple ROIs
-    roi1 = kym_image.rois.create_roi(10, 10, 50, 50)
-    roi2 = kym_image.rois.create_roi(60, 60, 90, 90)
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = kym_image.rois.create_roi(bounds=bounds1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = kym_image.rois.create_roi(bounds=bounds2)
     
     assert kym_image.rois.numRois() == 2
     
@@ -99,7 +104,8 @@ def test_kymanalysis_edit_roi_coordinates_invalidates_analysis() -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi = kym_image.rois.create_roi(10, 10, 50, 50)
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
     kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     
     # Verify analysis exists
@@ -110,9 +116,10 @@ def test_kymanalysis_edit_roi_coordinates_invalidates_analysis() -> None:
     assert meta.algorithm == "mpRadon"
     
     # Edit coordinates - should invalidate analysis
-    kym_image.rois.edit_roi(roi.id, left=15)
+    new_bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=15, dim1_stop=50)
+    kym_image.rois.edit_roi(roi.id, bounds=new_bounds)
     
-    assert roi.left == 15
+    assert roi.bounds.dim1_start == 15
     # Analysis should be stale after coordinate change
     assert kym_analysis.is_stale(roi.id) is True
     # Metadata may still exist but is stale
@@ -127,7 +134,8 @@ def test_kymanalysis_edit_roi_note_preserves_analysis() -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi = kym_image.rois.create_roi(10, 10, 50, 50, note="Original note")
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Original note")
     kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     
     original_meta = kym_analysis.get_analysis_metadata(roi.id)
@@ -171,7 +179,8 @@ def test_kymanalysis_save_and_load_analysis(test_data_dir: Path) -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi1 = kym_image.rois.create_roi(10, 10, 50, 50, note="ROI 1")
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
     kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
     
     # Save metadata (ROIs are saved in metadata.json)
@@ -213,8 +222,10 @@ def test_kymanalysis_multi_roi_analysis() -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze multiple ROIs
-    roi1 = kym_image.rois.create_roi(10, 10, 30, 30, note="ROI 1")
-    roi2 = kym_image.rois.create_roi(50, 50, 70, 70, note="ROI 2")
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
+    roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
+    bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
+    roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
     
     kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
     kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
@@ -243,7 +254,8 @@ def test_kymanalysis_get_analysis_value() -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # Add and analyze ROI
-    roi = kym_image.rois.create_roi(10, 10, 50, 50)
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
     kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
     
     # Get analysis values
@@ -264,7 +276,8 @@ def test_kymanalysis_dirty_flag() -> None:
     
     # Initially should not be dirty (if no analysis loaded)
     # Adding ROI doesn't set dirty flag (ROIs are separate from analysis)
-    kym_image.rois.create_roi(10, 10, 50, 50)
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    kym_image.rois.create_roi(bounds=bounds)
     # Dirty flag is only set when analysis is performed or modified
     
     # After analyzing, should be dirty

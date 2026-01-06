@@ -286,7 +286,7 @@ def _find_olympus_txt_file(tifPath: str | Path) -> str | None:
         olympusTxtPath = os.path.join(os.path.split(tifPath)[0], olympusTxtFile)
     
     if not os.path.isfile(olympusTxtPath):
-        logger.warning(f"did not find Olympus header: {olympusTxtPath}")
+        # logger.warning(f"did not find Olympus header: {olympusTxtPath}")
         return None
 
     
@@ -326,12 +326,12 @@ def _readOlympusHeader(tifPath: str | Path) -> dict | None:
     """
 
     olympusTxtPath = _find_olympus_txt_file(tifPath)
-    logger.info(f'olympusTxtPath:{olympusTxtPath}')
+    # logger.info(f'olympusTxtPath:{olympusTxtPath}')
 
     if olympusTxtPath is None:
         return None
 
-    logger.info(f'reading olympus header from: {olympusTxtPath}')
+    # logger.info(f'reading olympus header from: {olympusTxtPath}')
     
     retDict = {
         "dateStr": None,
@@ -356,7 +356,7 @@ def _readOlympusHeader(tifPath: str | Path) -> dict | None:
             if line.startswith('"Channel Dimension"'):
                 _oneLine = line.replace('"', '')
                 _oneLine = _oneLine.split()
-                print('_oneLine:', _oneLine)
+                # print('_oneLine:', _oneLine)
                 channel = _oneLine[2]
                 retDict["numChannels"] = int(channel)
 

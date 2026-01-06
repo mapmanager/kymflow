@@ -1,7 +1,7 @@
+from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
     plot_image_line_plotly,
-    update_colorscale,
     update_contrast,
     update_xaxis_range,
 )
@@ -11,23 +11,53 @@ from kymflow.core.utils.logging import get_logger, setup_logging
 logger = get_logger(__name__)
 
 
-def run(path: str):
+def run(folder_path: str, filename: str):
     """Test script to verify uirevision preserves axis ranges when updating colorscale.
 
     Test flow:
-    1. Load KymImage and create initial figure
-    2. Programmatically set x-axis ranges to simulate user zoom
-    3. Update colorscale using update_traces()
-    4. Verify that axis ranges are preserved (uirevision working)
+    1. Load folder with AcqImageList and find specific file
+    2. Load image data for the file
+    3. Create initial figure
+    4. Programmatically set x-axis ranges to simulate user zoom
+    5. Update colorscale using update_traces()
+    6. Verify that axis ranges are preserved (uirevision working)
     """
     print("=" * 80)
     print("Testing Plotly uirevision for preserving zoom/pan state")
     print("=" * 80)
 
-    # Step 1: Load KymImage from path
-    print("\n1. Loading KymImage...")
-    kymImage = KymImage(path, load_image=True)
-    print(f"   Loaded: {path}")
+    # Step 1: Load folder with AcqImageList
+    print(f"\n1. Loading folder: {folder_path}")
+    image_list = AcqImageList(
+        path=folder_path,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=1
+    )
+    print(f"   Found {len(image_list)} files in folder")
+    
+    # Find specific file
+    kymImage = None
+    image_index = None
+    for i, img in enumerate(image_list):
+        if img.path and img.path.name == filename:
+            kymImage = img
+            image_index = i
+            break
+    
+    if kymImage is None:
+        raise ValueError(f"File '{filename}' not found in folder '{folder_path}'")
+    
+    print(f"   Found file: {kymImage.path}")
+    
+    # Load all channels for the image
+    print("   Loading image data for all channels...")
+    load_results = image_list.load_all_channels(image_index)
+    for channel, success in load_results.items():
+        if success:
+            print(f"     Channel {channel}: loaded successfully")
+        else:
+            print(f"     Channel {channel}: failed to load")
 
     # Get all ROI IDs (using new API)
     roi_ids = kymImage.rois.get_roi_ids()
@@ -36,10 +66,10 @@ def run(path: str):
     
     # Use first ROI
     first_roi_id = roi_ids[0]
-    one_roi = kymImage.rois.get(first_roi_id)
     one_roi_id = first_roi_id
-    logger.info(f'one_roi: {one_roi}')
-    logger.info(f'one_roi_id: {one_roi_id}')
+
+    # logger.info(f'one_roi: {one_roi}')
+    # logger.info(f'one_roi_id: {one_roi_id}')
     
     # Commented out loop for iterating over all ROIs:
     # for roi in all_rois:
@@ -63,6 +93,7 @@ def run(path: str):
         colorscale="Gray",
         selected_roi_id=one_roi_id,
         transpose=True,
+        plot_rois=True,
     )
 
     # fig.show(config={"scrollZoom": True})
@@ -122,7 +153,13 @@ def run(path: str):
 if __name__ == "__main__":
     setup_logging()
     
-    path = "/Users/cudmore/Dropbox/data/declan/data/20221102/Capillary1_0001.tif"
-    path = '/Users/cudmore/Sites/kymflow_outer/kymflow/tests/data/Capillary1_0001.tif'
+    # Use folder path and filename
+    folder_path = '/Users/cudmore/Sites/kymflow_outer/kymflow/tests/data'
+    filename = 'Capillary1_0001.tif'
+    
+    # Alternative: use full path and extract folder/filename
+    # full_path = '/Users/cudmore/Sites/kymflow_outer/kymflow/tests/data/Capillary1_0001.tif'
+    # folder_path = str(Path(full_path).parent)
+    # filename = Path(full_path).name
 
-    run(path)
+    run(folder_path, filename)

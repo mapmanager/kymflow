@@ -16,7 +16,7 @@ from kymflow.gui.frontend.components.contrast_widget import create_contrast_widg
 from kymflow.gui.frontend.components.image_line_viewer import create_image_line_viewer
 from kymflow.gui.frontend.components.metadata_form import create_metadata_form
 # from kymflow.gui.frontend.components.olympus_form import create_olympus_form  # Deprecated
-from kymflow.gui.frontend.components.analysis_form import create_analysis_form
+# from kymflow.gui.frontend.components.analysis_form import create_analysis_form
 
 
 def build_home_content(context: AppContext) -> None:
@@ -88,5 +88,6 @@ def build_home_content(context: AppContext) -> None:
             # with ui.card().classes("flex-1"):
             #     create_olympus_form(context.app_state)
             
-            with ui.card().classes("flex-1"):
-                create_analysis_form(context.app_state)
+            # abb removed v2 20260105
+            # with ui.card().classes("flex-1"):
+            #     create_analysis_form(context.app_state)

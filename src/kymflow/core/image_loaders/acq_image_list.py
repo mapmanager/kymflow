@@ -7,7 +7,7 @@ for files matching a given extension and creates AcqImage instances for each one
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Type, TypeVar
 
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger
@@ -63,7 +63,6 @@ class AcqImageList(Generic[T]):
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
         depth: int = 1,
-        follow_symlinks: bool = False,
     ):
         """Initialize AcqImageList and automatically load files.
         
@@ -78,8 +77,6 @@ class AcqImageList(Generic[T]):
                 (code depth 0). depth=2 includes base folder and immediate subfolders
                 (code depths 0,1). depth=n includes all files from code depth 0 up to
                 and including code depth (n-1). Defaults to 1.
-            follow_symlinks: If True, follow symbolic links when searching.
-                Defaults to False.
         """
         self.folder = Path(path).resolve()
         self.depth = depth
@@ -89,17 +86,13 @@ class AcqImageList(Generic[T]):
         self.images: List[T] = []
         
         # Automatically load files during initialization
-        self._load_files(follow_symlinks=follow_symlinks)
+        self._load_files()
     
-    def _load_files(self, follow_symlinks: bool = False) -> None:
+    def _load_files(self) -> None:
         """Internal method to scan folder and create AcqImage instances.
         
         Uses the same depth-based filtering logic as KymFileList._load_files().
         Files that cannot be loaded are silently skipped.
-        
-        Args:
-            follow_symlinks: If True, follow symbolic links when searching.
-                Defaults to False.
         """
         if not self.folder.exists() or not self.folder.is_dir():
             logger.warning(f"AcqImageList: folder does not exist or is not a directory: {self.folder}")
@@ -112,11 +105,8 @@ class AcqImageList(Generic[T]):
         else:
             glob_pattern = f"*.{self.file_extension}"
         
-        # Collect all matching files recursively
-        if follow_symlinks:
-            all_paths = list(self.folder.rglob(glob_pattern))
-        else:
-            all_paths = list(self.folder.glob(f"**/{glob_pattern}"))
+        # Collect all matching files recursively (glob doesn't follow symlinks by default)
+        all_paths = list(self.folder.glob(f"**/{glob_pattern}"))
         
         # Filter by depth: calculate depth relative to base folder
         # Code depth: base folder = 0, first subfolder = 1, second subfolder = 2, etc.
@@ -145,8 +135,9 @@ class AcqImageList(Generic[T]):
                 # Include files where code depth < GUI depth
                 if path_depth < self.depth:
                     filtered_paths.append(path)
-            except ValueError:
+            except (ValueError) as e:
                 # Path is not relative to base (shouldn't happen, but handle gracefully)
+                logger.warning(f"{e}")
                 continue
         
         # Sort paths for consistent ordering
@@ -156,36 +147,26 @@ class AcqImageList(Generic[T]):
         for file_path in sorted_paths:
             try:
                 # Create instance WITHOUT loading image data
-                # Check if the class accepts load_image parameter
-                import inspect
-                sig = inspect.signature(self.image_cls.__init__)
-                if 'load_image' in sig.parameters:
-                    image = self.image_cls(path=file_path, load_image=False)
-                else:
-                    # Base AcqImage doesn't have load_image parameter
-                    image = self.image_cls(path=file_path)
+                # All subclasses now support load_image parameter
+                image = self.image_cls(path=file_path, load_image=False)
                 self.images.append(image)
             except Exception as e:
                 logger.warning(f"AcqImageList: could not load file: {file_path}")
                 logger.warning(f"  -->> e:{e}")
                 continue
     
-    def load(self, follow_symlinks: bool = False) -> None:
+    def load(self) -> None:
         """Reload files from the folder.
         
         Clears existing images and rescans the folder. Useful for refreshing
         the list after files have been added or removed.
-        
-        Args:
-            follow_symlinks: If True, follow symbolic links when searching.
-                Defaults to False.
         """
         self.images.clear()
-        self._load_files(follow_symlinks=follow_symlinks)
+        self._load_files()
     
-    def reload(self, follow_symlinks: bool = False) -> None:
+    def reload(self) -> None:
         """Alias for load() method. Reload files from the folder."""
-        self.load(follow_symlinks=follow_symlinks)
+        self.load()
     
     def iter_metadata(self) -> Iterator[Dict[str, Any]]:
         """Iterate over metadata for all loaded AcqImage instances.
@@ -206,6 +187,57 @@ class AcqImageList(Generic[T]):
             List of metadata dictionaries, one per loaded AcqImage.
         """
         return list(self.iter_metadata())
+    
+    def load_image_data(self, index: int, channel: int = 1) -> bool:
+        """Load image data for a specific image and channel in the list.
+        
+        Convenience method that calls load_channel() on the image at the specified index.
+        Useful for user scripts and tests.
+        
+        Args:
+            index: Index of the image in the list.
+            channel: Channel number to load (defaults to 1).
+            
+        Returns:
+            True if loading succeeded, False otherwise.
+            
+        Raises:
+            IndexError: If index is out of range.
+        """
+        if index < 0 or index >= len(self.images):
+            raise IndexError(f"Index {index} out of range for AcqImageList with {len(self.images)} images")
+        
+        image = self.images[index]
+        return image.load_channel(channel)
+    
+    def load_all_channels(self, index: int) -> dict[int, bool]:
+        """Load all available channels for a specific image in the list.
+        
+        Gets all channel keys from the image's _file_path_dict and loads each one.
+        Useful for ensuring all channels are loaded before processing.
+        
+        Args:
+            index: Index of the image in the list.
+            
+        Returns:
+            Dictionary mapping channel numbers to load success status.
+            
+        Raises:
+            IndexError: If index is out of range.
+        """
+        if index < 0 or index >= len(self.images):
+            raise IndexError(f"Index {index} out of range for AcqImageList with {len(self.images)} images")
+        
+        image = self.images[index]
+        result: dict[int, bool] = {}
+        
+        # Get all channel keys (channels with paths or loaded data)
+        channel_keys = image.getChannelKeys()
+        
+        for channel in channel_keys:
+            result[channel] = image.load_channel(channel)
+        
+        return result
     
     def __len__(self) -> int:
         """Return the number of images in the list."""

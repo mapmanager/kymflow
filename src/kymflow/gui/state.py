@@ -110,7 +110,9 @@ class AppState:
                 logger.exception("Error in file_list_changed handler")
         
         if len(self.files) > 0:
-            self.select_file(self.files[0])
+            _selectFile = self.files[0]
+            logger.info(f"selected file: {_selectFile}")
+            self.select_file(_selectFile)
         else:
             self.select_file(None)
     
@@ -124,6 +126,14 @@ class AppState:
         
         # Initialize selected_roi_id to first ROI if available
         if kym_file is not None:
+            # Load all available channels (idempotent - safe to call multiple times)
+            channel_keys = kym_file.getChannelKeys()
+            for channel in channel_keys:
+                try:
+                    kym_file.load_channel(channel)
+                except Exception as e:
+                    logger.warning(f"Failed to load channel {channel} for {kym_file.path}: {e}")
+            
             roi_ids = kym_file.rois.get_roi_ids()
             if roi_ids:
                 self.selected_roi_id = roi_ids[0]
