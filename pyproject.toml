@@ -110,6 +110,9 @@ dev = [
 # [project.scripts]
 # kymflow-gui = "gui.main:main"
 
+[project.scripts]
+kymflow-gui = "kymflow.gui_v2.app:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
