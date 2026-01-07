@@ -1,43 +1,44 @@
-# src/kymflow/gui_v2/views/file_table_view.py
-# gpt 20260106: adapt to nicewidgets ColumnConfig API (no width/hide/align kwargs);
-#              use extra_grid_options for AG Grid-only settings.
+"""File table view component using CustomAgGrid.
+
+This module provides a view component that displays a table of kymograph files
+using CustomAgGrid. The view emits FileSelected events when users select rows,
+but does not subscribe to events (that's handled by FileTableBindings).
+"""
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Iterable, List, Optional
+
+from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.gui_v2.events import FileSelected, FilesSelected, SelectionOrigin
+from kymflow.gui_v2.events import FileSelected, SelectionOrigin
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig
 from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
+
+Rows = List[dict[str, object]]
+OnSelected = Callable[[FileSelected], None]
 
 
 def _col(
     field: str,
-    header: str,
+    header: Optional[str] = None,
     *,
-    width: int | None = None,
+    width: Optional[int] = None,
     hide: bool = False,
-    cell_class: str | None = None,
+    cell_class: Optional[str] = None,
 ) -> ColumnConfig:
-    """Helper to build ColumnConfig using extra_grid_options for AG Grid props."""
     extra: dict[str, object] = {}
     if width is not None:
         extra["width"] = width
     if hide:
         extra["hide"] = True
-    if cell_class:
+    if cell_class is not None:
         extra["cellClass"] = cell_class
-
-    return ColumnConfig(
-        field=field,
-        header=header,
-        extra_grid_options=extra,  # gpt 20260106
-    )
+    return ColumnConfig(field=field, header=header, extra_grid_options=extra)
 
 
 def _default_columns() -> list[ColumnConfig]:
-    """Column setup matching KymImage.getRowDict() keys."""
     return [
         _col("File Name", "File Name", width=260),
         _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center"),
@@ -51,57 +52,93 @@ def _default_columns() -> list[ColumnConfig]:
         _col("ms/line", "ms/line", width=120, cell_class="ag-cell-right"),
         _col("um/pixel", "um/pixel", width=120, cell_class="ag-cell-right"),
         _col("note", "note", width=240),
-        _col("path", "path", hide=True),  # stable row id field
+        _col("path", "path", hide=True),  # keep for row id + selection, but hide
     ]
 
 
 class FileTableView:
-    """Thin view wrapper around CustomAgGrid for KymImage rows."""
+    """File table view component using CustomAgGrid.
+
+    This view displays a table of kymograph files with columns for file name,
+    analysis status, metadata, etc. Users can select rows, which triggers
+    FileSelected events.
+
+    Lifecycle:
+        - UI elements are created in render() (not __init__) to ensure correct
+          DOM placement within NiceGUI's client context
+        - Data updates via set_files() and set_selected_paths()
+        - Events emitted via on_selected callback
+
+    Attributes:
+        _on_selected: Callback function that receives FileSelected events.
+        _selection_mode: Selection mode ("single" or "multiple").
+        _grid: CustomAgGrid instance (created in render()).
+        _suppress_emit: Flag to prevent event emission during programmatic selection.
+        _pending_rows: Rows buffered before render() is called.
+    """
 
     def __init__(
         self,
         *,
-        on_selected: Callable[[FileSelected | FilesSelected], None],
+        on_selected: OnSelected,
         selection_mode: str = "single",
     ) -> None:
         self._on_selected = on_selected
+        self._selection_mode = selection_mode
+
+        self._grid: CustomAgGrid | None = None
+        self._suppress_emit: bool = False
+
+        # Keep latest rows so if FileListChanged arrives before render(),
+        # we can populate when render() happens.
+        self._pending_rows: Rows = []
+
+    def render(self) -> None:
+        """Create the grid UI inside the current container (idempotent)."""
+        if self._grid is not None:
+            return
 
         grid_cfg = GridConfig(
-            selection_mode=selection_mode,  # "single" or "multiple"
-            height="28rem",
-            row_id_field="path",  # stable id for programmatic selection
+            selection_mode=self._selection_mode,  # type: ignore[arg-type]
+            height="24rem",
         )
+        if hasattr(grid_cfg, "row_id_field"):
+            setattr(grid_cfg, "row_id_field", "path")
 
+        # Create the grid *now*, inside whatever container the caller opened.
         self._grid = CustomAgGrid(
-            data=[],
+            data=self._pending_rows,
             columns=_default_columns(),
             grid_config=grid_cfg,
         )
+        self._grid.on_row_selected(self._on_row_selected)
 
-        self._grid.on_row_selected(self._handle_row_selected)
-
-    def set_files(self, files: list[KymImage]) -> None:
-        """Replace grid rows with file.getRowDict()."""
-        self._grid.set_data([f.getRowDict() for f in files])
+    def set_files(self, files: Iterable[KymImage]) -> None:
+        """Update table contents from KymImage list."""
+        rows: Rows = [f.getRowDict() for f in files]
+        self._pending_rows = rows
+        if self._grid is not None:
+            self._grid.set_data(rows)
 
     def set_selected_paths(self, paths: list[str], *, origin: SelectionOrigin) -> None:
-        """Programmatically select one or more rows by path."""
-        self._grid.set_selected_row_ids(paths, origin=origin.value)
+        """Programmatically select rows by file path."""
+        if self._grid is None:
+            return
+        self._suppress_emit = True
+        try:
+            if hasattr(self._grid, "set_selected_row_ids"):
+                self._grid.set_selected_row_ids(paths, origin=origin.value)
+        finally:
+            self._suppress_emit = False
 
-    def _handle_row_selected(self, row_index: int, row_data: dict) -> None:
-        """Receive selection from grid and emit typed selection event."""
+    def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:
+        """Handle user selecting a row."""
+        if self._suppress_emit:
+            return
         path = row_data.get("path")
-        if self._grid_config_selection_mode() == "multiple":
-            # For now, CustomAgGrid v1 API gives single row events; we emit a single-item list.
-            self._on_selected(
-                FilesSelected(paths=[path] if path else [], origin=SelectionOrigin.FILE_TABLE)
+        self._on_selected(
+            FileSelected(
+                path=str(path) if path else None,
+                origin=SelectionOrigin.FILE_TABLE,
             )
-        else:
-            self._on_selected(
-                FileSelected(path=str(path) if path else None, origin=SelectionOrigin.FILE_TABLE)
-            )
-
-    def _grid_config_selection_mode(self) -> str:
-        # gpt 20260106: CustomAgGrid doesn't expose selection_mode property in your original file;
-        # we read from the grid options as a safe fallback.
-        return self._grid.grid.options.get("rowSelection") or "single"
+        )
