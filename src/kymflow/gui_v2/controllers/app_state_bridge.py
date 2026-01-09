@@ -13,12 +13,16 @@ from kymflow.core.utils.logging import get_logger
 from kymflow.gui.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import is_client_alive
-from kymflow.gui_v2.events import FileSelection, ROISelection, SelectionOrigin
+from kymflow.gui_v2.events import (
+    FileSelection,
+    ROISelection,
+    SelectionOrigin,
+    ImageDisplayChange,
+    MetadataUpdate,
+)
 from kymflow.gui_v2.events_state import (
     FileListChanged,
     ThemeChanged,
-    ImageDisplayChanged,
-    MetadataChanged,
 )
 
 if TYPE_CHECKING:
@@ -171,7 +175,7 @@ class AppStateBridgeController:
     def _on_image_display_changed(self, params) -> None:
         """Handle AppState image display parameter change callback.
 
-        Emits ImageDisplayChanged event with the current display parameters.
+        Emits ImageDisplayChange(phase="state") event with the current display parameters.
         Checks client validity before emitting.
 
         Args:
@@ -180,16 +184,24 @@ class AppStateBridgeController:
         # Only emit if client is still alive
         if not is_client_alive():
             logger.debug(
-                f"[bridge] Skipping ImageDisplayChanged emit - client deleted (bus={self._bus._client_id[:8]}...)"
+                f"[bridge] Skipping ImageDisplayChange emit - client deleted (bus={self._bus._client_id[:8]}...)"
             )
             return
-        self._bus.emit(ImageDisplayChanged(params=params))
+        # State events always use EXTERNAL origin (they come from AppState, not UI)
+        self._bus.emit(
+            ImageDisplayChange(
+                params=params,
+                origin=SelectionOrigin.EXTERNAL,
+                phase="state",
+            )
+        )
 
     def _on_metadata_changed(self, kym_file: KymImage) -> None:
         """Handle AppState metadata change callback.
 
-        Emits MetadataChanged event with the file whose metadata was updated.
-        Checks client validity before emitting.
+        Emits MetadataUpdate(phase="state") event with the file whose metadata was updated.
+        Note: We don't know which metadata type was updated, so we emit with empty fields.
+        Views will refresh based on file selection.
 
         Args:
             kym_file: KymImage instance whose metadata was updated.
@@ -197,7 +209,16 @@ class AppStateBridgeController:
         # Only emit if client is still alive
         if not is_client_alive():
             logger.debug(
-                f"[bridge] Skipping MetadataChanged emit - client deleted (bus={self._bus._client_id[:8]}...)"
+                f"[bridge] Skipping MetadataUpdate emit - client deleted (bus={self._bus._client_id[:8]}...)"
             )
             return
-        self._bus.emit(MetadataChanged(file=kym_file))
+        # Emit with empty fields - views will refresh from file
+        self._bus.emit(
+            MetadataUpdate(
+                file=kym_file,
+                metadata_type="experimental",  # Default, views will refresh both types
+                fields={},
+                origin=SelectionOrigin.EXTERNAL,
+                phase="state",
+            )
+        )

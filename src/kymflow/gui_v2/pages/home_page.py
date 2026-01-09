@@ -13,14 +13,22 @@ from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
 from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController
 from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
 from kymflow.gui_v2.controllers.folder_controller import FolderController
+from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
+from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
 from kymflow.gui_v2.events import SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
+from kymflow.gui_v2.views.contrast_bindings import ContrastBindings
+from kymflow.gui_v2.views.contrast_view import ContrastView
 from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
 from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
+from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
+from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
+from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
+from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 
 if TYPE_CHECKING:
     pass
@@ -64,14 +72,22 @@ class HomePage(BasePage):
         self._folder_controller: FolderController | None = None
         self._file_selection_controller: FileSelectionController | None = None
         self._roi_selection_controller: ROISelectionController | None = None
+        self._image_display_controller: ImageDisplayController | None = None
+        self._metadata_controller: MetadataController | None = None
         self._persistence: FileTablePersistenceController | None = None
 
         # View objects (created in __init__, UI elements created in build())
         self._folder_view = FolderSelectorView(bus, context.app_state)
         self._table_view = FileTableView(on_selected=bus.emit, selection_mode="single")
         self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
+        self._contrast_view = ContrastView(on_image_display_change=bus.emit)
+        self._metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
+        self._metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
+        self._contrast_bindings: ContrastBindings | None = None
+        self._metadata_experimental_bindings: MetadataExperimentalBindings | None = None
+        self._metadata_header_bindings: MetadataHeaderBindings | None = None
 
         # Per-client state tracking
         self._restored_once: bool = False
@@ -95,6 +111,12 @@ class HomePage(BasePage):
         self._roi_selection_controller = ROISelectionController(
             self.context.app_state, self.bus
         )
+        self._image_display_controller = ImageDisplayController(
+            self.context.app_state, self.bus
+        )
+        self._metadata_controller = MetadataController(
+            self.context.app_state, self.bus
+        )
 
         self._persistence = FileTablePersistenceController(
             self.context.app_state,
@@ -106,6 +128,13 @@ class HomePage(BasePage):
         self._table_bindings = FileTableBindings(self.bus, self._table_view)
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
+        )
+        self._contrast_bindings = ContrastBindings(self.bus, self._contrast_view)
+        self._metadata_experimental_bindings = MetadataExperimentalBindings(
+            self.bus, self._metadata_experimental_view
+        )
+        self._metadata_header_bindings = MetadataHeaderBindings(
+            self.bus, self._metadata_header_view
         )
 
         self._setup_complete = True
@@ -125,32 +154,61 @@ class HomePage(BasePage):
             initial_folder = self.context.app_state.folder or Path(".")
             self._folder_view.render(initial_folder=initial_folder)
 
-            # File table SECOND (creates grid ui here)
-            self._table_view.render()
+            # File table SECOND (creates grid ui here) - in disclosure triangle
+            with ui.expansion("Files", value=True).classes("w-full"):
+                self._table_view.render()
 
-            # Populate with current state (if already loaded, shows immediately)
-            self._table_view.set_files(list(self.context.app_state.files))
+                # Populate with current state (if already loaded, shows immediately)
+                self._table_view.set_files(list(self.context.app_state.files))
 
-            # Restore current selection from AppState (ensures visibility on navigation back)
-            # This handles both initial load and navigation back scenarios
-            current_file = self.context.app_state.selected_file
-            if current_file is not None and hasattr(current_file, "path"):
-                self._table_view.set_selected_paths(
-                    [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
-                )
+                # Restore current selection from AppState (ensures visibility on navigation back)
+                # This handles both initial load and navigation back scenarios
+                current_file = self.context.app_state.selected_file
+                if current_file is not None and hasattr(current_file, "path"):
+                    self._table_view.set_selected_paths(
+                        [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
+                    )
 
-            # Image/line viewer THIRD (creates plot ui here)
-            self._image_line_viewer.render()
+            # Contrast widget - in disclosure triangle
+            with ui.expansion("Contrast Controls", value=False).classes("w-full"):
+                self._contrast_view.render()
 
-            # Initialize viewer with current AppState (if already set)
-            # This ensures viewer shows current selection/theme on first render
-            current_file = self.context.app_state.selected_file
-            if current_file is not None:
-                self._image_line_viewer.set_selected_file(current_file)
-            current_roi = self.context.app_state.selected_roi_id
-            if current_roi is not None:
-                self._image_line_viewer.set_selected_roi(current_roi)
-            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+                # Initialize contrast view with current AppState
+                current_file = self.context.app_state.selected_file
+                if current_file is not None:
+                    self._contrast_view.set_selected_file(current_file)
+                # Get current display params from AppState if available
+                # Note: AppState doesn't store display params directly, so we'll initialize with defaults
+                # The view will be updated when ImageDisplayChange events arrive
+                self._contrast_view.set_theme(self.context.app_state.theme_mode)
+
+            # Image/line viewer THIRD (creates plot ui here) - in disclosure triangle
+            with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
+                self._image_line_viewer.render()
+
+                # Initialize viewer with current AppState (if already set)
+                # This ensures viewer shows current selection/theme on first render
+                current_file = self.context.app_state.selected_file
+                if current_file is not None:
+                    self._image_line_viewer.set_selected_file(current_file)
+                current_roi = self.context.app_state.selected_roi_id
+                if current_roi is not None:
+                    self._image_line_viewer.set_selected_roi(current_roi)
+                self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+
+            # Metadata widgets - both in single disclosure triangle
+            with ui.expansion("Metadata", value=True).classes("w-full"):
+                # Experimental metadata widget
+                self._metadata_experimental_view.render()
+
+                # Header metadata widget
+                self._metadata_header_view.render()
+
+                # Initialize metadata views with current AppState
+                current_file = self.context.app_state.selected_file
+                if current_file is not None:
+                    self._metadata_experimental_view.set_selected_file(current_file)
+                    self._metadata_header_view.set_selected_file(current_file)
 
             # Restore selection once per client (after UI is created)
             if not self._restored_once:

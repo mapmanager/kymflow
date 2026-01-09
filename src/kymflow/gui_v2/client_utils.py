@@ -35,11 +35,7 @@ def safe_call(func: Callable, *args, **kwargs) -> None:
     try:
         func(*args, **kwargs)
     except RuntimeError as e:
-        # Log and re-raise non-"deleted" errors for debugging
-        if "deleted" not in str(e).lower():
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"safe_call caught RuntimeError in {func.__name__}: {e}")
-            raise
         # Silently ignore "client deleted" errors
+        if "deleted" not in str(e).lower():
+            raise
 

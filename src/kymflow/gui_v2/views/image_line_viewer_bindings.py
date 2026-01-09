@@ -6,12 +6,8 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import FileSelection, ROISelection
-from kymflow.gui_v2.events_state import (
-    ThemeChanged,
-    ImageDisplayChanged,
-    MetadataChanged,
-)
+from kymflow.gui_v2.events import FileSelection, ROISelection, ImageDisplayChange, MetadataUpdate
+from kymflow.gui_v2.events_state import ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
 
 if TYPE_CHECKING:
@@ -29,8 +25,8 @@ class ImageLineViewerBindings:
         1. FileSelection(phase="state") → view.set_selected_file()
         2. ROISelection(phase="state") → view.set_selected_roi()
         3. ThemeChanged → view.set_theme()
-        4. ImageDisplayChanged → view.set_image_display()
-        5. MetadataChanged → view.set_metadata() (only if file matches current)
+        4. ImageDisplayChange(phase="state") → view.set_image_display()
+        5. MetadataUpdate(phase="state") → view.set_metadata() (only if file matches current)
 
     Attributes:
         _bus: EventBus instance for subscribing to events.
@@ -57,8 +53,8 @@ class ImageLineViewerBindings:
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(ROISelection, self._on_roi_changed)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
-        bus.subscribe(ImageDisplayChanged, self._on_image_display_changed)
-        bus.subscribe(MetadataChanged, self._on_metadata_changed)
+        bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        bus.subscribe_state(MetadataUpdate, self._on_metadata_changed)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -74,8 +70,8 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
         self._bus.unsubscribe_state(ROISelection, self._on_roi_changed)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
-        self._bus.unsubscribe(ImageDisplayChanged, self._on_image_display_changed)
-        self._bus.unsubscribe(MetadataChanged, self._on_metadata_changed)
+        self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_changed)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -111,25 +107,25 @@ class ImageLineViewerBindings:
         """
         safe_call(self._view.set_theme, e.theme)
 
-    def _on_image_display_changed(self, e: ImageDisplayChanged) -> None:
+    def _on_image_display_changed(self, e: ImageDisplayChange) -> None:
         """Handle image display parameter change event.
 
         Updates viewer contrast/colorscale. Wrapped in safe_call to handle
         deleted client errors gracefully.
 
         Args:
-            e: ImageDisplayChanged event containing the new display parameters.
+            e: ImageDisplayChange event (phase="state") containing the new display parameters.
         """
         safe_call(self._view.set_image_display, e.params)
 
-    def _on_metadata_changed(self, e: MetadataChanged) -> None:
+    def _on_metadata_changed(self, e: MetadataUpdate) -> None:
         """Handle metadata change event.
 
         Refreshes viewer if the updated file matches the currently selected file.
         Wrapped in safe_call to handle deleted client errors gracefully.
 
         Args:
-            e: MetadataChanged event containing the file whose metadata was updated.
+            e: MetadataUpdate event (phase="state") containing the file whose metadata was updated.
         """
         safe_call(self._view.set_metadata, e.file)
 

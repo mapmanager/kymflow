@@ -139,13 +139,6 @@ class ImageLineViewerView:
 
     def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
         """Internal implementation of set_selected_file."""
-        file_path = file.path if file is not None else None
-        logger.info(
-            f"_set_selected_file_impl: file={file_path}, "
-            f"plot={self._plot is not None}, "
-            f"remove_outliers_cb={self._remove_outliers_cb is not None}, "
-            f"median_filter_cb={self._median_filter_cb is not None}"
-        )
         self._current_file = file
         # Update dropdown options (ROI selection will be updated by ROISelection(phase="state") event
         # that AppState.select_file() automatically triggers)
@@ -289,20 +282,7 @@ class ImageLineViewerView:
         display_params = self._display_params
         roi_id = self._current_roi_id
 
-        file_path = kf.path if kf is not None else None
-        logger.info(
-            f"_render_combined: called with file={file_path}, roi_id={roi_id}, "
-            f"plot={self._plot is not None}, "
-            f"remove_outliers_cb={self._remove_outliers_cb is not None}, "
-            f"median_filter_cb={self._median_filter_cb is not None}"
-        )
-
         if self._plot is None or self._remove_outliers_cb is None or self._median_filter_cb is None:
-            logger.warning(
-                f"_render_combined: early return - plot={self._plot is not None}, "
-                f"remove_outliers_cb={self._remove_outliers_cb is not None}, "
-                f"median_filter_cb={self._median_filter_cb is not None}"
-            )
             return
 
         # Convert checkbox to median_filter int (0 = off, 5 = on with window size 5)

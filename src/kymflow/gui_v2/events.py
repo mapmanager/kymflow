@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Any
 
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.kym_image import KymImage
+    from kymflow.gui.state import ImageDisplayParams
+else:
+    from kymflow.gui.state import ImageDisplayParams
 
 EventPhase = Literal["intent", "state"]
 
@@ -90,5 +93,63 @@ class ROISelection:
     """
 
     roi_id: int | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class ImageDisplayChange:
+    """Image display parameter change event (intent or state phase).
+
+    This event is used for both intent (user wants to change display parameters)
+    and state (display parameters have changed) phases. The phase field determines
+    which handlers receive the event.
+
+    For intent phase:
+        - Emitted by views when user changes colorscale, zmin, or zmax
+        - Handled by ImageDisplayController which updates AppState
+
+    For state phase:
+        - Emitted by AppStateBridge when AppState.set_image_display() is called
+        - Subscribed to by bindings to update views
+
+    Attributes:
+        params: ImageDisplayParams containing colorscale, zmin, zmax, and origin.
+        origin: SelectionOrigin indicating where the change came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    params: "ImageDisplayParams"
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class MetadataUpdate:
+    """Metadata update event (intent or state phase).
+
+    This event is used for both intent (user wants to update metadata) and state
+    (metadata has been updated) phases. The phase field determines which handlers
+    receive the event.
+
+    For intent phase:
+        - Emitted by views when user edits a metadata field
+        - Handled by MetadataController which updates the file
+
+    For state phase:
+        - Emitted by AppStateBridge when AppState.update_metadata() is called
+        - Subscribed to by bindings to refresh views
+
+    Attributes:
+        file: KymImage instance whose metadata is being updated or was updated.
+        metadata_type: Type of metadata - "experimental" or "header".
+        fields: Dictionary mapping field names to new values.
+        origin: SelectionOrigin indicating where the update came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    file: "KymImage"
+    metadata_type: Literal["experimental", "header"]
+    fields: dict[str, Any]
     origin: SelectionOrigin
     phase: EventPhase

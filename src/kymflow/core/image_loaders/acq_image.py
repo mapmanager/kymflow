@@ -460,6 +460,22 @@ class AcqImage:
             else:
                 logger.warning(f"Unknown field '{key}' in experiment metadata")
     
+    def update_header(self, **fields: Any) -> None:
+        """Update stored header metadata fields.
+        
+        Updates one or more fields in the header metadata. Unknown fields
+        are silently ignored.
+        
+        Args:
+            **fields: Keyword arguments mapping field names to new values.
+                Only fields that exist in AcqImgHeader are updated.
+        """
+        for key, value in fields.items():
+            if hasattr(self._header, key):
+                setattr(self._header, key, value)
+            else:
+                logger.warning(f"Unknown field '{key}' in header metadata")
+    
     @property
     def rois(self) -> "RoiSet":
         """Get RoiSet instance (lazy initialization).

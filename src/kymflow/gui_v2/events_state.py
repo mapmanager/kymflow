@@ -50,31 +50,3 @@ class ThemeChanged:
     theme: ThemeMode
 
 
-@dataclass(frozen=True, slots=True)
-class ImageDisplayChanged:
-    """AppState image display parameter change notification.
-
-    Emitted by AppStateBridgeController when AppState.set_image_display() is called
-    and image display parameters (colorscale, contrast) change. Views subscribe
-    to this to update their UI when display parameters change.
-
-    Attributes:
-        params: ImageDisplayParams containing colorscale, zmin, zmax, and origin.
-    """
-
-    params: ImageDisplayParams
-
-
-@dataclass(frozen=True, slots=True)
-class MetadataChanged:
-    """AppState metadata change notification.
-
-    Emitted by AppStateBridgeController when AppState.update_metadata() is called
-    and metadata for a file is updated. Views subscribe to this to refresh
-    their UI when file metadata changes.
-
-    Attributes:
-        file: KymImage instance whose metadata was updated.
-    """
-
-    file: KymImage

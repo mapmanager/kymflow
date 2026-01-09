@@ -12,12 +12,9 @@ from typing import Callable, Iterable, List, Optional
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig
 from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
-
-logger = get_logger(__name__)
 
 Rows = List[dict[str, object]]
 OnSelected = Callable[[FileSelection], None]
@@ -146,14 +143,9 @@ class FileTableView:
 
     def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:
         """Handle user selecting a row."""
-        path = row_data.get("path")
-        logger.info(
-            f"_on_row_selected: row_index={row_index}, path={path}, suppress_emit={self._suppress_emit}"
-        )
         if self._suppress_emit:
-            logger.info("_on_row_selected: returning early due to suppress_emit=True")
             return
-        logger.info(f"_on_row_selected: emitting FileSelection for path={path}")
+        path = row_data.get("path")
         self._on_selected(
             FileSelection(
                 path=str(path) if path else None,
