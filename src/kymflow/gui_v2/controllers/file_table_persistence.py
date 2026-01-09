@@ -13,7 +13,7 @@ from nicegui import app
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui.state import AppState
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import FileSelected, FilesSelected, SelectionOrigin
+from kymflow.gui_v2.events import FileSelection, SelectionOrigin
 
 if TYPE_CHECKING:
     pass
@@ -30,8 +30,7 @@ class FileTablePersistenceController:
 
     Storage:
         - Uses app.storage.user (per-client, persists across page reloads)
-        - Stores single path string for single selection
-        - Stores list of paths for multi-selection
+        - Stores single path string for selected file
 
     Attributes:
         _app_state: AppState instance (not directly used, but kept for consistency).
@@ -41,7 +40,7 @@ class FileTablePersistenceController:
     def __init__(self, app_state: AppState, bus: EventBus, *, storage_key: str) -> None:
         """Initialize persistence controller.
 
-        Subscribes to FileSelected and FilesSelected events to save selections.
+        Subscribes to FileSelection (phase="state") events to save selections.
 
         Args:
             app_state: AppState instance (kept for consistency with other controllers).
@@ -51,8 +50,8 @@ class FileTablePersistenceController:
         self._app_state: AppState = app_state
         self._storage_key: str = storage_key
 
-        bus.subscribe(FileSelected, self._on_file_selected)
-        bus.subscribe(FilesSelected, self._on_files_selected)
+        # Subscribe to state events, but filter by origin=FILE_TABLE (only persist user actions)
+        bus.subscribe_state(FileSelection, self._on_file_selected)
 
     def restore_selection(self) -> list[str]:
         """Restore selected file path(s) from browser storage.
@@ -71,34 +70,24 @@ class FileTablePersistenceController:
             return [str(p) for p in stored]
         return [str(stored)]
 
-    def _on_file_selected(self, e: FileSelected) -> None:
-        """Handle FileSelected event and persist selection.
+    def _on_file_selected(self, e: FileSelection) -> None:
+        """Handle FileSelection state event and persist selection.
 
         Saves the selected file path to storage, but only if the origin is
         FILE_TABLE (user selection), not RESTORE or EXTERNAL (programmatic).
 
         Args:
-            e: FileSelected event containing the selected path and origin.
+            e: FileSelection event (phase="state") containing the selected file/path and origin.
         """
         # Don't persist programmatic selections (restore, external updates)
         if e.origin in {SelectionOrigin.RESTORE, SelectionOrigin.EXTERNAL}:
             return
 
-        app.storage.user[self._storage_key] = e.path
-        logger.info(f"stored selection {e.path!r} -> {self._storage_key}")
+        # Use path from event, or derive from file
+        path = e.path
+        if path is None and e.file is not None and hasattr(e.file, "path"):
+            path = str(e.file.path)
 
-    def _on_files_selected(self, e: FilesSelected) -> None:
-        """Handle FilesSelected event and persist selection.
-
-        Saves the selected file paths to storage, but only if the origin is
-        FILE_TABLE (user selection), not RESTORE or EXTERNAL (programmatic).
-
-        Args:
-            e: FilesSelected event containing the selected paths and origin.
-        """
-        # Don't persist programmatic selections (restore, external updates)
-        if e.origin in {SelectionOrigin.RESTORE, SelectionOrigin.EXTERNAL}:
-            return
-
-        app.storage.user[self._storage_key] = list(e.paths)
-        logger.info(f"stored selection {len(e.paths)} rows -> {self._storage_key}")
+        if path:
+            app.storage.user[self._storage_key] = path
+            logger.info(f"stored selection {path!r} -> {self._storage_key}")

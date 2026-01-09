@@ -13,11 +13,14 @@ from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
 from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController
 from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
 from kymflow.gui_v2.controllers.folder_controller import FolderController
+from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
 from kymflow.gui_v2.events import SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
+from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
+from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
 
 if TYPE_CHECKING:
     pass
@@ -60,12 +63,15 @@ class HomePage(BasePage):
         self._bridge: AppStateBridgeController | None = None
         self._folder_controller: FolderController | None = None
         self._file_selection_controller: FileSelectionController | None = None
+        self._roi_selection_controller: ROISelectionController | None = None
         self._persistence: FileTablePersistenceController | None = None
 
         # View objects (created in __init__, UI elements created in build())
         self._folder_view = FolderSelectorView(bus, context.app_state)
         self._table_view = FileTableView(on_selected=bus.emit, selection_mode="single")
+        self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
         self._table_bindings: FileTableBindings | None = None
+        self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
 
         # Per-client state tracking
         self._restored_once: bool = False
@@ -86,6 +92,9 @@ class HomePage(BasePage):
         self._file_selection_controller = FileSelectionController(
             self.context.app_state, self.bus
         )
+        self._roi_selection_controller = ROISelectionController(
+            self.context.app_state, self.bus
+        )
 
         self._persistence = FileTablePersistenceController(
             self.context.app_state,
@@ -95,6 +104,9 @@ class HomePage(BasePage):
 
         # Bindings (subscribe to events once per client)
         self._table_bindings = FileTableBindings(self.bus, self._table_view)
+        self._image_line_viewer_bindings = ImageLineViewerBindings(
+            self.bus, self._image_line_viewer
+        )
 
         self._setup_complete = True
 
@@ -118,6 +130,27 @@ class HomePage(BasePage):
 
             # Populate with current state (if already loaded, shows immediately)
             self._table_view.set_files(list(self.context.app_state.files))
+
+            # Restore current selection from AppState (ensures visibility on navigation back)
+            # This handles both initial load and navigation back scenarios
+            current_file = self.context.app_state.selected_file
+            if current_file is not None and hasattr(current_file, "path"):
+                self._table_view.set_selected_paths(
+                    [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
+                )
+
+            # Image/line viewer THIRD (creates plot ui here)
+            self._image_line_viewer.render()
+
+            # Initialize viewer with current AppState (if already set)
+            # This ensures viewer shows current selection/theme on first render
+            current_file = self.context.app_state.selected_file
+            if current_file is not None:
+                self._image_line_viewer.set_selected_file(current_file)
+            current_roi = self.context.app_state.selected_roi_id
+            if current_roi is not None:
+                self._image_line_viewer.set_selected_roi(current_roi)
+            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
 
             # Restore selection once per client (after UI is created)
             if not self._restored_once:

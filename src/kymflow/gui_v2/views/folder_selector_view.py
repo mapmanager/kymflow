@@ -32,6 +32,16 @@ class FolderSelectorView:
         self._folder_display: Optional[ui.label] = None
 
     def render(self, *, initial_folder: Path) -> None:
+        """Create the folder selector UI inside the current container.
+
+        Always creates fresh UI elements because NiceGUI creates a new container
+        context on each page navigation. Old UI elements are automatically cleaned
+        up by NiceGUI when navigating away.
+
+        This method is called on every page navigation. We always recreate UI
+        elements rather than trying to detect if they're still valid, which is
+        simpler and more reliable.
+        """
         self._current_folder = initial_folder
 
         def _emit() -> None:
@@ -39,6 +49,10 @@ class FolderSelectorView:
             self._bus.emit(FolderChosen(folder=str(self._current_folder)))
             if self._folder_display is not None:
                 self._folder_display.set_text(f"Folder: {self._current_folder}")
+
+        # Always reset UI element reference - NiceGUI will clean up old elements
+        # This ensures we create fresh elements in the new container context
+        self._folder_display = None
 
         with ui.row().classes("w-full items-center gap-2"):
             ui.button("Choose folder (disabled for now)", on_click=lambda: None).props("disable")

@@ -43,6 +43,16 @@ class BasePage(ABC):
         layout (header, navigation, theme) and then calls the subclass's build()
         method to create page-specific content.
 
+        NiceGUI creates a fresh container context on each page navigation. When
+        navigating from one route to another, NiceGUI:
+        - Destroys all UI elements from the previous route
+        - Creates a new DOM container for the new route
+        - Calls this render() method with a fresh container
+
+        Therefore, build() should always create fresh UI elements. Controllers
+        and bindings are created in _ensure_setup() (called once per client) to
+        avoid duplicate event subscriptions.
+
         Args:
             page_title: HTML page title to display in the browser tab.
         """
@@ -53,7 +63,10 @@ class BasePage(ABC):
 
         with ui.column().classes("w-full p-4 gap-4"):
             # Ensure setup is called once per client before building
+            # This creates controllers/bindings (Python objects that persist)
             self._ensure_setup()
+            # build() creates fresh UI elements in the new container context
+            # NiceGUI automatically cleans up old UI elements from previous navigation
             self.build()
 
     def _ensure_setup(self) -> None:
@@ -71,9 +84,22 @@ class BasePage(ABC):
     def build(self) -> None:
         """Build page-specific content.
 
-        This method is called every time the page is rendered. It should create
-        the UI elements specific to this page. UI elements are created fresh
-        on each render, but controllers and bindings should be created in _ensure_setup()
-        to avoid duplicate subscriptions.
+        This method is called every time the page is rendered (e.g., on each
+        navigation). NiceGUI creates a fresh container context for each page
+        navigation, so this method should always create new UI elements.
+
+        Important:
+        - UI elements (ui.select, ui.plotly, etc.) are destroyed by NiceGUI
+          when navigating away and must be recreated here
+        - Views should reset their UI element references at the start of render()
+          and create fresh elements each time
+        - Controllers and bindings should be created in _ensure_setup() (called
+          once per client) to avoid duplicate event subscriptions
+        - NiceGUI automatically cleans up old UI elements when navigating away
+
+        Example:
+            def build(self) -> None:
+                # Always create fresh UI elements
+                self._view.render()  # View's render() resets and recreates UI
         """
         raise NotImplementedError

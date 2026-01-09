@@ -23,6 +23,8 @@ from kymflow.gui.navigation import inject_global_styles
 
 from kymflow.gui_v2.bus import BusConfig, get_event_bus
 from kymflow.gui_v2.events_folder import FolderChosen
+from kymflow.gui_v2.page_cache import cache_page, get_cached_page, get_stable_session_id
+from kymflow.gui_v2.pages.about_page import AboutPage
 from kymflow.gui_v2.pages.home_page import HomePage
 
 logger = get_logger(__name__)
@@ -43,38 +45,82 @@ USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "1") == "1"
 # Shared application context (singleton, process-level)
 context = AppContext()
 
-# Track which clients have been bootstrapped (per-client dev folder loading)
-_BOOTSTRAPPED_CLIENTS: set[str] = set()
-
 
 @ui.page("/")
 def home() -> None:
     """Home route for v2 GUI.
 
-    Creates a per-client EventBus and HomePage instance. Each browser tab/window
-    gets its own isolated bus to prevent cross-client event leakage.
+    Uses cached page instances to prevent recreation on navigation.
+    Each browser tab/window gets its own isolated session.
     """
-    from kymflow.gui_v2.bus import get_client_id
-
     ui.page_title("KymFlow")
     inject_global_styles()
 
-    # Get per-client EventBus (created on first access for this client)
-    bus = get_event_bus(BusConfig(trace=True))
-    client_id = get_client_id()
+    # Get stable session ID (persists across navigations)
+    session_id = get_stable_session_id()
 
-    # Build UI (this must construct FileTableView + FileTableBindings)
-    page = HomePage(context, bus)
+    # Get or create cached page instance
+    cached_page = get_cached_page(session_id, "/")
+    if cached_page is not None:
+        # Reuse cached page
+        logger.debug(f"Reusing cached HomePage for session {session_id[:8]}...")
+        page = cached_page
+    else:
+        # Create new page instance and cache it
+        bus = get_event_bus(BusConfig(trace=True))
+        page = HomePage(context, bus)
+        cache_page(session_id, "/", page)
+        logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
+
+    # Render the page (creates fresh UI elements each time and ensures setup)
     page.render(page_title="KymFlow")
 
-    # Emit dev bootstrap event once per client (if enabled)
-    if USE_DEV_FOLDER and client_id not in _BOOTSTRAPPED_CLIENTS:
+    # Emit dev bootstrap event once per session (if enabled)
+    # MUST be after render() so controllers are set up via _ensure_setup()
+    # Only bootstrap if:
+    # 1. This is a new page instance (cached_page is None)
+    # 2. Dev folder loading is enabled
+    # 3. AppState doesn't already have this folder loaded (prevents redundant loading)
+    folder_already_loaded = (
+        context.app_state.folder is not None
+        and context.app_state.folder.resolve() == DEV_FOLDER.resolve()
+    )
+    if cached_page is None and USE_DEV_FOLDER and not folder_already_loaded:
         if DEV_FOLDER.exists():
-            logger.info(f"DEV bootstrap: emitting FolderChosen({DEV_FOLDER}) for client {client_id}")
-            bus.emit(FolderChosen(folder=str(DEV_FOLDER)))
+            logger.info(f"DEV bootstrap: emitting FolderChosen({DEV_FOLDER}) for session {session_id[:8]}...")
+            page.bus.emit(FolderChosen(folder=str(DEV_FOLDER)))
         else:
             logger.warning(f"DEV_FOLDER does not exist: {DEV_FOLDER}")
-        _BOOTSTRAPPED_CLIENTS.add(client_id)
+
+
+@ui.page("/about")
+def about() -> None:
+    """About route for v2 GUI.
+
+    Displays version information and application logs. Uses cached page
+    instances to prevent recreation on navigation.
+    """
+    ui.page_title("KymFlow - About")
+    inject_global_styles()
+
+    # Get stable session ID (persists across navigations)
+    session_id = get_stable_session_id()
+
+    # Get or create cached page instance
+    cached_page = get_cached_page(session_id, "/about")
+    if cached_page is not None:
+        # Reuse cached page
+        logger.debug(f"Reusing cached AboutPage for session {session_id[:8]}...")
+        page = cached_page
+    else:
+        # Create new page instance and cache it
+        bus = get_event_bus(BusConfig(trace=False))
+        page = AboutPage(context, bus)
+        cache_page(session_id, "/about", page)
+        logger.debug(f"Created and cached new AboutPage for session {session_id[:8]}...")
+
+    # Render the page (creates fresh UI elements each time)
+    page.render(page_title="KymFlow - About")
 
 
 def main(*, reload: bool | None = None, native: bool | None = None) -> None:

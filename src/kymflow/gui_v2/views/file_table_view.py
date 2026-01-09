@@ -1,8 +1,8 @@
 """File table view component using CustomAgGrid.
 
 This module provides a view component that displays a table of kymograph files
-using CustomAgGrid. The view emits FileSelected events when users select rows,
-but does not subscribe to events (that's handled by FileTableBindings).
+using CustomAgGrid. The view emits FileSelection (phase="intent") events when
+users select rows, but does not subscribe to events (that's handled by FileTableBindings).
 """
 
 from __future__ import annotations
@@ -12,12 +12,15 @@ from typing import Callable, Iterable, List, Optional
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.gui_v2.events import FileSelected, SelectionOrigin
+from kymflow.core.utils.logging import get_logger
+from kymflow.gui_v2.events import FileSelection, SelectionOrigin
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig
 from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
 
+logger = get_logger(__name__)
+
 Rows = List[dict[str, object]]
-OnSelected = Callable[[FileSelected], None]
+OnSelected = Callable[[FileSelection], None]
 
 
 def _col(
@@ -61,7 +64,7 @@ class FileTableView:
 
     This view displays a table of kymograph files with columns for file name,
     analysis status, metadata, etc. Users can select rows, which triggers
-    FileSelected events.
+    FileSelection (phase="intent") events.
 
     Lifecycle:
         - UI elements are created in render() (not __init__) to ensure correct
@@ -70,7 +73,7 @@ class FileTableView:
         - Events emitted via on_selected callback
 
     Attributes:
-        _on_selected: Callback function that receives FileSelected events.
+        _on_selected: Callback function that receives FileSelection events (phase="intent").
         _selection_mode: Selection mode ("single" or "multiple").
         _grid: CustomAgGrid instance (created in render()).
         _suppress_emit: Flag to prevent event emission during programmatic selection.
@@ -94,9 +97,19 @@ class FileTableView:
         self._pending_rows: Rows = []
 
     def render(self) -> None:
-        """Create the grid UI inside the current container (idempotent)."""
-        if self._grid is not None:
-            return
+        """Create the grid UI inside the current container.
+
+        Always creates fresh UI elements because NiceGUI creates a new container
+        context on each page navigation. Old UI elements are automatically cleaned
+        up by NiceGUI when navigating away.
+
+        This method is called on every page navigation. We always recreate UI
+        elements rather than trying to detect if they're still valid, which is
+        simpler and more reliable.
+        """
+        # Always reset grid reference - NiceGUI will clean up old elements
+        # This ensures we create fresh elements in the new container context
+        self._grid = None
 
         grid_cfg = GridConfig(
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
@@ -133,12 +146,19 @@ class FileTableView:
 
     def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:
         """Handle user selecting a row."""
-        if self._suppress_emit:
-            return
         path = row_data.get("path")
+        logger.info(
+            f"_on_row_selected: row_index={row_index}, path={path}, suppress_emit={self._suppress_emit}"
+        )
+        if self._suppress_emit:
+            logger.info("_on_row_selected: returning early due to suppress_emit=True")
+            return
+        logger.info(f"_on_row_selected: emitting FileSelection for path={path}")
         self._on_selected(
-            FileSelected(
+            FileSelection(
                 path=str(path) if path else None,
+                file=None,  # Intent phase - file will be looked up by controller
                 origin=SelectionOrigin.FILE_TABLE,
+                phase="intent",
             )
         )
