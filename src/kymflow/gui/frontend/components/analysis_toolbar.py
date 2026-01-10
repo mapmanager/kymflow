@@ -30,6 +30,12 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         if not kf:
             ui.notify("Select a file first", color="warning")
             return
+        
+        # Require ROI selection before starting analysis
+        if app_state.selected_roi_id is None:
+            ui.notify("Select an ROI first", color="warning")
+            return
+        
         window_value = window_input.value
         window = int(window_value)
 
@@ -44,6 +50,7 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
             kf,
             task_state,
             window_size=window,
+            roi_id=app_state.selected_roi_id,
             on_result=_after_result,
         )
 
@@ -53,21 +60,26 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
     def _sync_buttons() -> None:
         running = task_state.running
         cancellable = task_state.cancellable
-        if running:
+        has_file = app_state.selected_file is not None
+        has_roi = app_state.selected_roi_id is not None
+        
+        # Start button: enabled when not running, file selected, and ROI selected
+        if running or not has_file or not has_roi:
             start_button.disable()
+            if running:
+                start_button.props("color=red")
+            else:
+                start_button.props(remove="color")
         else:
             start_button.enable()
+            start_button.props(remove="color")
 
+        # Cancel button: enabled only when running and cancellable
         if running and cancellable:
             cancel_button.enable()
-        else:
-            cancel_button.disable()
-
-        if running:
-            start_button.props("color=red")
             cancel_button.props("color=red")
         else:
-            start_button.props(remove="color")
+            cancel_button.disable()
             cancel_button.props(remove="color")
 
     _sync_buttons()

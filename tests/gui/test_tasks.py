@@ -34,50 +34,52 @@ def sample_kym_file() -> KymImage:
         return kym_file
 
 
-def test_run_flow_analysis_creates_roi_if_none_exists(sample_kym_file: KymImage) -> None:
-    """Test that run_flow_analysis creates a default ROI if none exists."""
+def test_run_flow_analysis_requires_roi_id(sample_kym_file: KymImage) -> None:
+    """Test that run_flow_analysis requires roi_id parameter."""
     task_state = TaskState()
-    result_received = {"success": False}
     
-    def on_result(success: bool) -> None:
-        result_received["success"] = success
+    # Attempt to run analysis without roi_id (should raise TypeError)
+    # roi_id is now a required parameter, so this should fail at call time
+    with pytest.raises(TypeError, match="missing.*required.*argument.*roi_id"):
+        run_flow_analysis(
+            sample_kym_file,
+            task_state,
+            window_size=16,
+        )
+
+
+def test_run_flow_analysis_fails_with_invalid_roi_id(sample_kym_file: KymImage) -> None:
+    """Test that run_flow_analysis fails gracefully when ROI doesn't exist."""
+    task_state = TaskState()
     
-    # Ensure no ROIs exist
-    assert sample_kym_file.rois.numRois() == 0
+    # Test that passing invalid roi_id (ROI doesn't exist) fails gracefully
+    # Create an ROI first to ensure the file can have ROIs
+    bounds = RoiBounds(dim0_start=0, dim0_stop=100, dim1_start=0, dim1_stop=200)
+    roi = sample_kym_file.rois.create_roi(bounds=bounds)
+    valid_roi_id = roi.id
     
-    # Run analysis (should create ROI automatically)
+    # Now test with invalid ROI ID (non-existent)
+    invalid_roi_id = 99999
     run_flow_analysis(
         sample_kym_file,
         task_state,
         window_size=16,
-        on_result=on_result,
+        roi_id=invalid_roi_id,
     )
     
-    # Wait for analysis to complete
-    timeout = 10.0
+    # Wait for error to be set
+    timeout = 5.0
     start_time = time.time()
     while task_state.running and (time.time() - start_time) < timeout:
         time.sleep(0.1)
     
-    # Check that ROI was created
-    roi_ids = sample_kym_file.rois.get_roi_ids()
-    assert len(roi_ids) == 1
-    
-    # Check that ROI has full image bounds
-    roi = sample_kym_file.rois.get(roi_ids[0])
-    assert roi is not None
-    assert roi.bounds.dim0_start == 0
-    assert roi.bounds.dim1_start == 0
-    assert roi.bounds.dim0_stop == 100
-    assert roi.bounds.dim1_stop == 200
-    
-    # Check that analysis was performed
-    assert task_state.message == "Done"
-    assert sample_kym_file.get_kym_analysis().has_analysis(roi.id)
+    # Check that error message indicates ROI not found
+    assert not task_state.running
+    assert "not found" in task_state.message or "Error" in task_state.message
 
 
-def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
-    """Test that run_flow_analysis uses existing ROI if available."""
+def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> None:
+    """Test that run_flow_analysis uses the provided roi_id."""
     task_state = TaskState()
     result_received = {"success": False}
     
@@ -89,7 +91,7 @@ def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
     roi = sample_kym_file.rois.create_roi(bounds=bounds, note="Test ROI")
     roi_id = roi.id
     
-    # Run analysis (should use existing ROI)
+    # Run analysis with provided roi_id
     run_flow_analysis(
         sample_kym_file,
         task_state,
@@ -114,8 +116,8 @@ def test_run_flow_analysis_uses_existing_roi(sample_kym_file: KymImage) -> None:
     assert sample_kym_file.get_kym_analysis().has_analysis(roi_id)
 
 
-def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None:
-    """Test that run_batch_flow_analysis creates ROIs for each file."""
+def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymImage) -> None:
+    """Test that run_batch_flow_analysis skips files without ROIs."""
     # Create a second file
     with tempfile.TemporaryDirectory() as tmpdir:
         test_file2 = Path(tmpdir) / "test2.tif"
@@ -123,10 +125,14 @@ def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None
         tifffile.imwrite(test_file2, test_image2)
         
         kym_file2 = KymImage(test_file2, load_image=True)
-        # kym_file2.kym_image.pixels_per_line = 150
-        # kym_file2.kym_image.num_lines = 80
-        # kym_file2.kym_image.seconds_per_line = 0.001
-        # kym_file2.kym_image.um_per_pixel = 1.0
+        
+        # Create ROI for first file only
+        bounds1 = RoiBounds(dim0_start=0, dim0_stop=100, dim1_start=0, dim1_stop=200)
+        roi1 = sample_kym_file.rois.create_roi(bounds=bounds1)
+        
+        # Second file has no ROI
+        assert sample_kym_file.rois.numRois() == 1
+        assert kym_file2.rois.numRois() == 0
         
         files = [sample_kym_file, kym_file2]
         per_file_task = TaskState()
@@ -139,10 +145,6 @@ def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None
         
         def on_batch_complete(cancelled: bool) -> None:
             pass
-        
-        # Ensure no ROIs exist
-        assert sample_kym_file.rois.numRois() == 0
-        assert kym_file2.rois.numRois() == 0
         
         # Run batch analysis
         run_batch_flow_analysis(
@@ -160,14 +162,16 @@ def test_run_batch_flow_analysis_creates_rois(sample_kym_file: KymImage) -> None
         while overall_task.running and (time.time() - start_time) < timeout:
             time.sleep(0.1)
         
-        # Check that ROIs were created for each file
-        assert sample_kym_file.rois.numRois() == 1
-        assert kym_file2.rois.numRois() == 1
+        # Check that no new ROIs were created
+        assert sample_kym_file.rois.numRois() == 1  # Still only the one we created
+        assert kym_file2.rois.numRois() == 0  # Still no ROI (was skipped)
         
-        # Check that analysis was performed
-        assert overall_task.message == "2/2 files"
-        assert sample_kym_file.get_kym_analysis().has_analysis()
-        assert kym_file2.get_kym_analysis().has_analysis()
+        # Check that only the first file was analyzed (second was skipped)
+        assert sample_kym_file.get_kym_analysis().has_analysis(roi1.id)
+        assert not kym_file2.get_kym_analysis().has_analysis()  # No analysis for skipped file
+        
+        # Check that completion callback was only called once (for the file with ROI)
+        assert file_completed["count"] == 1
 
 
 def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:

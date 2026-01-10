@@ -78,10 +78,36 @@ def build_batch_content(context: AppContext) -> None:
                             ui.notify("No files to analyze", color="warning")
                             return
                         
+                        # Filter out files without ROIs
+                        files_with_rois = []
+                        files_without_rois = []
+                        for kf in files:
+                            roi_ids = kf.rois.get_roi_ids()
+                            if roi_ids:
+                                files_with_rois.append(kf)
+                            else:
+                                files_without_rois.append(kf.path.name if hasattr(kf, 'path') else str(kf))
+                        
+                        # Show notification if any files were filtered out
+                        if files_without_rois:
+                            file_list = ", ".join(files_without_rois[:5])  # Show first 5
+                            if len(files_without_rois) > 5:
+                                file_list += f" (and {len(files_without_rois) - 5} more)"
+                            ui.notify(
+                                f"Some files have no ROIs and will be skipped: {file_list}",
+                                color="info",
+                                timeout=5000,
+                            )
+                        
+                        # Only proceed if at least one file has ROIs
+                        if not files_with_rois:
+                            ui.notify("No files with ROIs to analyze", color="warning")
+                            return
+                        
                         window_value = int(window_select.value or 16)
                         
                         run_batch_flow_analysis(
-                            files,
+                            files_with_rois,
                             context.batch_task,
                             context.batch_overall_task,
                             window_size=window_value,
