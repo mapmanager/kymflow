@@ -31,7 +31,7 @@ def create_metadata_form(app_state: AppState) -> None:
         # Update the specific field
         value = widget.value
         kf.update_experiment_metadata(**{field_name: value})
-        app_state.notify_metadata_changed(kf)
+        app_state.update_metadata(kf)
         # Refresh file table to show updated metadata (e.g., note field)
         app_state.refresh_file_rows()
 

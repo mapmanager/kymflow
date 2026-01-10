@@ -9,6 +9,7 @@ from nicegui import ui
 
 from kymflow.gui.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
+from kymflow.gui_v2.controllers.analysis_controller import AnalysisController
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
 from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController
 from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
@@ -16,8 +17,12 @@ from kymflow.gui_v2.controllers.folder_controller import FolderController
 from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
+from kymflow.gui_v2.controllers.save_controller import SaveController
+from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeController
 from kymflow.gui_v2.events import SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
+from kymflow.gui_v2.views.analysis_toolbar_bindings import AnalysisToolbarBindings
+from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 from kymflow.gui_v2.views.contrast_bindings import ContrastBindings
 from kymflow.gui_v2.views.contrast_view import ContrastView
 from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
@@ -29,6 +34,10 @@ from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperime
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
+from kymflow.gui_v2.views.save_buttons_bindings import SaveButtonsBindings
+from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
+from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
+from kymflow.gui_v2.views.task_progress_view import TaskProgressView
 
 if TYPE_CHECKING:
     pass
@@ -74,6 +83,9 @@ class HomePage(BasePage):
         self._roi_selection_controller: ROISelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
         self._metadata_controller: MetadataController | None = None
+        self._analysis_controller: AnalysisController | None = None
+        self._save_controller: SaveController | None = None
+        self._task_state_bridge: TaskStateBridgeController | None = None
         self._persistence: FileTablePersistenceController | None = None
 
         # View objects (created in __init__, UI elements created in build())
@@ -83,11 +95,21 @@ class HomePage(BasePage):
         self._contrast_view = ContrastView(on_image_display_change=bus.emit)
         self._metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
         self._metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
+        self._analysis_toolbar_view = AnalysisToolbarView(
+            on_analysis_start=bus.emit, on_analysis_cancel=bus.emit
+        )
+        self._task_progress_view = TaskProgressView()
+        self._save_buttons_view = SaveButtonsView(
+            on_save_selected=bus.emit, on_save_all=bus.emit
+        )
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
         self._contrast_bindings: ContrastBindings | None = None
         self._metadata_experimental_bindings: MetadataExperimentalBindings | None = None
         self._metadata_header_bindings: MetadataHeaderBindings | None = None
+        self._analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
+        self._task_progress_bindings: TaskProgressBindings | None = None
+        self._save_buttons_bindings: SaveButtonsBindings | None = None
 
         # Per-client state tracking
         self._restored_once: bool = False
@@ -117,6 +139,15 @@ class HomePage(BasePage):
         self._metadata_controller = MetadataController(
             self.context.app_state, self.bus
         )
+        self._analysis_controller = AnalysisController(
+            self.context.app_state, self.context.home_task, self.bus
+        )
+        self._save_controller = SaveController(
+            self.context.app_state, self.context.home_task, self.bus
+        )
+        self._task_state_bridge = TaskStateBridgeController(
+            self.context.home_task, self.bus, task_type="home"
+        )
 
         self._persistence = FileTablePersistenceController(
             self.context.app_state,
@@ -136,6 +167,15 @@ class HomePage(BasePage):
         self._metadata_header_bindings = MetadataHeaderBindings(
             self.bus, self._metadata_header_view
         )
+        self._analysis_toolbar_bindings = AnalysisToolbarBindings(
+            self.bus, self._analysis_toolbar_view
+        )
+        self._task_progress_bindings = TaskProgressBindings(
+            self.bus, self._task_progress_view
+        )
+        self._save_buttons_bindings = SaveButtonsBindings(
+            self.bus, self._save_buttons_view
+        )
 
         self._setup_complete = True
 
@@ -153,6 +193,21 @@ class HomePage(BasePage):
             # Folder selector FIRST (renders first in DOM)
             initial_folder = self.context.app_state.folder or Path(".")
             self._folder_view.render(initial_folder=initial_folder)
+
+            # Analysis toolbar, progress, and save buttons
+            with ui.row().classes("w-full items-start gap-4"):
+                with ui.column().classes("flex-1 gap-2"):
+                    self._analysis_toolbar_view.render()
+                with ui.column().classes("shrink gap-2"):
+                    self._task_progress_view.render()
+                with ui.column().classes("shrink gap-2"):
+                    self._save_buttons_view.render()
+
+            # Initialize analysis toolbar and save buttons with current file
+            current_file = self.context.app_state.selected_file
+            if current_file is not None:
+                self._analysis_toolbar_view.set_selected_file(current_file)
+                self._save_buttons_view.set_selected_file(current_file)
 
             # File table SECOND (creates grid ui here) - in disclosure triangle
             with ui.expansion("Files", value=True).classes("w-full"):

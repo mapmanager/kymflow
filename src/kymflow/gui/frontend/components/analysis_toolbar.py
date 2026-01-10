@@ -37,7 +37,7 @@ def create_analysis_toolbar(app_state: AppState, task_state: TaskState) -> None:
         start_button.disable()
 
         def _after_result(_success: bool) -> None:
-            app_state.notify_metadata_changed(kf)
+            app_state.update_metadata(kf)
             app_state.refresh_file_rows()
 
         run_flow_analysis(

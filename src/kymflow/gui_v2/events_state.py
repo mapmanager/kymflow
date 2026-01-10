@@ -8,7 +8,7 @@ used to update UI components when the underlying state changes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.kym_image import KymImage
@@ -48,5 +48,28 @@ class ThemeChanged:
     """
 
     theme: ThemeMode
+
+
+@dataclass(frozen=True, slots=True)
+class TaskStateChanged:
+    """TaskState change notification.
+
+    Emitted by TaskStateBridgeController when TaskState changes
+    (running, progress, message, cancellable). Views subscribe to
+    this to update UI (button states, progress bars).
+
+    Attributes:
+        running: Whether the task is currently running.
+        progress: Progress value from 0.0 to 1.0.
+        message: Status message describing current task state.
+        cancellable: Whether the task can be cancelled.
+        task_type: Type of task - "home", "batch", or "batch_overall".
+    """
+
+    running: bool
+    progress: float
+    message: str
+    cancellable: bool
+    task_type: Literal["home", "batch", "batch_overall"]
 
 

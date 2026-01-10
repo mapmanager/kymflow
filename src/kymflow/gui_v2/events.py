@@ -153,3 +153,63 @@ class MetadataUpdate:
     fields: dict[str, Any]
     origin: SelectionOrigin
     phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisStart:
+    """Analysis start intent event.
+
+    Emitted by AnalysisToolbarView when user clicks "Analyze Flow" button.
+    Handled by AnalysisController which starts the analysis task.
+
+    Attributes:
+        window_size: Number of time lines per analysis window.
+        roi_id: ROI ID to analyze, or None to use default/selected ROI.
+        phase: Event phase - "intent" or "state".
+    """
+
+    window_size: int
+    roi_id: int | None
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisCancel:
+    """Analysis cancel intent event.
+
+    Emitted by AnalysisToolbarView when user clicks "Cancel" button.
+    Handled by AnalysisController which cancels the analysis task.
+
+    Attributes:
+        phase: Event phase - "intent" or "state".
+    """
+
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class SaveSelected:
+    """Save selected file intent event.
+
+    Emitted by SaveButtonsView when user clicks "Save Selected".
+    Handled by SaveController which saves the current file.
+
+    Attributes:
+        phase: Event phase - "intent" or "state".
+    """
+
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class SaveAll:
+    """Save all files intent event.
+
+    Emitted by SaveButtonsView when user clicks "Save All".
+    Handled by SaveController which saves all files with analysis.
+
+    Attributes:
+        phase: Event phase - "intent" or "state".
+    """
+
+    phase: EventPhase
