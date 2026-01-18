@@ -35,6 +35,40 @@ class RoiBounds:
     dim0_stop: int
     dim1_start: int
     dim1_stop: int
+    
+    @classmethod
+    def from_image_bounds(cls, image_bounds: "ImageBounds") -> "RoiBounds":
+        """Create RoiBounds that encompasses the entire image.
+        
+        Args:
+            image_bounds: ImageBounds with width, height, and num_slices.
+            
+        Returns:
+            RoiBounds covering the full image (dim0: 0 to height, dim1: 0 to width).
+        """
+        return cls(
+            dim0_start=0,
+            dim0_stop=image_bounds.height,
+            dim1_start=0,
+            dim1_stop=image_bounds.width,
+        )
+    
+    @classmethod
+    def from_image_size(cls, size: "ImageSize") -> "RoiBounds":
+        """Create RoiBounds that encompasses the entire image.
+        
+        Args:
+            size: ImageSize with width and height dimensions.
+            
+        Returns:
+            RoiBounds covering the full image (dim0: 0 to height, dim1: 0 to width).
+        """
+        return cls(
+            dim0_start=0,
+            dim0_stop=size.height,
+            dim1_start=0,
+            dim1_stop=size.width,
+        )
 
 @dataclass
 class RoiBoundsFloat:
@@ -227,7 +261,7 @@ class RoiSet:
 
     def create_roi(
         self,
-        bounds: RoiBounds,
+        bounds: RoiBounds | None = None,
         channel: int = 1,
         z: int = 0,
         name: str = "",
@@ -236,10 +270,12 @@ class RoiSet:
         """Create a new ROI, assign a unique id, and store it in the set.
 
         Validates channel exists and z coordinate is valid. Clamps coordinates
-        to current image bounds.
+        to current image bounds. If bounds is None, creates an ROI that encompasses
+        the entire image.
 
         Args:
-            bounds: RoiBounds defining the ROI coordinates.
+            bounds: RoiBounds defining the ROI coordinates. If None, creates bounds
+                that encompass the entire image.
             channel: Channel number (defaults to 1).
             z: Image plane/slice number (defaults to 0). For 2D images, must be 0.
             name: Optional human-readable name.
@@ -256,6 +292,10 @@ class RoiSet:
         
         # Get bounds for validation
         image_bounds = self._get_image_bounds()
+        
+        # If bounds is None, create full-image bounds
+        if bounds is None:
+            bounds = RoiBounds.from_image_bounds(image_bounds)
         
         # Clamp z to valid range [0, num_slices-1]
         if z < 0:

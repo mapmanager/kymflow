@@ -585,3 +585,137 @@ def test_clamp_coordinates_to_size_with_imagesize() -> None:
     
     logger.info("  - clamp_coordinates_to_size() with ImageSize works correctly")
 
+
+def test_roi_bounds_from_image_bounds() -> None:
+    """Test RoiBounds.from_image_bounds() classmethod."""
+    logger.info("Testing RoiBounds.from_image_bounds()")
+    
+    # Test 2D image bounds
+    image_bounds = ImageBounds(width=200, height=100, num_slices=1)
+    roi_bounds = RoiBounds.from_image_bounds(image_bounds)
+    
+    assert roi_bounds.dim0_start == 0
+    assert roi_bounds.dim0_stop == 100  # height
+    assert roi_bounds.dim1_start == 0
+    assert roi_bounds.dim1_stop == 200  # width
+    
+    # Test 3D image bounds
+    image_bounds_3d = ImageBounds(width=50, height=10000, num_slices=10)
+    roi_bounds_3d = RoiBounds.from_image_bounds(image_bounds_3d)
+    
+    assert roi_bounds_3d.dim0_start == 0
+    assert roi_bounds_3d.dim0_stop == 10000  # height
+    assert roi_bounds_3d.dim1_start == 0
+    assert roi_bounds_3d.dim1_stop == 50  # width
+    
+    logger.info("  - RoiBounds.from_image_bounds() works correctly")
+
+
+def test_roi_bounds_from_image_size() -> None:
+    """Test RoiBounds.from_image_size() classmethod."""
+    logger.info("Testing RoiBounds.from_image_size()")
+    
+    # Test with ImageSize
+    size = ImageSize(width=200, height=100)
+    roi_bounds = RoiBounds.from_image_size(size)
+    
+    assert roi_bounds.dim0_start == 0
+    assert roi_bounds.dim0_stop == 100  # height
+    assert roi_bounds.dim1_start == 0
+    assert roi_bounds.dim1_stop == 200  # width
+    
+    # Test with different dimensions
+    size2 = ImageSize(width=50, height=10000)
+    roi_bounds2 = RoiBounds.from_image_size(size2)
+    
+    assert roi_bounds2.dim0_start == 0
+    assert roi_bounds2.dim0_stop == 10000  # height
+    assert roi_bounds2.dim1_start == 0
+    assert roi_bounds2.dim1_stop == 50  # width
+    
+    logger.info("  - RoiBounds.from_image_size() works correctly")
+
+
+def test_roiset_create_roi_with_none_bounds() -> None:
+    """Test RoiSet.create_roi() with bounds=None creates full-image ROI."""
+    logger.info("Testing RoiSet.create_roi() with bounds=None")
+    
+    # Test 2D image
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI with bounds=None (should create full-image bounds)
+    roi = acq_image.rois.create_roi(bounds=None, channel=1, z=0)
+    
+    assert roi.id == 1
+    assert roi.channel == 1
+    assert roi.z == 0
+    # Should encompass entire image
+    assert roi.bounds.dim0_start == 0
+    assert roi.bounds.dim0_stop == 100  # height
+    assert roi.bounds.dim1_start == 0
+    assert roi.bounds.dim1_stop == 200  # width
+    
+    # Test with explicit None (same as omitting)
+    roi2 = acq_image.rois.create_roi(bounds=None, name="Full Image ROI")
+    assert roi2.id == 2
+    assert roi2.bounds.dim0_stop == 100
+    assert roi2.bounds.dim1_stop == 200
+    assert roi2.name == "Full Image ROI"
+    
+    logger.info("  - RoiSet.create_roi() with bounds=None works correctly")
+
+
+def test_roiset_create_roi_with_none_bounds_3d() -> None:
+    """Test RoiSet.create_roi() with bounds=None for 3D image."""
+    logger.info("Testing RoiSet.create_roi() with bounds=None for 3D image")
+    
+    # Test 3D image (shape: num_slices, height, width)
+    test_image_3d = np.zeros((10, 10000, 50), dtype=np.uint8)
+    acq_image_3d = AcqImage(path=None, img_data=test_image_3d)
+    
+    # Create ROI with bounds=None (should create full-image bounds)
+    roi = acq_image_3d.rois.create_roi(bounds=None, channel=1, z=0)
+    
+    assert roi.id == 1
+    assert roi.channel == 1
+    assert roi.z == 0
+    # Should encompass entire image
+    assert roi.bounds.dim0_start == 0
+    assert roi.bounds.dim0_stop == 10000  # height
+    assert roi.bounds.dim1_start == 0
+    assert roi.bounds.dim1_stop == 50  # width
+    
+    # Test with different z slice
+    roi2 = acq_image_3d.rois.create_roi(bounds=None, channel=1, z=5)
+    assert roi2.id == 2
+    assert roi2.z == 5
+    assert roi2.bounds.dim0_stop == 10000
+    assert roi2.bounds.dim1_stop == 50
+    
+    logger.info("  - RoiSet.create_roi() with bounds=None for 3D image works correctly")
+
+
+def test_roiset_create_roi_bounds_none_vs_explicit() -> None:
+    """Test that create_roi(bounds=None) and explicit full-image bounds are equivalent."""
+    logger.info("Testing create_roi(bounds=None) vs explicit full-image bounds")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI with bounds=None
+    roi_none = acq_image.rois.create_roi(bounds=None, channel=1, z=0)
+    
+    # Create ROI with explicit full-image bounds
+    image_bounds = acq_image.get_image_bounds()
+    full_bounds = RoiBounds.from_image_bounds(image_bounds)
+    roi_explicit = acq_image.rois.create_roi(bounds=full_bounds, channel=1, z=0)
+    
+    # Both should have the same bounds
+    assert roi_none.bounds.dim0_start == roi_explicit.bounds.dim0_start
+    assert roi_none.bounds.dim0_stop == roi_explicit.bounds.dim0_stop
+    assert roi_none.bounds.dim1_start == roi_explicit.bounds.dim1_start
+    assert roi_none.bounds.dim1_stop == roi_explicit.bounds.dim1_stop
+    
+    logger.info("  - create_roi(bounds=None) and explicit full-image bounds are equivalent")
+

@@ -270,10 +270,14 @@ def mp_analyze_flow(
             if cancelled():
                 raise FlowCancelled("Flow analysis cancelled (single-process mode).")
 
-            the_t[k] = 1 + k * stepsize + windowsize / 2.0
+            # the_t[k] = 1 + k * stepsize + windowsize / 2.0
+            the_t[k] = dim0_start + (k * stepsize) + (windowsize / 2.0)
 
-            t_start = k * stepsize
-            t_stop = k * stepsize + windowsize
+            # t_start = k * stepsize
+            # t_stop = k * stepsize + windowsize
+            t_start = dim0_start + (k * stepsize)
+            t_stop = t_start + windowsize
+
             # data_window = data[t_start:t_stop, start_pixel:stop_pixel]
             data_window = data[t_start:t_stop, dim1_start:dim1_stop]
 

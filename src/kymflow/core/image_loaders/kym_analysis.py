@@ -233,6 +233,13 @@ class KymAnalysis:
             use_multiprocessing=use_multiprocessing,
         )
         
+        if 1:
+            logger.info('mp_analyze_flow ->')
+            logger.info(f'the_t: {the_t.shape}')
+            logger.info(f'thetas: {thetas.shape}')
+            logger.info(f'spread: {spread.shape}')
+            logger.info(f'image: {image.shape}')
+
         # Record analysis metadata (geometry lives in acq_image.rois)
         self._analysis_metadata[roi_id] = RoiAnalysisMetadata(
             roi_id=roi_id,
@@ -271,6 +278,8 @@ class KymAnalysis:
         roi_df = pd.DataFrame({
             "roi_id": roi_id,
             "channel": roi.channel,
+            # "lineScanBin": the_t,  # abb 20260110
+            "lineScanBin": range(len(the_t)),
             "time": drew_time,
             "velocity": drew_velocity,
             "parentFolder": parent_name,
@@ -333,7 +342,7 @@ class KymAnalysis:
         
         # Save CSV
         self._df.to_csv(csv_path, index=False)
-        logger.info(f"Saved analysis CSV to {csv_path}")
+        logger.info(f"Saved analysis len:{len(self._df)} CSV to {csv_path}")
         
         # Reconcile to current ROIs (single source of truth)
         current_roi_ids = {roi.id for roi in self.acq_image.rois}

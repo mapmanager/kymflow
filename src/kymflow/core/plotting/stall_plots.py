@@ -30,7 +30,7 @@ def plot_stalls_matplotlib(
     remove_outliers: bool = False,
     median_filter: int = 0,
     figsize: tuple[float, float] = (10, 6),
-) -> plt.Figure:
+) -> Optional[plt.Figure]:
     """Plot velocity data with stall overlays using matplotlib.
 
     This function plots velocity vs bin number (or time) and overlays filled
@@ -49,69 +49,55 @@ def plot_stalls_matplotlib(
         figsize: Figure size as (width, height) in inches.
 
     Returns:
-        Matplotlib Figure object.
-
-    Raises:
-        ValueError: If roi_id has no analysis data available.
+        Matplotlib Figure object if data is available, None otherwise.
     """
     # Get KymAnalysis from KymImage
     kym_analysis = kym_image.get_kym_analysis()
 
-    # Check if analysis exists
+    # Collect data to plot
     if not kym_analysis.has_analysis(roi_id):
-        # Create empty figure with message
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.text(
-            0.5,
-            0.5,
-            "No analysis data available for this ROI",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
+        velocity = None
+        x_values = None
+    else:
+        velocity = kym_analysis.get_analysis_value(
+            roi_id, "velocity", remove_outliers, median_filter
         )
-        ax.set_xlabel("Bin" if not use_time_axis else "Time (s)")
-        ax.set_ylabel("Velocity (mm/s)")
-        return fig
-
-    # Get velocity data
-    velocity = kym_analysis.get_analysis_value(
-        roi_id, "velocity", remove_outliers, median_filter
-    )
-    if velocity is None:
-        # Create empty figure with message
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.text(
-            0.5,
-            0.5,
-            "No velocity data available for this ROI",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.set_xlabel("Bin" if not use_time_axis else "Time (s)")
-        ax.set_ylabel("Velocity (mm/s)")
-        return fig
-
-    # Create x-axis values
-    if use_time_axis:
-        # Use time values from analysis if available, otherwise convert from bins
-        time_values = kym_analysis.get_analysis_value(
-            roi_id, "time", remove_outliers, median_filter
-        )
-        if time_values is None:
-            # Fallback: convert bins to time
-            bin_indices = np.arange(len(velocity))
-            x_values = bin_indices * kym_image.seconds_per_line
+        # Get x-axis values (never filtered) - use time or lineScanBin based on use_time_axis
+        if use_time_axis:
+            time_stat = "time"
         else:
-            x_values = time_values
+            time_stat = "lineScanBin"
+        x_values = kym_analysis.get_analysis_value(roi_id, time_stat)
+
+    # Validate data and return None if data is not available
+    if velocity is None or x_values is None:
+        return None
+    
+    # Ensure x_values and velocity have the same length (they should since they come from same DataFrame)
+    if len(x_values) != len(velocity):
+        logger.warning(f"x_values and velocity have different lengths: {len(x_values)} != {len(velocity)}")
+        return None
+
+    # Set x-axis label
+    if use_time_axis:
         x_label = "Time (s)"
     else:
-        # Use bin indices
-        x_values = np.arange(len(velocity))
         x_label = "Bin"
 
     # Create figure and axis
     fig, ax = plt.subplots(figsize=figsize)
+
+    if 0:
+        # log the number of nan in velocity
+        logger.info(f"Number of NaN values in velocity: {np.sum(np.isnan(velocity))}")
+        # get the x-axis location of all nan values and log it
+        nan_indices = np.where(np.isnan(velocity))[0]
+        logger.info(f"x-axis location of NaN values: {nan_indices}")
+        # for debugging, plot velocity nan values as circle
+        # can't use velocity[nan_indices] because it will be nan
+        # just use y-axis location of 0
+        nan_y_values = np.zeros_like(nan_indices)
+        ax.scatter(x_values[nan_indices], nan_y_values, color="red", marker="o")
 
     # Plot velocity line
     ax.plot(x_values, velocity, "b-", linewidth=1.5, label="Velocity")
@@ -131,22 +117,11 @@ def plot_stalls_matplotlib(
     for stall in stalls:
         # Get x-coordinates for this stall
         if use_time_axis:
-            # Convert bin indices to time
-            if time_values is None:
-                x_start = stall.bin_start * kym_image.seconds_per_line
-                x_stop = stall.bin_stop * kym_image.seconds_per_line
-            else:
-                # Use actual time values from analysis (handle potential length mismatch)
-                if stall.bin_start < len(time_values) and stall.bin_stop < len(
-                    time_values
-                ):
-                    x_start = time_values[stall.bin_start]
-                    x_stop = time_values[stall.bin_stop]
-                else:
-                    # Fallback to conversion
-                    x_start = stall.bin_start * kym_image.seconds_per_line
-                    x_stop = stall.bin_stop * kym_image.seconds_per_line
+            # Convert bin numbers to time using seconds_per_line
+            x_start = float(stall.bin_start * kym_image.seconds_per_line)
+            x_stop = float(stall.bin_stop * kym_image.seconds_per_line)
         else:
+            # Use bin numbers directly
             x_start = float(stall.bin_start)
             x_stop = float(stall.bin_stop)
 
@@ -164,7 +139,7 @@ def plot_stalls_matplotlib(
             linewidth=0,
             edgecolor="none",
             facecolor="red",
-            alpha=0.3,  # Semi-transparent
+            alpha=0.6,  # Semi-transparent
         )
         ax.add_patch(rect)
 
@@ -196,7 +171,7 @@ def plot_stalls_plotly(
     remove_outliers: bool = False,
     median_filter: int = 0,
     theme: Optional[ThemeMode] = None,
-) -> go.Figure:
+) -> Optional[go.Figure]:
     """Plot velocity data with stall overlays using plotly.
 
     This function plots velocity vs bin number (or time) and overlays filled
@@ -215,7 +190,7 @@ def plot_stalls_plotly(
         theme: Theme mode (DARK or LIGHT). Defaults to LIGHT if None.
 
     Returns:
-        Plotly Figure object.
+        Plotly Figure object if data is available, None otherwise.
     """
     # Default to LIGHT theme
     if theme is None:
@@ -229,73 +204,41 @@ def plot_stalls_plotly(
     # Get KymAnalysis from KymImage
     kym_analysis = kym_image.get_kym_analysis()
 
-    # Handle missing analysis
+    # Collect data to plot
     if not kym_analysis.has_analysis(roi_id):
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No analysis data available for this ROI",
-            showarrow=False,
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            font=font_dict,
+        velocity = None
+        x_values = None
+    else:
+        velocity = kym_analysis.get_analysis_value(
+            roi_id, "velocity", remove_outliers, median_filter
         )
-        fig.update_layout(
-            template=template,
-            paper_bgcolor=bg_color,
-            plot_bgcolor=bg_color,
-            xaxis_title="Bin" if not use_time_axis else "Time (s)",
-            yaxis_title="Velocity (mm/s)",
-        )
-        return fig
-
-    # Get velocity data
-    velocity = kym_analysis.get_analysis_value(
-        roi_id, "velocity", remove_outliers, median_filter
-    )
-    if velocity is None:
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No velocity data available for this ROI",
-            showarrow=False,
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            font=font_dict,
-        )
-        fig.update_layout(
-            template=template,
-            paper_bgcolor=bg_color,
-            plot_bgcolor=bg_color,
-            xaxis_title="Bin" if not use_time_axis else "Time (s)",
-            yaxis_title="Velocity (mm/s)",
-        )
-        return fig
-
-    # Create x-axis values
-    if use_time_axis:
-        # Use time values from analysis if available, otherwise convert from bins
-        time_values = kym_analysis.get_analysis_value(
-            roi_id, "time", remove_outliers, median_filter
-        )
-        if time_values is None:
-            # Fallback: convert bins to time
-            bin_indices = np.arange(len(velocity))
-            x_values = bin_indices * kym_image.seconds_per_line
+        # Get x-axis values (never filtered) - use time or lineScanBin based on use_time_axis
+        if use_time_axis:
+            time_stat = "time"
         else:
-            x_values = time_values
+            time_stat = "lineScanBin"
+        x_values = kym_analysis.get_analysis_value(roi_id, time_stat)
+
+    # Validate data and return None if data is not available
+    if velocity is None or x_values is None:
+        logger.warning("No velocity or x_values data available")
+        return None
+    
+    # Ensure x_values and velocity have the same length (they should since they come from same DataFrame)
+    if len(x_values) != len(velocity):
+        logger.warning(f"x_values and velocity have different lengths: {len(x_values)} != {len(velocity)}")
+        return None
+
+    # Set x-axis label
+    if use_time_axis:
         x_label = "Time (s)"
     else:
-        # Use bin indices
-        x_values = np.arange(len(velocity))
         x_label = "Bin"
 
     # Create figure
     fig = go.Figure()
 
-    # Add velocity trace
+    # Plot velocity line
     fig.add_trace(
         go.Scatter(
             x=x_values,
@@ -306,44 +249,37 @@ def plot_stalls_plotly(
         )
     )
 
+    # Calculate y-axis range for stall rectangles
+    # Use velocity min/max with some padding, handling NaN values
+    valid_velocity = velocity[~np.isnan(velocity)]
+    if len(valid_velocity) > 0:
+        y_min = np.nanmin(velocity) - 0.1 * (np.nanmax(velocity) - np.nanmin(velocity))
+        y_max = np.nanmax(velocity) + 0.1 * (np.nanmax(velocity) - np.nanmin(velocity))
+    else:
+        # All NaN values - use default range
+        y_min = -1
+        y_max = 1
+
     # Add stall rectangles as shapes
     shapes = []
     for stall in stalls:
         # Get x-coordinates for this stall
         if use_time_axis:
-            # Convert bin indices to time
-            if time_values is None:
-                x_start = stall.bin_start * kym_image.seconds_per_line
-                x_stop = stall.bin_stop * kym_image.seconds_per_line
-            else:
-                # Use actual time values from analysis (handle potential length mismatch)
-                if stall.bin_start < len(time_values) and stall.bin_stop < len(
-                    time_values
-                ):
-                    x_start = time_values[stall.bin_start]
-                    x_stop = time_values[stall.bin_stop]
-                else:
-                    # Fallback to conversion
-                    x_start = stall.bin_start * kym_image.seconds_per_line
-                    x_stop = stall.bin_stop * kym_image.seconds_per_line
+            # Convert bin numbers to time using seconds_per_line
+            x_start = float(stall.bin_start * kym_image.seconds_per_line)
+            x_stop = float(stall.bin_stop * kym_image.seconds_per_line)
         else:
+            # Use bin numbers directly
             x_start = float(stall.bin_start)
             x_stop = float(stall.bin_stop)
-            # For bin axis, make the rectangle inclusive (extend by 1)
-            x_stop += 1.0
 
-        # Calculate y-axis range (will be filled to axis limits)
-        # We'll use yref="paper" to span full height, or calculate from velocity
-        valid_velocity = velocity[~np.isnan(velocity)]
-        if len(valid_velocity) > 0:
-            y_min = np.nanmin(velocity)
-            y_max = np.nanmax(velocity)
-            y_padding = 0.1 * (y_max - y_min) if y_max != y_min else 0.1
-            y_bottom = y_min - y_padding
-            y_top = y_max + y_padding
-        else:
-            y_bottom = -1
-            y_top = 1
+        # Create rectangle (width extends from start to stop, inclusive)
+        width = x_stop - x_start
+        # Add 1 to width to make it inclusive (stall.bin_stop is inclusive)
+        if not use_time_axis:
+            width += 1.0
+        # For time axis, width is already correct
+        x_stop = x_start + width
 
         # Add rectangle shape
         shapes.append(
@@ -352,11 +288,11 @@ def plot_stalls_plotly(
                 xref="x",
                 yref="y",
                 x0=x_start,
-                y0=y_bottom,
+                y0=y_min,
                 x1=x_stop,
-                y1=y_top,
+                y1=y_max,
                 fillcolor="red",
-                opacity=0.3,
+                opacity=0.6,  # Semi-transparent (matching matplotlib alpha=0.6)
                 layer="above",  # Render above the line
                 line_width=0,
             )
