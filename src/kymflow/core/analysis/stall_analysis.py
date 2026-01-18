@@ -1,13 +1,24 @@
-"""Stall detection analysis for kymograph velocity data.
+"""Stall detection analysis for kymograph-derived signals.
 
-This module provides functionality to detect "stalls" in velocity arrays.
-A stall is defined as a consecutive sequence of NaN (missing) values in
-the velocity data.
+This module detects "stalls" in per-ROI, per-bin signals (most commonly velocity
+traces) produced by :class:`~kymflow.core.analysis.kym_analysis.KymAnalysis`.
+
+A *stall* is a span of bins that begins at a NaN (missing) value in the signal.
+During detection, short bursts of non-NaN values can be *bridged* (ignored) so
+that a stall can extend through small "pops" of valid values. A stall is only
+terminated once a sufficiently long consecutive run of non-NaN values is
+observed.
+
+This file also defines :class:`StallAnalysisParams` and :class:`StallAnalysis`
+to support on-demand analysis and JSON persistence of both parameters and
+results.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -16,45 +27,60 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Stall:
-    """Represents a detected stall in velocity data.
-
-    A stall is a consecutive sequence of NaN values in the velocity array.
-    The stall spans from bin_start (inclusive) to bin_stop (inclusive).
+    """Represents a detected stall span.
 
     Attributes:
-        bin_start: Starting bin number of the stall (first NaN bin).
-            This represents the actual bin number (line scan bin) in the full
-            image coordinate system. When detect_stalls() is called with
-            start_bin=None (default), this is the array index (0-based).
-            When start_bin is provided, this is the actual bin number
-            (start_bin + array_index).
-        bin_stop: Ending bin number of the stall (last NaN bin before next non-NaN).
-            This represents the actual bin number (line scan bin) in the full
-            image coordinate system, consistent with bin_start.
-        stall_bins: Number of bins in the stall (bin_stop - bin_start + 1).
-            This is the duration of the stall, and remains the same regardless
-            of start_bin offset.
+        bin_start: Starting bin number of the stall (inclusive).
+        bin_stop: Ending bin number of the stall (inclusive).
     """
 
     bin_start: int
     bin_stop: int
-    stall_bins: int
 
     def __post_init__(self) -> None:
-        """Validate stall data after initialization."""
+        """Validate stall invariants."""
         if self.bin_start < 0:
             raise ValueError(f"bin_start must be >= 0, got {self.bin_start}")
         if self.bin_stop < self.bin_start:
             raise ValueError(
                 f"bin_stop ({self.bin_stop}) must be >= bin_start ({self.bin_start})"
             )
-        if self.stall_bins != (self.bin_stop - self.bin_start + 1):
-            raise ValueError(
-                f"stall_bins ({self.stall_bins}) must equal "
-                f"(bin_stop - bin_start + 1) = ({self.bin_stop - self.bin_start + 1})"
-            )
+
+    @property
+    def stall_bins(self) -> int:
+        """Total number of bins in the stall span (inclusive)."""
+        return self.bin_stop - self.bin_start + 1
+
+    def to_dict(self) -> Dict[str, int]:
+        """Serialize to a JSON-friendly dictionary.
+
+        Returns:
+            Dictionary with keys: bin_start, bin_stop.
+        """
+        return {
+            "bin_start": int(self.bin_start),
+            "bin_stop": int(self.bin_stop),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "Stall":
+        """Deserialize from a dictionary.
+
+        Args:
+            d: Dictionary containing bin_start and bin_stop.
+
+        Returns:
+            A :class:`Stall` instance.
+
+        Raises:
+            KeyError: If required keys are missing.
+            ValueError: If values are invalid.
+        """
+        bin_start = int(d["bin_start"])
+        bin_stop = int(d["bin_stop"])
+        return cls(bin_start=bin_start, bin_stop=bin_stop)
 
 
 def detect_stalls(
@@ -63,193 +89,225 @@ def detect_stalls(
     min_stall_duration: int = 1,
     end_stall_non_nan_bins: int = 1,
     start_bin: int | None = None,
-) -> list[Stall]:
-    """Detect stalls in velocity array.
+) -> List[Stall]:
+    """Detect stalls in a 1D signal array.
 
-    A stall is a consecutive sequence of NaN values. A new stall can only
-    start if we're past the refractory period (refactory_bins) from the
-    last stall's stop bin. This prevents detecting overlapping or
-    immediately adjacent stalls as separate events.
+    A stall begins at a NaN value and continues until *end_stall_non_nan_bins*
+    consecutive non-NaN values are observed. Shorter non-NaN runs are bridged,
+    allowing a stall to extend through small bursts of valid values.
 
-    Only stalls with duration >= min_stall_duration are included in the
-    results. Stalls shorter than this threshold are filtered out and do not
-    affect the refractory period.
+    The refractory period prevents a new stall from starting until
+    *refactory_bins* bins have elapsed after the previous accepted stall.
 
-    The bin_start and bin_stop values in the returned Stall objects represent
-    the actual bin numbers (line scan bins) in the full image coordinate system.
-    If start_bin is provided, array indices are offset by start_bin to get the
-    actual bin numbers. If start_bin is None (default), bin values are the same
-    as array indices (backward compatible behavior).
-
-    Algorithm:
-        1. Iterate through velocity array
-        2. When encountering a NaN, check if we're past the refractory period
-           from the last stall's stop bin (in array index space)
-        3. If yes, mark as start of new stall and continue until finding a
-           non-NaN value (end of stall)
-        4. If stall duration >= min_stall_duration, add to results and update
-           last_stall_stop for refractory period (in array index space)
-        5. If stall duration < min_stall_duration, skip it (don't add to results,
-           don't update refractory period)
-        6. If no (within refractory period), skip this NaN
-        7. Translate array indices to actual bin numbers using start_bin
+    Note:
+        ``min_stall_duration`` applies to the **total stall span length** in bins
+        (NaN + any bridged non-NaN).
 
     Args:
-        velocity: 1D numpy array of velocity values (may contain NaN).
-            Each element represents velocity at a specific bin (line scan).
-        refactory_bins: Minimum number of bins between stall stop and next
-            stall start. Must be >= 0. If 0, all consecutive stalls will be
-            detected separately. Only accepted stalls (that pass min_stall_duration
-            filter) affect the refractory period.
-        min_stall_duration: Minimum number of bins (NaN and any bridged short non-NaN
-            runs) required for a stall span to be included in results. Must be >= 1.
-            Stalls with fewer total span bins than this are filtered out and do not
-            affect the refractory period.
+        velocity: 1D array of signal values (typically velocity). NaNs mark missing.
+        refactory_bins: Number of bins after an accepted stall during which new
+            stalls are not allowed to start.
+        min_stall_duration: Minimum stall span length (in bins) required to accept
+            the stall.
         end_stall_non_nan_bins: Number of consecutive non-NaN bins required to
-            terminate an in-progress stall. This allows a stall to "bridge" short
-            runs of valid (non-NaN) velocity values at its end (or within it): if a
-            run of non-NaN values is shorter than this threshold, the stall will
-            continue and include that short run in its overall span.
-            Must be >= 1. Set to 1 for the original behavior (stall ends at the
-            first non-NaN value).
-
-        start_bin: Starting bin number for the first element of the velocity array.
-            If None (default), bin values are the same as array indices (0-based).
-            If provided, bin_start and bin_stop in returned Stall objects will be
-            translated: actual_bin = start_bin + array_index.
-            This allows Stall objects to represent actual bin numbers in the full
-            image coordinate system when analyzing an ROI with start_time/stop_time.
+            terminate a stall. Use small values (2-4) to ignore brief non-NaN pops.
+            Default 1 preserves the historical behavior.
+        start_bin: Optional offset to translate array indices into "global" bin
+            coordinates (e.g. line-scan bin indices in the full image). If None,
+            bin numbers match array indices (0-based).
 
     Returns:
-        List of Stall objects, sorted by bin_start (ascending order).
-        Empty list if no stalls are detected or all detected stalls are too short.
-        The bin_start and bin_stop values represent actual bin numbers (offset by
-        start_bin if provided).
+        List of accepted :class:`Stall` objects.
 
     Raises:
-        ValueError: If velocity is not 1D, refactory_bins is negative,
-            min_stall_duration is less than 1, or start_bin is negative.
-
-    Example:
-        >>> velocity = np.array([1.0, 2.0, np.nan, np.nan, np.nan, 3.0, 4.0])
-        >>> stalls = detect_stalls(velocity, refactory_bins=0, min_stall_duration=1)
-        >>> len(stalls)
-        1
-        >>> stalls[0].bin_start
-        2
-        >>> stalls[0].bin_stop
-        4
-        >>> # With start_bin offset
-        >>> stalls = detect_stalls(velocity, refactory_bins=0, min_stall_duration=1, start_bin=100)
-        >>> stalls[0].bin_start
-        102
-        >>> stalls[0].bin_stop
-        104
-        >>> # Filter out short stalls
-        >>> stalls = detect_stalls(velocity, refactory_bins=0, min_stall_duration=5)
-        >>> len(stalls)
-        0
+        ValueError: If parameters are invalid.
     """
-    # Validate inputs
     if velocity.ndim != 1:
         raise ValueError(f"velocity must be 1D array, got shape {velocity.shape}")
     if refactory_bins < 0:
         raise ValueError(f"refactory_bins must be >= 0, got {refactory_bins}")
     if min_stall_duration < 1:
-        raise ValueError(
-            f"min_stall_duration must be >= 1, got {min_stall_duration}"
-        )
+        raise ValueError(f"min_stall_duration must be >= 1, got {min_stall_duration}")
     if end_stall_non_nan_bins < 1:
         raise ValueError(
             f"end_stall_non_nan_bins must be >= 1, got {end_stall_non_nan_bins}"
         )
-    if start_bin is None:
-        start_bin = 0
-    elif start_bin < 0:
+    if start_bin is not None and int(start_bin) < 0:
         raise ValueError(f"start_bin must be >= 0, got {start_bin}")
 
-    stalls: list[Stall] = []
+    stalls: List[Stall] = []
+    n = int(len(velocity))
     i = 0
-    # Track last stall stop bin for refractory period check (in array index space)
-    # Initialize to negative infinity so first stall can always start
-    # Only accepted stalls (that pass min_stall_duration) update this
-    last_stall_stop = -float("inf")
 
-    # Iterate through velocity array
-    while i < len(velocity):
-        if np.isnan(velocity[i]):
-            # Check if we're past refractory period from last accepted stall
-            # If refactory_bins == 0, this condition is always True after first stall
-            # Note: This comparison is in array index space, not actual bin space
-            if i >= last_stall_stop + refactory_bins:
-                # Start of potential new stall - we're past refractory period
-                bin_start_idx = i
+    # Track the last accepted stall stop in *array index space*.
+    last_stall_stop_idx = -refactory_bins - 1
 
-                # Continue until we see a sufficiently long run of non-NaN values.
-                #
-                # By default (end_stall_non_nan_bins == 1), this matches the original
-                # behavior: the stall ends at the first non-NaN value.
-                #
-                # If end_stall_non_nan_bins > 1, short "bursts" of non-NaN values
-                # (length < end_stall_non_nan_bins) are treated as part of the stall
-                # span, allowing the stall to be extended/merged across those gaps.
-                n_non_nan = 0
-                last_nan_idx = bin_start_idx  # Track the last NaN index we've seen
+    # Normalize offset for translating indices to bins.
+    offset = int(start_bin) if start_bin is not None else 0
 
-                # Handle case where stall extends to end of array
-                while i < len(velocity):
-                    if np.isnan(velocity[i]):
-                        # Update last NaN index - this is the current position
-                        last_nan_idx = i
-                        n_non_nan = 0
-                        i += 1
-                        continue
+    while i < n:
+        # Skip non-NaN values quickly.
+        if not np.isnan(velocity[i]):
+            i += 1
+            continue
 
-                    # non-NaN value
-                    n_non_nan += 1
-                    i += 1
+        # Enforce refractory period relative to the last *accepted* stall.
+        if (i - last_stall_stop_idx) <= refactory_bins:
+            i += 1
+            continue
 
-                    # End the stall only once we've seen enough consecutive non-NaN bins
-                    if n_non_nan >= end_stall_non_nan_bins:
-                        break
+        # Found a candidate stall start at index i.
+        stall_start_idx = i
 
-                if i >= len(velocity):
-                    # Stall extends to end of array
-                    bin_stop_idx = len(velocity) - 1
-                else:
-                    # We terminated due to a qualifying run of non-NaN values.
-                    # The stall ends at the last NaN we saw before this qualifying run.
-                    bin_stop_idx = last_nan_idx
+        non_nan_run = 0  # consecutive non-NaN count since last NaN within current stall
+        i += 1
 
-                # Total span (in bins) of the stall (may include short non-NaN bursts)
-                stall_bins = bin_stop_idx - bin_start_idx + 1
-                
-                # Only accept stalls that meet minimum duration requirement.
-                # min_stall_duration is based on the total number of bins in the stall span
-                # (including any short non-NaN bursts that were bridged/ignored).
-                if stall_bins >= min_stall_duration:
-                    # Translate array indices to actual bin numbers
-                    bin_start_actual = start_bin + bin_start_idx
-                    bin_stop_actual = start_bin + bin_stop_idx
-                    
-                    stalls.append(
-                        Stall(
-                            bin_start=bin_start_actual,
-                            bin_stop=bin_stop_actual,
-                            stall_bins=stall_bins,
-                        )
-                    )
-                    # Update refractory period tracker only for accepted stalls
-                    # Keep this in array index space for internal algorithm
-                    last_stall_stop = bin_stop_idx
-                # If stall is too short, skip it (don't add to results,
-                # don't update last_stall_stop, so it doesn't affect refractory period)
+        # Expand stall until termination criterion is met or we hit end of array.
+        while i < n:
+            if np.isnan(velocity[i]):
+                # Reset termination counter on NaN.
+                non_nan_run = 0
             else:
-                # Skip this NaN - we're within refractory period of last accepted stall
-                # Just move past it without creating a new stall
-                i += 1
-        else:
-            # Non-NaN value - just continue
+                non_nan_run += 1
+                # Once we see enough consecutive non-NaNs, terminate stall.
+                if non_nan_run >= end_stall_non_nan_bins:
+                    break
             i += 1
 
+        if i >= n:
+            # Stall extends to end; include all remaining bins.
+            stall_stop_idx = n - 1
+        else:
+            # i currently points to the last non-NaN in the terminating run (or later),
+            # so exclude that terminating non-NaN run from the stall span.
+            stall_stop_idx = i - non_nan_run
+
+        stall_bins = stall_stop_idx - stall_start_idx + 1
+
+        # Accept only if long enough (duration counts NaN + bridged non-NaN).
+        if stall_bins >= min_stall_duration:
+            bin_start_actual = offset + stall_start_idx
+            bin_stop_actual = offset + stall_stop_idx
+            stalls.append(
+                Stall(
+                    bin_start=bin_start_actual,
+                    bin_stop=bin_stop_actual,
+                )
+            )
+            last_stall_stop_idx = stall_stop_idx
+
+        # Continue scanning from the end of the terminating non-NaN run (if any),
+        # otherwise one bin past the stall stop.
+        if i < n:
+            i = stall_stop_idx + non_nan_run
+        else:
+            i = n
+
     return stalls
+
+
+@dataclass(frozen=True)
+class StallAnalysisParams:
+    """Parameters controlling stall analysis.
+
+    These parameters are intended to be persisted alongside results to ensure
+    reproducibility.
+
+    Attributes:
+        velocity_key: Name of the analysis column/signal to analyze (e.g. 'velocity',
+            'cleanVelocity', 'signedVelocity').
+        refactory_bins: Refractory period after an accepted stall during which new stalls
+            are not detected.
+        min_stall_duration: Minimum accepted stall span length (in bins).
+        end_stall_non_nan_bins: Number of consecutive non-NaN bins required to end a stall.
+    """
+
+    velocity_key: str = "velocity"
+    refactory_bins: int = 0
+    min_stall_duration: int = 1
+    end_stall_non_nan_bins: int = 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize parameters to a JSON-friendly dictionary."""
+        return {
+            "velocity_key": self.velocity_key,
+            "refactory_bins": int(self.refactory_bins),
+            "min_stall_duration": int(self.min_stall_duration),
+            "end_stall_non_nan_bins": int(self.end_stall_non_nan_bins),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "StallAnalysisParams":
+        """Deserialize parameters from a dictionary."""
+        return cls(
+            velocity_key=str(d.get("velocity_key", "velocity")),
+            refactory_bins=int(d.get("refactory_bins", 0)),
+            min_stall_duration=int(d.get("min_stall_duration", 1)),
+            end_stall_non_nan_bins=int(d.get("end_stall_non_nan_bins", 1)),
+        )
+
+
+@dataclass
+class StallAnalysis:
+    """Stall analysis results plus the parameters used to generate them.
+
+    Attributes:
+        params: Parameters used for detection and signal selection.
+        stalls: List of detected stalls.
+        analyzed_at: ISO-8601 timestamp (UTC) when this analysis was computed.
+    """
+
+    params: StallAnalysisParams
+    stalls: List[Stall]
+    analyzed_at: str
+
+    @classmethod
+    def run(
+        cls,
+        velocity: np.ndarray,
+        params: StallAnalysisParams,
+        *,
+        start_bin: int | None = None,
+    ) -> "StallAnalysis":
+        """Run stall detection on a provided signal array.
+
+        Args:
+            velocity: 1D array of values to analyze (NaNs mark missing).
+            params: Stall analysis parameters.
+            start_bin: Optional offset to translate array indices to global bin numbers.
+
+        Returns:
+            A populated :class:`StallAnalysis` instance.
+        """
+        stalls = detect_stalls(
+            velocity=velocity,
+            refactory_bins=params.refactory_bins,
+            min_stall_duration=params.min_stall_duration,
+            end_stall_non_nan_bins=params.end_stall_non_nan_bins,
+            start_bin=start_bin,
+        )
+        analyzed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return cls(params=params, stalls=stalls, analyzed_at=analyzed_at)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize results to a JSON-friendly dictionary."""
+        return {
+            "params": self.params.to_dict(),
+            "stalls": [s.to_dict() for s in self.stalls],
+            "analyzed_at": self.analyzed_at,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "StallAnalysis":
+        """Deserialize results from a dictionary.
+
+        Args:
+            d: Dictionary containing 'params' and optionally 'stalls' and 'analyzed_at'.
+
+        Returns:
+            A :class:`StallAnalysis` instance.
+        """
+        params = StallAnalysisParams.from_dict(d.get("params", {}))
+        stalls = [Stall.from_dict(sd) for sd in d.get("stalls", [])]
+        analyzed_at = str(d.get("analyzed_at", ""))
+        return cls(params=params, stalls=stalls, analyzed_at=analyzed_at)

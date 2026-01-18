@@ -43,24 +43,20 @@ def test_generate_stall_analysis() -> None:
     logger.info(f"Velocity array length: {len(velocity)}")
     logger.info(f"Number of NaN values: {np.sum(np.isnan(velocity))}")
     
-    # Get lineScanBin to translate to actual bin numbers
-    lineScanBin = kym_analysis.get_analysis_value(roi_id=roi_id, key="lineScanBin")
-    if lineScanBin is None or len(lineScanBin) == 0:
-        start_bin = 0
-        logger.warning("No lineScanBin available, using start_bin=0")
-    else:
-        start_bin = int(lineScanBin[0])
-        logger.info(f"Using start_bin={start_bin} from lineScanBin[0]")
-        logger.info(f"  lineScanBin range: [{lineScanBin[0]}, {lineScanBin[-1]}]")
+    # Stall detection is performed in array-index space for tests.
+    # (We do not rely on any 'lineScanBin' column.)
+    start_bin = 0
     
     # Run stall detection with start_bin offset
     refactory_bins = 20
     min_stall_duration = 2  # 4
+    end_stall_non_nan_bins = 2
     stalls = detect_stalls(
         velocity,
         refactory_bins=refactory_bins,
         min_stall_duration=min_stall_duration,
         start_bin=start_bin,
+        end_stall_non_nan_bins=end_stall_non_nan_bins,
     )
     logger.info(f"Detected {len(stalls)} stalls")
     
@@ -70,7 +66,7 @@ def test_generate_stall_analysis() -> None:
     # Verify the code ran successfully
     assert isinstance(stalls, list)
 
-    if 0:
+    if 1:
         logger.info(f'plotting stalls {len(stalls)}')
         from kymflow.core.plotting.stall_plots import plot_stalls_matplotlib
         fig = plot_stalls_matplotlib(kym_image, roi_id, stalls)

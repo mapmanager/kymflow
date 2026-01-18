@@ -62,12 +62,14 @@ def plot_stalls_matplotlib(
         velocity = kym_analysis.get_analysis_value(
             roi_id, "velocity", remove_outliers, median_filter
         )
-        # Get x-axis values (never filtered) - use time or lineScanBin based on use_time_axis
+        # Get x-axis values (never filtered).
+        # If we are not using the time axis, plot in array-index space (0..N-1).
         if use_time_axis:
-            time_stat = "time"
+            x_values = kym_analysis.get_analysis_value(roi_id, "time")
+        elif velocity is None:
+            x_values = None
         else:
-            time_stat = "lineScanBin"
-        x_values = kym_analysis.get_analysis_value(roi_id, time_stat)
+            x_values = np.arange(len(velocity))
 
     # Validate data and return None if data is not available
     if velocity is None or x_values is None:
@@ -212,12 +214,14 @@ def plot_stalls_plotly(
         velocity = kym_analysis.get_analysis_value(
             roi_id, "velocity", remove_outliers, median_filter
         )
-        # Get x-axis values (never filtered) - use time or lineScanBin based on use_time_axis
+        # Get x-axis values (never filtered).
+        # If we are not using the time axis, plot in array-index space (0..N-1).
         if use_time_axis:
-            time_stat = "time"
+            x_values = kym_analysis.get_analysis_value(roi_id, "time")
+        elif velocity is None:
+            x_values = None
         else:
-            time_stat = "lineScanBin"
-        x_values = kym_analysis.get_analysis_value(roi_id, time_stat)
+            x_values = np.arange(len(velocity))
 
     # Validate data and return None if data is not available
     if velocity is None or x_values is None:

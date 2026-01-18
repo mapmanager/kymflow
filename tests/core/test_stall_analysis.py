@@ -7,7 +7,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from kymflow.core.analysis.stall_analysis import Stall, detect_stalls
+from kymflow.core.analysis.stall_analysis import (
+    Stall,
+    StallAnalysis,
+    StallAnalysisParams,
+    detect_stalls,
+)
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.logging import get_logger, setup_logging
 
@@ -20,7 +25,7 @@ class TestStallDataclass:
 
     def test_stall_creation(self) -> None:
         """Test creating a Stall object with valid data."""
-        stall = Stall(bin_start=10, bin_stop=15, stall_bins=6)
+        stall = Stall(bin_start=10, bin_stop=15)
         assert stall.bin_start == 10
         assert stall.bin_stop == 15
         assert stall.stall_bins == 6
@@ -28,17 +33,17 @@ class TestStallDataclass:
     def test_stall_validation_bin_start_negative(self) -> None:
         """Test that Stall raises error for negative bin_start."""
         with pytest.raises(ValueError, match="bin_start must be >= 0"):
-            Stall(bin_start=-1, bin_stop=5, stall_bins=6)
+            Stall(bin_start=-1, bin_stop=5)
 
     def test_stall_validation_bin_stop_before_start(self) -> None:
         """Test that Stall raises error when bin_stop < bin_start."""
         with pytest.raises(ValueError, match="bin_stop.*must be >= bin_start"):
-            Stall(bin_start=10, bin_stop=5, stall_bins=6)
+            Stall(bin_start=10, bin_stop=5)
 
-    def test_stall_validation_stall_bins_mismatch(self) -> None:
-        """Test that Stall raises error when stall_bins doesn't match bin range."""
-        with pytest.raises(ValueError, match="stall_bins.*must equal"):
-            Stall(bin_start=10, bin_stop=15, stall_bins=10)
+    def test_stall_bins_property_is_derived(self) -> None:
+        """Test that stall_bins is derived from bin_start/bin_stop."""
+        stall = Stall(bin_start=10, bin_stop=15)
+        assert stall.stall_bins == 6
 
 
 class TestDetectStallsSimple:
@@ -104,11 +109,10 @@ class TestDetectStallsSimple:
         assert stalls[1].bin_stop == 5
         assert stalls[1].stall_bins == 1
 
-        # Third stall: bins 8-10 (3 NaN bins), but algorithm extends to index 11
-        # when the qualifying non-NaN run reaches the end, so 4 bins total
+        # Third stall: bins 8-10
         assert stalls[2].bin_start == 8
-        assert stalls[2].bin_stop == 11
-        assert stalls[2].stall_bins == 4
+        assert stalls[2].bin_stop == 10
+        assert stalls[2].stall_bins == 3
 
     def test_invalid_input_not_1d(self) -> None:
         """Test detect_stalls raises error for non-1D array."""
@@ -130,12 +134,12 @@ class TestDetectStallsMinDuration:
         """Test that stalls shorter than min_stall_duration are filtered out."""
         # One short stall (2 bins) and one long stall (5 bins)
         velocity = np.array([1.0, np.nan, np.nan, 2.0, 3.0, np.nan, np.nan, np.nan, np.nan, np.nan, 4.0])
-        # With min_stall_duration=3, only the 6-bin stall should be detected
+        # With min_stall_duration=3, only the 5-bin stall should be detected
         stalls = detect_stalls(velocity, refactory_bins=0, min_stall_duration=3)
         assert len(stalls) == 1
         assert stalls[0].bin_start == 5
-        assert stalls[0].bin_stop == 10
-        assert stalls[0].stall_bins == 6
+        assert stalls[0].bin_stop == 9
+        assert stalls[0].stall_bins == 5
 
     def test_min_stall_duration_all_filtered(self) -> None:
         """Test that all stalls can be filtered out if they're all too short."""
@@ -155,14 +159,12 @@ class TestDetectStallsMinDuration:
     def test_min_stall_duration_exact_threshold(self) -> None:
         """Test that stalls exactly at the threshold are included."""
         velocity = np.array([1.0, np.nan, np.nan, 2.0])
-        # Stall spans indices 1-2 (2 NaN bins), but algorithm extends to index 3
-        # when the qualifying non-NaN run reaches the end, so 3 bins total
-        # With min_stall_duration=2, it should be included
+        # Stall spans indices 1-2 (2 bins). With min_stall_duration=2, it should be included.
         stalls = detect_stalls(velocity, refactory_bins=0, min_stall_duration=2)
         assert len(stalls) == 1
         assert stalls[0].bin_start == 1
-        assert stalls[0].bin_stop == 3
-        assert stalls[0].stall_bins == 3
+        assert stalls[0].bin_stop == 2
+        assert stalls[0].stall_bins == 2
 
     def test_min_stall_duration_one_below_threshold(self) -> None:
         """Test that stalls one bin below threshold are filtered out."""
@@ -173,21 +175,20 @@ class TestDetectStallsMinDuration:
 
     def test_min_stall_duration_with_refractory_period(self) -> None:
         """Test that filtered stalls don't affect refractory period."""
-        # Two stalls: first at indices 1-2 (2 bins), second at index 5
-        # With refactory_bins=3: second stall starts at index 5, which is >= 2 + 3 = 5, so it's detected
-        # Second stall: index 5 is NaN, index 6 is 4.0 (non-NaN)
-        # When we see non-NaN at index 6, n_non_nan=1, then i++ makes i=7
-        # i (7) >= len(velocity) (7), so algorithm treats it as extending to end
-        # bin_stop_idx = len(velocity) - 1 = 6, so stall_bins = 6 - 5 + 1 = 2
-        # With min_stall_duration=2, both stalls pass the filter
-        velocity = np.array([1.0, np.nan, np.nan, 2.0, 3.0, np.nan, 4.0])
-        stalls = detect_stalls(velocity, refactory_bins=3, min_stall_duration=2)
+        # This case ensures that a short stall filtered by min_stall_duration does not
+        # update the refractory anchor and therefore does not suppress later stalls.
+        #
+        # Stall 0: indices 1-2 (2 bins) -> accepted
+        # Stall 1: index 5 (1 bin) -> filtered (min_stall_duration=2)
+        # Stall 2: indices 7-8 (2 bins) -> should still be accepted
+        velocity = np.array([1.0, np.nan, np.nan, 2.0, 3.0, np.nan, 4.0, np.nan, np.nan, 5.0])
+        stalls = detect_stalls(velocity, refactory_bins=2, min_stall_duration=2)
         assert len(stalls) == 2
         assert stalls[0].bin_start == 1
         assert stalls[0].bin_stop == 2
         assert stalls[0].stall_bins == 2
-        assert stalls[1].bin_start == 5
-        assert stalls[1].bin_stop == 6
+        assert stalls[1].bin_start == 7
+        assert stalls[1].bin_stop == 8
         assert stalls[1].stall_bins == 2
 
     def test_min_stall_duration_invalid_value(self) -> None:
@@ -201,6 +202,65 @@ class TestDetectStallsMinDuration:
         velocity = np.array([1.0, 2.0, 3.0])
         with pytest.raises(ValueError, match="min_stall_duration must be >= 1"):
             detect_stalls(velocity, refactory_bins=0, min_stall_duration=0)
+
+
+class TestDetectStallsEndStallNonNanBins:
+    """Tests for detect_stalls() end_stall_non_nan_bins bridging behavior."""
+
+    def test_end_stall_non_nan_bins_bridges_short_non_nan_pop(self) -> None:
+        """A short non-NaN pop (< threshold) is bridged, merging stalls."""
+        # NaNs at 1-2, a 1-bin non-NaN "pop" at 3, then NaNs again at 4-5.
+        # With end_stall_non_nan_bins=1, we end a stall at the first non-NaN, so we get 2 stalls.
+        # With end_stall_non_nan_bins=2, that 1-bin pop is bridged and we get 1 merged stall.
+        velocity = np.array([1.0, np.nan, np.nan, 2.0, np.nan, np.nan, 3.0, 4.0])
+
+        stalls_end1 = detect_stalls(
+            velocity,
+            refactory_bins=0,
+            end_stall_non_nan_bins=1,
+        )
+        assert [(s.bin_start, s.bin_stop) for s in stalls_end1] == [(1, 2), (4, 5)]
+
+        stalls_end2 = detect_stalls(
+            velocity,
+            refactory_bins=0,
+            end_stall_non_nan_bins=2,
+        )
+        assert [(s.bin_start, s.bin_stop) for s in stalls_end2] == [(1, 5)]
+
+    def test_end_stall_non_nan_bins_affects_min_stall_duration(self) -> None:
+        """Bridging can increase span so a stall passes min_stall_duration."""
+        velocity = np.array([1.0, np.nan, 2.0, np.nan, 3.0, 4.0])
+
+        # Without bridging (end=1), stall is just index 1 (1 bin) => filtered out by min=3.
+        stalls_end1 = detect_stalls(
+            velocity,
+            refactory_bins=0,
+            min_stall_duration=3,
+            end_stall_non_nan_bins=1,
+        )
+        assert stalls_end1 == []
+
+        # With end=2, the single non-NaN at index 2 is bridged and stall spans indices 1-3 (3 bins).
+        stalls_end2 = detect_stalls(
+            velocity,
+            refactory_bins=0,
+            min_stall_duration=3,
+            end_stall_non_nan_bins=2,
+        )
+        assert [(s.bin_start, s.bin_stop, s.stall_bins) for s in stalls_end2] == [(1, 3, 3)]
+
+    def test_stall_analysis_run_uses_end_stall_non_nan_bins_param(self) -> None:
+        """StallAnalysis.run should honor params.end_stall_non_nan_bins."""
+        velocity = np.array([1.0, np.nan, np.nan, 2.0, np.nan, np.nan, 3.0, 4.0])
+        params = StallAnalysisParams(
+            refactory_bins=0,
+            min_stall_duration=1,
+            end_stall_non_nan_bins=2,
+        )
+        analysis = StallAnalysis.run(velocity=velocity, params=params)
+        assert analysis.params.end_stall_non_nan_bins == 2
+        assert [(s.bin_start, s.bin_stop) for s in analysis.stalls] == [(1, 5)]
 
 
 class TestDetectStallsRefractory:
@@ -241,10 +301,9 @@ class TestDetectStallsRefractory:
         velocity = np.array([1.0, np.nan, 2.0, 3.0, np.nan, 4.0])
         # First stall: bin 1, stop at 1
         # Second stall starts at bin 4, which is exactly 3 bins after stop (4 - 1 = 3)
-        # With refactory_bins=3, condition is: 4 >= 1 + 3, which is True
-        # So second stall should be detected
+        # With refactory_bins=3, this is still within the refractory period and is skipped
         stalls = detect_stalls(velocity, refactory_bins=3)
-        assert len(stalls) == 2
+        assert len(stalls) == 1
 
     def test_refactory_bins_one_bin_before_threshold(self) -> None:
         """Test that stall one bin before threshold is skipped."""
@@ -343,18 +402,14 @@ class TestDetectStallsStartBin:
         velocity = np.array(
             [1.0, np.nan, 2.0, np.nan, np.nan, 3.0, np.nan, np.nan, 4.0]
         )
-        # With refactory_bins=2, second stall should be skipped
+        # With refactory_bins=2, stalls can start only when (i - last_stop) > 2.
         stalls = detect_stalls(velocity, refactory_bins=2, start_bin=50)
-        
-        # First stall at index 1, second stall at index 3 is within refractory period
-        # (index 3 < 1 + 2 = 3, so 3 >= 3 is True, so it's detected)
-        # Actually, the condition is i >= last_stall_stop + refactory_bins
-        # So 3 >= 1 + 2 = 3, which is True, so second stall is detected
-        # Third stall at index 6: 6 >= 4 + 2 = 6, which is True, so it's also detected
+
+        # Detected stall starts (array indices): 1, 4, 7
         assert len(stalls) == 3
         assert stalls[0].bin_start == 51  # 50 + 1
-        assert stalls[1].bin_start == 53  # 50 + 3
-        assert stalls[2].bin_start == 56  # 50 + 6
+        assert stalls[1].bin_start == 54  # 50 + 4
+        assert stalls[2].bin_start == 57  # 50 + 7
 
     def test_start_bin_negative_raises_error(self) -> None:
         """Test that negative start_bin raises ValueError."""
@@ -369,7 +424,7 @@ class TestDetectStallsStartBin:
         
         assert len(stalls) == 1
         assert stalls[0].bin_start == 2
-        assert stalls[0].bin_stop == 4
+        assert stalls[0].bin_stop == 3
 
 
 class TestDetectStallsIntegration:
@@ -392,7 +447,8 @@ class TestDetectStallsIntegration:
 
         # Check if analysis exists
         if not kym_analysis.has_analysis(roi_id=1):
-            pytest.skip("No analysis data available for ROI 1")
+            # logger.warning(f'{tif_file}')
+            pytest.skip(f"No analysis data available for ROI 1 in {tif_file}")
 
         # Get velocity data
         velocity = kym_analysis.get_analysis_value(roi_id=1, key="velocity")
@@ -444,36 +500,24 @@ class TestDetectStallsIntegration:
 
         stalls = detect_stalls(velocity, refactory_bins=0)
 
-        # Verify that stall ranges start with NaN values
-        # Note: The algorithm may extend stalls to include non-NaN values at the end
-        # when the qualifying non-NaN run reaches the end of the array
+        # Verify that all bins in stall ranges are NaN
         for stall in stalls:
-            # At minimum, the stall should start with a NaN
-            assert np.isnan(
-                velocity[stall.bin_start]
-            ), f"Stall at {stall.bin_start} should start with NaN"
-            
-            # Check if the stall extends to the end of the array
-            if stall.bin_stop == len(velocity) - 1:
-                # If stall extends to end, it may include non-NaN values
-                # Just verify it contains at least one NaN
-                stall_range = velocity[stall.bin_start : stall.bin_stop + 1]
-                assert np.any(
-                    np.isnan(stall_range)
-                ), f"Stall at {stall.bin_start}-{stall.bin_stop} should contain at least one NaN"
-            else:
-                # If stall doesn't extend to end, all bins should be NaN
-                stall_range = velocity[stall.bin_start : stall.bin_stop + 1]
-                assert np.all(
-                    np.isnan(stall_range)
-                ), f"Stall at {stall.bin_start}-{stall.bin_stop} should contain only NaN values"
+            stall_range = velocity[stall.bin_start : stall.bin_stop + 1]
+            assert np.all(
+                np.isnan(stall_range)
+            ), f"Stall at {stall.bin_start}-{stall.bin_stop} contains non-NaN values"
 
-        # Verify that bins immediately before stalls are not NaN (unless at array boundaries)
+        # Verify that bins immediately before and after stalls are not NaN
+        # (unless at array boundaries)
         for stall in stalls:
             if stall.bin_start > 0:
                 assert not np.isnan(
                     velocity[stall.bin_start - 1]
                 ), f"Bin before stall {stall.bin_start} should not be NaN"
+            if stall.bin_stop < len(velocity) - 1:
+                assert not np.isnan(
+                    velocity[stall.bin_stop + 1]
+                ), f"Bin after stall {stall.bin_stop} should not be NaN"
 
 
 class TestStallPlotting:

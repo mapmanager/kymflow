@@ -20,6 +20,8 @@ from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers
 from kymflow.core.utils.logging import get_logger
 
+from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
+
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.acq_image import AcqImage
 
@@ -77,6 +79,8 @@ class KymAnalysis:
         self._analysis_metadata: Dict[int, RoiAnalysisMetadata] = {}
         self._df: Optional[pd.DataFrame] = None
         self._dirty: bool = False
+        self._stall_analysis: Dict[int, StallAnalysis] = {}
+        # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
         
         # Always try to load analysis (handles path=None gracefully)
         self.load_analysis()
@@ -152,8 +156,8 @@ class KymAnalysis:
     def _get_analysis_folder_path(self) -> Path:
         """Get the analysis folder path for the acq_image.
         
-        Pattern: parent folder + '-analysis' suffix
-        Example: 20221102/Capillary1_0001.tif -> 20221102/20221102-analysis/
+        Pattern: fixed folder name under the parent directory.
+        Example: 20221102/Capillary1_0001.tif -> 20221102/flow-analysis/
         
         Returns:
             Path to the analysis folder.
@@ -161,10 +165,7 @@ class KymAnalysis:
         primary_path = self._get_primary_path()
         if primary_path is None:
             raise ValueError("No file path available for analysis folder")
-        parent = primary_path.parent
-        parent_name = parent.name
-        analysis_folder_name = f"{parent_name}-analysis"
-        return parent / analysis_folder_name
+        return primary_path.parent / "flow-analysis"
     
     def _get_save_paths(self) -> tuple[Path, Path]:
         """Get the save paths for analysis files.
@@ -217,29 +218,30 @@ class KymAnalysis:
         # ROI coordinates are already clamped to image bounds and properly ordered when added/edited
         image = self.acq_image.get_img_slice(channel=channel)
         
+        # Convert ROI coordinates to pixel/line indices (already clamped and ordered)
+        # For kymographs: dim0 = time (rows), dim1 = space (columns)
+        start_pixel = roi.bounds.dim0_start  # time dimension (rows)
+        stop_pixel = roi.bounds.dim0_stop    # time dimension (rows)
+        start_line = roi.bounds.dim1_start    # space dimension (columns)
+        stop_line = roi.bounds.dim1_stop      # space dimension (columns)
+        
         logger.info(f'calling mp_analyze_flow() with roi {roi_id}:')
         print(roi)
         
         # Run analysis on the ROI region
+        # mp_analyze_flow expects explicit dim0/dim1 bounds in the (time, space) convention.
         thetas, the_t, spread = mp_analyze_flow(
             image,
             window_size,
-            dim0_start=roi.bounds.dim0_start,
-            dim0_stop=roi.bounds.dim0_stop,
-            dim1_start=roi.bounds.dim1_start,
-            dim1_stop=roi.bounds.dim1_stop,
+            start_pixel,
+            stop_pixel,
+            start_line,
+            stop_line,
             progress_callback=progress_callback,
             is_cancelled=is_cancelled,
             use_multiprocessing=use_multiprocessing,
         )
         
-        if 1:
-            logger.info('mp_analyze_flow ->')
-            logger.info(f'the_t: {the_t.shape}')
-            logger.info(f'thetas: {thetas.shape}')
-            logger.info(f'spread: {spread.shape}')
-            logger.info(f'image: {image.shape}')
-
         # Record analysis metadata (geometry lives in acq_image.rois)
         self._analysis_metadata[roi_id] = RoiAnalysisMetadata(
             roi_id=roi_id,
@@ -278,8 +280,6 @@ class KymAnalysis:
         roi_df = pd.DataFrame({
             "roi_id": roi_id,
             "channel": roi.channel,
-            # "lineScanBin": the_t,  # abb 20260110
-            "lineScanBin": range(len(the_t)),
             "time": drew_time,
             "velocity": drew_velocity,
             "parentFolder": parent_name,
@@ -342,7 +342,7 @@ class KymAnalysis:
         
         # Save CSV
         self._df.to_csv(csv_path, index=False)
-        logger.info(f"Saved analysis len:{len(self._df)} CSV to {csv_path}")
+        logger.info(f"Saved analysis CSV to {csv_path}")
         
         # Reconcile to current ROIs (single source of truth)
         current_roi_ids = {roi.id for roi in self.acq_image.rois}
@@ -364,6 +364,9 @@ class KymAnalysis:
                     "roi_revision_at_analysis": meta.roi_revision_at_analysis,
                 }
                 for rid, meta in self._analysis_metadata.items()
+            },
+            "stall_analysis": {
+                str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
             },
         }
         
@@ -393,19 +396,19 @@ class KymAnalysis:
         csv_path, json_path = self._get_save_paths()
         
         if not csv_path.exists():
-            # if primary_path:
-            #     logger.info(f"No analysis CSV found for {primary_path.name}")
-            # else:
-            #     logger.info("No analysis CSV found (no path available)")
-            # logger.info(f"  csv_path:{csv_path}")
+            if primary_path:
+                logger.info(f"No analysis CSV found for {primary_path.name}")
+            else:
+                logger.info("No analysis CSV found (no path available)")
+            logger.info(f"  csv_path:{csv_path}")
             return False
         
         if not json_path.exists():
-            # if primary_path:
-            #     logger.info(f"No analysis JSON found for {primary_path.name}")
-            # else:
-            #     logger.info("No analysis JSON found (no path available)")
-            # logger.info(f"  json_path:{json_path}")
+            if primary_path:
+                logger.info(f"No analysis JSON found for {primary_path.name}")
+            else:
+                logger.info("No analysis JSON found (no path available)")
+            logger.info(f"  json_path:{json_path}")
             return False
         
         # Load CSV
@@ -416,10 +419,11 @@ class KymAnalysis:
             json_data = json.load(f)
         
         # Load analysis metadata (v2.0 only). We do not recreate ROIs here.
-        if json_data.get("version") != "2.0" or "analysis_metadata" not in json_data:
+        version = str(json_data.get("version", ""))
+        if not version.startswith("2.") or "analysis_metadata" not in json_data:
             logger.warning(
                 f"Unsupported analysis JSON schema for {primary_path.name}. "
-                "Expected version='2.0' with key 'analysis_metadata'."
+                "Expected version starting with '2.' and key 'analysis_metadata'."
             )
             return False
 
@@ -437,10 +441,23 @@ class KymAnalysis:
             except Exception as e:
                 logger.warning(f"Skipping invalid analysis metadata entry {key}: {e}")
 
+
+        # Load stall analysis (optional; may be absent in older analysis JSON).
+        self._stall_analysis.clear()
+        for roi_id_str, payload in json_data.get("stall_analysis", {}).items():
+            try:
+                roi_id = int(roi_id_str)
+                self._stall_analysis[roi_id] = StallAnalysis.from_dict(payload)
+            except Exception as e:
+                logger.warning(f"Skipping invalid stall_analysis entry {roi_id_str}: {e}")
+
         # Reconcile to current ROIs
         current_roi_ids = {roi.id for roi in self.acq_image.rois}
         self._analysis_metadata = {
             rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
+        }
+        self._stall_analysis = {
+            rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
         }
         if self._df is not None and 'roi_id' in self._df.columns:
             self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
@@ -483,8 +500,9 @@ class KymAnalysis:
         Returns:
             Array of values for the specified key, or None if not found.
         """
-        roi_df = self.get_analysis(roi_id=roi_id)
 
+        roi_df = self.get_analysis(roi_id=roi_id)
+        
         # logger.info('roi_df:')
         # print(roi_df)
 
@@ -498,8 +516,8 @@ class KymAnalysis:
         
         values = roi_df[key].values
 
-        # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
-        # print(values)
+        logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
+        print(values)
 
         if remove_outliers:
             values = _removeOutliers(values)
@@ -508,9 +526,55 @@ class KymAnalysis:
         
         return values
     
+
+    def run_stall_analysis(self, roi_id: int, params: StallAnalysisParams) -> StallAnalysis:
+        """Run stall analysis for a single ROI and store results.
+
+        This method is intentionally **on-demand**: it does not run automatically
+        when flow analysis is computed. A caller (GUI/script) supplies parameters and
+        explicitly requests stall detection once the underlying analysis values exist.
+
+        The source signal is selected via `params.velocity_key` (e.g. 'velocity',
+        'cleanVelocity', 'signedVelocity').
+
+        Args:
+            roi_id: Identifier of the ROI to analyze.
+            params: Stall analysis parameters.
+
+        Returns:
+            The computed `StallAnalysis` instance.
+
+        Raises:
+            ValueError: If the requested analysis values are missing for this ROI.
+        """
+        values = self.get_analysis_value(
+            roi_id=roi_id,
+            key=params.velocity_key,
+        )
+        if values is None:
+            raise ValueError(
+                f"Cannot run stall analysis: ROI {roi_id} has no analysis values for key '{params.velocity_key}'."
+            )
+
+        analysis = StallAnalysis.run(velocity=values, params=params)
+        self._stall_analysis[roi_id] = analysis
+        # Mark dirty so callers know there are unsaved results.
+        self._dirty = True
+        return analysis
+
+    def get_stall_analysis(self, roi_id: int) -> Optional[StallAnalysis]:
+        """Return stall analysis results for roi_id, or None if not present.
+
+        Args:
+            roi_id: Identifier of the ROI.
+
+        Returns:
+            Stored `StallAnalysis` results, or None if stall analysis has not been run
+            for this ROI (or results were not loaded).
+        """
+        return self._stall_analysis.get(roi_id)
     def __str__(self) -> str:
         """String representation."""
         roi_ids = [roi.id for roi in self.acq_image.rois]
         analyzed = sorted(self._analysis_metadata.keys())
         return f"KymAnalysis(roi_ids={roi_ids}, analyzed={analyzed}, dirty={self._dirty})"
-
