@@ -396,19 +396,19 @@ class KymAnalysis:
         csv_path, json_path = self._get_save_paths()
         
         if not csv_path.exists():
-            if primary_path:
-                logger.info(f"No analysis CSV found for {primary_path.name}")
-            else:
-                logger.info("No analysis CSV found (no path available)")
-            logger.info(f"  csv_path:{csv_path}")
+            # if primary_path:
+            #     logger.info(f"No analysis CSV found for {primary_path.name}")
+            # else:
+            #     logger.info("No analysis CSV found (no path available)")
+            # logger.info(f"  csv_path:{csv_path}")
             return False
         
         if not json_path.exists():
-            if primary_path:
-                logger.info(f"No analysis JSON found for {primary_path.name}")
-            else:
-                logger.info("No analysis JSON found (no path available)")
-            logger.info(f"  json_path:{json_path}")
+            # if primary_path:
+            #     logger.info(f"No analysis JSON found for {primary_path.name}")
+            # else:
+            #     logger.info("No analysis JSON found (no path available)")
+            # logger.info(f"  json_path:{json_path}")
             return False
         
         # Load CSV
@@ -516,11 +516,14 @@ class KymAnalysis:
         
         values = roi_df[key].values
 
-        logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
-        print(values)
+        # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
+        # print(values)
 
         if remove_outliers:
             values = _removeOutliers(values)
+            # set to np.nan if values[i] < 100000
+            values[values < -100000] = np.nan
+
         if median_filter > 0:
             values = _medianFilter(values, median_filter)
         
@@ -550,6 +553,7 @@ class KymAnalysis:
         values = self.get_analysis_value(
             roi_id=roi_id,
             key=params.velocity_key,
+            remove_outliers=True,
         )
         if values is None:
             raise ValueError(

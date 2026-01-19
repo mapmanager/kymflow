@@ -138,7 +138,7 @@ class KymImage(AcqImage):
             
             # Add the channel with loaded data
             self._imgData[channel] = img_array
-            logger.info(f"Loaded image data for channel {channel}: {img_array.shape} from {path}")
+            # logger.info(f"Loaded image data for channel {channel}: {img_array.shape} from {path}")
             
             return True
             

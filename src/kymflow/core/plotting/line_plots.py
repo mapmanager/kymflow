@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -20,6 +20,24 @@ from kymflow.core.plotting.roi_config import (
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
+    """Convert hex color string to RGBA format.
+    
+    Args:
+        hex_color: Hex color string (e.g., "#ffffff" or "#000000")
+        alpha: Alpha transparency value between 0 and 1 (default: 1.0)
+    
+    Returns:
+        RGBA color string (e.g., "rgba(255, 255, 255, 0.8)")
+    """
+    if not hex_color.startswith("#"):
+        return hex_color
+    
+    hex_rgb = hex_color.lstrip("#")
+    rgb = tuple(int(hex_rgb[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha})"
 
 
 def line_plot_plotly(
@@ -304,7 +322,7 @@ def plot_image_line_plotly(
     # Plot line plot if analysis data is available
     # Get analysis data for line plot (for specified ROI)
     kym_analysis = kf.get_kym_analysis()
-    if kym_analysis.has_analysis(selected_roi_id):
+    if selected_roi_id is not None and kym_analysis.has_analysis(selected_roi_id):
         analysis_time_values = kym_analysis.get_analysis_value(selected_roi_id, "time")
         y_values = kym_analysis.get_analysis_value(selected_roi_id, yStat, remove_outliers, median_filter)
     else:
@@ -316,10 +334,10 @@ def plot_image_line_plotly(
         and y_values is not None
         and len(analysis_time_values) > 0
     ):
-        import numpy as np
-        logger.info('=== add_trace()')
-        logger.info(f'analysis_time_values: n:{len(y_values)} min:{np.min(analysis_time_values)}, max:{np.max(analysis_time_values)}')
-        logger.info(f'y_values: n:{len(y_values)} min:{np.min(y_values)}, max:{np.max(y_values)}')
+        # import numpy as np
+        # logger.info('=== add_trace()')
+        # logger.info(f'analysis_time_values: n:{len(y_values)} min:{np.min(analysis_time_values)}, max:{np.max(analysis_time_values)}')
+        # logger.info(f'y_values: n:{len(y_values)} min:{np.min(y_values)}, max:{np.max(y_values)}')
 
         fig.add_trace(
             go.Scatter(
@@ -352,6 +370,51 @@ def plot_image_line_plotly(
             gridcolor=grid_color,
             color=fg_color,
         )
+
+        # ------------------------------------------------------------------
+        # Stall analysis overlays (row=2: velocity vs time)
+        #
+        # Stalls are stored on the KymAnalysis object (computed on-demand).
+        # We map stall bin indices to time using analysis_time_values and draw
+        # vertical rectangles spanning the full subplot height.
+        # ------------------------------------------------------------------
+        if selected_roi_id is not None:
+            stall_analysis = kym_analysis.get_stall_analysis(selected_roi_id)
+        else:
+            stall_analysis = None
+
+        if stall_analysis is not None and stall_analysis.stalls:
+            n_time = len(analysis_time_values)
+            for stall in stall_analysis.stalls:
+                if not (0 <= stall.bin_start < n_time and 0 <= stall.bin_stop < n_time):
+                    logger.warning(
+                        "Skipping out-of-range stall for ROI %s: [%s, %s] (time_len=%s)",
+                        selected_roi_id,
+                        stall.bin_start,
+                        stall.bin_stop,
+                        n_time,
+                    )
+                    continue
+
+                x0 = float(analysis_time_values[stall.bin_start])
+                x1 = float(analysis_time_values[stall.bin_stop])
+                if x1 < x0:
+                    x0, x1 = x1, x0
+
+                # Use yref='y2 domain' so rectangles span the full height of row=2.
+                fig.add_shape(
+                    type="rect",
+                    xref="x2",
+                    yref="y2 domain",
+                    x0=x0,
+                    x1=x1,
+                    y0=0,
+                    y1=1,
+                    fillcolor="red",
+                    opacity=0.25,
+                    line_width=0,
+                    layer="below",
+                )
     else:
         # No analysis data - show message
         fig.add_annotation(
@@ -370,6 +433,357 @@ def plot_image_line_plotly(
     fig.update_layout(**layout_dict)
 
     return fig
+
+
+def _add_single_roi_line_plot(
+    fig: go.Figure,
+    kym_analysis,
+    roi_id: int,
+    row: int,
+    yStat: str,
+    remove_outliers: bool,
+    median_filter: int,
+    grid_color: str,
+    fg_color: str,
+    bg_color: str,
+    font_dict: dict,
+) -> None:
+    """Add a line plot with stall overlays for a single ROI to a specific subplot row.
+    
+    Args:
+        fig: Plotly figure to add the line plot to.
+        kym_analysis: KymAnalysis instance to get data from.
+        roi_id: ROI identifier to plot.
+        row: Subplot row number (1-based).
+        yStat: Column name for y-axis data (e.g., "velocity").
+        remove_outliers: If True, remove outliers using 2*std threshold.
+        median_filter: Median filter window size.
+        grid_color: Color for grid lines.
+        fg_color: Color for foreground text.
+        bg_color: Background color for legend box.
+        font_dict: Font dictionary for annotations.
+    """
+    if not kym_analysis.has_analysis(roi_id):
+        # No analysis data - show message
+        fig.add_annotation(
+            text="Analyze flow to see velocity trace",
+            showarrow=False,
+            x=0.5,
+            y=0.5,
+            xref=f"x{row if row > 1 else ''}",
+            yref=f"y{row if row > 1 else ''}",
+            font=font_dict,
+            row=row,
+            col=1,
+        )
+        return
+    
+    analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
+    y_values = kym_analysis.get_analysis_value(roi_id, yStat, remove_outliers, median_filter)
+    
+    if (
+        analysis_time_values is not None
+        and y_values is not None
+        and len(analysis_time_values) > 0
+    ):
+        # Add line plot trace with legend label
+        fig.add_trace(
+            go.Scatter(
+                x=analysis_time_values,
+                y=y_values,
+                mode="lines",
+                name=f"ROI {roi_id}",
+            ),
+            row=row,
+            col=1,
+        )
+
+        # Configure subplot axes
+        xref = f"x{row if row > 1 else ''}"
+        yref = f"y{row if row > 1 else ''}"
+        
+        fig.update_xaxes(
+            title_text="Time (s)",
+            row=row,
+            col=1,
+            showgrid=True,
+            gridcolor=grid_color,
+            color=fg_color,
+        )
+        fig.update_yaxes(
+            title_text=yStat,
+            row=row,
+            col=1,
+            showgrid=True,
+            gridcolor=grid_color,
+            color=fg_color,
+        )
+
+        # Add ROI ID label in upper right corner of this subplot (like a legend)
+        # Use paper coordinates (0-1) relative to this subplot's domain
+        fig.add_annotation(
+            text=f"ROI {roi_id}",
+            showarrow=False,
+            xref=f"{xref} domain",
+            yref=f"{yref} domain",
+            x=0.98,
+            y=0.98,
+            xanchor="right",
+            yanchor="top",
+            bgcolor=_hex_to_rgba(bg_color, alpha=0.8),
+            bordercolor=fg_color,
+            borderwidth=1,
+            borderpad=4,
+            font=dict(size=10, color=fg_color),
+            row=row,
+            col=1,
+        )
+
+        # Add stall analysis overlays
+        stall_analysis = kym_analysis.get_stall_analysis(roi_id)
+        if stall_analysis is not None and stall_analysis.stalls:
+            n_time = len(analysis_time_values)
+            for stall in stall_analysis.stalls:
+                if not (0 <= stall.bin_start < n_time and 0 <= stall.bin_stop < n_time):
+                    logger.warning(
+                        "Skipping out-of-range stall for ROI %s: [%s, %s] (time_len=%s)",
+                        roi_id,
+                        stall.bin_start,
+                        stall.bin_stop,
+                        n_time,
+                    )
+                    continue
+
+                x0 = float(analysis_time_values[stall.bin_start])
+                x1 = float(analysis_time_values[stall.bin_stop])
+                if x1 < x0:
+                    x0, x1 = x1, x0
+
+                # Use yref with domain so rectangles span the full height of the row
+                fig.add_shape(
+                    type="rect",
+                    xref=xref,
+                    yref=f"{yref} domain",
+                    x0=x0,
+                    x1=x1,
+                    y0=0,
+                    y1=1,
+                    fillcolor="red",
+                    opacity=0.25,
+                    line_width=0,
+                    layer="below",
+                )
+    else:
+        # No analysis data - show message
+        fig.add_annotation(
+            text="Analyze flow to see velocity trace",
+            showarrow=False,
+            x=0.5,
+            y=0.5,
+            xref=f"x{row if row > 1 else ''}",
+            yref=f"y{row if row > 1 else ''}",
+            font=font_dict,
+            row=row,
+            col=1,
+        )
+
+
+def plot_image_line_plotly_v2(
+    kf: Optional[KymImage],
+    channel: int = 1,
+    yStat: str = "velocity",
+    remove_outliers: bool = False,
+    median_filter: int = 0,
+    colorscale: str = "Gray",
+    plot_rois: bool = True,
+    selected_roi_id: Optional[Union[int, list[int]]] = None,
+    zmin: Optional[int] = None,
+    zmax: Optional[int] = None,
+    theme: Optional[ThemeMode] = ThemeMode.LIGHT,
+    transpose: bool = False,
+) -> go.Figure:
+    """Create a figure with kymograph image and one or more line plots for multiple ROIs.
+    
+    This is an extended version of plot_image_line_plotly that supports plotting
+    line plots for multiple ROIs, each in its own subplot row with stall overlays.
+
+    Args:
+        kf: KymImage instance, or None for empty plot
+        channel: Image channel to display (default: 1)
+        yStat: Column name for y-axis data in line plots (default: "velocity")
+        remove_outliers: If True, remove outliers using 2*std threshold
+        median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
+                       If even and > 0, raises ValueError.
+        colorscale: Plotly colorscale name (default: "Gray")
+        plot_rois: If True, overlay ROI rectangles on the image
+        selected_roi_id: List of ROI identifiers to plot line plots for. If None, only
+                         the image is shown (no line plots).
+        zmin: Minimum intensity for display (optional)
+        zmax: Maximum intensity for display (optional)
+        theme: Theme mode (DARK or LIGHT). Defaults to LIGHT if None.
+        transpose: If True, transpose the image display
+
+    Returns:
+        Plotly Figure with image subplot and one or more line plot subplots
+
+    Raises:
+        ValueError: If median_filter > 0 and not odd
+    """
+    template = get_theme_template(theme)
+    bg_color, fg_color = get_theme_colors(theme)
+    font_dict = {"color": fg_color}
+    grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
+    
+    # Configurable plot height
+    plot_height = 600
+
+    # Determine number of rows: 1 for image + N for line plots
+    if selected_roi_id is not None and isinstance(selected_roi_id, int):
+        selected_roi_id = [selected_roi_id]
+    num_line_plots = len(selected_roi_id) if selected_roi_id is not None else 0
+    num_rows = 1 + num_line_plots
+    
+    # Calculate row heights: image gets proportionally more space, line plots share the rest
+    if num_line_plots == 0:
+        row_heights = [1.0]
+    else:
+        # Image gets 40%, line plots share the remaining 60%
+        image_height = 0.4
+        line_height_per_plot = 0.6 / num_line_plots
+        row_heights = [image_height] + [line_height_per_plot] * num_line_plots
+
+    # Create subplots
+    fig = make_subplots(
+        rows=num_rows,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.025,
+        row_heights=row_heights,
+    )
+
+    # Handle None KymFile (minimal layout for early return)
+    if kf is None:
+        fig.update_layout(
+            template=template,
+            paper_bgcolor=bg_color,
+            plot_bgcolor=bg_color,
+            font=font_dict,
+            height=plot_height,
+        )
+        return fig
+
+    image = kf.get_img_slice(channel=channel)
+
+    # Early return if image is missing or invalid (minimal layout)
+    if image is None:
+        fig.update_layout(
+            template=template,
+            paper_bgcolor=bg_color,
+            plot_bgcolor=bg_color,
+            font=font_dict,
+            height=plot_height,
+        )
+        return fig
+
+    # Physical units for image axes
+    dim0_arange = kf.get_dim_arange(0)  # First dimension (rows)
+    dim1_arange = kf.get_dim_arange(1)  # Second dimension (columns)
+    
+    # Plot image in top subplot (row=1)
+    colorscale_value = get_colorscale(colorscale)
+
+    heatmap_kwargs = {
+        "z": image.transpose() if transpose else image,
+        "x": dim0_arange if transpose else dim1_arange,
+        "y": dim1_arange if transpose else dim0_arange,
+        "colorscale": colorscale_value,
+        "showscale": False,
+        **({"zmin": zmin} if zmin is not None else {}),
+        **({"zmax": zmax} if zmax is not None else {}),
+    }
+
+    fig.add_trace(
+        go.Heatmap(**heatmap_kwargs),
+        row=1,
+        col=1,
+    )
+
+    # Configure top subplot axes using header labels
+    x_label = kf.header.labels[0] if transpose else kf.header.labels[1]  # Time dimension
+    y_label = kf.header.labels[1] if transpose else kf.header.labels[0]  # Space dimension
+    fig.update_xaxes(
+        title_text=x_label,
+        row=1,
+        col=1,
+        showgrid=True,
+        showticklabels=True,
+        gridcolor=grid_color,
+        color=fg_color,
+    )
+    fig.update_yaxes(
+        title_text=y_label,
+        row=1,
+        col=1,
+        showticklabels=True,
+        showgrid=False,
+        color=fg_color,
+    )
+
+    # Configure zoom behavior for independent x and y axis zooming
+    fig.update_xaxes(constrain="range")
+    fig.update_yaxes(constrain="range")
+    
+    # Add ROI rectangles overlay to image subplot
+    # For highlighting, use the first ROI in the list if provided
+    highlight_roi_id = selected_roi_id[0] if selected_roi_id else None
+    if plot_rois:
+        _add_roi_overlay(
+            fig,
+            kf,
+            highlight_roi_id,
+            transpose,
+            row=1,
+            col=1,
+        )
+
+    # Add line plots for each ROI
+    if selected_roi_id is not None:
+        kym_analysis = kf.get_kym_analysis()
+        for idx, roi_id in enumerate(selected_roi_id):
+            row_num = 2 + idx  # Row 1 is image, rows 2+ are line plots
+            _add_single_roi_line_plot(
+                fig,
+                kym_analysis,
+                roi_id,
+                row_num,
+                yStat,
+                remove_outliers,
+                median_filter,
+                grid_color,
+                fg_color,
+                bg_color,
+                font_dict,
+            )
+
+    # Build complete layout configuration once
+    layout_dict = {
+        "template": template,
+        "paper_bgcolor": bg_color,
+        "plot_bgcolor": bg_color,
+        "font": font_dict,
+        "height": plot_height,
+        "margin": dict(l=10, r=10, t=10, b=10),
+        "uirevision": "kymflow-plot",
+        "dragmode": "zoom",
+        "modebar_add": ["zoomInX", "zoomOutX", "zoomInY", "zoomOutY"],
+        "showlegend": False,  # No global legend - each line plot has its own ROI ID label
+    }
+
+    # Apply layout once at the end
+    fig.update_layout(**layout_dict)
+
+    return fig
+
 
 def _add_roi_overlay(
     fig: go.Figure,
