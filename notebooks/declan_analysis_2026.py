@@ -14,21 +14,21 @@ def plot_analysis(path: str) -> None:
         # logger.info(kymImage.path)
 
         # already analyzed
-        ka = kymImage.get_kym_analysis()
+        # ka = kymImage.get_kym_analysis()
 
         # analyze stalls
-        sap = StallAnalysisParams(
-            velocity_key="velocity",
-            refactory_bins=500,
-            min_stall_duration=50,
-            end_stall_non_nan_bins=2,
-        )
+        # sap = StallAnalysisParams(
+        #     velocity_key="velocity",
+        #     refactory_bins=500,
+        #     min_stall_duration=50,
+        #     end_stall_non_nan_bins=2,
+        # )
         
-        for roi_id in roi_ids:
-            stall_analysis = ka.run_stall_analysis(roi_id, sap)
-            logger.info(f'stall_analysis: {roi_id}')
-            for stall in stall_analysis.stalls:
-                logger.info(f'stall: {stall}')
+        # for roi_id in roi_ids:
+        #     stall_analysis = ka.run_stall_analysis(roi_id, sap)
+        #     logger.info(f'stall_analysis: {roi_id}')
+        #     for stall in stall_analysis.stalls:
+        #         logger.info(f'stall: {stall}')
 
         # ensure img data is loaded (for plotting)
         kymImage.load_channel(channel=1)
@@ -47,6 +47,31 @@ def plot_analysis(path: str) -> None:
         
         break
 
+def analyze_stalls(path: str) -> None:
+    depth = 2
+    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+
+    # analyze stalls
+    sap = StallAnalysisParams(
+        velocity_key="velocity",
+        refactory_bins=50,
+        min_stall_duration=5,
+        end_stall_non_nan_bins=2,
+    )
+
+    for kymImage in kymList:
+        logger.info(kymImage.path)
+        ka = kymImage.get_kym_analysis()
+        for roi_id in kymImage.rois.get_roi_ids():
+            stall_analysis = ka.run_stall_analysis(roi_id, sap)
+            logger.info(f'stall_analysis: {roi_id}')
+            for stall in stall_analysis.stalls:
+                logger.info(f'stall: {stall}')
+
+        # save analysis
+        success = ka.save_analysis()
+        logger.info(f'saved analysis: {success}')
+
 def analyze_flow(path: str) -> None:
 
     depth = 2
@@ -54,12 +79,12 @@ def analyze_flow(path: str) -> None:
     # print(kymList)
 
     # analyze stalls
-    sap = StallAnalysisParams(
-        velocity_key="velocity",
-        refactory_bins=500,
-        min_stall_duration=50,
-        end_stall_non_nan_bins=2,
-    )
+    # sap = StallAnalysisParams(
+    #     velocity_key="velocity",
+    #     refactory_bins=500,
+    #     min_stall_duration=50,
+    #     end_stall_non_nan_bins=2,
+    # )
     
     for kymImage in kymList:
         logger.info(kymImage.path)
@@ -83,10 +108,10 @@ def analyze_flow(path: str) -> None:
             logger.info(f'   analyze flow for roi {roi.id} window:{window}...')
             ka.analyze_roi(roi.id, window)
 
-            stall_analysis = ka.run_stall_analysis(roi.id, sap)
-            logger.info(f'stall_analysis: {roi.id}')
-            for stall in stall_analysis.stalls:
-                logger.info(f'stall: {stall}')
+            # stall_analysis = ka.run_stall_analysis(roi.id, sap)
+            # logger.info(f'stall_analysis: {roi.id}')
+            # for stall in stall_analysis.stalls:
+            #     logger.info(f'stall: {stall}')
 
         # save analysis
         success = kymImage.get_kym_analysis().save_analysis()
@@ -97,6 +122,8 @@ if __name__ == "__main__":
     path = "/Users/cudmore/Dropbox/data/declan/2026/declan-data-analyzed"
     path = '/Users/cudmore/Dropbox/data/declan/2026/data/20251204'
 
-    analyze_flow(path)
+    # analyze_flow(path)
 
-    # plot_analysis(path)
+    # analyze_stalls(path)
+    
+    plot_analysis(path)

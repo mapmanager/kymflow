@@ -553,7 +553,7 @@ class KymAnalysis:
         values = self.get_analysis_value(
             roi_id=roi_id,
             key=params.velocity_key,
-            remove_outliers=True,
+            remove_outliers=False,
         )
         if values is None:
             raise ValueError(
