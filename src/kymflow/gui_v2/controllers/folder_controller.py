@@ -56,4 +56,5 @@ class FolderController:
         Args:
             e: FolderChosen event containing the folder path.
         """
-        self._app_state.load_folder(Path(e.folder))
+        # Explicitly use current folder_depth from app_state to ensure UI setting is respected
+        self._app_state.load_folder(Path(e.folder), depth=self._app_state.folder_depth)

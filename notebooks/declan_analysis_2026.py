@@ -7,7 +7,8 @@ from kymflow.core.utils.logging import get_logger, setup_logging
 logger = get_logger(__name__)
 
 def plot_analysis(path: str) -> None:
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=1)
+    depth = 2
+    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
     for kymImage in kymList:
         roi_ids = kymImage.rois.get_roi_ids()
         # logger.info(kymImage.path)
@@ -48,9 +49,18 @@ def plot_analysis(path: str) -> None:
 
 def analyze_flow(path: str) -> None:
 
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=1)
+    depth = 2
+    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
     # print(kymList)
 
+    # analyze stalls
+    sap = StallAnalysisParams(
+        velocity_key="velocity",
+        refactory_bins=500,
+        min_stall_duration=50,
+        end_stall_non_nan_bins=2,
+    )
+    
     for kymImage in kymList:
         logger.info(kymImage.path)
 
@@ -67,9 +77,16 @@ def analyze_flow(path: str) -> None:
             roi = kymImage.rois.create_roi()
             logger.info(f'created roi: {roi.id}')
 
+            ka = kymImage.get_kym_analysis()
+            
             # analyze flow
             logger.info(f'   analyze flow for roi {roi.id} window:{window}...')
-            kymImage.get_kym_analysis().analyze_roi(roi.id, window)
+            ka.analyze_roi(roi.id, window)
+
+            stall_analysis = ka.run_stall_analysis(roi.id, sap)
+            logger.info(f'stall_analysis: {roi.id}')
+            for stall in stall_analysis.stalls:
+                logger.info(f'stall: {stall}')
 
         # save analysis
         success = kymImage.get_kym_analysis().save_analysis()
@@ -78,7 +95,8 @@ def analyze_flow(path: str) -> None:
 if __name__ == "__main__":
     setup_logging(level="INFO")
     path = "/Users/cudmore/Dropbox/data/declan/2026/declan-data-analyzed"
+    path = '/Users/cudmore/Dropbox/data/declan/2026/data/20251204'
 
-    # analyze_flow(path)
+    analyze_flow(path)
 
-    plot_analysis(path)
+    # plot_analysis(path)
