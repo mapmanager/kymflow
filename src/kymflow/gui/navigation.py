@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import webbrowser
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
 from nicegui import ui, app
 
@@ -22,7 +22,7 @@ def open_external(url: str) -> None:
         ui.run_javascript(f'window.open("{url}", "_blank")')
 
 
-def build_header(context: AppContext, dark_mode) -> None:
+def build_header(context: AppContext, dark_mode, drawer_toggle_callback: Optional[Callable[[], None]] = None) -> None:
     """Build the shared header with navigation and theme toggle.
     
     In multi-page architecture, this header is rebuilt on each page load.
@@ -30,6 +30,7 @@ def build_header(context: AppContext, dark_mode) -> None:
     Args:
         context: Application context
         dark_mode: Dark mode controller for current page
+        drawer_toggle_callback: Optional callback to toggle drawer (for Home page only)
     """
     def _navigate(path: str) -> None:
         """Navigate to a different page using NiceGUI routing."""
@@ -44,8 +45,17 @@ def build_header(context: AppContext, dark_mode) -> None:
         _update_theme_icon()
     
     with ui.header().classes("items-center justify-between"):
-        # Left side: Title and navigation buttons
+        # Left side: Drawer toggle, Title and navigation buttons
         with ui.row().classes("items-center gap-4"):
+            # Drawer toggle button (always visible, enabled only on Home page)
+            drawer_button = ui.button(
+                icon="menu",
+                on_click=drawer_toggle_callback if drawer_toggle_callback else lambda: None,
+            ).props("flat round dense text-color=white").tooltip("Toggle toolbar drawer")
+            
+            if drawer_toggle_callback is None:
+                drawer_button.disable()
+            
             ui.label("KymFlow").classes("text-2xl font-bold text-white")
             
             home_button = ui.button(
@@ -53,10 +63,11 @@ def build_header(context: AppContext, dark_mode) -> None:
                 on_click=lambda: _navigate("/"),
             ).props("flat text-color=white")
             
-            batch_button = ui.button(
-                "Batch",
-                on_click=lambda: _navigate("/batch"),
-            ).props("flat text-color=white")
+            # COMMENTED OUT: Batch button removed
+            # batch_button = ui.button(
+            #     "Batch",
+            #     on_click=lambda: _navigate("/batch"),
+            # ).props("flat text-color=white")
             
             about_button = ui.button(
                 "About",

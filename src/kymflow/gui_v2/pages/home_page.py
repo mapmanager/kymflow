@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from nicegui import ui
 
@@ -36,6 +36,10 @@ from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.save_buttons_bindings import SaveButtonsBindings
 from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
+from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
+from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
+from kymflow.gui_v2.views.stall_analysis_toolbar_bindings import StallAnalysisToolbarBindings
+from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
 from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
 from kymflow.gui_v2.views.task_progress_view import TaskProgressView
 
@@ -111,6 +115,30 @@ class HomePage(BasePage):
         self._task_progress_bindings: TaskProgressBindings | None = None
         self._save_buttons_bindings: SaveButtonsBindings | None = None
 
+        # Drawer toolbar views (duplicates for left drawer)
+        self._drawer_analysis_toolbar_view = AnalysisToolbarView(
+            on_analysis_start=bus.emit, on_analysis_cancel=bus.emit
+        )
+        self._drawer_task_progress_view = TaskProgressView()
+        self._drawer_save_buttons_view = SaveButtonsView(
+            on_save_selected=bus.emit, on_save_all=bus.emit
+        )
+        self._drawer_stall_analysis_toolbar_view = StallAnalysisToolbarView()
+        self._drawer_contrast_view = ContrastView(on_image_display_change=bus.emit)
+        self._drawer_line_plot_controls_view = LinePlotControlsView(
+            on_filter_change=self._on_drawer_filter_change,
+            on_full_zoom=self._on_drawer_full_zoom,
+        )
+        self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
+        self._drawer_task_progress_bindings: TaskProgressBindings | None = None
+        self._drawer_save_buttons_bindings: SaveButtonsBindings | None = None
+        self._drawer_stall_analysis_toolbar_bindings: StallAnalysisToolbarBindings | None = None
+        self._drawer_contrast_bindings: ContrastBindings | None = None
+        self._drawer_line_plot_controls_bindings: LinePlotControlsBindings | None = None
+
+        # Drawer UI element
+        self._left_drawer: Optional[ui.drawer] = None
+
         # Per-client state tracking
         self._restored_once: bool = False
         self._setup_complete: bool = False
@@ -177,7 +205,131 @@ class HomePage(BasePage):
             self.bus, self._save_buttons_view
         )
 
+        # Drawer toolbar bindings (duplicates for left drawer)
+        self._drawer_analysis_toolbar_bindings = AnalysisToolbarBindings(
+            self.bus, self._drawer_analysis_toolbar_view
+        )
+        self._drawer_task_progress_bindings = TaskProgressBindings(
+            self.bus, self._drawer_task_progress_view
+        )
+        self._drawer_save_buttons_bindings = SaveButtonsBindings(
+            self.bus, self._drawer_save_buttons_view
+        )
+        self._drawer_stall_analysis_toolbar_bindings = StallAnalysisToolbarBindings(
+            self.bus, self._drawer_stall_analysis_toolbar_view
+        )
+        self._drawer_contrast_bindings = ContrastBindings(
+            self.bus, self._drawer_contrast_view
+        )
+        self._drawer_line_plot_controls_bindings = LinePlotControlsBindings(
+            self.bus, self._drawer_line_plot_controls_view
+        )
+
+        # Set up stall analysis callback to trigger plot update
+        self._drawer_stall_analysis_toolbar_view.set_on_stall_analysis_complete(
+            self._on_drawer_stall_analysis_complete
+        )
+
         self._setup_complete = True
+
+    def _on_drawer_stall_analysis_complete(self) -> None:
+        """Callback when drawer stall analysis completes - triggers plot update."""
+        # Trigger plot re-render by calling set_selected_roi with current ROI
+        # This will cause the plot to refresh with the new stall analysis data
+        current_roi = self.context.app_state.selected_roi_id
+        if current_roi is not None:
+            self._image_line_viewer.set_selected_roi(current_roi)
+
+    def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
+        """Callback when drawer filter controls change - applies filters to plot."""
+        self._image_line_viewer.apply_filters(remove_outliers, median_filter)
+
+    def _on_drawer_full_zoom(self) -> None:
+        """Callback when drawer full zoom button is clicked - resets plot zoom."""
+        self._image_line_viewer.reset_zoom()
+
+    def render(self, *, page_title: str) -> None:
+        """Override render to create drawer at page level before column.
+
+        Drawers must be top-level layout elements (direct children of page),
+        not nested inside columns. So we create the drawer first, then proceed
+        with the normal render flow.
+        """
+        ui.page_title(page_title)
+
+        dark_mode = self.context.init_dark_mode_for_page()
+        from kymflow.gui.navigation import build_header
+        
+        # Pass drawer toggle callback to header (drawer will be created after header)
+        def drawer_toggle_callback() -> None:
+            """Toggle the drawer if it exists."""
+            if self._left_drawer:
+                self._left_drawer.toggle()
+        
+        build_header(self.context, dark_mode, drawer_toggle_callback=drawer_toggle_callback)
+
+        # Create drawer at page level (must be before column)
+        with ui.drawer(side="left", value=False).classes("w-80 p-4") as drawer:
+            self._left_drawer = drawer
+            with ui.column().classes("w-full gap-4"):
+                # Section header
+                # ui.label("Toolbar").classes("text-lg font-semibold mb-2")
+                
+                # Save buttons section
+                # ui.label("Save").classes("text-sm font-semibold mt-2")
+                self._drawer_save_buttons_view.render()
+
+                # Analysis toolbar section - in disclosure triangle
+                with ui.expansion("Analysis", value=True).classes("w-full"):
+                    self._drawer_analysis_toolbar_view.render()
+                
+                # Task progress section
+                # COMMENTED OUT: Progress toolbar is currently broken because multiprocessing
+                # for 'analyze flow' does not work properly. Task state updates are not
+                # being communicated correctly across processes, causing the progress bar
+                # to not update. Re-enable once multiprocessing task state communication is fixed.
+                # ui.label("Progress").classes("text-sm font-semibold mt-2")
+                # self._drawer_task_progress_view.render()
+                
+                # # Save buttons section
+                # ui.label("Save").classes("text-sm font-semibold mt-2")
+                # self._drawer_save_buttons_view.render()
+                
+                # Stall analysis section - in disclosure triangle
+                with ui.expansion("Stall Analysis", value=True).classes("w-full"):
+                    self._drawer_stall_analysis_toolbar_view.render()
+                
+                # Contrast section - in disclosure triangle
+                with ui.expansion("Contrast", value=True).classes("w-full"):
+                    self._drawer_contrast_view.render()
+                
+                # Line plot controls section - in disclosure triangle
+                with ui.expansion("Line Plot Controls", value=True).classes("w-full"):
+                    self._drawer_line_plot_controls_view.render()
+                
+                # Initialize drawer toolbars with current state
+                current_file = self.context.app_state.selected_file
+                if current_file is not None:
+                    self._drawer_analysis_toolbar_view.set_selected_file(current_file)
+                    self._drawer_save_buttons_view.set_selected_file(current_file)
+                    self._drawer_stall_analysis_toolbar_view.set_selected_file(current_file)
+                    self._drawer_contrast_view.set_selected_file(current_file)
+                    self._drawer_line_plot_controls_view.set_selected_file(current_file)
+                current_roi = self.context.app_state.selected_roi_id
+                if current_roi is not None:
+                    self._drawer_analysis_toolbar_view.set_selected_roi(current_roi)
+                    self._drawer_stall_analysis_toolbar_view.set_selected_roi(current_roi)
+                    self._drawer_line_plot_controls_view.set_selected_roi(current_roi)
+                # Initialize contrast view theme
+                self._drawer_contrast_view.set_theme(self.context.app_state.theme_mode)
+                # Note: Display params will be updated via ImageDisplayChange events from bindings
+
+        # Now proceed with normal render flow (column + build)
+        with ui.column().classes("w-full p-4 gap-4"):
+            # Ensure setup is called once per client before building
+            self._ensure_setup()
+            # build() creates fresh UI elements in the new container context
+            self.build()
 
     def build(self) -> None:
         """Build the Home page UI.
@@ -189,88 +341,87 @@ class HomePage(BasePage):
         Selection restoration happens after the UI is created, but only once
         per client session to avoid overwriting user selections.
         """
-        with ui.column().classes("w-full p-4 gap-4"):
-            # Folder selector FIRST (renders first in DOM)
-            initial_folder = self.context.app_state.folder or Path(".")
-            self._folder_view.render(initial_folder=initial_folder)
+        # Folder selector FIRST (renders first in DOM)
+        initial_folder = self.context.app_state.folder or Path(".")
+        self._folder_view.render(initial_folder=initial_folder)
 
-            # Analysis toolbar, progress, and save buttons
-            with ui.row().classes("w-full items-start gap-4"):
-                with ui.column().classes("flex-1 gap-2"):
-                    self._analysis_toolbar_view.render()
-                with ui.column().classes("shrink gap-2"):
-                    self._task_progress_view.render()
-                with ui.column().classes("shrink gap-2"):
-                    self._save_buttons_view.render()
+        # Analysis toolbar, progress, and save buttons
+        with ui.row().classes("w-full items-start gap-4"):
+            with ui.column().classes("flex-1 gap-2"):
+                self._analysis_toolbar_view.render()
+            with ui.column().classes("shrink gap-2"):
+                self._task_progress_view.render()
+            with ui.column().classes("shrink gap-2"):
+                self._save_buttons_view.render()
 
-            # Initialize analysis toolbar and save buttons with current file
+        # Initialize analysis toolbar and save buttons with current file
+        current_file = self.context.app_state.selected_file
+        if current_file is not None:
+            self._analysis_toolbar_view.set_selected_file(current_file)
+            self._save_buttons_view.set_selected_file(current_file)
+
+        # File table SECOND (creates grid ui here) - in disclosure triangle
+        with ui.expansion("Files", value=True).classes("w-full"):
+            self._table_view.render()
+
+            # Populate with current state (if already loaded, shows immediately)
+            self._table_view.set_files(list(self.context.app_state.files))
+
+            # Restore current selection from AppState (ensures visibility on navigation back)
+            # This handles both initial load and navigation back scenarios
+            current_file = self.context.app_state.selected_file
+            if current_file is not None and hasattr(current_file, "path"):
+                self._table_view.set_selected_paths(
+                    [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
+                )
+
+        # Contrast widget - in disclosure triangle
+        with ui.expansion("Contrast Controls", value=False).classes("w-full"):
+            self._contrast_view.render()
+
+            # Initialize contrast view with current AppState
             current_file = self.context.app_state.selected_file
             if current_file is not None:
-                self._analysis_toolbar_view.set_selected_file(current_file)
-                self._save_buttons_view.set_selected_file(current_file)
+                self._contrast_view.set_selected_file(current_file)
+            # Get current display params from AppState if available
+            # Note: AppState doesn't store display params directly, so we'll initialize with defaults
+            # The view will be updated when ImageDisplayChange events arrive
+            self._contrast_view.set_theme(self.context.app_state.theme_mode)
 
-            # File table SECOND (creates grid ui here) - in disclosure triangle
-            with ui.expansion("Files", value=True).classes("w-full"):
-                self._table_view.render()
+        # Image/line viewer THIRD (creates plot ui here) - in disclosure triangle
+        with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
+            self._image_line_viewer.render()
 
-                # Populate with current state (if already loaded, shows immediately)
-                self._table_view.set_files(list(self.context.app_state.files))
+            # Initialize viewer with current AppState (if already set)
+            # This ensures viewer shows current selection/theme on first render
+            current_file = self.context.app_state.selected_file
+            if current_file is not None:
+                self._image_line_viewer.set_selected_file(current_file)
+            current_roi = self.context.app_state.selected_roi_id
+            if current_roi is not None:
+                self._image_line_viewer.set_selected_roi(current_roi)
+            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
 
-                # Restore current selection from AppState (ensures visibility on navigation back)
-                # This handles both initial load and navigation back scenarios
-                current_file = self.context.app_state.selected_file
-                if current_file is not None and hasattr(current_file, "path"):
+        # Metadata widgets - both in single disclosure triangle
+        with ui.expansion("Metadata", value=True).classes("w-full"):
+            # Experimental metadata widget
+            self._metadata_experimental_view.render()
+
+            # Header metadata widget
+            self._metadata_header_view.render()
+
+            # Initialize metadata views with current AppState
+            current_file = self.context.app_state.selected_file
+            if current_file is not None:
+                self._metadata_experimental_view.set_selected_file(current_file)
+                self._metadata_header_view.set_selected_file(current_file)
+
+        # Restore selection once per client (after UI is created)
+        if not self._restored_once:
+            if self._persistence is not None:
+                restored = self._persistence.restore_selection()
+                if restored:
                     self._table_view.set_selected_paths(
-                        [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
+                        restored, origin=SelectionOrigin.RESTORE
                     )
-
-            # Contrast widget - in disclosure triangle
-            with ui.expansion("Contrast Controls", value=False).classes("w-full"):
-                self._contrast_view.render()
-
-                # Initialize contrast view with current AppState
-                current_file = self.context.app_state.selected_file
-                if current_file is not None:
-                    self._contrast_view.set_selected_file(current_file)
-                # Get current display params from AppState if available
-                # Note: AppState doesn't store display params directly, so we'll initialize with defaults
-                # The view will be updated when ImageDisplayChange events arrive
-                self._contrast_view.set_theme(self.context.app_state.theme_mode)
-
-            # Image/line viewer THIRD (creates plot ui here) - in disclosure triangle
-            with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
-                self._image_line_viewer.render()
-
-                # Initialize viewer with current AppState (if already set)
-                # This ensures viewer shows current selection/theme on first render
-                current_file = self.context.app_state.selected_file
-                if current_file is not None:
-                    self._image_line_viewer.set_selected_file(current_file)
-                current_roi = self.context.app_state.selected_roi_id
-                if current_roi is not None:
-                    self._image_line_viewer.set_selected_roi(current_roi)
-                self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
-
-            # Metadata widgets - both in single disclosure triangle
-            with ui.expansion("Metadata", value=True).classes("w-full"):
-                # Experimental metadata widget
-                self._metadata_experimental_view.render()
-
-                # Header metadata widget
-                self._metadata_header_view.render()
-
-                # Initialize metadata views with current AppState
-                current_file = self.context.app_state.selected_file
-                if current_file is not None:
-                    self._metadata_experimental_view.set_selected_file(current_file)
-                    self._metadata_header_view.set_selected_file(current_file)
-
-            # Restore selection once per client (after UI is created)
-            if not self._restored_once:
-                if self._persistence is not None:
-                    restored = self._persistence.restore_selection()
-                    if restored:
-                        self._table_view.set_selected_paths(
-                            restored, origin=SelectionOrigin.RESTORE
-                        )
-                self._restored_once = True
+            self._restored_once = True

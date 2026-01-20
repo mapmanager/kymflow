@@ -50,9 +50,6 @@ class ImageLineViewerView:
         _on_roi_selected: Callback function that receives ROISelection events.
         _plot: Plotly plot component (created in render()).
         _roi_select: ROI selector dropdown (created in render()).
-        _remove_outliers_cb: Remove outliers checkbox (created in render()).
-        _median_filter_cb: Median filter checkbox (created in render()).
-        _full_zoom_btn: Full zoom button (created in render()).
         _current_file: Currently selected file (for rendering).
         _current_roi_id: Currently selected ROI ID (for rendering).
         _theme: Current theme mode.
@@ -74,9 +71,6 @@ class ImageLineViewerView:
         # UI components (created in render())
         self._plot: Optional[ui.plotly] = None
         self._roi_select: Optional[ui.select] = None
-        self._remove_outliers_cb: Optional[ui.checkbox] = None
-        self._median_filter_cb: Optional[ui.checkbox] = None
-        self._full_zoom_btn: Optional[ui.button] = None
         self._stall_refactory_bins: Optional[ui.number] = None
         self._stall_min_duration: Optional[ui.number] = None
         self._stall_end_non_nan_bins: Optional[ui.number] = None
@@ -92,6 +86,10 @@ class ImageLineViewerView:
         self._original_time_values: Optional[np.ndarray] = None
         self._uirevision: int = 0
         self._suppress_roi_emit: bool = False  # Suppress ROI dropdown on_change during programmatic updates
+        
+        # Filter state (stored instead of reading from checkboxes)
+        self._remove_outliers: bool = False
+        self._median_filter: bool = False
 
     def render(self) -> None:
         """Create the viewer UI inside the current container.
@@ -108,9 +106,6 @@ class ImageLineViewerView:
         # This ensures we create fresh elements in the new container context
         self._plot = None
         self._roi_select = None
-        self._remove_outliers_cb = None
-        self._median_filter_cb = None
-        self._full_zoom_btn = None
         self._stall_refactory_bins = None
         self._stall_min_duration = None
         self._stall_end_non_nan_bins = None
@@ -121,15 +116,6 @@ class ImageLineViewerView:
         # ROI selector dropdown
         # Use on_change callback (NiceGUI recommended API) instead of on("update:model-value")
         self._roi_select = ui.select(options={}, label="ROI", on_change=self._on_roi_dropdown_change).classes("min-w-32")
-
-        # Filter checkboxes and zoom button
-        with ui.row().classes("w-full gap-2 items-center"):
-            self._remove_outliers_cb = ui.checkbox("Remove outliers")
-            self._remove_outliers_cb.on("update:model-value", self._on_filter_change)
-            self._median_filter_cb = ui.checkbox("Median filter")
-            self._median_filter_cb.on("update:model-value", self._on_filter_change)
-            self._full_zoom_btn = ui.button("Full zoom", icon="zoom_out_map")
-            self._full_zoom_btn.on("click", self._on_full_zoom)
 
         # Stall analysis controls (per-ROI, on-demand)
         with ui.row().classes("w-full gap-2 items-center"):
@@ -355,11 +341,11 @@ class ImageLineViewerView:
         display_params = self._display_params
         roi_id = self._current_roi_id
 
-        if self._plot is None or self._remove_outliers_cb is None or self._median_filter_cb is None:
+        if self._plot is None:
             return
 
-        # Convert checkbox to median_filter int (0 = off, 5 = on with window size 5)
-        median_filter_size = 5 if self._median_filter_cb.value else 0
+        # Convert stored median_filter bool to int (0 = off, 5 = on with window size 5)
+        median_filter_size = 5 if self._median_filter else 0
 
         # Get display parameters from stored params or use defaults
         colorscale = display_params.colorscale if display_params else "Gray"
@@ -369,7 +355,7 @@ class ImageLineViewerView:
         fig = plot_image_line_plotly(
             kf=kf,
             yStat="velocity",
-            remove_outliers=self._remove_outliers_cb.value,
+            remove_outliers=self._remove_outliers,
             median_filter=median_filter_size,
             theme=theme,
             colorscale=colorscale,
@@ -447,10 +433,6 @@ class ImageLineViewerView:
             )
         )
 
-    def _on_filter_change(self) -> None:
-        """Handle filter checkbox changes - use partial update to preserve zoom."""
-        self._update_line_plot_partial()
-
     def _update_line_plot_partial(self) -> None:
         """Update only the Scatter trace y-values when filters change, preserving zoom."""
         fig = self._current_figure
@@ -462,14 +444,14 @@ class ImageLineViewerView:
         kf = self._current_file
         roi_id = self._current_roi_id
 
-        if kf is None or roi_id is None or self._remove_outliers_cb is None or self._median_filter_cb is None:
+        if kf is None or roi_id is None:
             # No data available, do full render
             self._render_combined()
             return
 
-        # Get current filter settings
-        remove_outliers = self._remove_outliers_cb.value
-        median_filter_size = 5 if self._median_filter_cb.value else 0
+        # Get current filter settings from stored state
+        remove_outliers = self._remove_outliers
+        median_filter_size = 5 if self._median_filter else 0
 
         # Re-compute filtered y-values using KymAnalysis API
         kym_analysis = kf.get_kym_analysis()
@@ -507,9 +489,32 @@ class ImageLineViewerView:
                 raise
             # Client deleted, silently ignore
 
-    def _on_full_zoom(self) -> None:
-        """Handle full zoom button click - reset image zoom to full scale."""
-        self._reset_zoom(force_new_uirevision=True)
+    def apply_filters(self, remove_outliers: bool, median_filter: bool) -> None:
+        """Apply filter settings to the plot.
+
+        Public method for external controls (e.g., drawer toolbar) to update
+        filter state and trigger plot update.
+
+        Args:
+            remove_outliers: Whether to remove outliers from the line plot.
+            median_filter: Whether to apply median filter to the line plot.
+        """
+        safe_call(self._apply_filters_impl, remove_outliers, median_filter)
+
+    def _apply_filters_impl(self, remove_outliers: bool, median_filter: bool) -> None:
+        """Internal implementation of apply_filters."""
+        self._remove_outliers = remove_outliers
+        self._median_filter = median_filter
+        # Trigger plot update with new filter settings
+        self._update_line_plot_partial()
+
+    def reset_zoom(self) -> None:
+        """Reset zoom to full scale.
+
+        Public method for external controls (e.g., drawer toolbar) to reset
+        the image zoom to full scale.
+        """
+        safe_call(self._reset_zoom, force_new_uirevision=True)
 
     def _update_contrast_partial(self) -> None:
         """Update only colorscale/zmin/zmax when contrast changes, preserving zoom."""
