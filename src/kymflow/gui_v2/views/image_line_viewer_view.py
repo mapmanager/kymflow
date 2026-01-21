@@ -14,7 +14,6 @@ import numpy as np
 import plotly.graph_objects as go
 from nicegui import ui
 
-from kymflow.core.analysis.stall_analysis import StallAnalysisParams
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
     plot_image_line_plotly,
@@ -71,10 +70,6 @@ class ImageLineViewerView:
         # UI components (created in render())
         self._plot: Optional[ui.plotly] = None
         self._roi_select: Optional[ui.select] = None
-        self._stall_refactory_bins: Optional[ui.number] = None
-        self._stall_min_duration: Optional[ui.number] = None
-        self._stall_end_non_nan_bins: Optional[ui.number] = None
-        self._stall_run_btn: Optional[ui.button] = None
 
         # State (theme will be set by bindings from AppState)
         self._current_file: Optional[KymImage] = None
@@ -106,10 +101,6 @@ class ImageLineViewerView:
         # This ensures we create fresh elements in the new container context
         self._plot = None
         self._roi_select = None
-        self._stall_refactory_bins = None
-        self._stall_min_duration = None
-        self._stall_end_non_nan_bins = None
-        self._stall_run_btn = None
         # Reset suppression flag to ensure clean state
         self._suppress_roi_emit = False
 
@@ -117,72 +108,8 @@ class ImageLineViewerView:
         # Use on_change callback (NiceGUI recommended API) instead of on("update:model-value")
         self._roi_select = ui.select(options={}, label="ROI", on_change=self._on_roi_dropdown_change).classes("min-w-32")
 
-        # Stall analysis controls (per-ROI, on-demand)
-        with ui.row().classes("w-full gap-2 items-center"):
-            ui.label("Stall analysis").classes("text-sm font-semibold")
-            self._stall_refactory_bins = ui.number(
-                label="refactory_bins",
-                value=20,
-                min=0,
-                step=1,
-            ).classes("w-32")
-            self._stall_min_duration = ui.number(
-                label="min_stall_duration",
-                value=2,
-                min=1,
-                step=1,
-            ).classes("w-36")
-            self._stall_end_non_nan_bins = ui.number(
-                label="end_stall_non_nan_bins",
-                value=2,
-                min=1,
-                step=1,
-            ).classes("w-44")
-            self._stall_run_btn = ui.button("Analyze stalls", on_click=self._on_analyze_stalls)
-
         # Plot with larger height to accommodate both subplots
         self._plot = ui.plotly(go.Figure()).classes("w-full")
-
-    def _on_analyze_stalls(self) -> None:
-        """Run stall analysis for the currently selected ROI, then re-render plot."""
-        kf = self._current_file
-        roi_id = self._current_roi_id
-        if kf is None:
-            ui.notify("Select a file first", color="warning")
-            return
-        if roi_id is None:
-            ui.notify("Select an ROI first", color="warning")
-            return
-        if (
-            self._stall_refactory_bins is None
-            or self._stall_min_duration is None
-            or self._stall_end_non_nan_bins is None
-        ):
-            return
-
-        try:
-            refactory_bins = int(self._stall_refactory_bins.value)
-            min_stall_duration = int(self._stall_min_duration.value)
-            end_stall_non_nan_bins = int(self._stall_end_non_nan_bins.value)
-        except Exception:
-            ui.notify("Invalid stall parameters", color="negative")
-            return
-
-        params = StallAnalysisParams(
-            velocity_key="velocity",
-            refactory_bins=refactory_bins,
-            min_stall_duration=min_stall_duration,
-            end_stall_non_nan_bins=end_stall_non_nan_bins,
-        )
-
-        try:
-            analysis = kf.get_kym_analysis().run_stall_analysis(roi_id=roi_id, params=params)
-        except Exception as e:
-            ui.notify(f"Stall analysis failed: {e}", color="negative")
-            return
-
-        ui.notify(f"Detected {len(analysis.stalls)} stalls", color="positive")
-        self._render_combined()
 
     def set_selected_file(self, file: Optional[KymImage]) -> None:
         """Update plot for new file.

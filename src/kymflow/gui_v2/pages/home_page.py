@@ -96,24 +96,12 @@ class HomePage(BasePage):
         self._folder_view = FolderSelectorView(bus, context.app_state)
         self._table_view = FileTableView(on_selected=bus.emit, selection_mode="single")
         self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
-        self._contrast_view = ContrastView(on_image_display_change=bus.emit)
         self._metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
         self._metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
-        self._analysis_toolbar_view = AnalysisToolbarView(
-            on_analysis_start=bus.emit, on_analysis_cancel=bus.emit
-        )
-        self._task_progress_view = TaskProgressView()
-        self._save_buttons_view = SaveButtonsView(
-            on_save_selected=bus.emit, on_save_all=bus.emit
-        )
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
-        self._contrast_bindings: ContrastBindings | None = None
         self._metadata_experimental_bindings: MetadataExperimentalBindings | None = None
         self._metadata_header_bindings: MetadataHeaderBindings | None = None
-        self._analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
-        self._task_progress_bindings: TaskProgressBindings | None = None
-        self._save_buttons_bindings: SaveButtonsBindings | None = None
 
         # Drawer toolbar views (duplicates for left drawer)
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
@@ -188,21 +176,11 @@ class HomePage(BasePage):
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
         )
-        self._contrast_bindings = ContrastBindings(self.bus, self._contrast_view)
         self._metadata_experimental_bindings = MetadataExperimentalBindings(
             self.bus, self._metadata_experimental_view
         )
         self._metadata_header_bindings = MetadataHeaderBindings(
             self.bus, self._metadata_header_view
-        )
-        self._analysis_toolbar_bindings = AnalysisToolbarBindings(
-            self.bus, self._analysis_toolbar_view
-        )
-        self._task_progress_bindings = TaskProgressBindings(
-            self.bus, self._task_progress_view
-        )
-        self._save_buttons_bindings = SaveButtonsBindings(
-            self.bus, self._save_buttons_view
         )
 
         # Drawer toolbar bindings (duplicates for left drawer)
@@ -345,21 +323,6 @@ class HomePage(BasePage):
         initial_folder = self.context.app_state.folder or Path(".")
         self._folder_view.render(initial_folder=initial_folder)
 
-        # Analysis toolbar, progress, and save buttons
-        with ui.row().classes("w-full items-start gap-4"):
-            with ui.column().classes("flex-1 gap-2"):
-                self._analysis_toolbar_view.render()
-            with ui.column().classes("shrink gap-2"):
-                self._task_progress_view.render()
-            with ui.column().classes("shrink gap-2"):
-                self._save_buttons_view.render()
-
-        # Initialize analysis toolbar and save buttons with current file
-        current_file = self.context.app_state.selected_file
-        if current_file is not None:
-            self._analysis_toolbar_view.set_selected_file(current_file)
-            self._save_buttons_view.set_selected_file(current_file)
-
         # File table SECOND (creates grid ui here) - in disclosure triangle
         with ui.expansion("Files", value=True).classes("w-full"):
             self._table_view.render()
@@ -374,19 +337,6 @@ class HomePage(BasePage):
                 self._table_view.set_selected_paths(
                     [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
                 )
-
-        # Contrast widget - in disclosure triangle
-        with ui.expansion("Contrast Controls", value=False).classes("w-full"):
-            self._contrast_view.render()
-
-            # Initialize contrast view with current AppState
-            current_file = self.context.app_state.selected_file
-            if current_file is not None:
-                self._contrast_view.set_selected_file(current_file)
-            # Get current display params from AppState if available
-            # Note: AppState doesn't store display params directly, so we'll initialize with defaults
-            # The view will be updated when ImageDisplayChange events arrive
-            self._contrast_view.set_theme(self.context.app_state.theme_mode)
 
         # Image/line viewer THIRD (creates plot ui here) - in disclosure triangle
         with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
