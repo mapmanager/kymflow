@@ -114,6 +114,10 @@ def inject_global_styles() -> None:
 .q-expansion-item__container .q-item__section--main {
     text-align: left;
 }
+/* Shift expansion header row left in drawer to align with content body */
+.q-drawer .q-expansion-item__container .q-item {
+    margin-left: -2rem;  /* -1rem (16px) to shift header row left to align with content */
+}
 </style>
 """
     )

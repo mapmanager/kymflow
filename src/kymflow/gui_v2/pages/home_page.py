@@ -247,7 +247,8 @@ class HomePage(BasePage):
         build_header(self.context, dark_mode, drawer_toggle_callback=drawer_toggle_callback)
 
         # Create drawer at page level (must be before column)
-        with ui.drawer(side="left", value=False).classes("w-80 p-4") as drawer:
+        with ui.drawer(side="left", value=False).classes("w-80 p-4").props("behavior=desktop") as drawer:
+
             self._left_drawer = drawer
             with ui.column().classes("w-full gap-4"):
                 # Section header
@@ -339,7 +340,9 @@ class HomePage(BasePage):
                 )
 
         # Image/line viewer THIRD (creates plot ui here) - in disclosure triangle
-        with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
+        # abb turned off expansion
+        # with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
+        if 1:
             self._image_line_viewer.render()
 
             # Initialize viewer with current AppState (if already set)

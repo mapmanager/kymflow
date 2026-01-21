@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 
 # Configure logging at module import (runs in uvicorn worker)
 setup_logging(
-    level="INFO",
+    level="DEBUG",
     log_file=Path.home() / ".kymflow" / "logs" / "kymflow.log",
 )
 
@@ -153,6 +153,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         port=DEFAULT_PORT,
         reload=reload,
         native=native,
+        window_size=(1200, 800),
         storage_secret=STORAGE_SECRET,
         title="KymFlow",
     )
