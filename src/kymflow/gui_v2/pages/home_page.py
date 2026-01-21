@@ -35,6 +35,7 @@ from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimental
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
+from kymflow.gui_v2.views.drawer_view import DrawerView
 from kymflow.gui_v2.views.save_buttons_bindings import SaveButtonsBindings
 from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
@@ -124,6 +125,15 @@ class HomePage(BasePage):
         self._drawer_metadata_tab_view = MetadataTabView(
             self._drawer_metadata_experimental_view,
             self._drawer_metadata_header_view,
+        )
+        # Drawer view (organizes all drawer content)
+        self._drawer_view = DrawerView(
+            save_buttons_view=self._drawer_save_buttons_view,
+            analysis_toolbar_view=self._drawer_analysis_toolbar_view,
+            stall_analysis_toolbar_view=self._drawer_stall_analysis_toolbar_view,
+            contrast_view=self._drawer_contrast_view,
+            line_plot_controls_view=self._drawer_line_plot_controls_view,
+            metadata_tab_view=self._drawer_metadata_tab_view,
         )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None
@@ -262,70 +272,15 @@ class HomePage(BasePage):
         
         build_header(self.context, dark_mode, drawer_toggle_callback=drawer_toggle_callback)
 
-        # Create drawer at page level (must be before column)
-        with ui.drawer(side="left", value=False).classes("w-80 p-4").props("behavior=desktop") as drawer:
-
-            self._left_drawer = drawer
-            with ui.column().classes("w-full gap-4"):
-                # Tabs for organizing drawer content
-                with ui.tabs().classes("w-full") as tabs:
-                    tab_analysis = ui.tab("Analysis")
-                    tab_metadata = ui.tab("Metadata")
-                
-                # Tab panels - content for each tab
-                with ui.tab_panels(tabs, value=tab_analysis).classes("w-full"):
-                    # Analysis tab panel - contains all current drawer content
-                    with ui.tab_panel(tab_analysis):
-                        with ui.column().classes("w-full gap-4"):
-                            # Save buttons section
-                            self._drawer_save_buttons_view.render()
-
-                            # Analysis toolbar section - in disclosure triangle
-                            with ui.expansion("Analysis", value=True).classes("w-full"):
-                                self._drawer_analysis_toolbar_view.render()
-                            
-                            # Task progress section
-                            # COMMENTED OUT: Progress toolbar is currently broken because multiprocessing
-                            # for 'analyze flow' does not work properly. Task state updates are not
-                            # being communicated correctly across processes, causing the progress bar
-                            # to not update. Re-enable once multiprocessing task state communication is fixed.
-                            # ui.label("Progress").classes("text-sm font-semibold mt-2")
-                            # self._drawer_task_progress_view.render()
-                            
-                            # Stall analysis section - in disclosure triangle
-                            with ui.expansion("Stall Analysis", value=True).classes("w-full"):
-                                self._drawer_stall_analysis_toolbar_view.render()
-                            
-                            # Contrast section - in disclosure triangle
-                            with ui.expansion("Contrast", value=True).classes("w-full"):
-                                self._drawer_contrast_view.render()
-                            
-                            # Line plot controls section - in disclosure triangle
-                            with ui.expansion("Line Plot Controls", value=True).classes("w-full"):
-                                self._drawer_line_plot_controls_view.render()
-                    
-                    # Metadata tab panel - contains metadata editing widgets
-                    with ui.tab_panel(tab_metadata):
-                        with ui.column().classes("w-full gap-4"):
-                            self._drawer_metadata_tab_view.render()
-                
-                # Initialize drawer toolbars with current state
-                current_file = self.context.app_state.selected_file
-                if current_file is not None:
-                    self._drawer_analysis_toolbar_view.set_selected_file(current_file)
-                    self._drawer_save_buttons_view.set_selected_file(current_file)
-                    self._drawer_stall_analysis_toolbar_view.set_selected_file(current_file)
-                    self._drawer_contrast_view.set_selected_file(current_file)
-                    self._drawer_line_plot_controls_view.set_selected_file(current_file)
-                    self._drawer_metadata_tab_view.set_selected_file(current_file)
-                current_roi = self.context.app_state.selected_roi_id
-                if current_roi is not None:
-                    self._drawer_analysis_toolbar_view.set_selected_roi(current_roi)
-                    self._drawer_stall_analysis_toolbar_view.set_selected_roi(current_roi)
-                    self._drawer_line_plot_controls_view.set_selected_roi(current_roi)
-                # Initialize contrast view theme
-                self._drawer_contrast_view.set_theme(self.context.app_state.theme_mode)
-                # Note: Display params will be updated via ImageDisplayChange events from bindings
+        # Create drawer using DrawerView component
+        self._left_drawer = self._drawer_view.render()
+        
+        # Initialize drawer views with current state
+        self._drawer_view.initialize_views(
+            current_file=self.context.app_state.selected_file,
+            current_roi=self.context.app_state.selected_roi_id,
+            theme_mode=self.context.app_state.theme_mode,
+        )
 
         # Now proceed with normal render flow (column + build)
         with ui.column().classes("w-full p-4 gap-4"):
