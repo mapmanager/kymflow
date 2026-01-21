@@ -34,6 +34,7 @@ from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperime
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
+from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 from kymflow.gui_v2.views.save_buttons_bindings import SaveButtonsBindings
 from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
@@ -117,12 +118,21 @@ class HomePage(BasePage):
             on_filter_change=self._on_drawer_filter_change,
             on_full_zoom=self._on_drawer_full_zoom,
         )
+        # Drawer metadata views (duplicates for drawer Metadata tab)
+        self._drawer_metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
+        self._drawer_metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
+        self._drawer_metadata_tab_view = MetadataTabView(
+            self._drawer_metadata_experimental_view,
+            self._drawer_metadata_header_view,
+        )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None
         self._drawer_save_buttons_bindings: SaveButtonsBindings | None = None
         self._drawer_stall_analysis_toolbar_bindings: StallAnalysisToolbarBindings | None = None
         self._drawer_contrast_bindings: ContrastBindings | None = None
         self._drawer_line_plot_controls_bindings: LinePlotControlsBindings | None = None
+        self._drawer_metadata_experimental_bindings: MetadataExperimentalBindings | None = None
+        self._drawer_metadata_header_bindings: MetadataHeaderBindings | None = None
 
         # Drawer UI element
         self._left_drawer: Optional[ui.drawer] = None
@@ -202,6 +212,12 @@ class HomePage(BasePage):
         self._drawer_line_plot_controls_bindings = LinePlotControlsBindings(
             self.bus, self._drawer_line_plot_controls_view
         )
+        self._drawer_metadata_experimental_bindings = MetadataExperimentalBindings(
+            self.bus, self._drawer_metadata_experimental_view
+        )
+        self._drawer_metadata_header_bindings = MetadataHeaderBindings(
+            self.bus, self._drawer_metadata_header_view
+        )
 
         # Set up stall analysis callback to trigger plot update
         self._drawer_stall_analysis_toolbar_view.set_on_stall_analysis_complete(
@@ -251,40 +267,47 @@ class HomePage(BasePage):
 
             self._left_drawer = drawer
             with ui.column().classes("w-full gap-4"):
-                # Section header
-                # ui.label("Toolbar").classes("text-lg font-semibold mb-2")
+                # Tabs for organizing drawer content
+                with ui.tabs().classes("w-full") as tabs:
+                    tab_analysis = ui.tab("Analysis")
+                    tab_metadata = ui.tab("Metadata")
                 
-                # Save buttons section
-                # ui.label("Save").classes("text-sm font-semibold mt-2")
-                self._drawer_save_buttons_view.render()
+                # Tab panels - content for each tab
+                with ui.tab_panels(tabs, value=tab_analysis).classes("w-full"):
+                    # Analysis tab panel - contains all current drawer content
+                    with ui.tab_panel(tab_analysis):
+                        with ui.column().classes("w-full gap-4"):
+                            # Save buttons section
+                            self._drawer_save_buttons_view.render()
 
-                # Analysis toolbar section - in disclosure triangle
-                with ui.expansion("Analysis", value=True).classes("w-full"):
-                    self._drawer_analysis_toolbar_view.render()
-                
-                # Task progress section
-                # COMMENTED OUT: Progress toolbar is currently broken because multiprocessing
-                # for 'analyze flow' does not work properly. Task state updates are not
-                # being communicated correctly across processes, causing the progress bar
-                # to not update. Re-enable once multiprocessing task state communication is fixed.
-                # ui.label("Progress").classes("text-sm font-semibold mt-2")
-                # self._drawer_task_progress_view.render()
-                
-                # # Save buttons section
-                # ui.label("Save").classes("text-sm font-semibold mt-2")
-                # self._drawer_save_buttons_view.render()
-                
-                # Stall analysis section - in disclosure triangle
-                with ui.expansion("Stall Analysis", value=True).classes("w-full"):
-                    self._drawer_stall_analysis_toolbar_view.render()
-                
-                # Contrast section - in disclosure triangle
-                with ui.expansion("Contrast", value=True).classes("w-full"):
-                    self._drawer_contrast_view.render()
-                
-                # Line plot controls section - in disclosure triangle
-                with ui.expansion("Line Plot Controls", value=True).classes("w-full"):
-                    self._drawer_line_plot_controls_view.render()
+                            # Analysis toolbar section - in disclosure triangle
+                            with ui.expansion("Analysis", value=True).classes("w-full"):
+                                self._drawer_analysis_toolbar_view.render()
+                            
+                            # Task progress section
+                            # COMMENTED OUT: Progress toolbar is currently broken because multiprocessing
+                            # for 'analyze flow' does not work properly. Task state updates are not
+                            # being communicated correctly across processes, causing the progress bar
+                            # to not update. Re-enable once multiprocessing task state communication is fixed.
+                            # ui.label("Progress").classes("text-sm font-semibold mt-2")
+                            # self._drawer_task_progress_view.render()
+                            
+                            # Stall analysis section - in disclosure triangle
+                            with ui.expansion("Stall Analysis", value=True).classes("w-full"):
+                                self._drawer_stall_analysis_toolbar_view.render()
+                            
+                            # Contrast section - in disclosure triangle
+                            with ui.expansion("Contrast", value=True).classes("w-full"):
+                                self._drawer_contrast_view.render()
+                            
+                            # Line plot controls section - in disclosure triangle
+                            with ui.expansion("Line Plot Controls", value=True).classes("w-full"):
+                                self._drawer_line_plot_controls_view.render()
+                    
+                    # Metadata tab panel - contains metadata editing widgets
+                    with ui.tab_panel(tab_metadata):
+                        with ui.column().classes("w-full gap-4"):
+                            self._drawer_metadata_tab_view.render()
                 
                 # Initialize drawer toolbars with current state
                 current_file = self.context.app_state.selected_file
@@ -294,6 +317,7 @@ class HomePage(BasePage):
                     self._drawer_stall_analysis_toolbar_view.set_selected_file(current_file)
                     self._drawer_contrast_view.set_selected_file(current_file)
                     self._drawer_line_plot_controls_view.set_selected_file(current_file)
+                    self._drawer_metadata_tab_view.set_selected_file(current_file)
                 current_roi = self.context.app_state.selected_roi_id
                 if current_roi is not None:
                     self._drawer_analysis_toolbar_view.set_selected_roi(current_roi)
