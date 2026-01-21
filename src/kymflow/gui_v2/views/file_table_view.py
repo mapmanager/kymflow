@@ -13,8 +13,9 @@ from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
-from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig
-from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
+from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
+# from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
+from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
 
 Rows = List[dict[str, object]]
 OnSelected = Callable[[FileSelection], None]
@@ -81,12 +82,13 @@ class FileTableView:
         self,
         *,
         on_selected: OnSelected,
-        selection_mode: str = "single",
+        selection_mode: SelectionMode = "single",
     ) -> None:
         self._on_selected = on_selected
         self._selection_mode = selection_mode
 
-        self._grid: CustomAgGrid | None = None
+        # self._grid: CustomAgGrid | None = None
+        self._grid: CustomAgGrid_v2 | None = None
         self._suppress_emit: bool = False
 
         # Keep latest rows so if FileListChanged arrives before render(),
@@ -111,12 +113,14 @@ class FileTableView:
         grid_cfg = GridConfig(
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
             height="24rem",
+            row_id_field="path",
         )
-        if hasattr(grid_cfg, "row_id_field"):
-            setattr(grid_cfg, "row_id_field", "path")
+        # if hasattr(grid_cfg, "row_id_field"):
+        #     setattr(grid_cfg, "row_id_field", "path")
 
         # Create the grid *now*, inside whatever container the caller opened.
-        self._grid = CustomAgGrid(
+        # self._grid = CustomAgGrid(
+        self._grid = CustomAgGrid_v2(
             data=self._pending_rows,
             columns=_default_columns(),
             grid_config=grid_cfg,
