@@ -6,9 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
+import importlib.util
+import sys
 
-from kymflow.gui_v2 import app as app_module
+import pytest
+from nicegui import ui
+
 from kymflow.gui_v2.events_folder import FolderChosen
 
 
@@ -23,13 +26,27 @@ class DummyPage:
         self.render_calls.append(page_title)
 
 
-def _stub_ui(monkeypatch) -> None:
+def _load_app_module(monkeypatch):
+    """Load gui_v2.app without executing its main() import side effect."""
+    monkeypatch.setattr(ui, "page", lambda *_args, **_kwargs: (lambda fn: fn))
+
+    import kymflow.gui_v2 as gui_v2_pkg
+
+    app_path = Path(gui_v2_pkg.__file__).with_name("app.py")
+    module_name = "kymflow.gui_v2._app_test"
+    spec = importlib.util.spec_from_file_location(module_name, app_path)
+    app_module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = app_module
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(app_module)
+
     monkeypatch.setattr(app_module.ui, "page_title", lambda *_: None)
+    return app_module
 
 
 def test_home_reuses_cached_page(monkeypatch) -> None:
     """Home route should reuse cached page when available."""
-    _stub_ui(monkeypatch)
+    app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
 
@@ -50,7 +67,7 @@ def test_home_reuses_cached_page(monkeypatch) -> None:
 
 def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None:
     """Home route should emit FolderChosen once when dev folder exists."""
-    _stub_ui(monkeypatch)
+    app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
     monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
@@ -79,7 +96,7 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
 
 def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> None:
     """Home route should not emit FolderChosen if folder already loaded."""
-    _stub_ui(monkeypatch)
+    app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
     monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
