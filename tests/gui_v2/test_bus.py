@@ -160,3 +160,80 @@ def test_bus_type_safety() -> None:
     bus.emit(TestEvent(value=42))
     assert len(file_selection_received) == 1  # Unchanged
 
+
+def test_bus_unsubscribe_removes_all_phases(bus: EventBus) -> None:
+    """Unsubscribe with phase=None should remove intent and state handlers."""
+    call_count = 0
+
+    def handler(_event: FileSelection) -> None:
+        nonlocal call_count
+        call_count += 1
+
+    bus.subscribe_intent(FileSelection, handler)
+    bus.subscribe_state(FileSelection, handler)
+    bus.unsubscribe(FileSelection, handler)
+
+    bus.emit(
+        FileSelection(
+            path="/test.tif",
+            file=None,
+            origin=SelectionOrigin.FILE_TABLE,
+            phase="intent",
+        )
+    )
+    bus.emit(
+        FileSelection(
+            path="/test.tif",
+            file=None,
+            origin=SelectionOrigin.FILE_TABLE,
+            phase="state",
+        )
+    )
+
+    assert call_count == 0
+
+
+def test_bus_phase_filters(bus: EventBus) -> None:
+    """Phase filters should route only matching events."""
+    intent_calls = 0
+    state_calls = 0
+
+    def intent_handler(_event: FileSelection) -> None:
+        nonlocal intent_calls
+        intent_calls += 1
+
+    def state_handler(_event: FileSelection) -> None:
+        nonlocal state_calls
+        state_calls += 1
+
+    bus.subscribe_intent(FileSelection, intent_handler)
+    bus.subscribe_state(FileSelection, state_handler)
+
+    bus.emit(
+        FileSelection(
+            path="/test.tif",
+            file=None,
+            origin=SelectionOrigin.FILE_TABLE,
+            phase="intent",
+        )
+    )
+    bus.emit(
+        FileSelection(
+            path="/test.tif",
+            file=None,
+            origin=SelectionOrigin.FILE_TABLE,
+            phase="state",
+        )
+    )
+
+    assert intent_calls == 1
+    assert state_calls == 1
+
+
+def test_bus_unsubscribe_noop_on_missing(bus: EventBus) -> None:
+    """Unsubscribing an unknown handler should not raise."""
+    def handler(_event: FileSelection) -> None:
+        pass
+
+    bus.unsubscribe(FileSelection, handler)
+
