@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.gui.state import AppState
+from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
 from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController

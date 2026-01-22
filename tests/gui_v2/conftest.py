@@ -6,7 +6,7 @@ from typing import Generator
 
 import pytest
 
-from kymflow.gui.state import AppState
+from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import BusConfig, EventBus
 
 

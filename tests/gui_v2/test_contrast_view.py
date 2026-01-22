@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from kymflow.core.plotting.theme import ThemeMode
-from kymflow.gui.events import ImageDisplayOrigin
-from kymflow.gui.state import AppState, ImageDisplayParams
+from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
+from kymflow.gui_v2.state import AppState, ImageDisplayParams
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
 from kymflow.gui_v2.events import FileSelection, ImageDisplayChange, SelectionOrigin

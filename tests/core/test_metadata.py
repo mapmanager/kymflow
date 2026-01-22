@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from kymflow.core.image_loaders.metadata import ExperimentMetadata
+from kymflow.core.image_loaders.acq_image import AcqImage
+from kymflow.core.image_loaders.metadata import AcqImgHeader, ExperimentMetadata
 
 
 def test_experiment_metadata_from_dict() -> None:
@@ -56,4 +58,26 @@ def test_experiment_metadata_to_dict() -> None:
     # Check abbreviated keys
     assert "acq_date" in d
     assert "acq_time" in d
+
+
+def test_update_header_method() -> None:
+    """Test that AcqImage.update_header() method works correctly."""
+    # Create a mock AcqImage with a header
+    # AcqImage requires either path or img_data, so provide dummy image data
+    dummy_img = np.zeros((10, 10), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=dummy_img)
+    acq_image._header = AcqImgHeader()
+    acq_image._header.voxels = [1.0, 2.0]
+    acq_image._header.voxels_units = ["um", "um"]
+
+    # Update header fields
+    acq_image.update_header(voxels=[1.5, 2.5], voxels_units=["px", "px"])
+
+    assert acq_image._header.voxels == [1.5, 2.5]
+    assert acq_image._header.voxels_units == ["px", "px"]
+
+    # Test with unknown field (should log warning but not crash)
+    acq_image.update_header(unknown_field="value")
+    # Should not have set unknown field
+    assert not hasattr(acq_image._header, "unknown_field")
 

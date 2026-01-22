@@ -1,15 +1,10 @@
-"""Tests for metadata widgets (views, bindings, controller, update_header)."""
+"""Tests for metadata widgets (views, bindings, controller)."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
-
-import numpy as np
-import pytest
-
-from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.image_loaders.metadata import AcqImgHeader, ExperimentMetadata
-from kymflow.gui.state import AppState
+from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
@@ -17,28 +12,6 @@ from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperime
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
-
-
-def test_update_header_method() -> None:
-    """Test that AcqImage.update_header() method works correctly."""
-    # Create a mock AcqImage with a header
-    # AcqImage requires either path or img_data, so provide dummy image data
-    dummy_img = np.zeros((10, 10), dtype=np.uint8)
-    acq_image = AcqImage(path=None, img_data=dummy_img)
-    acq_image._header = AcqImgHeader()
-    acq_image._header.voxels = [1.0, 2.0]
-    acq_image._header.voxels_units = ["um", "um"]
-
-    # Update header fields
-    acq_image.update_header(voxels=[1.5, 2.5], voxels_units=["px", "px"])
-
-    assert acq_image._header.voxels == [1.5, 2.5]
-    assert acq_image._header.voxels_units == ["px", "px"]
-
-    # Test with unknown field (should log warning but not crash)
-    acq_image.update_header(unknown_field="value")
-    # Should not have set unknown field
-    assert not hasattr(acq_image._header, "unknown_field")
 
 
 def test_metadata_experimental_view_emits_intent(bus: EventBus) -> None:
