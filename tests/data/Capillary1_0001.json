@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "header": {
+    "shape": [
+      30000,
+      38
+    ],
+    "ndim": 2,
+    "voxels": [
+      0.0011699666666666665,
+      0.284
+    ],
+    "voxels_units": [
+      "s",
+      "um"
+    ],
+    "labels": [
+      "time (s)",
+      "space (um)"
+    ],
+    "physical_size": [
+      35.099,
+      10.792
+    ]
+  },
+  "experiment_metadata": {
+    "species": "",
+    "region": "",
+    "cell_type": "",
+    "depth": null,
+    "branch_order": null,
+    "direction": "",
+    "sex": "",
+    "genotype": "",
+    "condition": "",
+    "note": "",
+    "acq_date": "",
+    "acq_time": ""
+  },
+  "rois": [
+    {
+      "id": 1,
+      "channel": 1,
+      "z": 0,
+      "name": "",
+      "note": "Full Image",
+      "revision": 0,
+      "dim0_start": 0,
+      "dim0_stop": 30000,
+      "dim1_start": 0,
+      "dim1_stop": 38
+    },
+    {
+      "id": 2,
+      "channel": 1,
+      "z": 0,
+      "name": "",
+      "note": "Center Region",
+      "revision": 0,
+      "dim0_start": 7500,
+      "dim0_stop": 22500,
+      "dim1_start": 9,
+      "dim1_stop": 28
+    },
+    {
+      "id": 3,
+      "channel": 1,
+      "z": 0,
+      "name": "",
+      "note": "Left Region",
+      "revision": 0,
+      "dim0_start": 10000,
+      "dim0_stop": 30000,
+      "dim1_start": 0,
+      "dim1_stop": 12
+    }
+  ]
+}
