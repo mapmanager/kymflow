@@ -1,0 +1,99 @@
+"""Tests for GUI v2 app startup behavior."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+
+from kymflow.gui_v2 import app as app_module
+from kymflow.gui_v2.events_folder import FolderChosen
+
+
+class DummyPage:
+    """Minimal page stub with render + bus.emit."""
+
+    def __init__(self, bus) -> None:
+        self.bus = bus
+        self.render_calls: list[str] = []
+
+    def render(self, *, page_title: str) -> None:
+        self.render_calls.append(page_title)
+
+
+def _stub_ui(monkeypatch) -> None:
+    monkeypatch.setattr(app_module.ui, "page_title", lambda *_: None)
+
+
+def test_home_reuses_cached_page(monkeypatch) -> None:
+    """Home route should reuse cached page when available."""
+    _stub_ui(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+
+    cached_page = DummyPage(bus=SimpleNamespace(emit=MagicMock()))
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: cached_page)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: object())
+
+    def _fail_homepage(*_args, **_kwargs):
+        raise AssertionError("HomePage should not be instantiated when cached")
+
+    monkeypatch.setattr(app_module, "HomePage", _fail_homepage)
+
+    app_module.home()
+
+    assert cached_page.render_calls == ["KymFlow"]
+
+
+def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None:
+    """Home route should emit FolderChosen once when dev folder exists."""
+    _stub_ui(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+
+    bus = SimpleNamespace(emit=MagicMock())
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
+
+    def _homepage(_context, _bus):
+        return DummyPage(bus=_bus)
+
+    monkeypatch.setattr(app_module, "HomePage", _homepage)
+
+    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", True)
+    monkeypatch.setattr(app_module, "DEV_FOLDER", tmp_path)
+
+    app_module.context.app_state.folder = None
+
+    app_module.home()
+
+    bus.emit.assert_called_once()
+    emitted = bus.emit.call_args.args[0]
+    assert isinstance(emitted, FolderChosen)
+    assert emitted.folder == str(tmp_path)
+
+
+def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> None:
+    """Home route should not emit FolderChosen if folder already loaded."""
+    _stub_ui(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+
+    bus = SimpleNamespace(emit=MagicMock())
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
+    monkeypatch.setattr(app_module, "HomePage", lambda _context, _bus: DummyPage(bus=_bus))
+
+    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", True)
+    monkeypatch.setattr(app_module, "DEV_FOLDER", tmp_path)
+
+    app_module.context.app_state.folder = tmp_path
+
+    app_module.home()
+
+    bus.emit.assert_not_called()
