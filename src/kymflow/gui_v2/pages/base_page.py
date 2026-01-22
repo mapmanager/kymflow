@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 
 from nicegui import ui
 
-from kymflow.gui.app_context import AppContext
-from kymflow.gui.navigation import build_header
+from kymflow.gui_v2.app_context import AppContext
+from kymflow.gui_v2.navigation import build_header
 from kymflow.gui_v2.bus import EventBus, get_client_id
 
 

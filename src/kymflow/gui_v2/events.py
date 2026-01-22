@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Literal, Any
 
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.kym_image import KymImage
-    from kymflow.gui.state import ImageDisplayParams
+    from kymflow.gui_v2.state import ImageDisplayParams
 else:
-    from kymflow.gui.state import ImageDisplayParams
+    from kymflow.gui_v2.state import ImageDisplayParams
 
 EventPhase = Literal["intent", "state"]
 

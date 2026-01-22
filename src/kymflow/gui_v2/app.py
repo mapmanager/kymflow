@@ -17,9 +17,9 @@ from pathlib import Path
 from nicegui import ui
 
 from kymflow.core.utils.logging import get_logger, setup_logging
-from kymflow.gui.app_context import AppContext
-from kymflow.gui.config import DEFAULT_PORT, STORAGE_SECRET
-from kymflow.gui.navigation import inject_global_styles
+from kymflow.gui_v2.app_context import AppContext
+from kymflow.gui_v2.config import DEFAULT_PORT, STORAGE_SECRET
+from kymflow.gui_v2.navigation import inject_global_styles
 
 from kymflow.gui_v2.bus import BusConfig, get_event_bus
 from kymflow.gui_v2.events_folder import FolderChosen

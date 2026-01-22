@@ -18,8 +18,8 @@ from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting.colorscales import COLORSCALE_OPTIONS
 from kymflow.core.plotting.image_plots import histogram_plot_plotly
 from kymflow.core.plotting.theme import ThemeMode
-from kymflow.gui.events import ImageDisplayOrigin
-from kymflow.gui.state import ImageDisplayParams
+from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
+from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import ImageDisplayChange, SelectionOrigin
 from kymflow.core.utils.logging import get_logger

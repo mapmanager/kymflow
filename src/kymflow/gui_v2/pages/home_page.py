@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 from nicegui import ui
 
-from kymflow.gui.app_context import AppContext
+from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers import (
     AnalysisController,
@@ -256,7 +256,7 @@ class HomePage(BasePage):
         ui.page_title(page_title)
 
         dark_mode = self.context.init_dark_mode_for_page()
-        from kymflow.gui.navigation import build_header
+        from kymflow.gui_v2.navigation import build_header
         
         # Pass drawer toggle callback to header (drawer will be created after header)
         def drawer_toggle_callback() -> None:

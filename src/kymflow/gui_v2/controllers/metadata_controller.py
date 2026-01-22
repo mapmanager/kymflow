@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from kymflow.gui.state import AppState
+from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import MetadataUpdate
 

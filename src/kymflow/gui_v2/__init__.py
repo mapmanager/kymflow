@@ -2,7 +2,7 @@
 """NiceGUI v2 package for KymFlow.
 
 This package provides a thin NiceGUI UI layer that:
-- relies on the existing kymflow.core backend (and kymflow.gui.AppState for now)
+- relies on the existing kymflow.core backend
 - uses an explicit EventBus for clean signal flow logging
 - keeps views dumb and controllers responsible for coordination
 """

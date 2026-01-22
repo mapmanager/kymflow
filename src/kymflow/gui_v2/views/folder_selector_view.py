@@ -9,7 +9,7 @@ from typing import Optional
 from nicegui import ui, app
 
 from kymflow.core.utils.logging import get_logger
-from kymflow.gui.state import AppState
+from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import FolderChosen
 from kymflow.gui_v2.views.folder_picker import _prompt_for_directory_pywebview

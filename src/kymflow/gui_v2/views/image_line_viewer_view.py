@@ -22,7 +22,7 @@ from kymflow.core.plotting import (
     reset_image_zoom,
 )
 from kymflow.core.plotting.theme import ThemeMode
-from kymflow.gui.state import ImageDisplayParams
+from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import ROISelection, SelectionOrigin
 from kymflow.core.utils.logging import get_logger

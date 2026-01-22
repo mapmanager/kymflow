@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.plotting.theme import ThemeMode
-    from kymflow.gui.state import ImageDisplayParams
+    from kymflow.gui_v2.state import ImageDisplayParams
 else:
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.plotting.theme import ThemeMode
-    from kymflow.gui.state import ImageDisplayParams
+    from kymflow.gui_v2.state import ImageDisplayParams
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 from nicegui import ui
 
 from kymflow.core.state import TaskState
-from kymflow.gui.state import AppState
-from kymflow.gui.tasks import run_flow_analysis
+from kymflow.gui_v2.state import AppState
+from kymflow.gui_v2.tasks import run_flow_analysis
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import AnalysisCancel, AnalysisStart
 from kymflow.core.utils.logging import get_logger

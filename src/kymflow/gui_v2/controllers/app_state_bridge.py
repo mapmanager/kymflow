@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kymflow.core.utils.logging import get_logger
-from kymflow.gui.state import AppState
+from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import is_client_alive
 from kymflow.gui_v2.events import (

@@ -9,7 +9,7 @@ from nicegui import ui
 
 from kymflow.core.utils.about import getVersionInfo
 from kymflow.core.utils.logging import get_log_file_path
-from kymflow.gui.app_context import AppContext
+from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.pages.base_page import BasePage
 
