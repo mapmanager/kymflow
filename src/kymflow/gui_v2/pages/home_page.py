@@ -9,41 +9,45 @@ from nicegui import ui
 
 from kymflow.gui.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.controllers.analysis_controller import AnalysisController
-from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
-from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController
-from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
-from kymflow.gui_v2.controllers.folder_controller import FolderController
-from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
-from kymflow.gui_v2.controllers.metadata_controller import MetadataController
-from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
-from kymflow.gui_v2.controllers.save_controller import SaveController
-from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeController
+from kymflow.gui_v2.controllers import (
+    AnalysisController,
+    AppStateBridgeController,
+    FileSelectionController,
+    FileTablePersistenceController,
+    FolderController,
+    ImageDisplayController,
+    MetadataController,
+    ROISelectionController,
+    SaveController,
+    TaskStateBridgeController,
+)
 from kymflow.gui_v2.events import SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
-from kymflow.gui_v2.views.analysis_toolbar_bindings import AnalysisToolbarBindings
-from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
-from kymflow.gui_v2.views.contrast_bindings import ContrastBindings
-from kymflow.gui_v2.views.contrast_view import ContrastView
-from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
-from kymflow.gui_v2.views.file_table_view import FileTableView
-from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
-from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
-from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
-from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
-from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
-from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
-from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
-from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
-from kymflow.gui_v2.views.drawer_view import DrawerView
-from kymflow.gui_v2.views.save_buttons_bindings import SaveButtonsBindings
-from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
-from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
-from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
-from kymflow.gui_v2.views.stall_analysis_toolbar_bindings import StallAnalysisToolbarBindings
-from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
-from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
-from kymflow.gui_v2.views.task_progress_view import TaskProgressView
+from kymflow.gui_v2.views import (
+    AnalysisToolbarBindings,
+    AnalysisToolbarView,
+    ContrastBindings,
+    ContrastView,
+    DrawerView,
+    FileTableBindings,
+    FileTableView,
+    FolderSelectorView,
+    ImageLineViewerBindings,
+    ImageLineViewerView,
+    LinePlotControlsBindings,
+    LinePlotControlsView,
+    MetadataExperimentalBindings,
+    MetadataExperimentalView,
+    MetadataHeaderBindings,
+    MetadataHeaderView,
+    MetadataTabView,
+    SaveButtonsBindings,
+    SaveButtonsView,
+    StallAnalysisToolbarBindings,
+    StallAnalysisToolbarView,
+    TaskProgressBindings,
+    TaskProgressView,
+)
 
 if TYPE_CHECKING:
     pass
@@ -98,12 +102,8 @@ class HomePage(BasePage):
         self._folder_view = FolderSelectorView(bus, context.app_state)
         self._table_view = FileTableView(on_selected=bus.emit, selection_mode="single")
         self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
-        self._metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
-        self._metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
-        self._metadata_experimental_bindings: MetadataExperimentalBindings | None = None
-        self._metadata_header_bindings: MetadataHeaderBindings | None = None
 
         # Drawer toolbar views (duplicates for left drawer)
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
@@ -195,12 +195,6 @@ class HomePage(BasePage):
         self._table_bindings = FileTableBindings(self.bus, self._table_view)
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
-        )
-        self._metadata_experimental_bindings = MetadataExperimentalBindings(
-            self.bus, self._metadata_experimental_view
-        )
-        self._metadata_header_bindings = MetadataHeaderBindings(
-            self.bus, self._metadata_header_view
         )
 
         # Drawer toolbar bindings (duplicates for left drawer)
@@ -333,20 +327,6 @@ class HomePage(BasePage):
             if current_roi is not None:
                 self._image_line_viewer.set_selected_roi(current_roi)
             self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
-
-        # Metadata widgets - both in single disclosure triangle
-        with ui.expansion("Metadata", value=True).classes("w-full"):
-            # Experimental metadata widget
-            self._metadata_experimental_view.render()
-
-            # Header metadata widget
-            self._metadata_header_view.render()
-
-            # Initialize metadata views with current AppState
-            current_file = self.context.app_state.selected_file
-            if current_file is not None:
-                self._metadata_experimental_view.set_selected_file(current_file)
-                self._metadata_header_view.set_selected_file(current_file)
 
         # Restore selection once per client (after UI is created)
         if not self._restored_once:
