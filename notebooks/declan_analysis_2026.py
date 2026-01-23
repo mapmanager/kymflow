@@ -1,6 +1,6 @@
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.plotting.line_plots import plot_image_line_plotly_v2
+from kymflow.core.plotting.line_plots import plot_image_line_plotly_v3
 from kymflow.core.analysis.stall_analysis import StallAnalysisParams
 
 from kymflow.core.utils.logging import get_logger, setup_logging
@@ -34,7 +34,7 @@ def plot_analysis(path: str) -> None:
         kymImage.load_channel(channel=1)
 
         # roi_ids = [roi_ids[0]]
-        fig = plot_image_line_plotly_v2(kymImage,
+        fig = plot_image_line_plotly_v3(kymImage,
                 channel=1,
                 selected_roi_id=roi_ids,
                 transpose=True,
@@ -45,6 +45,29 @@ def plot_analysis(path: str) -> None:
             )
         fig.show()
         
+        break
+
+def analyze_velocity_events(path: str) -> None:
+    depth = 2
+    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+    for kymImage in kymList:
+        logger.info(kymImage.path)
+        ka = kymImage.get_kym_analysis()
+        for roi_id in kymImage.rois.get_roi_ids():
+            ka.run_velocity_event_analysis(roi_id)
+            logger.info(f'analyzed velocity events for roi {roi_id}')
+            from pprint import pprint
+            _velEvents = ka.get_velocity_events(roi_id)
+            logger.info(f'velEvents: {len(_velEvents)}')
+            # pprint(_velEvents)
+            # if _velEvents is not None:
+            #     for velEvent in _velEvents:
+            #         logger.info(f'velEvent: {velEvent}')
+            #         pprint(velEvent)
+        # save analysis
+        success = ka.save_analysis()
+        logger.info(f'saved analysis: {success}')
+
         break
 
 def analyze_stalls(path: str) -> None:
@@ -118,7 +141,7 @@ def analyze_flow(path: str) -> None:
 
         
 if __name__ == "__main__":
-    setup_logging(level="INFO")
+    setup_logging()
     path = "/Users/cudmore/Dropbox/data/declan/2026/declan-data-analyzed"
     path = '/Users/cudmore/Dropbox/data/declan/2026/data/20251204'
 
@@ -126,4 +149,6 @@ if __name__ == "__main__":
 
     # analyze_stalls(path)
     
-    plot_analysis(path)
+    analyze_velocity_events(path)
+    
+    # plot_analysis(path)

@@ -16,7 +16,8 @@ from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
-    plot_image_line_plotly,
+    # plot_image_line_plotly,
+    plot_image_line_plotly_v3,
     update_colorscale,
     update_contrast,
     reset_image_zoom,
@@ -279,7 +280,7 @@ class ImageLineViewerView:
         zmin = display_params.zmin if display_params else None
         zmax = display_params.zmax if display_params else None
 
-        fig = plot_image_line_plotly(
+        fig = plot_image_line_plotly_v3(
             kf=kf,
             yStat="velocity",
             remove_outliers=self._remove_outliers,

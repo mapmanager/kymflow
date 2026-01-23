@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -21,6 +21,10 @@ from kymflow.core.analysis.utils import _medianFilter, _removeOutliers
 from kymflow.core.utils.logging import get_logger
 
 from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
+from kymflow.core.analysis.velocity_events.velocity_events import (
+    VelocityEvent,
+    detect_events,
+)
 
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.acq_image import AcqImage
@@ -81,6 +85,8 @@ class KymAnalysis:
         self._dirty: bool = False
         self._stall_analysis: Dict[int, StallAnalysis] = {}
         # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
+        self._velocity_events: Dict[int, List[VelocityEvent]] = {}
+        # Velocity events are computed on-demand from stored analysis values (e.g., velocity).
         
         # Always try to load analysis (handles path=None gracefully)
         self.load_analysis()
@@ -368,6 +374,10 @@ class KymAnalysis:
             "stall_analysis": {
                 str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
             },
+            "velocity_events": {
+                str(rid): [ev.to_dict() for ev in evs]
+                for rid, evs in self._velocity_events.items()
+            },
         }
         
         # Save JSON
@@ -451,6 +461,17 @@ class KymAnalysis:
             except Exception as e:
                 logger.warning(f"Skipping invalid stall_analysis entry {roi_id_str}: {e}")
 
+        # Load velocity events (optional; may be absent in older analysis JSON).
+        self._velocity_events.clear()
+        for roi_id_str, events_list in json_data.get("velocity_events", {}).items():
+            try:
+                roi_id = int(roi_id_str)
+                self._velocity_events[roi_id] = [
+                    VelocityEvent.from_dict(ev_dict) for ev_dict in events_list
+                ]
+            except Exception as e:
+                logger.warning(f"Skipping invalid velocity_events entry {roi_id_str}: {e}")
+
         # Reconcile to current ROIs
         current_roi_ids = {roi.id for roi in self.acq_image.rois}
         self._analysis_metadata = {
@@ -458,6 +479,9 @@ class KymAnalysis:
         }
         self._stall_analysis = {
             rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
+        }
+        self._velocity_events = {
+            rid: evs for rid, evs in self._velocity_events.items() if rid in current_roi_ids
         }
         if self._df is not None and 'roi_id' in self._df.columns:
             self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
@@ -577,6 +601,80 @@ class KymAnalysis:
             for this ROI (or results were not loaded).
         """
         return self._stall_analysis.get(roi_id)
+
+    def run_velocity_event_analysis(
+        self,
+        roi_id: int,
+        *,
+        velocity_key: str = "velocity",
+        remove_outliers: bool = False,
+        **detect_events_kwargs: Any,
+    ) -> list[VelocityEvent]:
+        """Run velocity event detection for a single ROI and store results.
+
+        This method is intentionally **on-demand**: it does not run automatically
+        when flow analysis is computed. A caller (GUI/script) explicitly requests
+        event detection once the underlying analysis values exist.
+
+        The source signal is selected via `velocity_key` (e.g. 'velocity',
+        'cleanVelocity', 'absVelocity').
+
+        Args:
+            roi_id: Identifier of the ROI to analyze.
+            velocity_key: Column name to retrieve from analysis (default: "velocity").
+            remove_outliers: If True, remove outliers using 2*std threshold before detection.
+            **detect_events_kwargs: Additional keyword arguments passed to detect_events()
+                (e.g., win_cmp_sec, mad_k, top_k_total, etc.).
+
+        Returns:
+            List of detected VelocityEvent instances.
+
+        Raises:
+            ValueError: If the requested analysis values are missing for this ROI.
+        """
+        # Get velocity values
+        velocity = self.get_analysis_value(
+            roi_id=roi_id,
+            key=velocity_key,
+            remove_outliers=remove_outliers,
+        )
+        if velocity is None:
+            raise ValueError(
+                f"Cannot run velocity event analysis: ROI {roi_id} has no analysis values for key '{velocity_key}'."
+            )
+
+        # Get time values (required for detect_events)
+        time_s = self.get_analysis_value(
+            roi_id=roi_id,
+            key="time",
+            remove_outliers=False,
+        )
+        if time_s is None:
+            raise ValueError(
+                f"Cannot run velocity event analysis: ROI {roi_id} has no 'time' values."
+            )
+
+        # Run detection
+        events, _debug = detect_events(time_s, velocity, **detect_events_kwargs)
+        
+        # Store results
+        self._velocity_events[roi_id] = events
+        # Mark dirty so callers know there are unsaved results.
+        self._dirty = True
+        return events
+
+    def get_velocity_events(self, roi_id: int) -> Optional[list[VelocityEvent]]:
+        """Return velocity event results for roi_id, or None if not present.
+
+        Args:
+            roi_id: Identifier of the ROI.
+
+        Returns:
+            Stored list of VelocityEvent instances, or None if velocity event analysis
+            has not been run for this ROI (or results were not loaded).
+        """
+        return self._velocity_events.get(roi_id)
+
     def __str__(self) -> str:
         """String representation."""
         roi_ids = [roi.id for roi in self.acq_image.rois]

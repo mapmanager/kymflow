@@ -81,6 +81,62 @@ class VelocityEvent:
     user_type: UserType = UserType.UNREVIEWED
     note: str = ""
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dictionary.
+        
+        Returns:
+            Dictionary containing all VelocityEvent fields.
+        """
+        return {
+            "event_type": self.event_type,
+            "i_start": int(self.i_start),
+            "t_start": float(self.t_start),
+            "i_peak": int(self.i_peak) if self.i_peak is not None else None,
+            "t_peak": float(self.t_peak) if self.t_peak is not None else None,
+            "i_end": int(self.i_end) if self.i_end is not None else None,
+            "t_end": float(self.t_end) if self.t_end is not None else None,
+            "score_peak": float(self.score_peak) if self.score_peak is not None else None,
+            "baseline_before": float(self.baseline_before) if self.baseline_before is not None else None,
+            "baseline_after": float(self.baseline_after) if self.baseline_after is not None else None,
+            "strength": float(self.strength) if self.strength is not None else None,
+            "nan_fraction_in_event": float(self.nan_fraction_in_event) if self.nan_fraction_in_event is not None else None,
+            "n_valid_in_event": int(self.n_valid_in_event) if self.n_valid_in_event is not None else None,
+            "duration_sec": float(self.duration_sec) if self.duration_sec is not None else None,
+            "machine_type": self.machine_type.value,
+            "user_type": self.user_type.value,
+            "note": str(self.note),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "VelocityEvent":
+        """Deserialize from a dictionary.
+        
+        Args:
+            d: Dictionary containing VelocityEvent fields.
+            
+        Returns:
+            A VelocityEvent instance.
+        """
+        return cls(
+            event_type=d["event_type"],
+            i_start=int(d["i_start"]),
+            t_start=float(d["t_start"]),
+            i_peak=int(d["i_peak"]) if d.get("i_peak") is not None else None,
+            t_peak=float(d["t_peak"]) if d.get("t_peak") is not None else None,
+            i_end=int(d["i_end"]) if d.get("i_end") is not None else None,
+            t_end=float(d["t_end"]) if d.get("t_end") is not None else None,
+            score_peak=float(d["score_peak"]) if d.get("score_peak") is not None else None,
+            baseline_before=float(d["baseline_before"]) if d.get("baseline_before") is not None else None,
+            baseline_after=float(d["baseline_after"]) if d.get("baseline_after") is not None else None,
+            strength=float(d["strength"]) if d.get("strength") is not None else None,
+            nan_fraction_in_event=float(d["nan_fraction_in_event"]) if d.get("nan_fraction_in_event") is not None else None,
+            n_valid_in_event=int(d["n_valid_in_event"]) if d.get("n_valid_in_event") is not None else None,
+            duration_sec=float(d["duration_sec"]) if d.get("duration_sec") is not None else None,
+            machine_type=MachineType(d.get("machine_type", MachineType.OTHER.value)),
+            user_type=UserType(d.get("user_type", UserType.UNREVIEWED.value)),
+            note=str(d.get("note", "")),
+        )
+
 
 def estimate_fs(time_s: np.ndarray) -> float:
     """Estimate sample rate from median dt in seconds."""

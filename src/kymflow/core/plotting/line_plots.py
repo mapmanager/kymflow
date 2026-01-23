@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -588,6 +589,107 @@ def _add_single_roi_line_plot(
         )
 
 
+def _add_velocity_event_overlays(
+    fig: go.Figure,
+    kym_analysis,
+    roi_id: int,
+    analysis_time_values,
+    row: int,
+    span_sec_if_no_end: float = 0.20,
+) -> None:
+    """Add velocity event overlays as rectangles on a line plot subplot.
+    
+    Args:
+        fig: Plotly figure to add shapes to.
+        kym_analysis: KymAnalysis instance to get velocity events from.
+        roi_id: ROI identifier to get events for.
+        analysis_time_values: Time array for validation (numpy array).
+        row: Subplot row number (1-based).
+        span_sec_if_no_end: Fixed width in seconds when t_end is None (default: 0.20).
+    """
+    velocity_events = kym_analysis.get_velocity_events(roi_id)
+    # logger.warning(f'adding velocity events for roi {roi_id}: {len(velocity_events)}')
+    if velocity_events is None or len(velocity_events) == 0:
+        return
+    
+    # Get time range for validation
+    if analysis_time_values is None or len(analysis_time_values) == 0:
+        return
+    
+    time_min = float(np.min(analysis_time_values))
+    time_max = float(np.max(analysis_time_values))
+    
+    # Determine xref and yref for this row
+    xref = f"x{row if row > 1 else ''}"
+    yref = f"y{row if row > 1 else ''}"
+    
+    # Color mapping by event_type
+    color_map = {
+        "baseline_drop": "rgba(255, 165, 0, 0.25)",  # Orange
+        "nan_gap": "rgba(255, 0, 0, 0.25)",  # Red
+    }
+    
+    for event in velocity_events:
+        # Validate t_start
+        t_start = float(event.t_start)
+        if not np.isfinite(t_start):
+            logger.warning(
+                "Skipping velocity event with invalid t_start for ROI %s: t_start=%s",
+                roi_id,
+                event.t_start,
+            )
+            continue
+        
+        # Skip if t_start is out of bounds
+        if t_start < time_min or t_start > time_max:
+            logger.warning(
+                "Skipping out-of-range velocity event for ROI %s: t_start=%s (time_range=[%s, %s])",
+                roi_id,
+                t_start,
+                time_min,
+                time_max,
+            )
+            continue
+        
+        # Determine t_end
+        if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
+            # Use fixed span when t_end is missing or invalid
+            t_end_plot = t_start + span_sec_if_no_end
+        else:
+            t_end_plot = float(event.t_end)
+            # Clamp to time range
+            if t_end_plot > time_max:
+                t_end_plot = time_max
+        
+        # Ensure x0 < x1
+        x0 = t_start
+        x1 = t_end_plot
+        if x1 < x0:
+            x0, x1 = x1, x0
+        
+        # Get color based on event_type
+        event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
+        event_color = "rgba(255, 0, 0, 0.5)"
+
+        logger.warning(f'adding velocity event for roi {roi_id}: {event.event_type} color:{event_color}')
+        logger.info(f'x0:{x0} x1:{x1} y0:0 y1:1')
+
+        # Add rectangle shape
+        fig.add_shape(
+            type="rect",
+            xref=xref,
+            yref=f"{yref} domain",
+            x0=x0,
+            x1=x1,
+            y0=0,
+            y1=1,
+            fillcolor=event_color,
+            opacity=0.25,
+            line_width=2,
+            layer="below",
+        )
+
+
 def plot_image_line_plotly_v2(
     kf: Optional[KymImage],
     channel: int = 1,
@@ -764,6 +866,221 @@ def plot_image_line_plotly_v2(
                 bg_color,
                 font_dict,
             )
+
+    # Build complete layout configuration once
+    layout_dict = {
+        "template": template,
+        "paper_bgcolor": bg_color,
+        "plot_bgcolor": bg_color,
+        "font": font_dict,
+        "height": plot_height,
+        "margin": dict(l=10, r=10, t=10, b=10),
+        "uirevision": "kymflow-plot",
+        "dragmode": "zoom",
+        "modebar_add": ["zoomInX", "zoomOutX", "zoomInY", "zoomOutY"],
+        "showlegend": False,  # No global legend - each line plot has its own ROI ID label
+    }
+
+    # Apply layout once at the end
+    fig.update_layout(**layout_dict)
+
+    return fig
+
+
+def plot_image_line_plotly_v3(
+    kf: Optional[KymImage],
+    channel: int = 1,
+    yStat: str = "velocity",
+    remove_outliers: bool = False,
+    median_filter: int = 0,
+    colorscale: str = "Gray",
+    plot_rois: bool = True,
+    selected_roi_id: Optional[Union[int, list[int]]] = None,
+    zmin: Optional[int] = None,
+    zmax: Optional[int] = None,
+    theme: Optional[ThemeMode] = ThemeMode.LIGHT,
+    transpose: bool = False,
+    span_sec_if_no_end: float = 0.20,
+) -> go.Figure:
+    """Create a figure with kymograph image and one or more line plots for multiple ROIs.
+    
+    This is an extended version of plot_image_line_plotly_v2 that adds velocity event
+    overlays as rectangles on velocity line plots, in addition to stall analysis overlays.
+
+    Args:
+        kf: KymImage instance, or None for empty plot
+        channel: Image channel to display (default: 1)
+        yStat: Column name for y-axis data in line plots (default: "velocity")
+        remove_outliers: If True, remove outliers using 2*std threshold
+        median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
+                       If even and > 0, raises ValueError.
+        colorscale: Plotly colorscale name (default: "Gray")
+        plot_rois: If True, overlay ROI rectangles on the image
+        selected_roi_id: List of ROI identifiers to plot line plots for. If None, only
+                         the image is shown (no line plots).
+        zmin: Minimum intensity for display (optional)
+        zmax: Maximum intensity for display (optional)
+        theme: Theme mode (DARK or LIGHT). Defaults to LIGHT if None.
+        transpose: If True, transpose the image display
+        span_sec_if_no_end: Fixed width in seconds for velocity events when t_end is None
+                           (default: 0.20)
+
+    Returns:
+        Plotly Figure with image subplot and one or more line plot subplots with
+        both stall and velocity event overlays
+
+    Raises:
+        ValueError: If median_filter > 0 and not odd
+    """
+    template = get_theme_template(theme)
+    bg_color, fg_color = get_theme_colors(theme)
+    font_dict = {"color": fg_color}
+    grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
+    
+    # Configurable plot height
+    plot_height = 600
+
+    # Determine number of rows: 1 for image + N for line plots
+    if selected_roi_id is not None and isinstance(selected_roi_id, int):
+        selected_roi_id = [selected_roi_id]
+    num_line_plots = len(selected_roi_id) if selected_roi_id is not None else 0
+    num_rows = 1 + num_line_plots
+    
+    # Calculate row heights: image gets proportionally more space, line plots share the rest
+    if num_line_plots == 0:
+        row_heights = [1.0]
+    else:
+        # Image gets 40%, line plots share the remaining 60%
+        image_height = 0.4
+        line_height_per_plot = 0.6 / num_line_plots
+        row_heights = [image_height] + [line_height_per_plot] * num_line_plots
+
+    # Create subplots
+    fig = make_subplots(
+        rows=num_rows,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.025,
+        row_heights=row_heights,
+    )
+
+    # Handle None KymFile (minimal layout for early return)
+    if kf is None:
+        fig.update_layout(
+            template=template,
+            paper_bgcolor=bg_color,
+            plot_bgcolor=bg_color,
+            font=font_dict,
+            height=plot_height,
+        )
+        return fig
+
+    image = kf.get_img_slice(channel=channel)
+
+    # Early return if image is missing or invalid (minimal layout)
+    if image is None:
+        fig.update_layout(
+            template=template,
+            paper_bgcolor=bg_color,
+            plot_bgcolor=bg_color,
+            font=font_dict,
+            height=plot_height,
+        )
+        return fig
+
+    # Physical units for image axes
+    dim0_arange = kf.get_dim_arange(0)  # First dimension (rows)
+    dim1_arange = kf.get_dim_arange(1)  # Second dimension (columns)
+    
+    # Plot image in top subplot (row=1)
+    colorscale_value = get_colorscale(colorscale)
+
+    heatmap_kwargs = {
+        "z": image.transpose() if transpose else image,
+        "x": dim0_arange if transpose else dim1_arange,
+        "y": dim1_arange if transpose else dim0_arange,
+        "colorscale": colorscale_value,
+        "showscale": False,
+        **({"zmin": zmin} if zmin is not None else {}),
+        **({"zmax": zmax} if zmax is not None else {}),
+    }
+
+    fig.add_trace(
+        go.Heatmap(**heatmap_kwargs),
+        row=1,
+        col=1,
+    )
+
+    # Configure top subplot axes using header labels
+    x_label = kf.header.labels[0] if transpose else kf.header.labels[1]  # Time dimension
+    y_label = kf.header.labels[1] if transpose else kf.header.labels[0]  # Space dimension
+    fig.update_xaxes(
+        title_text=x_label,
+        row=1,
+        col=1,
+        showgrid=True,
+        showticklabels=True,
+        gridcolor=grid_color,
+        color=fg_color,
+    )
+    fig.update_yaxes(
+        title_text=y_label,
+        row=1,
+        col=1,
+        showticklabels=True,
+        showgrid=False,
+        color=fg_color,
+    )
+
+    # Configure zoom behavior for independent x and y axis zooming
+    fig.update_xaxes(constrain="range")
+    fig.update_yaxes(constrain="range")
+    
+    # Add ROI rectangles overlay to image subplot
+    # For highlighting, use the first ROI in the list if provided
+    highlight_roi_id = selected_roi_id[0] if selected_roi_id else None
+    if plot_rois:
+        _add_roi_overlay(
+            fig,
+            kf,
+            highlight_roi_id,
+            transpose,
+            row=1,
+            col=1,
+        )
+
+    # Add line plots for each ROI
+    if selected_roi_id is not None:
+        kym_analysis = kf.get_kym_analysis()
+        for idx, roi_id in enumerate(selected_roi_id):
+            row_num = 2 + idx  # Row 1 is image, rows 2+ are line plots
+            _add_single_roi_line_plot(
+                fig,
+                kym_analysis,
+                roi_id,
+                row_num,
+                yStat,
+                remove_outliers,
+                median_filter,
+                grid_color,
+                fg_color,
+                bg_color,
+                font_dict,
+            )
+            
+            # Add velocity event overlays after stall overlays (so they render on top)
+            # Get analysis_time_values for validation
+            if kym_analysis.has_analysis(roi_id):
+                analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
+                if analysis_time_values is not None:
+                    _add_velocity_event_overlays(
+                        fig,
+                        kym_analysis,
+                        roi_id,
+                        np.array(analysis_time_values),
+                        row_num,
+                        span_sec_if_no_end,
+                    )
 
     # Build complete layout configuration once
     layout_dict = {
