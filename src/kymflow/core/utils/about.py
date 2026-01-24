@@ -5,7 +5,7 @@ def getVersionInfo() -> dict:
 
     import nicegui
     import kymflow.core as kymflow_core
-    import kymflow.gui as kymflow_gui
+    import kymflow.gui_v2 as kymflow_gui
 
     from kymflow.core.utils.logging import get_log_file_path
 

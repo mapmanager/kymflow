@@ -273,7 +273,9 @@ class ImageLineViewerView:
             return
 
         # Convert stored median_filter bool to int (0 = off, 5 = on with window size 5)
-        median_filter_size = 5 if self._median_filter else 0
+        median_filter_size = 3 if self._median_filter else 0
+        if self._median_filter:
+            logger.warning('HARD CODING median_filter_size: 3')
 
         # Get display parameters from stored params or use defaults
         colorscale = display_params.colorscale if display_params else "Gray"

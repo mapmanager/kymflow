@@ -34,7 +34,7 @@ class BusConfig:
         trace: If True, log all event emissions and handler executions.
     """
 
-    trace: bool = True
+    trace: bool = False
 
 
 class EventBus:
@@ -95,10 +95,12 @@ class EventBus:
             )
             return
         handlers.append((handler, phase))
-        logger.debug(
-            f"[bus] Subscribed {handler.__qualname__} to {event_type.__name__} "
-            f"(phase={phase}, client={self._client_id}, total_handlers={len(handlers)})"
-        )
+        
+        if self._config.trace:
+            logger.debug(
+                f"[bus] Subscribed {handler.__qualname__} to {event_type.__name__} "
+                f"(phase={phase}, client={self._client_id}, total_handlers={len(handlers)})"
+            )
 
     def subscribe_intent(
         self, event_type: Type[TEvent], handler: Callable[[TEvent], None]

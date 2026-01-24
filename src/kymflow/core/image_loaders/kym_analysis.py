@@ -675,6 +675,27 @@ class KymAnalysis:
         """
         return self._velocity_events.get(roi_id)
 
+    def get_velocity_report(self, roi_id: int) -> Optional[list[dict]]:
+        """Return velocity report for roi_id, or None if not present.
+
+        Args:
+            roi_id: Identifier of the ROI.
+
+        Returns:
+            Stored list of velocity report, or None if velocity report has not been run for this ROI (or results were not loaded).
+        """
+        events = self.get_velocity_events(roi_id)
+        if events is None:
+            return None
+        # return [event.to_dict() for event in events]
+        event_dicts = []
+        for event in events:
+            event_dict = event.to_dict()
+            event_dict['roi_id'] = roi_id
+            event_dict['path'] = self.acq_image.path
+            event_dicts.append(event_dict)
+        return event_dicts
+
     def __str__(self) -> str:
         """String representation."""
         roi_ids = [roi.id for roi in self.acq_image.rois]

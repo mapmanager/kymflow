@@ -48,31 +48,36 @@ def build_header(context: AppContext, dark_mode, drawer_toggle_callback: Optiona
         # Left side: Drawer toggle, Title and navigation buttons
         with ui.row().classes("items-center gap-4"):
             # Drawer toggle button (always visible, enabled only on Home page)
-            drawer_button = ui.button(
-                icon="menu",
-                on_click=drawer_toggle_callback if drawer_toggle_callback else lambda: None,
-            ).props("flat round dense text-color=white").tooltip("Toggle toolbar drawer")
+            # drawer_button = ui.button(
+            #     icon="menu",
+            #     on_click=drawer_toggle_callback if drawer_toggle_callback else lambda: None,
+            # ).props("flat round dense text-color=white").tooltip("Toggle toolbar drawer")
             
-            if drawer_toggle_callback is None:
-                drawer_button.disable()
+            # if drawer_toggle_callback is None:
+            #     drawer_button.disable()
             
-            ui.label("KymFlow").classes("text-2xl font-bold text-white")
+            ui.label("KymFlow").classes("text-xl font-bold text-white")
             
-            home_button = ui.button(
+            ui.button(
                 "Home",
                 on_click=lambda: _navigate("/"),
             ).props("flat text-color=white")
             
-            # COMMENTED OUT: Batch button removed
-            # batch_button = ui.button(
-            #     "Batch",
-            #     on_click=lambda: _navigate("/batch"),
-            # ).props("flat text-color=white")
-            
-            about_button = ui.button(
-                "About",
-                on_click=lambda: _navigate("/about"),
+            ui.button(
+                "Batch",
+                on_click=lambda: _navigate("/batch"),
             ).props("flat text-color=white")
+            
+            ui.button(
+                "Pool",
+                on_click=lambda: _navigate("/pool"),
+            ).props("flat text-color=white")
+            
+            # COMMENTED OUT: About button removed - About tab is now in drawer
+            # about_button = ui.button(
+            #     "About",
+            #     on_click=lambda: _navigate("/about"),
+            # ).props("flat text-color=white")
         
         # Right side: Documentation, GitHub and theme buttons
         with ui.row().classes("items-center gap-2"):
@@ -86,7 +91,7 @@ def build_header(context: AppContext, dark_mode, drawer_toggle_callback: Optiona
             
             # GitHub button (as clickable image)
             github_icon = ui.image("https://cdn.simpleicons.org/github/ffffff").classes(
-                "w-6 h-6 cursor-pointer"
+                "w-5 h-5 cursor-pointer"
             )
             github_icon.on(
                 "click",
@@ -117,6 +122,36 @@ def inject_global_styles() -> None:
 /* Shift expansion header row left in drawer to align with content body */
 .q-drawer .q-expansion-item__container .q-item {
     margin-left: -2rem;  /* -1rem (16px) to shift header row left to align with content */
+}
+
+/* Header height customization - adjust HEADER_HEIGHT value to change toolbar height */
+:root {
+    --kymflow-header-height: 48px;  /* Default header height */
+}
+.q-header {
+    min-height: var(--kymflow-header-height) !important;
+    height: var(--kymflow-header-height) !important;
+    display: flex !important;
+    align-items: center !important;
+}
+.q-header .q-toolbar {
+    min-height: var(--kymflow-header-height) !important;
+    height: var(--kymflow-header-height) !important;
+    padding: 0 12px;  /* Reduced horizontal padding for more compact look */
+    display: flex !important;
+    align-items: center !important;
+}
+/* Ensure all header content is vertically centered */
+.q-header .q-btn,
+.q-header .q-img,
+.q-header .q-label {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+/* Reduce line-height for label to prevent overflow */
+.q-header .q-label {
+    line-height: 1.2 !important;
 }
 </style>
 """

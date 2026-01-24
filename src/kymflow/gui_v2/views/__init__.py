@@ -2,6 +2,7 @@
 """Thin view wrappers around nicewidgets / v1 components."""
 
 # Views
+from kymflow.gui_v2.views.about_tab_view import AboutTabView
 from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 from kymflow.gui_v2.views.contrast_view import ContrastView
 from kymflow.gui_v2.views.drawer_view import DrawerView
@@ -30,6 +31,7 @@ from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
 
 __all__ = [
     # Views
+    "AboutTabView",
     "AnalysisToolbarView",
     "ContrastView",
     "DrawerView",

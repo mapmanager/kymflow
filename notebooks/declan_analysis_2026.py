@@ -68,7 +68,7 @@ def analyze_velocity_events(path: str) -> None:
         success = ka.save_analysis()
         logger.info(f'saved analysis: {success}')
 
-        break
+        # break
 
 def analyze_stalls(path: str) -> None:
     depth = 2

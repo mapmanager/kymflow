@@ -6,3 +6,10 @@ This package provides a thin NiceGUI UI layer that:
 - uses an explicit EventBus for clean signal flow logging
 - keeps views dumb and controllers responsible for coordination
 """
+
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("kymflow")
+except PackageNotFoundError:  # running from source without install
+    __version__ = "0.0.0+local"

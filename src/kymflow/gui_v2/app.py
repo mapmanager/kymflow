@@ -24,8 +24,9 @@ from kymflow.gui_v2.navigation import inject_global_styles
 from kymflow.gui_v2.bus import BusConfig, get_event_bus
 from kymflow.gui_v2.events_folder import FolderChosen
 from kymflow.gui_v2.page_cache import cache_page, get_cached_page, get_stable_session_id
-from kymflow.gui_v2.pages.about_page import AboutPage
+from kymflow.gui_v2.pages.batch_page import BatchPage
 from kymflow.gui_v2.pages.home_page import HomePage
+from kymflow.gui_v2.pages.pool_page import PoolPage
 
 logger = get_logger(__name__)
 
@@ -69,7 +70,8 @@ def home() -> None:
         page = cached_page
     else:
         # Create new page instance and cache it
-        bus = get_event_bus(BusConfig(trace=True))
+        # bus = get_event_bus(BusConfig(trace=True))
+        bus = get_event_bus()
         page = HomePage(context, bus)
         cache_page(session_id, "/", page)
         logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
@@ -95,34 +97,66 @@ def home() -> None:
             logger.warning(f"DEV_FOLDER does not exist: {DEV_FOLDER}")
 
 
-@ui.page("/about")
-def about() -> None:
-    """About route for v2 GUI.
+@ui.page("/batch")
+def batch() -> None:
+    """Batch route for v2 GUI.
 
-    Displays version information and application logs. Uses cached page
-    instances to prevent recreation on navigation.
+    Uses cached page instances to prevent recreation on navigation.
+    Each browser tab/window gets its own isolated session.
     """
-    ui.page_title("KymFlow - About")
+    ui.page_title("KymFlow - Batch")
     inject_global_styles()
 
     # Get stable session ID (persists across navigations)
     session_id = get_stable_session_id()
 
     # Get or create cached page instance
-    cached_page = get_cached_page(session_id, "/about")
+    cached_page = get_cached_page(session_id, "/batch")
     if cached_page is not None:
         # Reuse cached page
-        logger.debug(f"Reusing cached AboutPage for session {session_id[:8]}...")
+        logger.debug(f"Reusing cached BatchPage for session {session_id[:8]}...")
         page = cached_page
     else:
         # Create new page instance and cache it
-        bus = get_event_bus(BusConfig(trace=False))
-        page = AboutPage(context, bus)
-        cache_page(session_id, "/about", page)
-        logger.debug(f"Created and cached new AboutPage for session {session_id[:8]}...")
+        # bus = get_event_bus(BusConfig(trace=False))
+        bus = get_event_bus()
+        page = BatchPage(context, bus)
+        cache_page(session_id, "/batch", page)
+        logger.debug(f"Created and cached new BatchPage for session {session_id[:8]}...")
 
     # Render the page (creates fresh UI elements each time)
-    page.render(page_title="KymFlow - About")
+    page.render(page_title="KymFlow - Batch")
+
+
+@ui.page("/pool")
+def pool() -> None:
+    """Pool route for v2 GUI.
+
+    Uses cached page instances to prevent recreation on navigation.
+    Each browser tab/window gets its own isolated session.
+    """
+    ui.page_title("KymFlow - Pool")
+    inject_global_styles()
+
+    # Get stable session ID (persists across navigations)
+    session_id = get_stable_session_id()
+
+    # Get or create cached page instance
+    cached_page = get_cached_page(session_id, "/pool")
+    if cached_page is not None:
+        # Reuse cached page
+        logger.debug(f"Reusing cached PoolPage for session {session_id[:8]}...")
+        page = cached_page
+    else:
+        # Create new page instance and cache it
+        # bus = get_event_bus(BusConfig(trace=False))
+        bus = get_event_bus()
+        page = PoolPage(context, bus)
+        cache_page(session_id, "/pool", page)
+        logger.debug(f"Created and cached new PoolPage for session {session_id[:8]}...")
+
+    # Render the page (creates fresh UI elements each time)
+    page.render(page_title="KymFlow - Pool")
 
 
 def main(*, reload: bool | None = None, native: bool | None = None) -> None:

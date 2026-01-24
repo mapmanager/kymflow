@@ -541,39 +541,41 @@ def _add_single_roi_line_plot(
         )
 
         # Add stall analysis overlays
-        stall_analysis = kym_analysis.get_stall_analysis(roi_id)
-        if stall_analysis is not None and stall_analysis.stalls:
-            n_time = len(analysis_time_values)
-            for stall in stall_analysis.stalls:
-                if not (0 <= stall.bin_start < n_time and 0 <= stall.bin_stop < n_time):
-                    logger.warning(
-                        "Skipping out-of-range stall for ROI %s: [%s, %s] (time_len=%s)",
-                        roi_id,
-                        stall.bin_start,
-                        stall.bin_stop,
-                        n_time,
+        logger.warning('turned of stall analysis plot')
+        if 0:
+            stall_analysis = kym_analysis.get_stall_analysis(roi_id)
+            if stall_analysis is not None and stall_analysis.stalls:
+                n_time = len(analysis_time_values)
+                for stall in stall_analysis.stalls:
+                    if not (0 <= stall.bin_start < n_time and 0 <= stall.bin_stop < n_time):
+                        logger.warning(
+                            "Skipping out-of-range stall for ROI %s: [%s, %s] (time_len=%s)",
+                            roi_id,
+                            stall.bin_start,
+                            stall.bin_stop,
+                            n_time,
+                        )
+                        continue
+
+                    x0 = float(analysis_time_values[stall.bin_start])
+                    x1 = float(analysis_time_values[stall.bin_stop])
+                    if x1 < x0:
+                        x0, x1 = x1, x0
+
+                    # Use yref with domain so rectangles span the full height of the row
+                    fig.add_shape(
+                        type="rect",
+                        xref=xref,
+                        yref=f"{yref} domain",
+                        x0=x0,
+                        x1=x1,
+                        y0=0,
+                        y1=1,
+                        fillcolor="cyan",
+                        opacity=0.25,
+                        line_width=0,
+                        layer="below",
                     )
-                    continue
-
-                x0 = float(analysis_time_values[stall.bin_start])
-                x1 = float(analysis_time_values[stall.bin_stop])
-                if x1 < x0:
-                    x0, x1 = x1, x0
-
-                # Use yref with domain so rectangles span the full height of the row
-                fig.add_shape(
-                    type="rect",
-                    xref=xref,
-                    yref=f"{yref} domain",
-                    x0=x0,
-                    x1=x1,
-                    y0=0,
-                    y1=1,
-                    fillcolor="cyan",
-                    opacity=0.25,
-                    line_width=0,
-                    layer="below",
-                )
     else:
         # No analysis data - show message
         fig.add_annotation(
@@ -610,6 +612,7 @@ def _add_velocity_event_overlays(
     velocity_events = kym_analysis.get_velocity_events(roi_id)
     # logger.warning(f'adding velocity events for roi {roi_id}: {len(velocity_events)}')
     if velocity_events is None or len(velocity_events) == 0:
+        logger.warning(f'no velocity events for roi {roi_id}')
         return
     
     # Get time range for validation
@@ -669,12 +672,15 @@ def _add_velocity_event_overlays(
         
         # Get color based on event_type
         event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
-        event_color = "rgba(255, 0, 0, 0.5)"
+        # event_color = "rgba(255, 0, 0, 0.5)"
 
-        logger.warning(f'adding velocity event for roi {roi_id}: {event.event_type} color:{event_color}')
-        logger.info(f'x0:{x0} x1:{x1} y0:0 y1:1')
+        logger.warning(f'added velocity event for roi {roi_id}:')
+        logger.warning(f'  event_type:"{event.event_type}"')
+        logger.warning(f'  t_start:{t_start} t_end:{t_end_plot}')
+        logger.warning(f'  x0:{x0} x1:{x1} y0:0 y1:1')
+        logger.warning(f'  color:{event_color}')
 
-        # Add rectangle shape
+        # Add rectangle shape for velocity event overlay
         fig.add_shape(
             type="rect",
             xref=xref,
@@ -684,8 +690,7 @@ def _add_velocity_event_overlays(
             y0=0,
             y1=1,
             fillcolor=event_color,
-            opacity=0.25,
-            line_width=2,
+            line_width=0,
             layer="below",
         )
 
@@ -938,7 +943,8 @@ def plot_image_line_plotly_v3(
     grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
     
     # Configurable plot height
-    plot_height = 600
+    plot_height = 300
+    logger.warning(f'HARD CODING plot_height: {plot_height}')
 
     # Determine number of rows: 1 for image + N for line plots
     if selected_roi_id is not None and isinstance(selected_roi_id, int):
@@ -1054,6 +1060,7 @@ def plot_image_line_plotly_v3(
         kym_analysis = kf.get_kym_analysis()
         for idx, roi_id in enumerate(selected_roi_id):
             row_num = 2 + idx  # Row 1 is image, rows 2+ are line plots
+            
             _add_single_roi_line_plot(
                 fig,
                 kym_analysis,

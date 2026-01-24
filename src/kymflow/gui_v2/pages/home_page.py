@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from nicegui import ui
 
@@ -24,6 +24,7 @@ from kymflow.gui_v2.controllers import (
 from kymflow.gui_v2.events import SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.views import (
+    AboutTabView,
     AnalysisToolbarBindings,
     AnalysisToolbarView,
     ContrastBindings,
@@ -105,7 +106,7 @@ class HomePage(BasePage):
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
 
-        # Drawer toolbar views (duplicates for left drawer)
+        # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
             on_analysis_start=bus.emit, on_analysis_cancel=bus.emit
         )
@@ -119,14 +120,15 @@ class HomePage(BasePage):
             on_filter_change=self._on_drawer_filter_change,
             on_full_zoom=self._on_drawer_full_zoom,
         )
-        # Drawer metadata views (duplicates for drawer Metadata tab)
+        # Splitter pane metadata views
         self._drawer_metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
         self._drawer_metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
         self._drawer_metadata_tab_view = MetadataTabView(
             self._drawer_metadata_experimental_view,
             self._drawer_metadata_header_view,
         )
-        # Drawer view (organizes all drawer content)
+        self._drawer_about_tab_view = AboutTabView()
+        # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
             save_buttons_view=self._drawer_save_buttons_view,
             analysis_toolbar_view=self._drawer_analysis_toolbar_view,
@@ -134,6 +136,7 @@ class HomePage(BasePage):
             contrast_view=self._drawer_contrast_view,
             line_plot_controls_view=self._drawer_line_plot_controls_view,
             metadata_tab_view=self._drawer_metadata_tab_view,
+            about_tab_view=self._drawer_about_tab_view,
         )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None
@@ -143,9 +146,6 @@ class HomePage(BasePage):
         self._drawer_line_plot_controls_bindings: LinePlotControlsBindings | None = None
         self._drawer_metadata_experimental_bindings: MetadataExperimentalBindings | None = None
         self._drawer_metadata_header_bindings: MetadataHeaderBindings | None = None
-
-        # Drawer UI element
-        self._left_drawer: Optional[ui.drawer] = None
 
         # Per-client state tracking
         self._restored_once: bool = False
@@ -197,7 +197,7 @@ class HomePage(BasePage):
             self.bus, self._image_line_viewer
         )
 
-        # Drawer toolbar bindings (duplicates for left drawer)
+        # Splitter pane toolbar bindings
         self._drawer_analysis_toolbar_bindings = AnalysisToolbarBindings(
             self.bus, self._drawer_analysis_toolbar_view
         )
@@ -231,7 +231,7 @@ class HomePage(BasePage):
         self._setup_complete = True
 
     def _on_drawer_stall_analysis_complete(self) -> None:
-        """Callback when drawer stall analysis completes - triggers plot update."""
+        """Callback when splitter pane stall analysis completes - triggers plot update."""
         # Trigger plot re-render by calling set_selected_roi with current ROI
         # This will cause the plot to refresh with the new stall analysis data
         current_roi = self.context.app_state.selected_roi_id
@@ -239,49 +239,85 @@ class HomePage(BasePage):
             self._image_line_viewer.set_selected_roi(current_roi)
 
     def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
-        """Callback when drawer filter controls change - applies filters to plot."""
+        """Callback when splitter pane filter controls change - applies filters to plot."""
         self._image_line_viewer.apply_filters(remove_outliers, median_filter)
 
     def _on_drawer_full_zoom(self) -> None:
-        """Callback when drawer full zoom button is clicked - resets plot zoom."""
+        """Callback when splitter pane full zoom button is clicked - resets plot zoom."""
         self._image_line_viewer.reset_zoom()
 
     def render(self, *, page_title: str) -> None:
-        """Override render to create drawer at page level before column.
+        """Override render to create splitter layout at page level.
 
-        Drawers must be top-level layout elements (direct children of page),
-        not nested inside columns. So we create the drawer first, then proceed
-        with the normal render flow.
+        The splitter divides the page into two panes:
+        - Left pane (before): Contains DrawerView with tabs and toolbars
+        - Right pane (after): Contains main page content (folder selector, file table, viewer)
+
+        Snap positions are percentages for the LEFT pane (before):
+        - CLOSED = 6 (icon tabs always visible, minimum width)
         """
         ui.page_title(page_title)
 
         dark_mode = self.context.init_dark_mode_for_page()
         from kymflow.gui_v2.navigation import build_header
         
-        # Pass drawer toggle callback to header (drawer will be created after header)
-        def drawer_toggle_callback() -> None:
-            """Toggle the drawer if it exists."""
-            if self._left_drawer:
-                self._left_drawer.toggle()
-        
-        build_header(self.context, dark_mode, drawer_toggle_callback=drawer_toggle_callback)
+        # Build header without drawer toggle (no drawer needed with splitter)
+        build_header(self.context, dark_mode, drawer_toggle_callback=None)
 
-        # Create drawer using DrawerView component
-        self._left_drawer = self._drawer_view.render()
-        
-        # Initialize drawer views with current state
-        self._drawer_view.initialize_views(
-            current_file=self.context.app_state.selected_file,
-            current_roi=self.context.app_state.selected_roi_id,
-            theme_mode=self.context.app_state.theme_mode,
-        )
+        # Add CSS for splitter handle container
+        ui.add_css("""
+            .handle_wrap {
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        """)
 
-        # Now proceed with normal render flow (column + build)
-        with ui.column().classes("w-full p-4 gap-4"):
-            # Ensure setup is called once per client before building
-            self._ensure_setup()
-            # build() creates fresh UI elements in the new container context
-            self.build()
+        # Snap positions are percentages for the LEFT pane (before)
+        CLOSED = 6
+        OPEN_DEFAULT = 28
+        last_open = {'value': OPEN_DEFAULT}
+
+        # Create splitter layout
+        with ui.splitter(value=CLOSED, limits=(CLOSED, 70)).classes('w-full h-screen') as splitter:
+            def ensure_open() -> None:
+                """If the left pane is collapsed, restore it to a reasonable open width."""
+                if splitter.value <= (CLOSED + 2):
+                    splitter.value = last_open['value']
+
+            # LEFT: Splitter pane with tabs and toolbars
+            with splitter.before:
+                # Render drawer view content into splitter before pane
+                self._drawer_view.render(on_tab_click=ensure_open)
+                
+                # Initialize drawer views with current state
+                self._drawer_view.initialize_views(
+                    current_file=self.context.app_state.selected_file,
+                    current_roi=self.context.app_state.selected_roi_id,
+                    theme_mode=self.context.app_state.theme_mode,
+                )
+
+            # RIGHT: Main page content
+            with splitter.after:
+                with ui.column().classes("w-full p-4 gap-4"):
+                    # Ensure setup is called once per client before building
+                    self._ensure_setup()
+                    # build() creates fresh UI elements in the new container context
+                    self.build()
+
+            # SEPARATOR: toggle button lives on the handle
+            with splitter.separator:
+                with ui.element('div').classes('handle_wrap'):
+                    def toggle_snap() -> None:
+                        """If open-ish, remember current width and close; else reopen to last width."""
+                        if splitter.value > (CLOSED + 2):
+                            last_open['value'] = splitter.value
+                            splitter.value = CLOSED
+                        else:
+                            splitter.value = last_open['value']
+
+                    ui.button(icon='chevron_left', on_click=toggle_snap).props('flat dense')
 
     def build(self) -> None:
         """Build the Home page UI.
@@ -298,7 +334,8 @@ class HomePage(BasePage):
         self._folder_view.render(initial_folder=initial_folder)
 
         # File table SECOND (creates grid ui here) - in disclosure triangle
-        with ui.expansion("Files", value=True).classes("w-full"):
+        # with ui.expansion("Files", value=True).classes("w-full"):
+        if 1:
             self._table_view.render()
 
             # Populate with current state (if already loaded, shows immediately)

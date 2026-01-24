@@ -42,11 +42,11 @@ def test_clear_session_pages() -> None:
     """Clearing a session should remove only that session's cached pages."""
     page_cache._PAGE_CACHE.clear()
     page_cache.cache_page("session-1", "/", object())
-    page_cache.cache_page("session-1", "/about", object())
+    page_cache.cache_page("session-1", "/test", object())
     page_cache.cache_page("session-2", "/", object())
 
     page_cache.clear_session_pages("session-1")
 
     assert page_cache.get_cached_page("session-1", "/") is None
-    assert page_cache.get_cached_page("session-1", "/about") is None
+    assert page_cache.get_cached_page("session-1", "/test") is None
     assert page_cache.get_cached_page("session-2", "/") is not None
