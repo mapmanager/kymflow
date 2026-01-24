@@ -12,6 +12,7 @@ from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers import (
     AnalysisController,
     AppStateBridgeController,
+    EventSelectionController,
     FileSelectionController,
     FileTablePersistenceController,
     FolderController,
@@ -35,6 +36,8 @@ from kymflow.gui_v2.views import (
     FolderSelectorView,
     ImageLineViewerBindings,
     ImageLineViewerView,
+    KymEventBindings,
+    KymEventView,
     LinePlotControlsBindings,
     LinePlotControlsView,
     MetadataExperimentalBindings,
@@ -92,6 +95,7 @@ class HomePage(BasePage):
         self._folder_controller: FolderController | None = None
         self._file_selection_controller: FileSelectionController | None = None
         self._roi_selection_controller: ROISelectionController | None = None
+        self._event_selection_controller: EventSelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
         self._metadata_controller: MetadataController | None = None
         self._analysis_controller: AnalysisController | None = None
@@ -103,8 +107,10 @@ class HomePage(BasePage):
         self._folder_view = FolderSelectorView(bus, context.app_state)
         self._table_view = FileTableView(on_selected=bus.emit, selection_mode="single")
         self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
+        self._event_view = KymEventView(on_selected=bus.emit, selection_mode="single")
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
+        self._event_bindings: KymEventBindings | None = None
 
         # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
@@ -150,6 +156,8 @@ class HomePage(BasePage):
         # Per-client state tracking
         self._restored_once: bool = False
         self._setup_complete: bool = False
+        self._full_zoom_shortcut_registered: bool = False
+        self._full_zoom_shortcut_event: str = "kymflow_full_zoom_enter"
 
     def _ensure_setup(self) -> None:
         """Ensure controllers and bindings are set up once per client.
@@ -167,6 +175,9 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._roi_selection_controller = ROISelectionController(
+            self.context.app_state, self.bus
+        )
+        self._event_selection_controller = EventSelectionController(
             self.context.app_state, self.bus
         )
         self._image_display_controller = ImageDisplayController(
@@ -196,6 +207,7 @@ class HomePage(BasePage):
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
         )
+        self._event_bindings = KymEventBindings(self.bus, self._event_view)
 
         # Splitter pane toolbar bindings
         self._drawer_analysis_toolbar_bindings = AnalysisToolbarBindings(
@@ -246,6 +258,43 @@ class HomePage(BasePage):
         """Callback when splitter pane full zoom button is clicked - resets plot zoom."""
         self._image_line_viewer.reset_zoom()
 
+    def _on_full_zoom_shortcut(self, _event) -> None:
+        """Handle Enter/Return full-zoom shortcut when not editing."""
+        if (
+            self.context.app_state.selected_file is None
+            or self.context.app_state.selected_roi_id is None
+        ):
+            return
+        self._image_line_viewer.reset_zoom()
+
+    def _register_full_zoom_shortcut(self) -> None:
+        """Register a global Enter/Return shortcut for full zoom (unless editing)."""
+        if self._full_zoom_shortcut_registered:
+            return
+        self._full_zoom_shortcut_registered = True
+        ui.on(self._full_zoom_shortcut_event, self._on_full_zoom_shortcut)
+        ui.run_javascript(
+            """
+(function() {
+  if (window._kymflow_full_zoom_listener) return;
+  window._kymflow_full_zoom_listener = true;
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const active = document.activeElement;
+    const tag = active ? active.tagName : '';
+    const isEditable = !!active && (
+      active.isContentEditable ||
+      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+      (active.classList && active.classList.contains('ag-cell-edit-input')) ||
+      (active.closest && (active.closest('.ag-cell-inline-editing') || active.closest('.ag-cell-editor')))
+    );
+    if (isEditable) return;
+    emitEvent('kymflow_full_zoom_enter', {});
+  });
+})();
+            """
+        )
+
     def render(self, *, page_title: str) -> None:
         """Override render to create splitter layout at page level.
 
@@ -263,6 +312,7 @@ class HomePage(BasePage):
         
         # Build header without drawer toggle (no drawer needed with splitter)
         build_header(self.context, dark_mode, drawer_toggle_callback=None)
+        self._register_full_zoom_shortcut()
 
         # Add CSS for splitter handle container
         ui.add_css("""
@@ -364,6 +414,16 @@ class HomePage(BasePage):
             if current_roi is not None:
                 self._image_line_viewer.set_selected_roi(current_roi)
             self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+
+        if 1:
+            self._event_view.render()
+            current_file = self.context.app_state.selected_file
+            if current_file is not None:
+                report = current_file.get_kym_analysis().get_velocity_report()
+                self._event_view.set_events(report)
+            current_roi = self.context.app_state.selected_roi_id
+            if current_roi is not None:
+                self._event_view.set_selected_roi(current_roi)
 
         # Restore selection once per client (after UI is created)
         if not self._restored_once:

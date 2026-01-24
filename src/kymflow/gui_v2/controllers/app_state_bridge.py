@@ -14,6 +14,7 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import is_client_alive
 from kymflow.gui_v2.events import (
+    EventSelection,
     FileSelection,
     ROISelection,
     SelectionOrigin,
@@ -65,6 +66,7 @@ class AppStateBridgeController:
         self._app_state.on_file_list_changed(self._on_file_list_changed)
         self._app_state.on_selection_changed(self._on_selection_changed)
         self._app_state.on_roi_selection_changed(self._on_roi_selection_changed)
+        self._app_state.on_event_selection_changed(self._on_event_selection_changed)
         self._app_state.on_theme_changed(self._on_theme_changed)
         self._app_state.on_image_display_changed(self._on_image_display_changed)
         self._app_state.on_metadata_changed(self._on_metadata_changed)
@@ -104,7 +106,9 @@ class AppStateBridgeController:
             return
 
         # Convert origin to SelectionOrigin enum (None is valid)
-        selection_origin = origin if origin is not None else SelectionOrigin.EXTERNAL
+        selection_origin = (
+            origin if isinstance(origin, SelectionOrigin) else SelectionOrigin.EXTERNAL
+        )
 
         # Derive path from file if available
         path = str(kym_file.path) if kym_file and hasattr(kym_file, "path") else None
@@ -151,6 +155,39 @@ class AppStateBridgeController:
             ROISelection(
                 roi_id=roi_id,
                 origin=SelectionOrigin.EXTERNAL,
+                phase="state",
+            )
+        )
+
+    def _on_event_selection_changed(
+        self,
+        event_id: str | None,
+        roi_id: int | None,
+        path: str | None,
+        event,
+        options,
+        origin,
+    ) -> None:
+        """Handle AppState event selection change callback.
+
+        Emits EventSelection(phase="state") event with the current selection.
+        Checks client validity before emitting.
+        """
+        if not is_client_alive():
+            logger.debug(
+                f"[bridge] Skipping EventSelection emit - client deleted (bus={self._bus._client_id[:8]}...)"
+            )
+            return
+
+        selection_origin = origin if origin is not None else SelectionOrigin.EXTERNAL
+        self._bus.emit(
+            EventSelection(
+                event_id=event_id,
+                roi_id=roi_id,
+                path=path,
+                event=event,
+                options=options,
+                origin=selection_origin,
                 phase="state",
             )
         )

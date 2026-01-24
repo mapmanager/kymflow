@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -48,6 +48,29 @@ class RoiAnalysisMetadata:
     window_size: int | None = None
     analyzed_at: str | None = None  # ISO-8601 UTC string
     roi_revision_at_analysis: int = 0
+
+
+class VelocityReportRow(TypedDict):
+    event_id: str
+    roi_id: int
+    path: Optional[str]
+    event_type: str
+    i_start: int
+    t_start: float
+    i_peak: Optional[int]
+    t_peak: Optional[float]
+    i_end: Optional[int]
+    t_end: Optional[float]
+    score_peak: Optional[float]
+    baseline_before: Optional[float]
+    baseline_after: Optional[float]
+    strength: Optional[float]
+    nan_fraction_in_event: Optional[float]
+    n_valid_in_event: Optional[int]
+    duration_sec: Optional[float]
+    machine_type: str
+    user_type: str
+    note: str
 
 
 class KymAnalysis:
@@ -675,25 +698,34 @@ class KymAnalysis:
         """
         return self._velocity_events.get(roi_id)
 
-    def get_velocity_report(self, roi_id: int) -> Optional[list[dict]]:
-        """Return velocity report for roi_id, or None if not present.
+    def get_velocity_report(self, roi_id: int | None = None) -> list[VelocityReportRow]:
+        """Return velocity report rows for roi_id (or all ROIs if None).
 
         Args:
-            roi_id: Identifier of the ROI.
+            roi_id: Identifier of the ROI, or None for all ROIs.
 
         Returns:
-            Stored list of velocity report, or None if velocity report has not been run for this ROI (or results were not loaded).
+            Stored list of velocity report rows (possibly empty).
         """
-        events = self.get_velocity_events(roi_id)
-        if events is None:
-            return None
-        # return [event.to_dict() for event in events]
-        event_dicts = []
-        for event in events:
-            event_dict = event.to_dict()
-            event_dict['roi_id'] = roi_id
-            event_dict['path'] = self.acq_image.path
-            event_dicts.append(event_dict)
+        if roi_id is None:
+            roi_ids = sorted(self._velocity_events.keys())
+        else:
+            roi_ids = [roi_id]
+
+        event_dicts: list[VelocityReportRow] = []
+        path = str(self.acq_image.path) if self.acq_image.path is not None else None
+        for rid in roi_ids:
+            events = self.get_velocity_events(rid)
+            if not events:
+                continue
+            for event in events:
+                event_dict = event.to_dict()
+                i_end_value = event.i_end if event.i_end is not None else "None"
+                event_id = f"{rid}:{event.i_start}:{i_end_value}:{event.event_type}"
+                event_dict["event_id"] = event_id
+                event_dict["roi_id"] = rid
+                event_dict["path"] = path
+                event_dicts.append(event_dict)
         return event_dicts
 
     def __str__(self) -> str:

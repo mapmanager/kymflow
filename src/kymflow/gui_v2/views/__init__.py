@@ -9,6 +9,7 @@ from kymflow.gui_v2.views.drawer_view import DrawerView
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
+from kymflow.gui_v2.views.kym_event_view import KymEventView
 from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
@@ -22,6 +23,7 @@ from kymflow.gui_v2.views.analysis_toolbar_bindings import AnalysisToolbarBindin
 from kymflow.gui_v2.views.contrast_bindings import ContrastBindings
 from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
 from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
+from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
 from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
@@ -38,6 +40,7 @@ __all__ = [
     "FileTableView",
     "FolderSelectorView",
     "ImageLineViewerView",
+    "KymEventView",
     "LinePlotControlsView",
     "MetadataExperimentalView",
     "MetadataHeaderView",
@@ -50,6 +53,7 @@ __all__ = [
     "ContrastBindings",
     "FileTableBindings",
     "ImageLineViewerBindings",
+    "KymEventBindings",
     "LinePlotControlsBindings",
     "MetadataExperimentalBindings",
     "MetadataHeaderBindings",

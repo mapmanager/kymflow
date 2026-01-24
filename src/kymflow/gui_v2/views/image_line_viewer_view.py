@@ -21,11 +21,12 @@ from kymflow.core.plotting import (
     update_colorscale,
     update_contrast,
     reset_image_zoom,
+    update_xaxis_range,
 )
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import ROISelection, SelectionOrigin
+from kymflow.gui_v2.events import EventSelection, ROISelection, SelectionOrigin
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -218,6 +219,40 @@ class ImageLineViewerView:
             file: KymImage instance whose metadata was updated.
         """
         safe_call(self._set_metadata_impl, file)
+
+    def zoom_to_event(self, e: EventSelection) -> None:
+        """Zoom the x-axis to an event if options request it."""
+        safe_call(self._zoom_to_event_impl, e)
+
+    def _zoom_to_event_impl(self, e: EventSelection) -> None:
+        if e.event is None or e.options is None:
+            return
+        if not e.options.zoom:
+            return
+        if self._current_roi_id is None or e.roi_id != self._current_roi_id:
+            return
+        fig = self._current_figure
+        if fig is None or self._plot is None:
+            return
+        t_start = e.event.t_start
+        pad = float(e.options.zoom_pad_sec)
+        x_min = t_start - pad
+        x_max = t_start + pad
+        if self._original_time_values is not None and len(self._original_time_values) > 0:
+            x_min = max(x_min, float(self._original_time_values[0]))
+            x_max = min(x_max, float(self._original_time_values[-1]))
+        elif self._current_file is not None:
+            duration = self._current_file.image_dur
+            if duration is not None:
+                x_min = max(x_min, 0.0)
+                x_max = min(x_max, float(duration))
+        update_xaxis_range(fig, [x_min, x_max])
+        try:
+            self._plot.update_figure(fig)
+        except RuntimeError as ex:
+            logger.error(f"Error updating figure: {ex}")
+            if "deleted" not in str(ex).lower():
+                raise
 
     def _set_metadata_impl(self, file: KymImage) -> None:
         """Internal implementation of set_metadata."""

@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import FileSelection, ROISelection, ImageDisplayChange, MetadataUpdate
+from kymflow.gui_v2.events import (
+    EventSelection,
+    FileSelection,
+    ROISelection,
+    ImageDisplayChange,
+    MetadataUpdate,
+)
 from kymflow.gui_v2.events_state import ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
 
@@ -52,6 +58,7 @@ class ImageLineViewerBindings:
         # Subscribe to state change events
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(ROISelection, self._on_roi_changed)
+        bus.subscribe_state(EventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
         bus.subscribe_state(MetadataUpdate, self._on_metadata_changed)
@@ -69,6 +76,7 @@ class ImageLineViewerBindings:
 
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
         self._bus.unsubscribe_state(ROISelection, self._on_roi_changed)
+        self._bus.unsubscribe_state(EventSelection, self._on_event_selected)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_changed)
@@ -129,3 +137,6 @@ class ImageLineViewerBindings:
         """
         safe_call(self._view.set_metadata, e.file)
 
+    def _on_event_selected(self, e: EventSelection) -> None:
+        """Handle EventSelection change event."""
+        safe_call(self._view.zoom_to_event, e)

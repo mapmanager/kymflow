@@ -11,6 +11,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Literal, Any
 
 if TYPE_CHECKING:
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.gui_v2.state import ImageDisplayParams
 else:
@@ -31,12 +32,14 @@ class SelectionOrigin(str, Enum):
         IMAGE_VIEWER: Selection originated from image/line viewer (e.g., ROI dropdown).
         EXTERNAL: Selection originated from external source (e.g., programmatic update).
         RESTORE: Selection originated from restoring saved selection on page load.
+        EVENT_TABLE: Selection originated from the event table.
     """
 
     FILE_TABLE = "file_table"
     IMAGE_VIEWER = "image_viewer"
     EXTERNAL = "external"
     RESTORE = "restore"
+    EVENT_TABLE = "event_table"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +96,42 @@ class ROISelection:
     """
 
     roi_id: int | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class EventSelectionOptions:
+    """Options that accompany a velocity event selection."""
+
+    zoom: bool
+    zoom_pad_sec: float
+
+
+@dataclass(frozen=True, slots=True)
+class EventSelection:
+    """Velocity event selection event (intent or state phase).
+
+    For intent phase:
+        - Emitted by KymEventView when user selects an event row
+    For state phase:
+        - Emitted by AppStateBridge when AppState changes
+
+    Attributes:
+        event_id: Selected event ID, or None if selection cleared.
+        roi_id: ROI ID for the event, or None if selection cleared.
+        path: File path for the event, or None if selection cleared.
+        event: VelocityEvent instance, or None if selection cleared.
+        options: EventSelectionOptions for view-local behaviors.
+        origin: SelectionOrigin indicating where the selection came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    event_id: str | None
+    roi_id: int | None
+    path: str | None
+    event: "VelocityEvent | None"
+    options: EventSelectionOptions | None
     origin: SelectionOrigin
     phase: EventPhase
 

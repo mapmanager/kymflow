@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
@@ -38,6 +38,22 @@ FileListChangedHandler = Callable[[], None]
 MetadataChangedHandler = Callable[[KymImage], None]
 ThemeChangedHandler = Callable[[ThemeMode], None]
 ImageDisplayChangedHandler = Callable[[ImageDisplayParams], None]
+if TYPE_CHECKING:
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+    from kymflow.gui_v2.events import EventSelectionOptions
+
+
+EventSelectionChangedHandler = Callable[
+    [
+        Optional[str],
+        Optional[int],
+        Optional[str],
+        Optional["VelocityEvent"],
+        Optional["EventSelectionOptions"],
+        Optional[Any],
+    ],
+    None,
+]
 
 
 class AppState:
@@ -53,6 +69,12 @@ class AppState:
         self.files: AcqImageList[KymImage] = AcqImageList(path=Path("."), image_cls=KymImage, file_extension=".tif", depth=1)
         self.selected_file: Optional[KymImage] = None
         self.selected_roi_id: Optional[int] = None  # Currently selected ROI ID
+        self.selected_event_id: Optional[str] = None
+        self.selected_event_roi_id: Optional[int] = None
+        self.selected_event_path: Optional[str] = None
+        self.selected_event: Optional["VelocityEvent"] = None
+        self.selected_event_options: Optional["EventSelectionOptions"] = None
+        self.selected_event_origin: Optional[Any] = None
         self.theme_mode: ThemeMode = ThemeMode.DARK
         self.folder_depth: int = 1
         
@@ -63,6 +85,7 @@ class AppState:
         self._theme_changed_handlers: List[ThemeChangedHandler] = []
         self._image_display_changed_handlers: List[ImageDisplayChangedHandler] = []
         self._roi_selection_changed_handlers: List[Callable[[Optional[int]], None]] = []
+        self._event_selection_changed_handlers: List[EventSelectionChangedHandler] = []
     
     # Registration methods
     def on_file_list_changed(self, handler: FileListChangedHandler) -> None:
@@ -88,6 +111,10 @@ class AppState:
     def on_roi_selection_changed(self, handler: Callable[[Optional[int]], None]) -> None:
         """Register callback for ROI selection changes."""
         self._roi_selection_changed_handlers.append(handler)
+
+    def on_event_selection_changed(self, handler: EventSelectionChangedHandler) -> None:
+        """Register callback for event selection changes."""
+        self._event_selection_changed_handlers.append(handler)
     
     # State mutation methods that trigger callbacks
     def load_folder(self, folder: Path, depth: Optional[int] = None) -> None:
@@ -141,6 +168,16 @@ class AppState:
                 self.selected_roi_id = None
         else:
             self.selected_roi_id = None
+
+        # Clear selected event when file changes
+        self.select_event(
+            event_id=None,
+            roi_id=None,
+            path=None,
+            event=None,
+            options=None,
+            origin=origin,
+        )
         
         logger.info(f"select_file: calling selection_changed handlers for {kym_file}, selected_roi_id={self.selected_roi_id}")
         for handler in list(self._selection_changed_handlers):
@@ -189,3 +226,27 @@ class AppState:
             except Exception:
                 logger.exception("Error in roi_selection_changed handler")
 
+    def select_event(
+        self,
+        event_id: Optional[str],
+        roi_id: Optional[int],
+        path: Optional[str],
+        event: Optional["VelocityEvent"],
+        options: Optional["EventSelectionOptions"] = None,
+        origin: Optional[Any] = None,
+    ) -> None:
+        """Select a velocity event and notify handlers."""
+        self.selected_event_id = event_id
+        self.selected_event_roi_id = roi_id
+        self.selected_event_path = path
+        self.selected_event = event
+        self.selected_event_options = options
+        self.selected_event_origin = origin
+        logger.info(
+            f"select_event: calling event_selection_changed handlers for event_id={event_id}"
+        )
+        for handler in list(self._event_selection_changed_handlers):
+            try:
+                handler(event_id, roi_id, path, event, options, origin)
+            except Exception:
+                logger.exception("Error in event_selection_changed handler")
