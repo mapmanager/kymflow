@@ -195,6 +195,32 @@ class MetadataUpdate:
 
 
 @dataclass(frozen=True, slots=True)
+class VelocityEventUpdate:
+    """Velocity event update event (intent or state phase).
+
+    For intent phase:
+        - Emitted by KymEventView when user edits an event field
+    For state phase:
+        - Emitted by VelocityEventUpdateController after applying the update
+
+    Attributes:
+        event_id: Unique event id string.
+        path: File path for the event (optional).
+        field: Field name being updated (e.g., "user_type").
+        value: New value for the field.
+        origin: SelectionOrigin indicating where the update came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    event_id: str
+    path: str | None
+    field: str
+    value: Any
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
 class AnalysisStart:
     """Analysis start intent event.
 

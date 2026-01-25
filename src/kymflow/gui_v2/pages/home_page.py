@@ -21,6 +21,7 @@ from kymflow.gui_v2.controllers import (
     ROISelectionController,
     SaveController,
     TaskStateBridgeController,
+    VelocityEventUpdateController,
 )
 from kymflow.gui_v2.events import SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
@@ -98,6 +99,7 @@ class HomePage(BasePage):
         self._event_selection_controller: EventSelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
         self._metadata_controller: MetadataController | None = None
+        self._velocity_event_update_controller: VelocityEventUpdateController | None = None
         self._analysis_controller: AnalysisController | None = None
         self._save_controller: SaveController | None = None
         self._task_state_bridge: TaskStateBridgeController | None = None
@@ -105,9 +107,17 @@ class HomePage(BasePage):
 
         # View objects (created in __init__, UI elements created in build())
         self._folder_view = FolderSelectorView(bus, context.app_state)
-        self._table_view = FileTableView(on_selected=bus.emit, selection_mode="single")
+        self._table_view = FileTableView(
+            on_selected=bus.emit,
+            on_metadata_update=bus.emit,
+            selection_mode="single",
+        )
         self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
-        self._event_view = KymEventView(on_selected=bus.emit, selection_mode="single")
+        self._event_view = KymEventView(
+            on_selected=bus.emit,
+            on_event_update=bus.emit,
+            selection_mode="single",
+        )
         self._table_bindings: FileTableBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
         self._event_bindings: KymEventBindings | None = None
@@ -184,6 +194,9 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._metadata_controller = MetadataController(
+            self.context.app_state, self.bus
+        )
+        self._velocity_event_update_controller = VelocityEventUpdateController(
             self.context.app_state, self.bus
         )
         self._analysis_controller = AnalysisController(

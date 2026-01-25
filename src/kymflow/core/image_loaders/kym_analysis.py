@@ -8,7 +8,7 @@ must be explicitly defined before analysis.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypedDict
@@ -22,6 +22,7 @@ from kymflow.core.utils.logging import get_logger
 
 from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
 from kymflow.core.analysis.velocity_events.velocity_events import (
+    UserType,
     VelocityEvent,
     detect_events,
 )
@@ -697,6 +698,33 @@ class KymAnalysis:
             has not been run for this ROI (or results were not loaded).
         """
         return self._velocity_events.get(roi_id)
+
+    def update_velocity_event_field(self, event_id: str, field: str, value: Any) -> bool:
+        """Update a field on a velocity event by event_id.
+
+        Returns:
+            True if an event was updated, False if not found or invalid.
+        """
+        if field != "user_type":
+            logger.warning("Unsupported velocity event field update: %s", field)
+            return False
+
+        try:
+            new_user_type = UserType(str(value))
+        except Exception as exc:
+            logger.warning("Invalid user_type value %r: %s", value, exc)
+            return False
+
+        for roi_id, events in self._velocity_events.items():
+            for idx, event in enumerate(events):
+                i_end_value = event.i_end if event.i_end is not None else "None"
+                candidate_id = f"{roi_id}:{event.i_start}:{i_end_value}:{event.event_type}"
+                if candidate_id == event_id:
+                    events[idx] = replace(event, user_type=new_user_type)
+                    self._velocity_events[roi_id] = events
+                    self._dirty = True
+                    return True
+        return False
 
     def get_velocity_report(self, roi_id: int | None = None) -> list[VelocityReportRow]:
         """Return velocity report rows for roi_id (or all ROIs if None).

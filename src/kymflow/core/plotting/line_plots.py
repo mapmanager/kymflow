@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional, Union, Callable
+from dataclasses import dataclass
 
 import numpy as np
 import plotly.graph_objects as go
@@ -674,11 +675,11 @@ def _add_velocity_event_overlays(
         event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
         # event_color = "rgba(255, 0, 0, 0.5)"
 
-        logger.warning(f'added velocity event for roi {roi_id}:')
-        logger.warning(f'  event_type:"{event.event_type}"')
-        logger.warning(f'  t_start:{t_start} t_end:{t_end_plot}')
-        logger.warning(f'  x0:{x0} x1:{x1} y0:0 y1:1')
-        logger.warning(f'  color:{event_color}')
+        # logger.warning(f'added velocity event for roi {roi_id}:')
+        # logger.warning(f'  event_type:"{event.event_type}"')
+        # logger.warning(f'  t_start:{t_start} t_end:{t_end_plot}')
+        # logger.warning(f'  x0:{x0} x1:{x1} y0:0 y1:1')
+        # logger.warning(f'  color:{event_color}')
 
         # Add rectangle shape for velocity event overlay
         fig.add_shape(
@@ -891,6 +892,11 @@ def plot_image_line_plotly_v2(
 
     return fig
 
+# abb
+# @dataclass
+# class XAxisCallback:
+#     x0: float
+#     x1: float
 
 def plot_image_line_plotly_v3(
     kf: Optional[KymImage],
@@ -906,6 +912,7 @@ def plot_image_line_plotly_v3(
     theme: Optional[ThemeMode] = ThemeMode.LIGHT,
     transpose: bool = False,
     span_sec_if_no_end: float = 0.20,
+    # x_axis_callback: Optional[Callable[[XAxisCallback], None]] = None,
 ) -> go.Figure:
     """Create a figure with kymograph image and one or more line plots for multiple ROIs.
     

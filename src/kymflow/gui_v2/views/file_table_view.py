@@ -9,16 +9,15 @@ from __future__ import annotations
 
 from typing import Callable, Iterable, List, Optional
 
-from nicegui import ui
-
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.gui_v2.events import FileSelection, SelectionOrigin
+from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
 # from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
 from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
 
 Rows = List[dict[str, object]]
 OnSelected = Callable[[FileSelection], None]
+OnMetadataUpdate = Callable[[MetadataUpdate], None]
 
 
 def _col(
@@ -28,6 +27,7 @@ def _col(
     width: Optional[int] = None,
     hide: bool = False,
     cell_class: Optional[str] = None,
+    editable: bool = False,
 ) -> ColumnConfig:
     extra: dict[str, object] = {}
     if width is not None:
@@ -36,7 +36,12 @@ def _col(
         extra["hide"] = True
     if cell_class is not None:
         extra["cellClass"] = cell_class
-    return ColumnConfig(field=field, header=header, extra_grid_options=extra)
+    return ColumnConfig(
+        field=field,
+        header=header,
+        editable=editable,
+        extra_grid_options=extra,
+    )
 
 
 def _default_columns() -> list[ColumnConfig]:
@@ -52,7 +57,7 @@ def _default_columns() -> list[ColumnConfig]:
         _col("duration (s)", "duration (s)", width=140, cell_class="ag-cell-right"),
         _col("ms/line", "ms/line", width=120, cell_class="ag-cell-right"),
         _col("um/pixel", "um/pixel", width=120, cell_class="ag-cell-right"),
-        _col("note", "note", width=240),
+        _col("note", "note", width=240, editable=True),
         _col("path", "path", hide=True),  # keep for row id + selection, but hide
     ]
 
@@ -82,9 +87,11 @@ class FileTableView:
         self,
         *,
         on_selected: OnSelected,
+        on_metadata_update: OnMetadataUpdate | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._on_selected = on_selected
+        self._on_metadata_update = on_metadata_update
         self._selection_mode = selection_mode
 
         # self._grid: CustomAgGrid | None = None
@@ -94,6 +101,8 @@ class FileTableView:
         # Keep latest rows so if FileListChanged arrives before render(),
         # we can populate when render() happens.
         self._pending_rows: Rows = []
+        self._files: list[KymImage] = []
+        self._files_by_path: dict[str, KymImage] = {}
 
     def render(self) -> None:
         """Create the grid UI inside the current container.
@@ -126,13 +135,25 @@ class FileTableView:
             grid_config=grid_cfg,
         )
         self._grid.on_row_selected(self._on_row_selected)
+        self._grid.on_cell_edited(self._on_cell_edited)
 
     def set_files(self, files: Iterable[KymImage]) -> None:
         """Update table contents from KymImage list."""
-        rows: Rows = [f.getRowDict() for f in files]
+        files_list = list(files)
+        self._files = files_list
+        self._files_by_path = {
+            str(f.path): f for f in files_list if getattr(f, "path", None) is not None
+        }
+        rows: Rows = [f.getRowDict() for f in files_list]
         self._pending_rows = rows
         if self._grid is not None:
             self._grid.set_data(rows)
+
+    def refresh_rows(self) -> None:
+        """Refresh table rows from cached files (used after metadata updates)."""
+        if not self._files:
+            return
+        self.set_files(self._files)
 
     def set_selected_paths(self, paths: list[str], *, origin: SelectionOrigin) -> None:
         """Programmatically select rows by file path."""
@@ -154,6 +175,41 @@ class FileTableView:
             FileSelection(
                 path=str(path) if path else None,
                 file=None,  # Intent phase - file will be looked up by controller
+                origin=SelectionOrigin.FILE_TABLE,
+                phase="intent",
+            )
+        )
+
+    def _on_cell_edited(
+        self,
+        row_index: int,
+        field: str,
+        old_value: object,
+        new_value: object,
+        row_data: dict[str, object],
+    ) -> None:
+        """Handle user editing a cell."""
+        if self._on_metadata_update is None:
+            return
+        if field != "note":
+            return
+        path = row_data.get("path")
+        if not path:
+            return
+        file = self._files_by_path.get(str(path))
+        if file is None:
+            return
+        if new_value is None:
+            note_value = ""
+        else:
+            note_value = str(new_value)
+            if note_value.strip() == "-" and (old_value in (None, "", "-")):
+                note_value = ""
+        self._on_metadata_update(
+            MetadataUpdate(
+                file=file,
+                metadata_type="experimental",
+                fields={"note": note_value},
                 origin=SelectionOrigin.FILE_TABLE,
                 phase="intent",
             )

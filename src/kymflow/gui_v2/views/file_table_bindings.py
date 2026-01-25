@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import FileSelection, SelectionOrigin
+from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
 from kymflow.gui_v2.events_state import FileListChanged
 from kymflow.gui_v2.views.file_table_view import FileTableView
 
@@ -53,6 +53,7 @@ class FileTableBindings:
         # Subscribe to state change events
         bus.subscribe(FileListChanged, self._on_file_list_changed)
         bus.subscribe_state(FileSelection, self._on_selected_file_changed)
+        bus.subscribe_state(MetadataUpdate, self._on_metadata_update)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -67,6 +68,7 @@ class FileTableBindings:
 
         self._bus.unsubscribe(FileListChanged, self._on_file_list_changed)
         self._bus.unsubscribe_state(FileSelection, self._on_selected_file_changed)
+        self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_update)
         self._subscribed = False
 
     def _on_file_list_changed(self, e: FileListChanged) -> None:
@@ -106,3 +108,7 @@ class FileTableBindings:
                 safe_call(self._table.set_selected_paths, [str(path)], origin=SelectionOrigin.EXTERNAL)
             else:
                 safe_call(self._table.set_selected_paths, [], origin=SelectionOrigin.EXTERNAL)
+
+    def _on_metadata_update(self, e: MetadataUpdate) -> None:
+        """Handle metadata update events by refreshing table rows."""
+        safe_call(self._table.refresh_rows)

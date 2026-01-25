@@ -8,11 +8,12 @@ by ImageLineViewerBindings).
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict, Any
 
 import numpy as np
 import plotly.graph_objects as go
 from nicegui import ui
+from nicegui.events import GenericEventArguments  # for _on_relayout()
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
@@ -112,6 +113,58 @@ class ImageLineViewerView:
 
         # Plot with larger height to accommodate both subplots
         self._plot = ui.plotly(go.Figure()).classes("w-full")
+        # abb when implementing getting user drawrect/rect selection
+        # and setting start/stop of a single velocity event.
+        self._plot.on("plotly_relayout", self._on_plotly_relayout)
+
+    def _on_plotly_relayout(self, e: GenericEventArguments) -> None:
+        """
+        Handle Plotly relayout events.
+        
+        Use this to handle setting start/stop of a single velocity event.
+
+
+        This is the only way to get the selection x-range when the user is dragging a box.
+        The payload is a dictionary with the following keys:
+        - selections: list of selection dictionaries
+        - selections[0].x0: x-coordinate of the left edge of the selection
+        - selections[0].x1: x-coordinate of the right edge of the selection
+        - selections[0].y0: y-coordinate of the top edge of the selection
+        - selections[0].y1: y-coordinate of the bottom edge of the selection
+        - selections[0].type: type of the selection
+
+        If toolbar is in rect mode and user shift+click+drag,
+        then a new selection is created like [1], [2], [3], ... etc.
+        """
+
+        payload: Dict[str, Any] = e.args  # <-- dict
+
+        logger.info('=== in on_relayout() payload is:')
+        from pprint import pprint
+        pprint(payload)
+
+        x0, x1 = None, None  # default to no selection
+        if 'selections[0].x0' in payload.keys():
+            print('  update "selections[0].x0" found')
+            x0  = payload['selections[0].x0']
+            x1  = payload['selections[0].x1']
+            print(f"  -> update Selection: x-range = [{x0}, {x1}]")
+        elif 'selections' not in payload.keys():
+            # print('  no selection found')
+            return
+
+        # on new selection ?
+        if x0 is None and x1 is None:
+            selections = payload['selections'] 
+            if selections:
+                for _idx, selection in enumerate(selections):
+                    _type = selection['type']
+                    if _type != 'rect':
+                        # print(f'  -> ignoring selection type: {_type} (idx={_idx})')
+                        continue
+                    x0 = selection['x0']
+                    x1 = selection['x1']
+                    logger.info(f"  --> new Selection: {_type} x-range = [{x0}, {x1}] (idx={_idx})")
 
     def set_selected_file(self, file: Optional[KymImage]) -> None:
         """Update plot for new file.

@@ -12,6 +12,9 @@ from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
 from kymflow.gui_v2.controllers.save_controller import SaveController
 from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeController
+from kymflow.gui_v2.controllers.velocity_event_update_controller import (
+    VelocityEventUpdateController,
+)
 
 __all__ = [
     "AnalysisController",
@@ -25,4 +28,5 @@ __all__ = [
     "ROISelectionController",
     "SaveController",
     "TaskStateBridgeController",
+    "VelocityEventUpdateController",
 ]
