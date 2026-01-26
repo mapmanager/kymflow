@@ -285,7 +285,7 @@ def plot_image_line_plotly(
     x_label = kf.header.labels[0] if transpose else kf.header.labels[1]  # Time dimension
     y_label = kf.header.labels[1] if transpose else kf.header.labels[0]  # Space dimension
     fig.update_xaxes(
-        title_text=x_label,
+        title_text="",
         row=1,
         col=1,
         showgrid=True,

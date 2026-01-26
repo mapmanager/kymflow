@@ -139,12 +139,12 @@ if __name__ == "__main__":
 
     depth = 3
     path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download'
-    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download/14d Saline'
+    # path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download/14d Saline'
 
-    analyze_flow(path, depth)
+    # analyze_flow(path, depth)
 
     # analyze_stalls(path)
     
-    # analyze_velocity_events(path, depth)
+    analyze_velocity_events(path, depth)
     
     # plot_analysis(path)

@@ -134,6 +134,7 @@ class KymEventView:
                     selection_mode=self._selection_mode,  # type: ignore[arg-type]
                     height="16rem",
                     row_id_field="event_id",
+                    show_row_index=True,
                 )
                 self._grid = CustomAgGrid_v2(
                     data=self._pending_rows,

@@ -123,6 +123,7 @@ class FileTableView:
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
             height="24rem",
             row_id_field="path",
+            show_row_index=True,
         )
         # if hasattr(grid_cfg, "row_id_field"):
         #     setattr(grid_cfg, "row_id_field", "path")
