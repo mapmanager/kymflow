@@ -11,7 +11,8 @@ import json
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypedDict
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -112,6 +113,12 @@ class KymAnalysis:
         # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
         self._velocity_events: Dict[int, List[VelocityEvent]] = {}
         # Velocity events are computed on-demand from stored analysis values (e.g., velocity).
+        
+        # Runtime-only UUID mapping for stable event_id (not serialized)
+        # Maps: uuid -> (roi_id, index_in_list)
+        self._velocity_event_uuid_map: Dict[str, Tuple[int, int]] = {}
+        # Reverse mapping for O(1) lookup: (roi_id, index) -> uuid
+        self._velocity_event_uuid_reverse: Dict[Tuple[int, int], str] = {}
         
         # Always try to load analysis (handles path=None gracefully)
         self.load_analysis()
@@ -490,12 +497,20 @@ class KymAnalysis:
 
         # Load velocity events (optional; may be absent in older analysis JSON).
         self._velocity_events.clear()
+        self._velocity_event_uuid_map.clear()
+        self._velocity_event_uuid_reverse.clear()
         for roi_id_str, events_list in json_data.get("velocity_events", {}).items():
             try:
                 roi_id = int(roi_id_str)
-                self._velocity_events[roi_id] = [
+                events = [
                     VelocityEvent.from_dict(ev_dict) for ev_dict in events_list
                 ]
+                self._velocity_events[roi_id] = events
+                # Generate stable UUIDs for each event on load
+                for idx, _ in enumerate(events):
+                    uuid = str(uuid4())
+                    self._velocity_event_uuid_map[uuid] = (roi_id, idx)
+                    self._velocity_event_uuid_reverse[(roi_id, idx)] = uuid
             except Exception as e:
                 logger.warning(f"Skipping invalid velocity_events entry {roi_id_str}: {e}")
 
@@ -507,6 +522,16 @@ class KymAnalysis:
         self._stall_analysis = {
             rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
         }
+        # Remove events for deleted ROIs and clean up UUID mappings
+        removed_roi_ids = set(self._velocity_events.keys()) - current_roi_ids
+        for removed_roi_id in removed_roi_ids:
+            events = self._velocity_events.get(removed_roi_id, [])
+            for idx in range(len(events)):
+                uuid_key = (removed_roi_id, idx)
+                if uuid_key in self._velocity_event_uuid_reverse:
+                    uuid = self._velocity_event_uuid_reverse.pop(uuid_key)
+                    if uuid in self._velocity_event_uuid_map:
+                        del self._velocity_event_uuid_map[uuid]
         self._velocity_events = {
             rid: evs for rid, evs in self._velocity_events.items() if rid in current_roi_ids
         }
@@ -703,22 +728,44 @@ class KymAnalysis:
         return self._velocity_events.get(roi_id)
 
     def _velocity_event_id(self, roi_id: int, event: VelocityEvent) -> str:
-        """Generate a stable event_id for a velocity event."""
+        """Generate a stable event_id for a velocity event.
+        
+        DEPRECATED: This method is kept for backward compatibility but is no longer
+        used for event identification. Events now use UUID-based event_id.
+        """
         i_end_value = event.i_end if event.i_end is not None else "None"
         return f"{roi_id}:{event.i_start}:{i_end_value}:{event.event_type}"
 
-    def update_velocity_event_field(self, event_id: str, field: str, value: Any) -> bool:
+    def _find_event_by_uuid(self, event_id: str) -> tuple[int, int, VelocityEvent] | None:
+        """Find event by UUID event_id.
+        
+        Returns:
+            Tuple of (roi_id, index, event) if found, None otherwise.
+        """
+        if event_id not in self._velocity_event_uuid_map:
+            return None
+        roi_id, index = self._velocity_event_uuid_map[event_id]
+        events = self._velocity_events.get(roi_id)
+        if events is None or index >= len(events):
+            # Clean up stale mapping
+            del self._velocity_event_uuid_map[event_id]
+            if (roi_id, index) in self._velocity_event_uuid_reverse:
+                del self._velocity_event_uuid_reverse[(roi_id, index)]
+            return None
+        return (roi_id, index, events[index])
+
+    def update_velocity_event_field(self, event_id: str, field: str, value: Any) -> str | None:
         """Update a field on a velocity event by event_id.
 
         Returns:
-            True if an event was updated, False if not found or invalid.
+            New event_id if an event was updated, None if not found or invalid.
         """
         if field not in {"user_type", "t_start", "t_end"}:
             logger.warning('Unsupported velocity event update field: "%s"', field)
             logger.warning("  event_id: %s", event_id)
             logger.warning("  field: %s", field)
             logger.warning("  value: %s", value)
-            return False
+            return None
 
         new_user_type: UserType | None = None
         new_t_start: float | None = None
@@ -728,13 +775,13 @@ class KymAnalysis:
                 new_user_type = UserType(str(value))
             except Exception as exc:
                 logger.warning("Invalid user_type value %r: %s", value, exc)
-                return False
+                return None
         elif field == "t_start":
             try:
                 new_t_start = float(value)
             except Exception as exc:
                 logger.warning("Invalid t_start value %r: %s", value, exc)
-                return False
+                return None
         elif field == "t_end":
             if value is None:
                 new_t_end = None
@@ -743,49 +790,105 @@ class KymAnalysis:
                     new_t_end = float(value)
                 except Exception as exc:
                     logger.warning("Invalid t_end value %r: %s", value, exc)
-                    return False
+                    return None
 
-        for roi_id, events in self._velocity_events.items():
-            for idx, event in enumerate(events):
-                candidate_id = self._velocity_event_id(roi_id, event)
-                if candidate_id == event_id:
-                    seconds_per_line = float(self.acq_image.seconds_per_line)
-                    if field == "user_type":
-                        events[idx] = replace(event, user_type=new_user_type)
-                    elif field == "t_start":
-                        new_i_start = time_to_index(new_t_start, seconds_per_line)
-                        new_duration = (
-                            float(event.t_end) - float(new_t_start)
-                            if event.t_end is not None
-                            else None
-                        )
-                        events[idx] = replace(
-                            event,
-                            t_start=new_t_start,
-                            i_start=new_i_start,
-                            duration_sec=new_duration,
-                        )
-                    elif field == "t_end":
-                        new_i_end = (
-                            None
-                            if new_t_end is None
-                            else time_to_index(new_t_end, seconds_per_line)
-                        )
-                        new_duration = (
-                            None
-                            if new_t_end is None
-                            else float(new_t_end) - float(event.t_start)
-                        )
-                        events[idx] = replace(
-                            event,
-                            t_end=new_t_end,
-                            i_end=new_i_end,
-                            duration_sec=new_duration,
-                        )
-                    self._velocity_events[roi_id] = events
-                    self._dirty = True
-                    return True
-        return False
+        # Find event by UUID
+        result = self._find_event_by_uuid(event_id)
+        if result is None:
+            return None
+        roi_id, idx, event = result
+        
+        seconds_per_line = float(self.acq_image.seconds_per_line)
+        if field == "user_type":
+            events = self._velocity_events[roi_id]
+            events[idx] = replace(event, user_type=new_user_type)
+            self._velocity_events[roi_id] = events
+        elif field == "t_start":
+            new_i_start = time_to_index(new_t_start, seconds_per_line)
+            new_duration = (
+                float(event.t_end) - float(new_t_start)
+                if event.t_end is not None
+                else None
+            )
+            events = self._velocity_events[roi_id]
+            events[idx] = replace(
+                event,
+                t_start=new_t_start,
+                i_start=new_i_start,
+                duration_sec=new_duration,
+            )
+            self._velocity_events[roi_id] = events
+        elif field == "t_end":
+            new_i_end = (
+                None
+                if new_t_end is None
+                else time_to_index(new_t_end, seconds_per_line)
+            )
+            new_duration = (
+                None
+                if new_t_end is None
+                else float(new_t_end) - float(event.t_start)
+            )
+            events = self._velocity_events[roi_id]
+            events[idx] = replace(
+                event,
+                t_end=new_t_end,
+                i_end=new_i_end,
+                duration_sec=new_duration,
+            )
+            self._velocity_events[roi_id] = events
+        
+        self._dirty = True
+        # UUID doesn't change, return same event_id
+        return event_id
+
+    def update_velocity_event_range(self, event_id: str, t_start: float, t_end: float | None) -> str | None:
+        """Update both t_start and t_end atomically to avoid event_id mismatch.
+
+        When updating both t_start and t_end, the event_id changes after the first update,
+        causing the second update to fail. This method updates both in a single operation.
+
+        Returns:
+            New event_id if an event was updated, None if not found or invalid.
+        """
+        try:
+            new_t_start = float(t_start)
+            new_t_end = float(t_end) if t_end is not None else None
+        except (ValueError, TypeError) as exc:
+            logger.warning("Invalid t_start/t_end values: %s", exc)
+            return False
+
+        # Find event by UUID
+        result = self._find_event_by_uuid(event_id)
+        if result is None:
+            return None
+        roi_id, idx, event = result
+        
+        seconds_per_line = float(self.acq_image.seconds_per_line)
+        new_i_start = time_to_index(new_t_start, seconds_per_line)
+        new_i_end = (
+            None
+            if new_t_end is None
+            else time_to_index(new_t_end, seconds_per_line)
+        )
+        new_duration = (
+            None
+            if new_t_end is None
+            else float(new_t_end) - float(new_t_start)
+        )
+        events = self._velocity_events[roi_id]
+        events[idx] = replace(
+            event,
+            t_start=new_t_start,
+            i_start=new_i_start,
+            t_end=new_t_end,
+            i_end=new_i_end,
+            duration_sec=new_duration,
+        )
+        self._velocity_events[roi_id] = events
+        self._dirty = True
+        # UUID doesn't change, return same event_id
+        return event_id
 
     def add_velocity_event(
         self, roi_id: int, t_start: float, t_end: float | None = None
@@ -822,7 +925,8 @@ class KymAnalysis:
 
         # Create new event with defaults
         new_event = VelocityEvent(
-            event_type="baseline_drop",  # Default event type
+            # event_type="baseline_drop",  # Default event type
+            event_type="added",  # Default event type
             i_start=i_start,
             t_start=t_start,
             i_end=i_end,
@@ -844,26 +948,45 @@ class KymAnalysis:
         return event_id
 
     def delete_velocity_event(self, event_id: str) -> bool:
-        """Delete a velocity event by event_id.
+        """Delete a velocity event by UUID event_id.
 
         Args:
-            event_id: Unique event id string to delete.
+            event_id: UUID string to delete.
 
         Returns:
             True if an event was deleted, False if not found.
         """
-        for roi_id, events in self._velocity_events.items():
-            for idx, event in enumerate(events):
-                candidate_id = self._velocity_event_id(roi_id, event)
-                if candidate_id == event_id:
-                    # Remove the event from the list
-                    events.pop(idx)
-                    # Update the stored list (in case it was a reference)
-                    self._velocity_events[roi_id] = events
-                    # Mark dirty
-                    self._dirty = True
-                    return True
-        return False
+        # Find event by UUID
+        result = self._find_event_by_uuid(event_id)
+        if result is None:
+            return False
+        
+        roi_id, idx, _ = result
+        events = self._velocity_events[roi_id]
+        
+        # Remove the event from the list
+        events.pop(idx)
+        self._velocity_events[roi_id] = events
+        
+        # Clean up UUID mappings
+        if event_id in self._velocity_event_uuid_map:
+            del self._velocity_event_uuid_map[event_id]
+        if (roi_id, idx) in self._velocity_event_uuid_reverse:
+            del self._velocity_event_uuid_reverse[(roi_id, idx)]
+        
+        # Update UUID mappings for events after the deleted one (indices shifted)
+        # Rebuild reverse mapping for this ROI to fix indices
+        for new_idx in range(idx, len(events)):
+            old_key = (roi_id, new_idx + 1)
+            if old_key in self._velocity_event_uuid_reverse:
+                uuid = self._velocity_event_uuid_reverse.pop(old_key)
+                new_key = (roi_id, new_idx)
+                self._velocity_event_uuid_reverse[new_key] = uuid
+                self._velocity_event_uuid_map[uuid] = new_key
+        
+        # Mark dirty
+        self._dirty = True
+        return True
 
     def get_velocity_report(self, roi_id: int | None = None) -> list[VelocityReportRow]:
         """Return velocity report rows for roi_id (or all ROIs if None).
@@ -885,9 +1008,15 @@ class KymAnalysis:
             events = self.get_velocity_events(rid)
             if not events:
                 continue
-            for event in events:
+            for idx, event in enumerate(events):
                 event_dict = event.to_dict()
-                event_id = self._velocity_event_id(rid, event)
+                # Use UUID as event_id (stable, doesn't change when event is updated)
+                event_id = self._velocity_event_uuid_reverse.get((rid, idx))
+                if event_id is None:
+                    # Fallback: generate UUID if not found (shouldn't happen)
+                    event_id = str(uuid4())
+                    self._velocity_event_uuid_map[event_id] = (rid, idx)
+                    self._velocity_event_uuid_reverse[(rid, idx)] = event_id
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path

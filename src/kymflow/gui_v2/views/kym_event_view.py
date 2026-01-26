@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable, Iterable, List, Optional
 
 from nicegui import ui
@@ -73,7 +74,7 @@ def _default_columns() -> list[ColumnConfig]:
         _col("event_type", "Type", width=160),
         _col("t_start", "t_start", width=110, cell_class="ag-cell-right"),
         _col("t_end", "t_end", width=110, cell_class="ag-cell-right"),
-        _col("t_duration", "t_duration", width=110, cell_class="ag-cell-right"),
+        _col("duration_sec", "duration_sec", width=110, cell_class="ag-cell-right"),
         _col("strength", "strength", width=110, cell_class="ag-cell-right"),
         _col("event_id", "event_id", hide=True),
         _col("path", "path", hide=True),
@@ -117,6 +118,7 @@ class KymEventView:
         self._selected_event_roi_id: int | None = None
         self._selected_event_path: str | None = None
         self._current_file_path: str | None = None  # Track current file path from row data
+        self._file_path_label: ui.label | None = None  # Label showing current file name
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
@@ -124,6 +126,7 @@ class KymEventView:
         with ui.row().classes("w-full items-start gap-4"):
             with ui.column().classes("w-40 shrink-0"):
                 ui.label("Event Controls").classes("text-sm text-gray-500")
+                self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
                 ui.checkbox("Auto Zoom", value=self._zoom_enabled).on_value_change(
                     lambda e: self._set_zoom_enabled(bool(e.value))
                 )
@@ -134,20 +137,20 @@ class KymEventView:
                     self._set_range_button = ui.button(
                         "Set Start/Stop",
                         on_click=self._on_set_event_range_clicked,
-                    )
+                    ).props("dense")
                     self._cancel_range_button = ui.button(
                         "Cancel",
                         on_click=self._on_cancel_event_range_clicked,
-                    )
+                    ).props("dense")
                 with ui.row().classes("w-full gap-2"):
                     self._add_event_button = ui.button(
                         "Add Event",
                         on_click=self._on_add_event_clicked,
-                    )
+                    ).props("dense")
                     self._delete_event_button = ui.button(
                         "Delete Event",
                         on_click=self._on_delete_event_clicked,
-                    )
+                    ).props("dense")
                 self._update_range_button_state()
                 self._update_add_delete_button_state()
 
@@ -180,6 +183,11 @@ class KymEventView:
             first_path = self._all_rows[0].get("path")
             if first_path:
                 self._current_file_path = str(first_path)
+            else:
+                self._current_file_path = None
+        else:
+            self._current_file_path = None
+        self._update_file_path_label()
         self._apply_filter()
 
     def set_selected_event_ids(self, event_ids: list[str], *, origin: SelectionOrigin) -> None:
@@ -378,7 +386,7 @@ class KymEventView:
             return
         if self._selected_event_id is None:
             self._set_range_button.disable()
-            self._set_range_button.text = "Set Event Start/Stop"
+            # self._set_range_button.text = "Set Event Start/Stop"
             # self._set_range_button.props(remove="color")
             self._cancel_range_button.disable()
             # self._cancel_range_button.props(remove="color")
@@ -386,12 +394,12 @@ class KymEventView:
             return
         self._set_range_button.enable()
         if self._setting_kym_event_range_state:
-            self._set_range_button.text = "Set Event Start/Stop"
+            # self._set_range_button.text = "Set Event Start/Stop"
             # self._set_range_button.props("color=orange")
             self._cancel_range_button.enable()
             # self._cancel_range_button.props("color=orange")
         else:
-            self._set_range_button.text = "Set Event Start/Stop"
+            # self._set_range_button.text = "Set Event Start/Stop"
             # self._set_range_button.props(remove="color")
             self._cancel_range_button.disable()
             #  self._cancel_range_button.props(remove="color")
@@ -466,6 +474,19 @@ class KymEventView:
                 phase="intent",
             )
         )
+
+    def _update_file_path_label(self) -> None:
+        """Update the file path label with current file name (stem) or placeholder."""
+        if self._file_path_label is None:
+            return
+        if self._current_file_path:
+            try:
+                file_name = Path(self._current_file_path).stem
+                self._file_path_label.text = file_name
+            except (ValueError, TypeError):
+                self._file_path_label.text = "No file selected"
+        else:
+            self._file_path_label.text = "No file selected"
 
     def _update_add_delete_button_state(self) -> None:
         """Update Add/Delete button enable/disable state."""

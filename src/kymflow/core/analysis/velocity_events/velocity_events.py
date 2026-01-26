@@ -27,7 +27,7 @@ class UserType(str, Enum):
     OTHER = "other"
 
 
-EventType = Literal["baseline_drop", "nan_gap"]
+EventType = Literal["baseline_drop", "nan_gap", "added"]  # abb added "added" for new events by user
 RoundingMode = Literal["round", "floor", "ceil"]
 
 

@@ -106,6 +106,7 @@ class ImageLineViewerView:
         self._range_roi_id: Optional[int] = None
         self._range_path: Optional[str] = None
         self._pending_range_zoom: Optional[tuple[float, float]] = None
+        self._selected_event_id: str | None = None  # Track selected event for visual highlighting
 
     def render(self) -> None:
         """Create the viewer UI inside the current container.
@@ -390,34 +391,54 @@ class ImageLineViewerView:
         safe_call(self._zoom_to_event_impl, e)
 
     def _zoom_to_event_impl(self, e: EventSelection) -> None:
+        # Store selected event_id for visual highlighting (None clears selection)
+        old_selected = self._selected_event_id
+        self._selected_event_id = e.event_id
+        
+        # Early returns for invalid cases
         if e.event is None or e.options is None:
-            return
-        if not e.options.zoom:
+            # Update highlight if selection changed
+            if old_selected != e.event_id:
+                self._render_combined()
             return
         if self._current_roi_id is None or e.roi_id != self._current_roi_id:
+            # ROI mismatch - update highlight if selection changed
+            if old_selected != e.event_id:
+                self._render_combined()
             return
-        fig = self._current_figure
-        if fig is None or self._plot is None:
+        if self._current_figure is None or self._plot is None:
             return
-        t_start = e.event.t_start
-        pad = float(e.options.zoom_pad_sec)
-        x_min = t_start - pad
-        x_max = t_start + pad
-        if self._original_time_values is not None and len(self._original_time_values) > 0:
-            x_min = max(x_min, float(self._original_time_values[0]))
-            x_max = min(x_max, float(self._original_time_values[-1]))
-        elif self._current_file is not None:
-            duration = self._current_file.image_dur
-            if duration is not None:
-                x_min = max(x_min, 0.0)
-                x_max = min(x_max, float(duration))
-        update_xaxis_range(fig, [x_min, x_max])
-        try:
-            self._plot.update_figure(fig)
-        except RuntimeError as ex:
-            logger.error(f"Error updating figure: {ex}")
-            if "deleted" not in str(ex).lower():
-                raise
+        
+        # Always re-render to show highlight (if selection changed)
+        needs_render = (old_selected != e.event_id)
+        if needs_render:
+            self._render_combined()
+        
+        # If zoom is enabled, apply it as a fast partial update (axis range only)
+        # This is very fast and doesn't cause a full re-render
+        if e.options.zoom and e.event is not None:
+            t_start = e.event.t_start
+            pad = float(e.options.zoom_pad_sec)
+            x_min = t_start - pad
+            x_max = t_start + pad
+            if self._original_time_values is not None and len(self._original_time_values) > 0:
+                x_min = max(x_min, float(self._original_time_values[0]))
+                x_max = min(x_max, float(self._original_time_values[-1]))
+            elif self._current_file is not None:
+                duration = self._current_file.image_dur
+                if duration is not None:
+                    x_min = max(x_min, 0.0)
+                    x_max = min(x_max, float(duration))
+            
+            fig = self._current_figure
+            if fig is not None:
+                update_xaxis_range(fig, [x_min, x_max])
+                try:
+                    self._plot.update_figure(fig)
+                except RuntimeError as ex:
+                    logger.error(f"Error updating zoom: {ex}")
+                    if "deleted" not in str(ex).lower():
+                        raise
 
     def _set_metadata_impl(self, file: KymImage) -> None:
         """Internal implementation of set_metadata."""
@@ -437,6 +458,8 @@ class ImageLineViewerView:
         if kf is None:
             # Use set_options() which handles both setting options and calling update()
             self._roi_select.set_options({}, value=None)
+            # No file selected, hide dropdown
+            self._roi_select.visible = False
             return
 
         # Use RoiSet.get_roi_ids() public API instead of accessing ROI objects directly
@@ -461,6 +484,10 @@ class ImageLineViewerView:
                 self._roi_select.set_options(options, value=None)
         finally:
             self._suppress_roi_emit = False
+        
+        # Hide dropdown if 0 or 1 ROIs (no selection needed)
+        num_rois = kf.rois.numRois()
+        self._roi_select.visible = (num_rois > 1)
 
     def _render_combined(self) -> None:
         """Render the combined image and line plot."""
@@ -482,6 +509,10 @@ class ImageLineViewerView:
         zmin = display_params.zmin if display_params else None
         zmax = display_params.zmax if display_params else None
 
+        # Determine if ROI overlay should be shown (only if > 1 ROI)
+        num_rois = kf.rois.numRois() if kf is not None else 0
+        plot_rois = (num_rois > 1)
+
         fig = plot_image_line_plotly_v3(
             kf=kf,
             yStat="velocity",
@@ -493,6 +524,8 @@ class ImageLineViewerView:
             zmax=zmax,
             selected_roi_id=roi_id,
             transpose=True,
+            plot_rois=plot_rois,
+            selected_event_id=self._selected_event_id,
         )
 
         # Store original unfiltered y-values for partial updates

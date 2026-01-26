@@ -599,6 +599,7 @@ def _add_velocity_event_overlays(
     analysis_time_values,
     row: int,
     span_sec_if_no_end: float = 0.20,
+    selected_event_id: Optional[str] = None,
 ) -> None:
     """Add velocity event overlays as rectangles on a line plot subplot.
     
@@ -609,6 +610,7 @@ def _add_velocity_event_overlays(
         analysis_time_values: Time array for validation (numpy array).
         row: Subplot row number (1-based).
         span_sec_if_no_end: Fixed width in seconds when t_end is None (default: 0.20).
+        selected_event_id: Optional event_id to highlight with a border (default: None).
     """
     velocity_events = kym_analysis.get_velocity_events(roi_id)
     # logger.warning(f'adding velocity events for roi {roi_id}: {len(velocity_events)}')
@@ -671,6 +673,20 @@ def _add_velocity_event_overlays(
         if x1 < x0:
             x0, x1 = x1, x0
         
+        # Get event_id (UUID) for this event to compare with selected
+        # Find index of this event in the list
+        velocity_events_list = kym_analysis.get_velocity_events(roi_id)
+        if velocity_events_list is None:
+            event_id = None
+        else:
+            try:
+                event_idx = velocity_events_list.index(event)
+                event_id = kym_analysis._velocity_event_uuid_reverse.get((roi_id, event_idx))
+            except (ValueError, AttributeError):
+                # Fallback if event not found or UUID mapping not available
+                event_id = None
+        is_selected = (selected_event_id is not None and event_id is not None and event_id == selected_event_id)
+        
         # Get color based on event_type
         event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
         # event_color = "rgba(255, 0, 0, 0.5)"
@@ -682,18 +698,28 @@ def _add_velocity_event_overlays(
         # logger.warning(f'  color:{event_color}')
 
         # Add rectangle shape for velocity event overlay
-        fig.add_shape(
-            type="rect",
-            xref=xref,
-            yref=f"{yref} domain",
-            x0=x0,
-            x1=x1,
-            y0=0,
-            y1=1,
-            fillcolor=event_color,
-            line_width=0,
-            layer="below",
-        )
+        shape_dict = {
+            "type": "rect",
+            "xref": xref,
+            "yref": f"{yref} domain",
+            "x0": x0,
+            "x1": x1,
+            "y0": 0,
+            "y1": 1,
+            "fillcolor": event_color,
+            "layer": "below",
+        }
+        
+        # Add border for selected event
+        if is_selected:
+            shape_dict["line"] = {
+                "color": "yellow",  # Match ROI_COLOR_SELECTED
+                "width": 2,  # Similar to ROI_LINE_WIDTH
+            }
+        else:
+            shape_dict["line_width"] = 0
+        
+        fig.add_shape(**shape_dict)
 
 
 def plot_image_line_plotly_v2(
@@ -912,6 +938,7 @@ def plot_image_line_plotly_v3(
     theme: Optional[ThemeMode] = ThemeMode.LIGHT,
     transpose: bool = False,
     span_sec_if_no_end: float = 0.20,
+    selected_event_id: Optional[str] = None,
     # x_axis_callback: Optional[Callable[[XAxisCallback], None]] = None,
 ) -> go.Figure:
     """Create a figure with kymograph image and one or more line plots for multiple ROIs.
@@ -1025,14 +1052,13 @@ def plot_image_line_plotly_v3(
     )
 
     # Configure top subplot axes using header labels
-    x_label = kf.header.labels[0] if transpose else kf.header.labels[1]  # Time dimension
     y_label = kf.header.labels[1] if transpose else kf.header.labels[0]  # Space dimension
     fig.update_xaxes(
-        title_text=x_label,
+        title_text="",  # No x-axis label on image heatmap (time label shown on line plot below)
         row=1,
         col=1,
-        showgrid=True,
-        showticklabels=True,
+        showgrid=False,
+        showticklabels=False,
         gridcolor=grid_color,
         color=fg_color,
     )
@@ -1094,6 +1120,7 @@ def plot_image_line_plotly_v3(
                         np.array(analysis_time_values),
                         row_num,
                         span_sec_if_no_end,
+                        selected_event_id=selected_event_id,
                     )
 
     # Build complete layout configuration once

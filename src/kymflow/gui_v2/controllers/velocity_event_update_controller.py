@@ -41,23 +41,44 @@ class VelocityEventUpdateController:
                 return
             updates = {e.field: e.value}
 
-        for field, value in updates.items():
-            updated = kym_file.get_kym_analysis().update_velocity_event_field(
+        # Track new event_id (may change if t_start/t_end are updated)
+        new_event_id = e.event_id
+
+        # If both t_start and t_end are being updated, use atomic update to avoid event_id mismatch
+        if "t_start" in updates and "t_end" in updates:
+            new_event_id = kym_file.get_kym_analysis().update_velocity_event_range(
                 event_id=e.event_id,
-                field=field,
-                value=value,
+                t_start=updates["t_start"],
+                t_end=updates["t_end"],
             )
-            if not updated:
+            if new_event_id is None:
                 logger.warning(
                     "VelocityEventUpdate: event not found (event_id=%s, path=%s)",
                     e.event_id,
                     e.path,
                 )
                 return
+        else:
+            # Update fields one at a time
+            for field, value in updates.items():
+                result = kym_file.get_kym_analysis().update_velocity_event_field(
+                    event_id=new_event_id,  # Use updated event_id for subsequent updates
+                    field=field,
+                    value=value,
+                )
+                if result is None:
+                    logger.warning(
+                        "VelocityEventUpdate: event not found (event_id=%s, path=%s)",
+                        new_event_id,
+                        e.path,
+                    )
+                    return
+                # Update event_id if it changed (e.g., when updating t_start or t_end)
+                new_event_id = result
 
         self._bus.emit(
             VelocityEventUpdate(
-                event_id=e.event_id,
+                event_id=new_event_id,  # Use new event_id in state event
                 path=e.path,
                 updates=updates,
                 origin=e.origin,
