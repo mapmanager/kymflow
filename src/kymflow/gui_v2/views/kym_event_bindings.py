@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
+    AddKymEvent,
+    DeleteKymEvent,
     EventSelection,
     FileSelection,
     ROISelection,
@@ -36,6 +38,8 @@ class KymEventBindings:
         bus.subscribe_state(EventSelection, self._on_event_selection_changed)
         bus.subscribe_intent(SetKymEventXRange, self._on_kym_event_x_range)
         bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
+        bus.subscribe_state(AddKymEvent, self._on_add_kym_event)
+        bus.subscribe_state(DeleteKymEvent, self._on_delete_kym_event)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -46,6 +50,8 @@ class KymEventBindings:
         self._bus.unsubscribe_state(EventSelection, self._on_event_selection_changed)
         self._bus.unsubscribe_intent(SetKymEventXRange, self._on_kym_event_x_range)
         self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
+        self._bus.unsubscribe_state(AddKymEvent, self._on_add_kym_event)
+        self._bus.unsubscribe_state(DeleteKymEvent, self._on_delete_kym_event)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -89,3 +95,32 @@ class KymEventBindings:
                 [e.event_id],
                 origin=SelectionOrigin.EXTERNAL,
             )
+
+    def _on_add_kym_event(self, e: AddKymEvent) -> None:
+        """Refresh event table rows after adding new event."""
+        if self._current_file is None:
+            return
+        self._logger.debug("add_kym_event(state) event_id=%s", e.event_id)
+        report = self._current_file.get_kym_analysis().get_velocity_report()
+        safe_call(self._view.set_events, report)
+        # Select the newly created event
+        if e.event_id:
+            safe_call(
+                self._view.set_selected_event_ids,
+                [e.event_id],
+                origin=SelectionOrigin.EXTERNAL,
+            )
+
+    def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
+        """Refresh event table rows after deleting event and clear selection."""
+        if self._current_file is None:
+            return
+        self._logger.debug("delete_kym_event(state) event_id=%s", e.event_id)
+        report = self._current_file.get_kym_analysis().get_velocity_report()
+        safe_call(self._view.set_events, report)
+        # Clear selection since the event was deleted
+        safe_call(
+            self._view.set_selected_event_ids,
+            [],
+            origin=SelectionOrigin.EXTERNAL,
+        )

@@ -363,3 +363,70 @@ class SaveAll:
     """
 
     phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class AddKymEvent:
+    """Add a new velocity event event (intent or state phase).
+
+    Purpose:
+        Create a new velocity event with specified t_start/t_end. KymAnalysis
+        will fill in defaults for other fields (event_type, user_type, etc.).
+    Triggered by:
+        - Intent: KymEventView when user completes range selection for new event.
+        - State: AddKymEventController after creating the event.
+    Consumed by:
+        - AddKymEventController (intent -> KymAnalysis create).
+        - Any state listeners that need to refresh UI after creation.
+    Dependencies:
+        - Requires SetKymEventRangeState + SetKymEventXRange flow to capture t_start/t_end.
+        - roi_id comes from KymEventView._roi_filter (current ROI filter).
+        - path comes from AppState.selected_file in controller.
+
+    Attributes:
+        event_id: Event ID after creation (None in intent, set in state).
+        roi_id: ROI ID for the new event.
+        path: File path for the event (optional, for validation).
+        t_start: Event start time in seconds.
+        t_end: Event end time in seconds (optional).
+        origin: SelectionOrigin indicating where the add came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    event_id: str | None
+    roi_id: int
+    path: str | None
+    t_start: float
+    t_end: float | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteKymEvent:
+    """Delete a velocity event event (intent or state phase).
+
+    Purpose:
+        Remove a velocity event by event_id.
+    Triggered by:
+        - Intent: KymEventView when user confirms deletion.
+        - State: DeleteKymEventController after deleting the event.
+    Consumed by:
+        - DeleteKymEventController (intent -> KymAnalysis delete).
+        - Any state listeners that need to refresh UI after deletion.
+    Dependencies:
+        - Requires an active event selection (event_id) in KymEventView.
+
+    Attributes:
+        event_id: Unique event id string to delete.
+        roi_id: ROI ID for the event (optional, for validation).
+        path: File path for the event (optional, for validation).
+        origin: SelectionOrigin indicating where the delete came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    event_id: str
+    roi_id: int | None
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase

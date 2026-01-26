@@ -10,8 +10,10 @@ from nicegui import ui
 from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers import (
+    AddKymEventController,
     AnalysisController,
     AppStateBridgeController,
+    DeleteKymEventController,
     EventSelectionController,
     FileSelectionController,
     FileTablePersistenceController,
@@ -102,6 +104,8 @@ class HomePage(BasePage):
         self._kym_event_range_state_controller: KymEventRangeStateController | None = None
         self._metadata_controller: MetadataController | None = None
         self._velocity_event_update_controller: VelocityEventUpdateController | None = None
+        self._add_kym_event_controller: AddKymEventController | None = None
+        self._delete_kym_event_controller: DeleteKymEventController | None = None
         self._analysis_controller: AnalysisController | None = None
         self._save_controller: SaveController | None = None
         self._task_state_bridge: TaskStateBridgeController | None = None
@@ -122,6 +126,8 @@ class HomePage(BasePage):
             on_selected=bus.emit,
             on_event_update=bus.emit,
             on_range_state=bus.emit,
+            on_add_event=bus.emit,
+            on_delete_event=bus.emit,
             selection_mode="single",
         )
         self._table_bindings: FileTableBindings | None = None
@@ -204,6 +210,12 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._velocity_event_update_controller = VelocityEventUpdateController(
+            self.context.app_state, self.bus
+        )
+        self._add_kym_event_controller = AddKymEventController(
+            self.context.app_state, self.bus
+        )
+        self._delete_kym_event_controller = DeleteKymEventController(
             self.context.app_state, self.bus
         )
         self._analysis_controller = AnalysisController(

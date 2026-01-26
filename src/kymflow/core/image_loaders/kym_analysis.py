@@ -787,6 +787,84 @@ class KymAnalysis:
                     return True
         return False
 
+    def add_velocity_event(
+        self, roi_id: int, t_start: float, t_end: float | None = None
+    ) -> str:
+        """Add a new velocity event for the specified ROI.
+
+        Creates a new VelocityEvent with the given t_start/t_end. Other fields
+        are set to defaults (event_type="baseline_drop", user_type=UNREVIEWED, etc.).
+        The event is appended to the ROI's event list. Future TODO: sort events by t_start.
+
+        Args:
+            roi_id: Identifier of the ROI.
+            t_start: Event start time in seconds.
+            t_end: Event end time in seconds, or None.
+
+        Returns:
+            The generated event_id string for the new event.
+
+        Raises:
+            ValueError: If roi_id is not found or t_start is invalid.
+        """
+        roi = self.acq_image.rois.get(roi_id)
+        if roi is None:
+            raise ValueError(f"ROI {roi_id} not found")
+
+        seconds_per_line = float(self.acq_image.seconds_per_line)
+        i_start = time_to_index(t_start, seconds_per_line)
+
+        i_end: int | None = None
+        duration_sec: float | None = None
+        if t_end is not None:
+            i_end = time_to_index(t_end, seconds_per_line)
+            duration_sec = float(t_end - t_start)
+
+        # Create new event with defaults
+        new_event = VelocityEvent(
+            event_type="baseline_drop",  # Default event type
+            i_start=i_start,
+            t_start=t_start,
+            i_end=i_end,
+            t_end=t_end,
+            duration_sec=duration_sec,
+            user_type=UserType.UNREVIEWED,  # Default user type
+        )
+
+        # Append to the ROI's event list
+        if roi_id not in self._velocity_events:
+            self._velocity_events[roi_id] = []
+        self._velocity_events[roi_id].append(new_event)
+
+        # Mark dirty
+        self._dirty = True
+
+        # Generate and return event_id
+        event_id = self._velocity_event_id(roi_id, new_event)
+        return event_id
+
+    def delete_velocity_event(self, event_id: str) -> bool:
+        """Delete a velocity event by event_id.
+
+        Args:
+            event_id: Unique event id string to delete.
+
+        Returns:
+            True if an event was deleted, False if not found.
+        """
+        for roi_id, events in self._velocity_events.items():
+            for idx, event in enumerate(events):
+                candidate_id = self._velocity_event_id(roi_id, event)
+                if candidate_id == event_id:
+                    # Remove the event from the list
+                    events.pop(idx)
+                    # Update the stored list (in case it was a reference)
+                    self._velocity_events[roi_id] = events
+                    # Mark dirty
+                    self._dirty = True
+                    return True
+        return False
+
     def get_velocity_report(self, roi_id: int | None = None) -> list[VelocityReportRow]:
         """Return velocity report rows for roi_id (or all ROIs if None).
 

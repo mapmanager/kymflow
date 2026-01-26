@@ -18,10 +18,16 @@ from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeControll
 from kymflow.gui_v2.controllers.velocity_event_update_controller import (
     VelocityEventUpdateController,
 )
+from kymflow.gui_v2.controllers.add_kym_event_controller import AddKymEventController
+from kymflow.gui_v2.controllers.delete_kym_event_controller import (
+    DeleteKymEventController,
+)
 
 __all__ = [
     "AnalysisController",
     "AppStateBridgeController",
+    "AddKymEventController",
+    "DeleteKymEventController",
     "EventSelectionController",
     "FileSelectionController",
     "FileTablePersistenceController",

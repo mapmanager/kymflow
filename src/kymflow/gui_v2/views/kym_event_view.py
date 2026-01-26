@@ -11,6 +11,8 @@ from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
 from kymflow.core.analysis.velocity_events.velocity_events import UserType, VelocityEvent
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.events import (
+    AddKymEvent,
+    DeleteKymEvent,
     EventSelection,
     EventSelectionOptions,
     SelectionOrigin,
@@ -23,6 +25,8 @@ Rows = List[dict[str, object]]
 OnSelected = Callable[[EventSelection], None]
 OnEventUpdate = Callable[[VelocityEventUpdate], None]
 OnRangeState = Callable[[SetKymEventRangeState], None]
+OnAddEvent = Callable[[AddKymEvent], None]
+OnDeleteEvent = Callable[[DeleteKymEvent], None]
 
 logger = get_logger(__name__)
 
@@ -85,11 +89,15 @@ class KymEventView:
         on_selected: OnSelected,
         on_event_update: OnEventUpdate | None = None,
         on_range_state: OnRangeState | None = None,
+        on_add_event: OnAddEvent | None = None,
+        on_delete_event: OnDeleteEvent | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._on_selected = on_selected
         self._on_event_update = on_event_update
         self._on_range_state = on_range_state
+        self._on_add_event = on_add_event
+        self._on_delete_event = on_delete_event
         self._selection_mode = selection_mode
         self._grid: CustomAgGrid_v2 | None = None
         self._suppress_emit: bool = False
@@ -99,12 +107,16 @@ class KymEventView:
         self._zoom_enabled: bool = True
         self._zoom_pad_sec: float = 1.0
         self._setting_kym_event_range_state: bool = False
+        self._adding_new_event: bool = False  # Track if we're adding a new event vs updating
         self._set_range_button: ui.button | None = None
         self._cancel_range_button: ui.button | None = None
+        self._add_event_button: ui.button | None = None
+        self._delete_event_button: ui.button | None = None
         self._range_notification: ui.notification | None = None
         self._selected_event_id: str | None = None
         self._selected_event_roi_id: int | None = None
         self._selected_event_path: str | None = None
+        self._current_file_path: str | None = None  # Track current file path from row data
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
@@ -127,7 +139,17 @@ class KymEventView:
                         "Cancel",
                         on_click=self._on_cancel_event_range_clicked,
                     )
+                with ui.row().classes("w-full gap-2"):
+                    self._add_event_button = ui.button(
+                        "Add Event",
+                        on_click=self._on_add_event_clicked,
+                    )
+                    self._delete_event_button = ui.button(
+                        "Delete Event",
+                        on_click=self._on_delete_event_clicked,
+                    )
                 self._update_range_button_state()
+                self._update_add_delete_button_state()
 
             with ui.column().classes("grow"):
                 grid_cfg = GridConfig(
@@ -153,6 +175,11 @@ class KymEventView:
     def set_events(self, rows: Iterable[dict[str, object]]) -> None:
         """Update table contents from velocity report rows."""
         self._all_rows = list(rows)
+        # Extract current file path from first row if available
+        if self._all_rows:
+            first_path = self._all_rows[0].get("path")
+            if first_path:
+                self._current_file_path = str(first_path)
         self._apply_filter()
 
     def set_selected_event_ids(self, event_ids: list[str], *, origin: SelectionOrigin) -> None:
@@ -172,6 +199,7 @@ class KymEventView:
         self._selected_event_roi_id = None
         self._selected_event_path = None
         self._update_range_button_state()
+        self._update_add_delete_button_state()
 
     def set_selected_roi(self, roi_id: int | None) -> None:
         """Filter rows by ROI ID (None clears filter)."""
@@ -203,6 +231,7 @@ class KymEventView:
         self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
         self._selected_event_path = str(path) if path else None
         self._update_range_button_state()
+        self._update_add_delete_button_state()
         self._on_selected(
             EventSelection(
                 event_id=str(event_id),
@@ -248,12 +277,36 @@ class KymEventView:
 
     def handle_set_kym_event_x_range(self, e: SetKymEventXRange) -> None:
         """Handle proposed x-range selection for a velocity event."""
-        logger.debug("handle_set_kym_event_x_range event_id=%s", e.event_id)
+        logger.debug("handle_set_kym_event_x_range event_id=%s adding_new_event=%s", e.event_id, self._adding_new_event)
         self._setting_kym_event_range_state = False
         self._emit_range_state(False)
         self._update_range_button_state()
         self._set_range_notification_visible(False)
 
+        # If adding a new event, emit AddKymEvent instead of VelocityEventUpdate
+        if self._adding_new_event:
+            self._adding_new_event = False
+            if self._on_add_event is None:
+                logger.warning("handle_set_kym_event_x_range: on_add_event callback not set")
+                return
+            if self._roi_filter is None:
+                logger.warning("handle_set_kym_event_x_range: roi_filter is None, cannot add event")
+                return
+            self._on_add_event(
+                AddKymEvent(
+                    event_id=None,  # Will be set by controller after creation
+                    roi_id=self._roi_filter,
+                    path=self._current_file_path,
+                    t_start=e.x0,
+                    t_end=e.x1,
+                    origin=SelectionOrigin.EVENT_TABLE,
+                    phase="intent",
+                )
+            )
+            self._update_add_delete_button_state()
+            return
+
+        # Otherwise, update existing event (original behavior)
         if self._selected_event_id is None:
             logger.debug("no selected event; ignoring range proposal")
             return
@@ -281,32 +334,40 @@ class KymEventView:
             return
         logger.debug("set_event_range_clicked -> toggle state")
         self._setting_kym_event_range_state = not self._setting_kym_event_range_state
+        self._adding_new_event = False  # Ensure we're not in add mode
         self._emit_range_state(self._setting_kym_event_range_state)
         self._update_range_button_state()
+        self._update_add_delete_button_state()
         if self._setting_kym_event_range_state:
             self._set_range_notification_visible(True)
         else:
             self._set_range_notification_visible(False)
 
     def _on_cancel_event_range_clicked(self) -> None:
-        if not self._setting_kym_event_range_state:
+        if not self._setting_kym_event_range_state and not self._adding_new_event:
             return
         logger.debug("cancel_event_range_clicked -> disable state")
         self._setting_kym_event_range_state = False
+        self._adding_new_event = False
         self._emit_range_state(False)
         self._update_range_button_state()
+        self._update_add_delete_button_state()
         self._set_range_notification_visible(False)
 
     def _emit_range_state(self, enabled: bool) -> None:
         if self._on_range_state is None:
             return
-        logger.debug("emit SetKymEventRangeState enabled=%s", enabled)
+        logger.debug("emit SetKymEventRangeState enabled=%s adding_new_event=%s", enabled, self._adding_new_event)
+        # For new events, event_id is None
+        event_id = None if self._adding_new_event else self._selected_event_id
+        roi_id = self._roi_filter if self._adding_new_event else self._selected_event_roi_id
+        path = self._current_file_path if self._adding_new_event else self._selected_event_path
         self._on_range_state(
             SetKymEventRangeState(
                 enabled=enabled,
-                event_id=self._selected_event_id,
-                roi_id=self._selected_event_roi_id,
-                path=self._selected_event_path,
+                event_id=event_id,
+                roi_id=roi_id,
+                path=path,
                 origin=SelectionOrigin.EVENT_TABLE,
                 phase="intent",
             )
@@ -340,8 +401,13 @@ class KymEventView:
         if visible:
             if self._range_notification is not None:
                 self._range_notification.dismiss()
+            message = (
+                "Draw a rectangle on the plot to add new event start/stop."
+                if self._adding_new_event
+                else "Draw a rectangle on the plot to set event start/stop."
+            )
             self._range_notification = ui.notification(
-                "Draw a rectangle on the plot to set event start/stop.",
+                message,
                 color="warning",
                 timeout=None,
             )
@@ -350,3 +416,77 @@ class KymEventView:
                 return
             self._range_notification.dismiss()
             self._range_notification = None
+
+    def _on_add_event_clicked(self) -> None:
+        """Handle Add Event button click."""
+        if self._roi_filter is None:
+            logger.warning("Add Event: roi_filter is None, cannot add event")
+            return
+        if self._current_file_path is None:
+            logger.warning("Add Event: current_file_path is None, cannot add event")
+            return
+        logger.debug("add_event_clicked -> enable range state for new event")
+        self._adding_new_event = True
+        self._setting_kym_event_range_state = True
+        self._emit_range_state(True)
+        self._update_range_button_state()
+        self._update_add_delete_button_state()
+        self._set_range_notification_visible(True)
+
+    def _on_delete_event_clicked(self) -> None:
+        """Handle Delete Event button click."""
+        if self._selected_event_id is None:
+            return
+        if self._on_delete_event is None:
+            logger.warning("Delete Event: on_delete_event callback not set")
+            return
+
+        # Show confirmation dialog
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Delete Event").classes("text-lg font-semibold")
+            ui.label(f"Are you sure you want to delete event {self._selected_event_id}?")
+            with ui.row():
+                ui.button("Cancel", on_click=dialog.close)
+                ui.button("Delete", on_click=lambda: self._confirm_delete(dialog))
+
+        dialog.open()
+
+    def _confirm_delete(self, dialog: ui.dialog) -> None:
+        """Confirm deletion and emit DeleteKymEvent."""
+        dialog.close()
+        if self._on_delete_event is None:
+            return
+        logger.debug("confirm_delete event_id=%s", self._selected_event_id)
+        self._on_delete_event(
+            DeleteKymEvent(
+                event_id=self._selected_event_id,
+                roi_id=self._selected_event_roi_id,
+                path=self._selected_event_path,
+                origin=SelectionOrigin.EVENT_TABLE,
+                phase="intent",
+            )
+        )
+
+    def _update_add_delete_button_state(self) -> None:
+        """Update Add/Delete button enable/disable state."""
+        if self._add_event_button is None or self._delete_event_button is None:
+            return
+
+        # Add button: enabled when roi_filter and file path are available, and not in range-selection state
+        add_enabled = (
+            self._roi_filter is not None
+            and self._current_file_path is not None
+            and not self._setting_kym_event_range_state
+            and not self._adding_new_event
+        )
+        if add_enabled:
+            self._add_event_button.enable()
+        else:
+            self._add_event_button.disable()
+
+        # Delete button: enabled only when a row is selected
+        delete_enabled = self._selected_event_id is not None
+        if delete_enabled:
+            self._delete_event_button.enable()
+        else:
+            self._delete_event_button.disable()
