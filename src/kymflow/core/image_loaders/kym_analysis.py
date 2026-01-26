@@ -25,6 +25,7 @@ from kymflow.core.analysis.velocity_events.velocity_events import (
     UserType,
     VelocityEvent,
     detect_events,
+    time_to_index,
 )
 
 if TYPE_CHECKING:
@@ -255,8 +256,8 @@ class KymAnalysis:
         start_line = roi.bounds.dim1_start    # space dimension (columns)
         stop_line = roi.bounds.dim1_stop      # space dimension (columns)
         
-        logger.info(f'calling mp_analyze_flow() with roi {roi_id}:')
-        print(roi)
+        # logger.info(f'calling mp_analyze_flow() with roi {roi_id}:')
+        # print(roi)
         
         # Run analysis on the ROI region
         # mp_analyze_flow expects explicit dim0/dim1 bounds in the (time, space) convention.
@@ -372,7 +373,8 @@ class KymAnalysis:
         
         # Save CSV
         self._df.to_csv(csv_path, index=False)
-        logger.info(f"Saved analysis CSV to {csv_path}")
+        
+        # logger.info(f"Saved analysis CSV to {csv_path}")
         
         # Reconcile to current ROIs (single source of truth)
         current_roi_ids = {roi.id for roi in self.acq_image.rois}
@@ -407,7 +409,8 @@ class KymAnalysis:
         # Save JSON
         with open(json_path, "w") as f:
             json.dump(json_data, f, indent=2, default=str)
-        logger.info(f"Saved analysis metadata to {json_path}")
+        
+        # logger.info(f"Saved analysis metadata to {json_path}")
         
         self._dirty = False
         return True
@@ -699,28 +702,86 @@ class KymAnalysis:
         """
         return self._velocity_events.get(roi_id)
 
+    def _velocity_event_id(self, roi_id: int, event: VelocityEvent) -> str:
+        """Generate a stable event_id for a velocity event."""
+        i_end_value = event.i_end if event.i_end is not None else "None"
+        return f"{roi_id}:{event.i_start}:{i_end_value}:{event.event_type}"
+
     def update_velocity_event_field(self, event_id: str, field: str, value: Any) -> bool:
         """Update a field on a velocity event by event_id.
 
         Returns:
             True if an event was updated, False if not found or invalid.
         """
-        if field != "user_type":
-            logger.warning("Unsupported velocity event field update: %s", field)
+        if field not in {"user_type", "t_start", "t_end"}:
+            logger.warning('Unsupported velocity event update field: "%s"', field)
+            logger.warning("  event_id: %s", event_id)
+            logger.warning("  field: %s", field)
+            logger.warning("  value: %s", value)
             return False
 
-        try:
-            new_user_type = UserType(str(value))
-        except Exception as exc:
-            logger.warning("Invalid user_type value %r: %s", value, exc)
-            return False
+        new_user_type: UserType | None = None
+        new_t_start: float | None = None
+        new_t_end: float | None = None
+        if field == "user_type":
+            try:
+                new_user_type = UserType(str(value))
+            except Exception as exc:
+                logger.warning("Invalid user_type value %r: %s", value, exc)
+                return False
+        elif field == "t_start":
+            try:
+                new_t_start = float(value)
+            except Exception as exc:
+                logger.warning("Invalid t_start value %r: %s", value, exc)
+                return False
+        elif field == "t_end":
+            if value is None:
+                new_t_end = None
+            else:
+                try:
+                    new_t_end = float(value)
+                except Exception as exc:
+                    logger.warning("Invalid t_end value %r: %s", value, exc)
+                    return False
 
         for roi_id, events in self._velocity_events.items():
             for idx, event in enumerate(events):
-                i_end_value = event.i_end if event.i_end is not None else "None"
-                candidate_id = f"{roi_id}:{event.i_start}:{i_end_value}:{event.event_type}"
+                candidate_id = self._velocity_event_id(roi_id, event)
                 if candidate_id == event_id:
-                    events[idx] = replace(event, user_type=new_user_type)
+                    seconds_per_line = float(self.acq_image.seconds_per_line)
+                    if field == "user_type":
+                        events[idx] = replace(event, user_type=new_user_type)
+                    elif field == "t_start":
+                        new_i_start = time_to_index(new_t_start, seconds_per_line)
+                        new_duration = (
+                            float(event.t_end) - float(new_t_start)
+                            if event.t_end is not None
+                            else None
+                        )
+                        events[idx] = replace(
+                            event,
+                            t_start=new_t_start,
+                            i_start=new_i_start,
+                            duration_sec=new_duration,
+                        )
+                    elif field == "t_end":
+                        new_i_end = (
+                            None
+                            if new_t_end is None
+                            else time_to_index(new_t_end, seconds_per_line)
+                        )
+                        new_duration = (
+                            None
+                            if new_t_end is None
+                            else float(new_t_end) - float(event.t_start)
+                        )
+                        events[idx] = replace(
+                            event,
+                            t_end=new_t_end,
+                            i_end=new_i_end,
+                            duration_sec=new_duration,
+                        )
                     self._velocity_events[roi_id] = events
                     self._dirty = True
                     return True
@@ -748,8 +809,7 @@ class KymAnalysis:
                 continue
             for event in events:
                 event_dict = event.to_dict()
-                i_end_value = event.i_end if event.i_end is not None else "None"
-                event_id = f"{rid}:{event.i_start}:{i_end_value}:{event.event_type}"
+                event_id = self._velocity_event_id(rid, event)
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path

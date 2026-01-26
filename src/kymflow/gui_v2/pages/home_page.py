@@ -17,6 +17,7 @@ from kymflow.gui_v2.controllers import (
     FileTablePersistenceController,
     FolderController,
     ImageDisplayController,
+    KymEventRangeStateController,
     MetadataController,
     ROISelectionController,
     SaveController,
@@ -98,6 +99,7 @@ class HomePage(BasePage):
         self._roi_selection_controller: ROISelectionController | None = None
         self._event_selection_controller: EventSelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
+        self._kym_event_range_state_controller: KymEventRangeStateController | None = None
         self._metadata_controller: MetadataController | None = None
         self._velocity_event_update_controller: VelocityEventUpdateController | None = None
         self._analysis_controller: AnalysisController | None = None
@@ -112,10 +114,14 @@ class HomePage(BasePage):
             on_metadata_update=bus.emit,
             selection_mode="single",
         )
-        self._image_line_viewer = ImageLineViewerView(on_roi_selected=bus.emit)
+        self._image_line_viewer = ImageLineViewerView(
+            on_roi_selected=bus.emit,
+            on_kym_event_x_range=bus.emit,
+        )
         self._event_view = KymEventView(
             on_selected=bus.emit,
             on_event_update=bus.emit,
+            on_range_state=bus.emit,
             selection_mode="single",
         )
         self._table_bindings: FileTableBindings | None = None
@@ -193,6 +199,7 @@ class HomePage(BasePage):
         self._image_display_controller = ImageDisplayController(
             self.context.app_state, self.bus
         )
+        self._kym_event_range_state_controller = KymEventRangeStateController(self.bus)
         self._metadata_controller = MetadataController(
             self.context.app_state, self.bus
         )

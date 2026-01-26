@@ -47,9 +47,8 @@ def plot_analysis(path: str) -> None:
         
         break
 
-def analyze_velocity_events(path: str) -> None:
-    depth = 2
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+def analyze_velocity_events(path: str, depth:int) -> None:
+    kymList = getKymFileList(path, depth)
     for kymImage in kymList:
         logger.info(kymImage.path)
         ka = kymImage.get_kym_analysis()
@@ -95,22 +94,18 @@ def analyze_stalls(path: str) -> None:
         success = ka.save_analysis()
         logger.info(f'saved analysis: {success}')
 
-def analyze_flow(path: str) -> None:
-
-    depth = 2
+def getKymFileList(path:str, depth:int):
     kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
-    # print(kymList)
+    return kymList
 
-    # analyze stalls
-    # sap = StallAnalysisParams(
-    #     velocity_key="velocity",
-    #     refactory_bins=500,
-    #     min_stall_duration=50,
-    #     end_stall_non_nan_bins=2,
-    # )
-    
-    for kymImage in kymList:
-        logger.info(kymImage.path)
+def analyze_flow(path: str, depth:int) -> None:
+    """Analyze flow for a folder with depth.
+    """
+
+    kymList = getKymFileList(path, depth)
+
+    for _idx, kymImage in enumerate(kymList):
+        logger.info(f'=== {_idx+1}/{len(kymList)}: {kymImage.path}')
 
         # Delete any existing ROIs (start fresh)
         deleted_count = kymImage.rois.clear()
@@ -119,22 +114,19 @@ def analyze_flow(path: str) -> None:
         # ensure img data is loaded
         kymImage.load_channel(channel=1)
 
-        windows = [16, 32, 64]
+        # windows = [16, 32, 64]
+        windows = [16]
         for _idx, window in enumerate(windows):
             # create roi for the window
             roi = kymImage.rois.create_roi()
             logger.info(f'created roi: {roi.id}')
+            print(roi)
 
             ka = kymImage.get_kym_analysis()
             
             # analyze flow
             logger.info(f'   analyze flow for roi {roi.id} window:{window}...')
             ka.analyze_roi(roi.id, window)
-
-            # stall_analysis = ka.run_stall_analysis(roi.id, sap)
-            # logger.info(f'stall_analysis: {roi.id}')
-            # for stall in stall_analysis.stalls:
-            #     logger.info(f'stall: {stall}')
 
         # save analysis
         success = kymImage.get_kym_analysis().save_analysis()
@@ -145,10 +137,14 @@ if __name__ == "__main__":
     path = "/Users/cudmore/Dropbox/data/declan/2026/declan-data-analyzed"
     path = '/Users/cudmore/Dropbox/data/declan/2026/data/20251204'
 
-    # analyze_flow(path)
+    depth = 3
+    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download'
+    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download/14d Saline'
+
+    analyze_flow(path, depth)
 
     # analyze_stalls(path)
     
-    analyze_velocity_events(path)
+    # analyze_velocity_events(path, depth)
     
     # plot_analysis(path)

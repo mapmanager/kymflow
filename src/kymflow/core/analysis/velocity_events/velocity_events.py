@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import ceil, floor
 from enum import Enum
 from typing import Literal, Optional, Sequence
 
@@ -27,6 +28,30 @@ class UserType(str, Enum):
 
 
 EventType = Literal["baseline_drop", "nan_gap"]
+RoundingMode = Literal["round", "floor", "ceil"]
+
+
+def time_to_index(
+    t_sec: float,
+    seconds_per_line: float,
+    *,
+    mode: RoundingMode = "round",
+) -> int:
+    """Convert time in seconds to a line index using a rounding strategy.
+
+    Rounds half away from zero for the default "round" mode.
+    """
+    if seconds_per_line <= 0:
+        raise ValueError(f"seconds_per_line must be > 0, got {seconds_per_line}")
+    x = t_sec / seconds_per_line
+    if mode == "round":
+        # Round half away from zero (avoid bankers-rounding for GUI edits).
+        return int(floor(x + 0.5)) if x >= 0 else int(ceil(x - 0.5))
+    if mode == "floor":
+        return int(floor(x))
+    if mode == "ceil":
+        return int(ceil(x))
+    raise ValueError(f"Unknown rounding mode: {mode}")
 
 
 @dataclass(frozen=True)

@@ -112,10 +112,18 @@ class EventSelectionOptions:
 class EventSelection:
     """Velocity event selection event (intent or state phase).
 
-    For intent phase:
-        - Emitted by KymEventView when user selects an event row
-    For state phase:
-        - Emitted by AppStateBridge when AppState changes
+    Purpose:
+        Communicate which velocity event is currently selected so views/controllers
+        can update UI and apply event-scoped actions.
+    Triggered by:
+        - Intent: KymEventView when user selects an event row.
+        - State: AppStateBridge when AppState changes.
+    Consumed by:
+        - EventSelectionController (intent -> AppState).
+        - ImageLineViewerBindings (state -> zoom to event).
+        - KymEventBindings (state -> sync grid selection).
+    Dependencies:
+        - Optional: used by SetKymEventRangeState to carry the active event context.
 
     Attributes:
         event_id: Selected event ID, or None if selection cleared.
@@ -198,26 +206,37 @@ class MetadataUpdate:
 class VelocityEventUpdate:
     """Velocity event update event (intent or state phase).
 
-    For intent phase:
-        - Emitted by KymEventView when user edits an event field
-    For state phase:
-        - Emitted by VelocityEventUpdateController after applying the update
+    Purpose:
+        Apply one or more field updates to a velocity event (e.g., user_type,
+        t_start/t_end).
+    Triggered by:
+        - Intent: KymEventView (cell edit or x-range proposal acceptance).
+        - State: VelocityEventUpdateController after applying the update(s).
+    Consumed by:
+        - VelocityEventUpdateController (intent -> KymAnalysis update).
+        - Any state listeners that need to refresh UI after update.
+    Dependencies:
+        - May be emitted as a result of SetKymEventXRange (intent).
+        - Prefer using `updates` for range edits (t_start/t_end) to avoid duplicate
+          state notifications.
 
     Attributes:
         event_id: Unique event id string.
         path: File path for the event (optional).
-        field: Field name being updated (e.g., "user_type").
-        value: New value for the field.
+        field: Field name being updated (single-field update).
+        value: New value for the field (single-field update).
+        updates: Multi-field updates as a dict (e.g., {"t_start": x0, "t_end": x1}).
         origin: SelectionOrigin indicating where the update came from.
         phase: Event phase - "intent" or "state".
     """
 
     event_id: str
     path: str | None
-    field: str
-    value: Any
-    origin: SelectionOrigin
-    phase: EventPhase
+    field: str | None = None
+    value: Any | None = None
+    updates: dict[str, Any] | None = None
+    origin: SelectionOrigin = SelectionOrigin.EXTERNAL
+    phase: EventPhase = "intent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +268,72 @@ class AnalysisCancel:
         phase: Event phase - "intent" or "state".
     """
 
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class SetKymEventRangeState:
+    """Arm/disarm the next Plotly selection for setting a kym event x-range.
+
+    Purpose:
+        Toggle a short-lived UI state where the next rectangle selection on the
+        plot proposes a new t_start/t_end for a specific velocity event.
+    Triggered by:
+        - Intent: KymEventView when the user clicks "Set Event Start/Stop".
+        - State: KymEventRangeStateController mirrors intent -> state for bindings.
+    Consumed by:
+        - ImageLineViewerBindings (state -> enable/disable Plotly dragmode).
+    Dependencies:
+        - Requires an active EventSelection context (event_id/roi_id/path) to
+          associate the selection with a specific event.
+
+    Attributes:
+        enabled: Whether the range-setting state is active.
+        event_id: Active velocity event id (required when enabled=True).
+        roi_id: ROI id for the active event (optional, for validation).
+        path: File path for the active event (optional, for validation).
+        origin: SelectionOrigin indicating where the toggle came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    enabled: bool
+    event_id: str | None
+    roi_id: int | None
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class SetKymEventXRange:
+    """Propose a new x-range (t_start/t_end) for the active velocity event.
+
+    Purpose:
+        Carry the x-range from a Plotly rectangle selection to the event table
+        so it can update the selected velocity event.
+    Triggered by:
+        - Intent: ImageLineViewerView when armed and a valid rect selection occurs.
+    Consumed by:
+        - KymEventView (validates against current selection, then emits VelocityEventUpdate).
+    Dependencies:
+        - Only emitted when SetKymEventRangeState(enabled=True) is active.
+
+    Attributes:
+        event_id: Velocity event id that the range applies to.
+        roi_id: ROI id for validation (optional).
+        path: File path for validation (optional).
+        x0: Proposed range start (seconds).
+        x1: Proposed range end (seconds).
+        origin: SelectionOrigin indicating where the proposal came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    event_id: str | None
+    roi_id: int | None
+    path: str | None
+    x0: float
+    x1: float
+    origin: SelectionOrigin
     phase: EventPhase
 
 

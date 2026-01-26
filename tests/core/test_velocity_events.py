@@ -12,6 +12,7 @@ from kymflow.core.analysis.velocity_events.velocity_events import (
     UserType,
     VelocityEvent,
     detect_events,
+    time_to_index,
 )
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.logging import get_logger, setup_logging
@@ -83,6 +84,22 @@ class TestVelocityEventDataclass:
         assert event.machine_type == MachineType.OTHER
         assert event.user_type == UserType.UNREVIEWED
         assert event.note == ""
+
+
+class TestTimeToIndex:
+    """Tests for time_to_index helper."""
+
+    def test_time_to_index_round_half_away_from_zero(self) -> None:
+        assert time_to_index(0.05, 0.1) == 1
+        assert time_to_index(-0.05, 0.1) == -1
+
+    def test_time_to_index_floor_ceil(self) -> None:
+        assert time_to_index(0.19, 0.1, mode="floor") == 1
+        assert time_to_index(0.11, 0.1, mode="ceil") == 2
+
+    def test_time_to_index_invalid_seconds_per_line(self) -> None:
+        with pytest.raises(ValueError):
+            time_to_index(0.1, 0.0)
 
 
 class TestVelocityEventSerialization:

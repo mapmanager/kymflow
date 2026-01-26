@@ -87,7 +87,7 @@ class AppContext:
         mode = ThemeMode.DARK if stored_value else ThemeMode.LIGHT
         self.app_state.set_theme(mode)
         
-        logger.debug(f"Dark mode initialized: {stored_value}")
+        # logger.debug(f"Dark mode initialized: {stored_value}")
         return dark_mode
     
     def set_default_folder(self, folder: Path) -> None:

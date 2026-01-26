@@ -12,9 +12,12 @@ from kymflow.gui_v2.events import (
     ROISelection,
     ImageDisplayChange,
     MetadataUpdate,
+    SetKymEventRangeState,
+    VelocityEventUpdate,
 )
 from kymflow.gui_v2.events_state import ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
+from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
     pass
@@ -62,7 +65,11 @@ class ImageLineViewerBindings:
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
         bus.subscribe_state(MetadataUpdate, self._on_metadata_changed)
+        bus.subscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
+        bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         self._subscribed = True
+
+        self._logger = get_logger(__name__)
 
     def teardown(self) -> None:
         """Unsubscribe from all events (cleanup).
@@ -80,6 +87,8 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_changed)
+        self._bus.unsubscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
+        self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -140,3 +149,21 @@ class ImageLineViewerBindings:
     def _on_event_selected(self, e: EventSelection) -> None:
         """Handle EventSelection change event."""
         safe_call(self._view.zoom_to_event, e)
+
+    def _on_kym_event_range_state(self, e: SetKymEventRangeState) -> None:
+        """Handle kym event range state change."""
+        self._logger.debug(
+            "kym_event_range_state(enabled=%s, event_id=%s)", e.enabled, e.event_id
+        )
+        safe_call(
+            self._view.set_kym_event_range_enabled,
+            e.enabled,
+            event_id=e.event_id,
+            roi_id=e.roi_id,
+            path=e.path,
+        )
+
+    def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:
+        """Handle velocity event updates by refreshing overlays."""
+        self._logger.debug("velocity_event_update(state) event_id=%s", e.event_id)
+        safe_call(self._view.refresh_velocity_events)

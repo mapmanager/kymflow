@@ -22,6 +22,7 @@ class VelocityEventUpdateController:
         """Handle VelocityEventUpdate intent event."""
         if e.origin != SelectionOrigin.EVENT_TABLE:
             return
+        logger.debug("VelocityEventUpdate intent event_id=%s", e.event_id)
 
         kym_file = None
         if e.path is not None:
@@ -34,25 +35,31 @@ class VelocityEventUpdateController:
         if kym_file is None:
             return
 
-        updated = kym_file.get_kym_analysis().update_velocity_event_field(
-            event_id=e.event_id,
-            field=e.field,
-            value=e.value,
-        )
-        if not updated:
-            logger.warning(
-                "VelocityEventUpdate: event not found (event_id=%s, path=%s)",
-                e.event_id,
-                e.path,
+        updates = e.updates
+        if updates is None:
+            if e.field is None:
+                return
+            updates = {e.field: e.value}
+
+        for field, value in updates.items():
+            updated = kym_file.get_kym_analysis().update_velocity_event_field(
+                event_id=e.event_id,
+                field=field,
+                value=value,
             )
-            return
+            if not updated:
+                logger.warning(
+                    "VelocityEventUpdate: event not found (event_id=%s, path=%s)",
+                    e.event_id,
+                    e.path,
+                )
+                return
 
         self._bus.emit(
             VelocityEventUpdate(
                 event_id=e.event_id,
                 path=e.path,
-                field=e.field,
-                value=e.value,
+                updates=updates,
                 origin=e.origin,
                 phase="state",
             )

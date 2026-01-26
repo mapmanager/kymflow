@@ -600,7 +600,7 @@ class AcqImage:
         try:
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2, default=str)
-            logger.info(f"Saved metadata to {metadata_path}")
+            # logger.info(f"Saved metadata to {metadata_path}")
             return True
         except Exception as e:
             logger.error(f"Failed to save metadata to {metadata_path}: {e}")

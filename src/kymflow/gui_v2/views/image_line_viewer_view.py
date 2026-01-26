@@ -27,12 +27,18 @@ from kymflow.core.plotting import (
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import EventSelection, ROISelection, SelectionOrigin
+from kymflow.gui_v2.events import (
+    EventSelection,
+    ROISelection,
+    SelectionOrigin,
+    SetKymEventXRange,
+)
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 OnROISelected = Callable[[ROISelection], None]
+OnKymEventXRange = Callable[[SetKymEventXRange], None]
 
 
 class ImageLineViewerView:
@@ -62,17 +68,24 @@ class ImageLineViewerView:
         _uirevision: Counter to control Plotly's uirevision for forced resets.
     """
 
-    def __init__(self, *, on_roi_selected: OnROISelected) -> None:
+    def __init__(
+        self,
+        *,
+        on_roi_selected: OnROISelected,
+        on_kym_event_x_range: OnKymEventXRange | None = None,
+    ) -> None:
         """Initialize image/line viewer view.
 
         Args:
             on_roi_selected: Callback function that receives ROISelection events.
         """
         self._on_roi_selected = on_roi_selected
+        self._on_kym_event_x_range = on_kym_event_x_range
 
         # UI components (created in render())
         self._plot: Optional[ui.plotly] = None
         self._roi_select: Optional[ui.select] = None
+        self._plot_div_id: str = "kymflow_image_line_plot"
 
         # State (theme will be set by bindings from AppState)
         self._current_file: Optional[KymImage] = None
@@ -88,6 +101,11 @@ class ImageLineViewerView:
         # Filter state (stored instead of reading from checkboxes)
         self._remove_outliers: bool = False
         self._median_filter: bool = False
+        self._awaiting_kym_event_range: bool = False
+        self._range_event_id: Optional[str] = None
+        self._range_roi_id: Optional[int] = None
+        self._range_path: Optional[str] = None
+        self._pending_range_zoom: Optional[tuple[float, float]] = None
 
     def render(self) -> None:
         """Create the viewer UI inside the current container.
@@ -113,6 +131,8 @@ class ImageLineViewerView:
 
         # Plot with larger height to accommodate both subplots
         self._plot = ui.plotly(go.Figure()).classes("w-full")
+        # Stable DOM id for JS access (dragmode toggling).
+        self._plot.props(f"id={self._plot_div_id}")
         # abb when implementing getting user drawrect/rect selection
         # and setting start/stop of a single velocity event.
         self._plot.on("plotly_relayout", self._on_plotly_relayout)
@@ -139,16 +159,17 @@ class ImageLineViewerView:
 
         payload: Dict[str, Any] = e.args  # <-- dict
 
+        logger.debug("plotly_relayout received (awaiting_range=%s)", self._awaiting_kym_event_range)
         logger.info('=== in on_relayout() payload is:')
         from pprint import pprint
         pprint(payload)
 
         x0, x1 = None, None  # default to no selection
         if 'selections[0].x0' in payload.keys():
-            print('  update "selections[0].x0" found')
+            logger.info('  update "selections[0].x0" found')
             x0  = payload['selections[0].x0']
             x1  = payload['selections[0].x1']
-            print(f"  -> update Selection: x-range = [{x0}, {x1}]")
+            logger.info(f"  -> update Selection: x-range = [{x0}, {x1}]")
         elif 'selections' not in payload.keys():
             # print('  no selection found')
             return
@@ -165,6 +186,97 @@ class ImageLineViewerView:
                     x0 = selection['x0']
                     x1 = selection['x1']
                     logger.info(f"  --> new Selection: {_type} x-range = [{x0}, {x1}] (idx={_idx})")
+
+        if not self._awaiting_kym_event_range:
+            return
+        if x0 is None or x1 is None:
+            return
+        if not isinstance(x0, (int, float)) or not isinstance(x1, (int, float)):
+            return
+        if self._on_kym_event_x_range is None:
+            return
+
+        x_min = float(min(x0, x1))
+        x_max = float(max(x0, x1))
+        self._awaiting_kym_event_range = False
+        self._pending_range_zoom = None
+        fig = self._current_figure
+        if fig is not None:
+            x_range = fig.layout.xaxis.range
+            if isinstance(x_range, (list, tuple)) and len(x_range) == 2:
+                try:
+                    self._pending_range_zoom = (float(x_range[0]), float(x_range[1]))
+                except (TypeError, ValueError):
+                    logger.debug("invalid xaxis range; skipping pending zoom")
+        logger.debug("emitting SetKymEventXRange x0=%s x1=%s", x_min, x_max)
+        logger.debug(f'  self._pending_range_zoom:{self._pending_range_zoom}')
+        self._on_kym_event_x_range(
+            SetKymEventXRange(
+                event_id=self._range_event_id,
+                roi_id=self._range_roi_id,
+                path=self._range_path,
+                x0=x_min,
+                x1=x_max,
+                origin=SelectionOrigin.IMAGE_VIEWER,
+                phase="intent",
+            )
+        )
+        # Clear drawn rectangle/selected points after accepting selection.
+        self._clear_plot_selections()
+
+    def set_kym_event_range_enabled(
+        self,
+        enabled: bool,
+        *,
+        event_id: Optional[str],
+        roi_id: Optional[int],
+        path: Optional[str],
+    ) -> None:
+        """Toggle Plotly dragmode and arm the next x-range selection."""
+        logger.debug(
+            "set_kym_event_range_enabled(enabled=%s, event_id=%s, roi_id=%s)",
+            enabled,
+            event_id,
+            roi_id,
+        )
+        self._awaiting_kym_event_range = enabled
+        self._range_event_id = event_id
+        self._range_roi_id = roi_id
+        self._range_path = path
+        dragmode = "select" if enabled else "zoom"
+        self._set_dragmode(dragmode)
+        if not enabled:
+            self._clear_plot_selections()
+
+    def _set_dragmode(self, dragmode: Optional[str]) -> None:
+        """Set Plotly dragmode on the current plot."""
+        js = f"""
+        (() => {{
+          const gd = document.getElementById({self._plot_div_id!r});
+          if (!gd) return;
+          Plotly.relayout(gd, {{ dragmode: {repr(dragmode)} }});
+        }})()
+        """
+        ui.run_javascript(js)
+
+    def _clear_plot_selections(self) -> None:
+        """Clear Plotly layout selections and selected points."""
+        js = f"""
+        (() => {{
+          const gd = document.getElementById({self._plot_div_id!r});
+          if (!gd) return;
+
+          // (1) Clear ROI rectangles (layout.selections)
+          Plotly.relayout(gd, {{ selections: [] }});
+
+          // (2) Clear selected points styling/state
+          if (gd.data && gd.data.length) {{
+            const idx = Array.from({{length: gd.data.length}}, (_, i) => i);
+            Plotly.restyle(gd, {{ selectedpoints: [null] }}, idx);
+          }}
+        }})()
+        """
+        ui.run_javascript(js)
 
     def set_selected_file(self, file: Optional[KymImage]) -> None:
         """Update plot for new file.
@@ -518,6 +630,29 @@ class ImageLineViewerView:
             median_filter: Whether to apply median filter to the line plot.
         """
         safe_call(self._apply_filters_impl, remove_outliers, median_filter)
+
+    def refresh_velocity_events(self) -> None:
+        """Re-render the plot to refresh velocity event overlays."""
+        safe_call(self._refresh_velocity_events_impl)
+
+    def _refresh_velocity_events_impl(self) -> None:
+        self._render_combined()
+        self._apply_pending_range_zoom()
+
+    def _apply_pending_range_zoom(self) -> None:
+        if self._pending_range_zoom is None:
+            return
+        fig = self._current_figure
+        if fig is None or self._plot is None:
+            return
+        x_min, x_max = self._pending_range_zoom
+        self._pending_range_zoom = None
+        update_xaxis_range(fig, [x_min, x_max])
+        try:
+            self._plot.update_figure(fig)
+        except RuntimeError as e:
+            if "deleted" not in str(e).lower():
+                raise
 
     def _apply_filters_impl(self, remove_outliers: bool, median_filter: bool) -> None:
         """Internal implementation of apply_filters."""

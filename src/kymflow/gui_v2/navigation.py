@@ -130,13 +130,11 @@ def inject_global_styles() -> None:
 }
 .q-header {
     min-height: var(--kymflow-header-height) !important;
-    height: var(--kymflow-header-height) !important;
     display: flex !important;
     align-items: center !important;
 }
 .q-header .q-toolbar {
     min-height: var(--kymflow-header-height) !important;
-    height: var(--kymflow-header-height) !important;
     padding: 0 12px;  /* Reduced horizontal padding for more compact look */
     display: flex !important;
     align-items: center !important;

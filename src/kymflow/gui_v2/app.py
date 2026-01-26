@@ -41,7 +41,11 @@ setup_logging(
 # ---------------------------------------------------------------------
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Sites/kymflow_outer/kymflow/tests/data")
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/declan-data-analyzed")
-_DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/data/20251204")
+
+_DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download")
+
+# _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/data/20251204")
+
 DEV_FOLDER = Path(os.getenv("KYMFLOW_DEV_FOLDER", str(_DEFAULT_DEV_FOLDER))).expanduser()
 USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "1") == "1"
 
