@@ -10,6 +10,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.gui_v2.state import AppState
 
@@ -25,7 +26,10 @@ def app_state_with_file() -> tuple[AppState, KymImage]:
         kym_file = KymImage(test_file, load_image=True)
 
         app_state = AppState()
-        app_state.files = [kym_file]
+        # Replace default empty list with a test AcqImageList containing our file
+        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list.images = [kym_file]
+        app_state.files = image_list
         app_state.selected_file = kym_file
 
         return app_state, kym_file
@@ -144,8 +148,10 @@ def test_save_buttons_all_files(
 
         kym_file2 = KymImage(test_file2, load_image=True)
 
-        # Add both files to app_state
-        app_state.files = [kym_file, kym_file2]
+        # Add both files to app_state using an AcqImageList
+        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list.images = [kym_file, kym_file2]
+        app_state.files = image_list
 
         # Analyze first file
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
@@ -153,10 +159,6 @@ def test_save_buttons_all_files(
         kym_file.get_kym_analysis().analyze_roi(
             roi1.id, window_size=16, use_multiprocessing=False
         )
-
-        # Don't analyze second file
-        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
-        roi2 = kym_file2.rois.create_roi(bounds=bounds)
 
         # Verify has_analysis() logic
         assert kym_file.get_kym_analysis().has_analysis()

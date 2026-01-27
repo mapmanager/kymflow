@@ -7,7 +7,7 @@ for files matching a given extension and creates AcqImage instances for each one
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger
@@ -28,7 +28,7 @@ class AcqImageList(Generic[T]):
     Files are created WITHOUT loading image data (lazy loading).
     
     Attributes:
-        folder: Path to the scanned folder.
+        folder: Path to the scanned folder, or None if uninitialized.
         depth: Recursive scanning depth used. depth=1 includes only base folder
             (code depth 0). depth=2 includes base folder and immediate subfolders
             (code depths 0,1). depth=n includes all files from code depth 0 up to
@@ -57,7 +57,7 @@ class AcqImageList(Generic[T]):
     
     def __init__(
         self,
-        path: str | Path,
+        path: str | Path | None,
         *,
         image_cls: Type[T] = AcqImage,
         file_extension: str = ".tif",
@@ -78,15 +78,21 @@ class AcqImageList(Generic[T]):
                 (code depths 0,1). depth=n includes all files from code depth 0 up to
                 and including code depth (n-1). Defaults to 1.
         """
-        self.folder = Path(path).resolve()
+        # Allow initialization without an initial folder (e.g. GUI startup before a folder
+        # is chosen). In that case, keep images empty and skip any scanning.
+        if path is None:
+            self.folder: Optional[Path] = None
+        else:
+            self.folder = Path(path).resolve()
         self.depth = depth
         self.file_extension = file_extension
         self.ignore_file_stub = ignore_file_stub
         self.image_cls = image_cls
         self.images: List[T] = []
         
-        # Automatically load files during initialization
-        self._load_files()
+        # Automatically load files during initialization (if we have a folder)
+        if self.folder is not None:
+            self._load_files()
     
     def _load_files(self) -> None:
         """Internal method to scan folder and create AcqImage instances.
@@ -94,6 +100,10 @@ class AcqImageList(Generic[T]):
         Uses the same depth-based filtering logic as KymFileList._load_files().
         Files that cannot be loaded are silently skipped.
         """
+        if self.folder is None:
+            logger.debug("AcqImageList._load_files called with folder=None; skipping scan")
+            return
+
         if not self.folder.exists() or not self.folder.is_dir():
             logger.warning(f"AcqImageList: folder does not exist or is not a directory: {self.folder}")
             return
@@ -163,6 +173,9 @@ class AcqImageList(Generic[T]):
         the list after files have been added or removed.
         """
         self.images.clear()
+        if self.folder is None:
+            logger.debug("AcqImageList.load called with folder=None; nothing to reload")
+            return
         self._load_files()
     
     def reload(self) -> None:

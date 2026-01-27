@@ -45,10 +45,13 @@ _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Sites/kymflow_outer/kymflow/tests/dat
 
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download")
 
+# DO THIS NOW !!!!! 2026 jan 26
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/data/20251204")
 
 DEV_FOLDER = Path(os.getenv("KYMFLOW_DEV_FOLDER", str(_DEFAULT_DEV_FOLDER))).expanduser()
 USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "1") == "1"
+
+# USE_DEV_FOLDER = False  # abb turn of before impleenting ~/ kymflow config json
 
 # Shared application context (singleton, process-level)
 # AppContext.__init__ will check if we're in a worker process and skip initialization

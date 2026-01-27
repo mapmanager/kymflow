@@ -81,11 +81,21 @@ class AnalysisToolbarView:
         Always creates fresh UI elements because NiceGUI creates a new container
         context on each page navigation. Old UI elements are automatically cleaned
         up by NiceGUI when navigating away.
+
+        Attributes:
+            _window_select: Dropdown for selecting analysis window size.
         """
         # Always reset UI element references
-        self._window_select = None
+        
+        self._window_select: Optional[ui.select] = None
+        
+        # Analyze Flow button
         self._start_button = None
+        
+        # Cancel button
         self._cancel_button = None
+        
+        # Progress bar
         self._progress_bar = None
         self._progress_label = None
 
@@ -241,7 +251,7 @@ class AnalysisToolbarView:
         try:
             window_size = int(window_value)
         except (ValueError, TypeError):
-            logger.warning(f"Invalid window size: {window_value}")
+            logger.warning(f"Invalid window size: {window_value}, expectin an int")
             return
 
         # Require ROI selection before starting analysis
