@@ -88,22 +88,28 @@ def home() -> None:
     # Render the page (creates fresh UI elements each time and ensures setup)
     page.render(page_title="KymFlow")
 
-    # Emit dev bootstrap event once per session (if enabled)
+    # Bootstrap folder loading once per session (if enabled)
     # MUST be after render() so controllers are set up via _ensure_setup()
-    # Only bootstrap if:
-    # 1. This is a new page instance (cached_page is None)
-    # 2. Dev folder loading is enabled
-    # 3. AppState doesn't already have this folder loaded (prevents redundant loading)
-    folder_already_loaded = (
-        context.app_state.folder is not None
-        and context.app_state.folder.resolve() == DEV_FOLDER.resolve()
-    )
-    if cached_page is None and USE_DEV_FOLDER and not folder_already_loaded:
-        if DEV_FOLDER.exists():
+    # Only bootstrap if this is a new page instance (cached_page is None)
+    # and no folder is already loaded
+    if cached_page is None and context.app_state.folder is None:
+        # Precedence: dev override > last folder from config
+        if USE_DEV_FOLDER and DEV_FOLDER.exists():
             logger.info(f"DEV bootstrap: emitting FolderChosen({DEV_FOLDER}) for session {session_id[:8]}...")
             page.bus.emit(FolderChosen(folder=str(DEV_FOLDER)))
         else:
-            logger.warning(f"DEV_FOLDER does not exist: {DEV_FOLDER}")
+            # Try to load last folder from user config
+            last_path, last_depth = context.user_config.get_last_folder()
+            if last_path:
+                last_folder_path = Path(last_path)
+                if last_folder_path.exists():
+                    logger.info(
+                        f"Loading last folder from config: {last_path} (depth={last_depth}) "
+                        f"for session {session_id[:8]}..."
+                    )
+                    page.bus.emit(FolderChosen(folder=last_path, depth=last_depth))
+                else:
+                    logger.debug(f"Last folder from config does not exist: {last_path}")
 
 
 @ui.page("/batch")

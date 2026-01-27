@@ -13,6 +13,7 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import FolderChosen
 from kymflow.gui_v2.views.folder_picker import _prompt_for_directory_pywebview
+from kymflow.core.user_config import UserConfig
 
 logger = get_logger(__name__)
 
@@ -41,11 +42,13 @@ class FolderSelectorView:
         - Depth changes do NOT rescan automatically.
     """
 
-    def __init__(self, bus: EventBus, app_state: AppState) -> None:
+    def __init__(self, bus: EventBus, app_state: AppState, user_config: UserConfig | None = None) -> None:
         self._bus = bus
         self._app_state = app_state
+        self._user_config = user_config
         self._current_folder: Path = Path(".")
         self._folder_display: Optional[ui.label] = None
+        self._recent_select: Optional[ui.select] = None
 
     def render(self, *, initial_folder: Path) -> None:
         """Create the folder selector UI inside the current container.
@@ -121,11 +124,60 @@ class FolderSelectorView:
                 logger.error("Folder selection failed: %s", exc, exc_info=True)
                 ui.notify(f"Failed to select folder: {exc}", type="negative")
 
+        def _on_recent_folder_selected() -> None:
+            """Handle recent folder selection from dropdown."""
+            if self._recent_select is None:
+                return
+            
+            selected_path = self._recent_select.value
+            if not selected_path:
+                return
+            
+            # Verify path exists
+            folder_path = Path(selected_path)
+            if not folder_path.exists():
+                ui.notify(f"Folder no longer exists: {selected_path}", type="warning")
+                return
+            
+            # Get depth for this folder from config
+            depth = self._app_state.folder_depth  # Default to current depth
+            if self._user_config is not None:
+                depth = self._user_config.get_depth_for_folder(selected_path)
+            
+            # Emit FolderChosen with path and depth
+            logger.info(f"Recent folder selected: {selected_path} (depth={depth})")
+            self._bus.emit(FolderChosen(folder=selected_path, depth=depth))
+            if self._folder_display is not None:
+                self._folder_display.set_text(f"Folder: {selected_path}")
+
         # Always reset UI element reference - NiceGUI will clean up old elements
         # This ensures we create fresh elements in the new container context
         self._folder_display = None
+        self._recent_select = None
+
+        # Build recent folders options
+        recent_options: dict[str, str] = {}
+        if self._user_config is not None:
+            recent_folders = self._user_config.get_recent_folders()
+            for path, _depth in recent_folders:
+                recent_options[path] = path  # Display full path
 
         with ui.row().classes("w-full items-center gap-2"):
+            # Recent folders dropdown
+            if recent_options:
+                self._recent_select = ui.select(
+                    options=recent_options,
+                    label="Recent",
+                    on_change=_on_recent_folder_selected,
+                ).classes("min-w-64")
+            else:
+                self._recent_select = ui.select(
+                    options={},
+                    label="Recent",
+                ).classes("min-w-64")
+                self._recent_select.disable()
+                self._recent_select.props("placeholder=No recent folders")
+            
             # Always enable the button - check happens dynamically when clicked
             # This avoids timing issues with pywebview window initialization
             ui.button("Choose folder", on_click=_choose_folder)

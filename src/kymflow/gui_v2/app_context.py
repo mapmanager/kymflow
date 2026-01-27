@@ -17,6 +17,7 @@ from kymflow.gui_v2.state import AppState
 from kymflow.core.state import TaskState
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.user_config import UserConfig
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,7 @@ class AppContext:
     
     Attributes:
         app_state: Shared AppState instance for file management and selection
+        user_config: UserConfig instance for persistent user preferences
         home_task: TaskState for home page analysis tasks
         batch_task: TaskState for batch analysis tasks
         batch_overall_task: TaskState for overall batch progress
@@ -65,6 +67,7 @@ class AppContext:
             self._initialized = True
             # Create minimal dummy attributes to avoid AttributeError
             self.app_state = None
+            self.user_config = None
             self.home_task = None
             self.batch_task = None
             self.batch_overall_task = None
@@ -75,6 +78,8 @@ class AppContext:
         
         # Shared state instances
         self.app_state = AppState()
+        self.user_config = UserConfig.load()
+        logger.info(f"User config loaded from: {self.user_config.path}")
         self.home_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
@@ -135,6 +140,7 @@ class AppContext:
         """Reset the context (useful for testing or logout)."""
         logger.info("Resetting AppContext")
         self.app_state = AppState()
+        self.user_config = UserConfig.load()
         self.home_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()

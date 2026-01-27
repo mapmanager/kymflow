@@ -18,6 +18,9 @@ class FolderChosen:
 
     Attributes:
         folder: Selected folder path as string.
+        depth: Optional folder depth. If provided, sets app_state.folder_depth
+            before loading. If None, uses current app_state.folder_depth.
     """
 
     folder: str
+    depth: int | None = None

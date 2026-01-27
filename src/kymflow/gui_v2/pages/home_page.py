@@ -116,7 +116,7 @@ class HomePage(BasePage):
         self._persistence: FileTablePersistenceController | None = None
 
         # View objects (created in __init__, UI elements created in build())
-        self._folder_view = FolderSelectorView(bus, context.app_state)
+        self._folder_view = FolderSelectorView(bus, context.app_state, context.user_config)
         self._table_view = FileTableView(
             on_selected=bus.emit,
             on_metadata_update=bus.emit,
@@ -201,7 +201,9 @@ class HomePage(BasePage):
 
         # Controllers (subscribe to events once per client)
         self._bridge = AppStateBridgeController(self.context.app_state, self.bus)
-        self._folder_controller = FolderController(self.context.app_state, self.bus)
+        self._folder_controller = FolderController(
+            self.context.app_state, self.bus, self.context.user_config
+        )
         self._file_selection_controller = FileSelectionController(
             self.context.app_state, self.bus
         )

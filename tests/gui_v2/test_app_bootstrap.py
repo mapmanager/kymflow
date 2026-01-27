@@ -92,6 +92,7 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
     emitted = bus.emit.call_args.args[0]
     assert isinstance(emitted, FolderChosen)
     assert emitted.folder == str(tmp_path)
+    assert emitted.depth is None  # Dev folder doesn't specify depth
 
 
 def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> None:
@@ -114,3 +115,75 @@ def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> N
     app_module.home()
 
     bus.emit.assert_not_called()
+
+
+def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Path) -> None:
+    """Home route should load last folder from config when dev override is disabled."""
+    app_module = _load_app_module(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+
+    bus = SimpleNamespace(emit=MagicMock())
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
+
+    def _homepage(_context, _bus):
+        return DummyPage(bus=_bus)
+
+    monkeypatch.setattr(app_module, "HomePage", _homepage)
+
+    # Disable dev folder override
+    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", False)
+    
+    # Set up user config with last folder
+    app_module.context.app_state.folder = None
+    app_module.context.user_config.push_recent_folder(str(tmp_path), depth=2)
+    app_module.context.user_config.save()
+
+    app_module.home()
+
+    bus.emit.assert_called_once()
+    emitted = bus.emit.call_args.args[0]
+    assert isinstance(emitted, FolderChosen)
+    assert emitted.folder == str(tmp_path)
+    assert emitted.depth == 2  # Depth from config
+
+
+def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Path) -> None:
+    """Home route should prefer dev folder over last folder from config."""
+    app_module = _load_app_module(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+
+    bus = SimpleNamespace(emit=MagicMock())
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
+
+    def _homepage(_context, _bus):
+        return DummyPage(bus=_bus)
+
+    monkeypatch.setattr(app_module, "HomePage", _homepage)
+
+    # Enable dev folder override
+    dev_folder = tmp_path / "dev"
+    dev_folder.mkdir()
+    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", True)
+    monkeypatch.setattr(app_module, "DEV_FOLDER", dev_folder)
+    
+    # Set up user config with different last folder
+    config_folder = tmp_path / "config"
+    config_folder.mkdir()
+    app_module.context.app_state.folder = None
+    app_module.context.user_config.push_recent_folder(str(config_folder), depth=3)
+    app_module.context.user_config.save()
+
+    app_module.home()
+
+    # Should emit dev folder, not config folder
+    bus.emit.assert_called_once()
+    emitted = bus.emit.call_args.args[0]
+    assert isinstance(emitted, FolderChosen)
+    assert emitted.folder == str(dev_folder)
+    assert emitted.depth is None  # Dev folder doesn't specify depth
