@@ -168,11 +168,11 @@ def run_flow_analysis(
     # Set cancellable BEFORE set_running so the bridge emits the correct state
     # IMPORTANT: set_running triggers the bridge to emit, so cancellable must be set first
     task_state.cancellable = True
-    logger.debug(f"Set cancellable=True, running={task_state.running}")
+    # logger.debug(f"Set cancellable=True, running={task_state.running}")
     task_state.set_running(True)
-    logger.debug(f"After set_running(True), cancellable={task_state.cancellable}, running={task_state.running}")
+    # logger.debug(f"After set_running(True), cancellable={task_state.cancellable}, running={task_state.running}")
     task_state.set_progress(0.0, "Starting analysis")
-    logger.debug(f"After set_progress, cancellable={task_state.cancellable}, running={task_state.running}")
+    # logger.debug(f"After set_progress, cancellable={task_state.cancellable}, running={task_state.running}")
 
     # IMPORTANT: non-daemon. We want deterministic cleanup of pools.
     threading.Thread(target=_worker, daemon=False).start()

@@ -72,7 +72,7 @@ def home() -> None:
     cached_page = get_cached_page(session_id, "/")
     if cached_page is not None:
         # Reuse cached page
-        logger.debug(f"Reusing cached HomePage for session {session_id[:8]}...")
+        # logger.debug(f"Reusing cached HomePage for session {session_id[:8]}...")
         page = cached_page
     else:
         # Create new page instance and cache it
@@ -80,7 +80,7 @@ def home() -> None:
         bus = get_event_bus()
         page = HomePage(context, bus)
         cache_page(session_id, "/", page)
-        logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
+        # logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
 
     # Render the page (creates fresh UI elements each time and ensures setup)
     page.render(page_title="KymFlow")
@@ -120,7 +120,7 @@ def batch() -> None:
     cached_page = get_cached_page(session_id, "/batch")
     if cached_page is not None:
         # Reuse cached page
-        logger.debug(f"Reusing cached BatchPage for session {session_id[:8]}...")
+        # logger.debug(f"Reusing cached BatchPage for session {session_id[:8]}...")
         page = cached_page
     else:
         # Create new page instance and cache it
@@ -128,7 +128,7 @@ def batch() -> None:
         bus = get_event_bus()
         page = BatchPage(context, bus)
         cache_page(session_id, "/batch", page)
-        logger.debug(f"Created and cached new BatchPage for session {session_id[:8]}...")
+        # logger.debug(f"Created and cached new BatchPage for session {session_id[:8]}...")
 
     # Render the page (creates fresh UI elements each time)
     page.render(page_title="KymFlow - Batch")
@@ -151,7 +151,7 @@ def pool() -> None:
     cached_page = get_cached_page(session_id, "/pool")
     if cached_page is not None:
         # Reuse cached page
-        logger.debug(f"Reusing cached PoolPage for session {session_id[:8]}...")
+        # logger.debug(f"Reusing cached PoolPage for session {session_id[:8]}...")
         page = cached_page
     else:
         # Create new page instance and cache it
@@ -159,7 +159,7 @@ def pool() -> None:
         bus = get_event_bus()
         page = PoolPage(context, bus)
         cache_page(session_id, "/pool", page)
-        logger.debug(f"Created and cached new PoolPage for session {session_id[:8]}...")
+        # logger.debug(f"Created and cached new PoolPage for session {session_id[:8]}...")
 
     # Render the page (creates fresh UI elements each time)
     page.render(page_title="KymFlow - Pool")

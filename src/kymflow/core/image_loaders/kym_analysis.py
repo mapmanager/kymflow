@@ -69,7 +69,7 @@ def _check_gui_imports(context: str) -> None:
         )
 
 # Check on module import
-_check_gui_imports("kym_analysis module import")
+# _check_gui_imports("kym_analysis module import")
 
 CancelCallback = Callable[[], bool]
 
@@ -306,7 +306,7 @@ class KymAnalysis:
         # print(roi)
         
         # Temporary diagnostic: check GUI imports before calling mp_analyze_flow
-        _check_gui_imports(f"analyze_roi before mp_analyze_flow (roi_id={roi_id})")
+        # _check_gui_imports(f"analyze_roi before mp_analyze_flow (roi_id={roi_id})")
         
         # Run analysis on the ROI region
         # mp_analyze_flow expects explicit dim0/dim1 bounds in the (time, space) convention.

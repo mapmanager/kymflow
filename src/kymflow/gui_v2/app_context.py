@@ -60,7 +60,7 @@ class AppContext:
         is_main_process = current_process.name == "MainProcess"
         
         if not is_main_process:
-            logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
+            # logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
             # Set initialized to True to prevent re-initialization attempts
             self._initialized = True
             # Create minimal dummy attributes to avoid AttributeError
@@ -111,7 +111,7 @@ class AppContext:
     def set_default_folder(self, folder: Path) -> None:
         """Set the default data folder."""
         self.default_folder = folder.expanduser()
-        logger.debug(f"Default folder set to: {self.default_folder}")
+        # logger.debug(f"Default folder set to: {self.default_folder}")
     
     def toggle_theme(self, dark_mode) -> None:
         """Toggle theme and persist to storage.
@@ -129,7 +129,7 @@ class AppContext:
         mode = ThemeMode.DARK if dark_mode.value else ThemeMode.LIGHT
         self.app_state.set_theme(mode)
         
-        logger.debug(f"Theme toggled: {mode}")
+        # logger.debug(f"Theme toggled: {mode}")
     
     def reset(self) -> None:
         """Reset the context (useful for testing or logout)."""

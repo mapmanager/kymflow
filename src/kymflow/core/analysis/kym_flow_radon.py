@@ -55,7 +55,7 @@ def _check_gui_imports(context: str) -> None:
         )
 
 # Check on module import
-_check_gui_imports("kym_flow_radon module import")
+# _check_gui_imports("kym_flow_radon module import")
 
 class FlowCancelled(Exception):
     """Exception raised when flow analysis is cancelled.

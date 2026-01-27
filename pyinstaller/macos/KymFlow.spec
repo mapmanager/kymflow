@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['../../src/kymflow/gui/main.py'],
+    ['../../src/kymflow/gui_v2/app.py'],
     pathex=[],
     binaries=[],
     datas=[('/Users/cudmore/opt/miniconda3/envs/kymflow-pyinstaller-arm/lib/python3.11/site-packages/nicegui', 'nicegui')],

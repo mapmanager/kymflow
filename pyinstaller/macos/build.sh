@@ -14,7 +14,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 DIST_DIR="$ROOT_DIR/pyinstaller/macos/dist"
 BUILD_DIR="$ROOT_DIR/pyinstaller/macos/build"
-APP_ENTRY="$ROOT_DIR/src/kymflow/gui/main.py"
+
+# abb 2026
+APP_ENTRY="$ROOT_DIR/src/kymflow/gui_v2/app.py"
 
 echo "ROOT_DIR: $ROOT_DIR"
 echo "DIST_DIR: $DIST_DIR"

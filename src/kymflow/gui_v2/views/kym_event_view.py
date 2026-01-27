@@ -334,7 +334,7 @@ class KymEventView:
 
     def handle_set_kym_event_x_range(self, e: SetKymEventXRange) -> None:
         """Handle proposed x-range selection for a velocity event."""
-        logger.debug("handle_set_kym_event_x_range event_id=%s adding_new_event=%s", e.event_id, self._adding_new_event)
+        # logger.debug("handle_set_kym_event_x_range event_id=%s adding_new_event=%s", e.event_id, self._adding_new_event)
         self._setting_kym_event_range_state = False
         self._emit_range_state(False)
         self._update_range_button_state()
@@ -365,14 +365,14 @@ class KymEventView:
 
         # Otherwise, update existing event (original behavior)
         if self._selected_event_id is None:
-            logger.debug("no selected event; ignoring range proposal")
+            # logger.debug("no selected event; ignoring range proposal")
             return
         if e.event_id is not None and e.event_id != self._selected_event_id:
-            logger.debug("range proposal event_id mismatch (current=%s)", self._selected_event_id)
+            # logger.debug("range proposal event_id mismatch (current=%s)", self._selected_event_id)
             return
         if self._selected_event_path is not None and e.path is not None:
             if self._selected_event_path != e.path:
-                logger.debug("range proposal path mismatch (current=%s)", self._selected_event_path)
+                # logger.debug("range proposal path mismatch (current=%s)", self._selected_event_path)
                 return
         if self._on_event_update is None:
             return
@@ -389,7 +389,7 @@ class KymEventView:
     def _on_set_event_range_clicked(self) -> None:
         if self._selected_event_id is None:
             return
-        logger.debug("set_event_range_clicked -> toggle state")
+        # logger.debug("set_event_range_clicked -> toggle state")
         self._setting_kym_event_range_state = not self._setting_kym_event_range_state
         self._adding_new_event = False  # Ensure we're not in add mode
         self._emit_range_state(self._setting_kym_event_range_state)
@@ -402,21 +402,21 @@ class KymEventView:
 
     def _on_notification_dismissed(self, e) -> None:
         """Handle notification dismiss event (either programmatic or user-initiated)."""
-        logger.debug("_on_notification_dismissed called, _dismissing_programmatically=%s", self._dismissing_programmatically)
+        # logger.debug("_on_notification_dismissed called, _dismissing_programmatically=%s", self._dismissing_programmatically)
         if self._dismissing_programmatically:
             # Programmatic dismiss - just clear the flag and reference
             self._dismissing_programmatically = False
             self._range_notification = None
             return
         # User clicked "Cancel" button on notification - clear reference and call cancel handler
-        logger.debug("User clicked Cancel button on notification")
+        # logger.debug("User clicked Cancel button on notification")
         self._range_notification = None  # Clear reference since notification is already dismissed
         self._on_cancel_event_range_clicked()
 
     def _on_cancel_event_range_clicked(self) -> None:
         if not self._setting_kym_event_range_state and not self._adding_new_event:
             return
-        logger.debug("cancel_event_range_clicked -> disable state")
+        # logger.debug("cancel_event_range_clicked -> disable state")
         self._setting_kym_event_range_state = False
         self._adding_new_event = False
         self._emit_range_state(False)
@@ -429,7 +429,7 @@ class KymEventView:
     def _emit_range_state(self, enabled: bool) -> None:
         if self._on_range_state is None:
             return
-        logger.debug("emit SetKymEventRangeState enabled=%s adding_new_event=%s", enabled, self._adding_new_event)
+        # logger.debug("emit SetKymEventRangeState enabled=%s adding_new_event=%s", enabled, self._adding_new_event)
         # For new events, event_id is None
         event_id = None if self._adding_new_event else self._selected_event_id
         roi_id = self._roi_filter if self._adding_new_event else self._selected_event_roi_id
@@ -501,7 +501,7 @@ class KymEventView:
         if self._current_file_path is None:
             logger.warning("Add Event: current_file_path is None, cannot add event")
             return
-        logger.debug("add_event_clicked -> enable range state for new event")
+        # logger.debug("add_event_clicked -> enable range state for new event")
         self._adding_new_event = True
         self._setting_kym_event_range_state = True
         self._emit_range_state(True)
@@ -532,7 +532,7 @@ class KymEventView:
         dialog.close()
         if self._on_delete_event is None:
             return
-        logger.debug("confirm_delete event_id=%s", self._selected_event_id)
+        # logger.debug("confirm_delete event_id=%s", self._selected_event_id)
         self._on_delete_event(
             DeleteKymEvent(
                 event_id=self._selected_event_id,

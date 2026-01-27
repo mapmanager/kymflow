@@ -104,14 +104,15 @@ class AnalysisToolbarBindings:
         from kymflow.core.utils.logging import get_logger
         logger = get_logger(__name__)
         
-        logger.debug(
-            f"Received TaskStateChanged: task_type={e.task_type}, running={e.running}, "
-            f"cancellable={e.cancellable}, progress={e.progress}"
-        )
+        # logger.debug(
+        #     f"Received TaskStateChanged: task_type={e.task_type}, running={e.running}, "
+        #     f"cancellable={e.cancellable}, progress={e.progress}"
+        # )
         
         # Only process "home" task type events for this toolbar
         if e.task_type == "home":
-            logger.debug(f"Processing TaskStateChanged for home task, calling set_task_state")
+            # logger.debug(f"Processing TaskStateChanged for home task, calling set_task_state")
             safe_call(self._view.set_task_state, e)
         else:
-            logger.debug(f"Ignoring TaskStateChanged for task_type={e.task_type} (not 'home')")
+            # logger.debug(f"Ignoring TaskStateChanged for task_type={e.task_type} (not 'home')")
+            pass
