@@ -65,8 +65,10 @@ class AppState:
     
     def __init__(self):
         self.folder: Optional[Path] = None
+        
         # Initialize with empty folder - will be replaced when load_folder() is called
         self.files: AcqImageList[KymImage] = AcqImageList(path=Path("."), image_cls=KymImage, file_extension=".tif", depth=1)
+        
         self.selected_file: Optional[KymImage] = None
         self.selected_roi_id: Optional[int] = None  # Currently selected ROI ID
         self.selected_event_id: Optional[str] = None

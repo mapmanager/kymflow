@@ -105,6 +105,7 @@ class AcqImageList(Generic[T]):
         else:
             glob_pattern = f"*.{self.file_extension}"
         
+        # abb pyinstaller fail
         # Collect all matching files recursively (glob doesn't follow symlinks by default)
         all_paths = list(self.folder.glob(f"**/{glob_pattern}"))
         

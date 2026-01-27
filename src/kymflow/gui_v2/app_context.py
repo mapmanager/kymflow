@@ -60,7 +60,7 @@ class AppContext:
         is_main_process = current_process.name == "MainProcess"
         
         if not is_main_process:
-            # logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
+            logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
             # Set initialized to True to prevent re-initialization attempts
             self._initialized = True
             # Create minimal dummy attributes to avoid AttributeError
