@@ -412,7 +412,29 @@ class ImageLineViewerView:
         # Always re-render to show highlight (if selection changed)
         needs_render = (old_selected != e.event_id)
         if needs_render:
+            # Preserve x-axis range if zoom is disabled (e.g., after adding event)
+            preserved_range = None
+            if not e.options.zoom:
+                x_range = self._current_figure.layout.xaxis.range
+                if isinstance(x_range, (list, tuple)) and len(x_range) == 2:
+                    try:
+                        preserved_range = (float(x_range[0]), float(x_range[1]))
+                    except (TypeError, ValueError):
+                        pass
+            
             self._render_combined()
+            
+            # Restore preserved x-axis range if we captured it
+            if preserved_range is not None:
+                fig = self._current_figure
+                if fig is not None and self._plot is not None:
+                    update_xaxis_range(fig, list(preserved_range))
+                    try:
+                        self._plot.update_figure(fig)
+                    except RuntimeError as ex:
+                        if "deleted" not in str(ex).lower():
+                            logger.error(f"Error restoring zoom: {ex}")
+                            raise
         
         # If zoom is enabled, apply it as a fast partial update (axis range only)
         # This is very fast and doesn't cause a full re-render
@@ -669,8 +691,34 @@ class ImageLineViewerView:
         safe_call(self._refresh_velocity_events_impl)
 
     def _refresh_velocity_events_impl(self) -> None:
+        """Refresh velocity event overlays while preserving current zoom."""
+        # Capture current x-axis range before re-rendering
+        fig = self._current_figure
+        preserved_range = None
+        if fig is not None and self._plot is not None:
+            x_range = fig.layout.xaxis.range
+            if isinstance(x_range, (list, tuple)) and len(x_range) == 2:
+                try:
+                    preserved_range = (float(x_range[0]), float(x_range[1]))
+                except (TypeError, ValueError):
+                    # Invalid range, will not preserve zoom
+                    pass
+        
         self._render_combined()
-        self._apply_pending_range_zoom()
+        
+        # Restore preserved zoom if we captured it
+        if preserved_range is not None:
+            fig = self._current_figure
+            if fig is not None and self._plot is not None:
+                update_xaxis_range(fig, list(preserved_range))
+                try:
+                    self._plot.update_figure(fig)
+                except RuntimeError as e:
+                    if "deleted" not in str(e).lower():
+                        raise
+        else:
+            # No preserved range, apply pending range zoom if any
+            self._apply_pending_range_zoom()
 
     def _apply_pending_range_zoom(self) -> None:
         if self._pending_range_zoom is None:

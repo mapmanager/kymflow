@@ -939,13 +939,18 @@ class KymAnalysis:
         if roi_id not in self._velocity_events:
             self._velocity_events[roi_id] = []
         self._velocity_events[roi_id].append(new_event)
+        
+        # Generate UUID for the new event and add to mappings
+        idx = len(self._velocity_events[roi_id]) - 1  # Index of the newly appended event
+        event_uuid = str(uuid4())
+        self._velocity_event_uuid_map[event_uuid] = (roi_id, idx)
+        self._velocity_event_uuid_reverse[(roi_id, idx)] = event_uuid
 
         # Mark dirty
         self._dirty = True
 
-        # Generate and return event_id
-        event_id = self._velocity_event_id(roi_id, new_event)
-        return event_id
+        # Return UUID event_id (not the old format)
+        return event_uuid
 
     def delete_velocity_event(self, event_id: str) -> bool:
         """Delete a velocity event by UUID event_id.

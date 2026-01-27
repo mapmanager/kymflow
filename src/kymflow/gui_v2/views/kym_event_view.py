@@ -114,6 +114,7 @@ class KymEventView:
         self._add_event_button: ui.button | None = None
         self._delete_event_button: ui.button | None = None
         self._range_notification: ui.notification | None = None
+        self._dismissing_programmatically: bool = False  # Flag to track programmatic dismiss
         self._selected_event_id: str | None = None
         self._selected_event_roi_id: int | None = None
         self._selected_event_path: str | None = None
@@ -175,8 +176,15 @@ class KymEventView:
     def _set_zoom_pad_sec(self, value: float) -> None:
         self._zoom_pad_sec = value
 
-    def set_events(self, rows: Iterable[dict[str, object]]) -> None:
-        """Update table contents from velocity report rows."""
+    def set_events(
+        self, rows: Iterable[dict[str, object]], *, select_event_id: str | None = None
+    ) -> None:
+        """Update table contents from velocity report rows.
+        
+        Args:
+            rows: Velocity report rows to display.
+            select_event_id: Optional event_id to select after updating the grid.
+        """
         self._all_rows = list(rows)
         # Extract current file path from first row if available
         if self._all_rows:
@@ -189,6 +197,10 @@ class KymEventView:
             self._current_file_path = None
         self._update_file_path_label()
         self._apply_filter()
+        
+        # Select event after grid update if requested
+        if select_event_id is not None:
+            self.set_selected_event_ids([select_event_id], origin=SelectionOrigin.EXTERNAL)
 
     def set_selected_event_ids(self, event_ids: list[str], *, origin: SelectionOrigin) -> None:
         """Programmatically select rows by event_id."""
@@ -202,10 +214,50 @@ class KymEventView:
             self._suppress_emit = False
         if len(event_ids) == 1:
             self._selected_event_id = event_ids[0]
+            # Find row data to emit EventSelection for plot highlighting
+            # Search _all_rows first (source of truth), then _pending_rows as fallback
+            row_data = None
+            for row in self._all_rows:
+                if row.get("event_id") == event_ids[0]:
+                    row_data = row
+                    break
+            if row_data is None:
+                # Not in all rows, search filtered rows as fallback
+                for row in self._pending_rows:
+                    if row.get("event_id") == event_ids[0]:
+                        row_data = row
+                        break
+            if row_data is not None:
+                roi_id = row_data.get("roi_id")
+                path = row_data.get("path")
+                event = VelocityEvent.from_dict(row_data)
+                self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
+                self._selected_event_path = str(path) if path else None
+                # Emit EventSelection to update plot highlighting
+                # Use "state" phase for EXTERNAL origin (programmatic selection) so it reaches state subscribers
+                # Use "intent" phase for EVENT_TABLE origin (user selection) to follow canonical event flow
+                phase = "state" if origin == SelectionOrigin.EXTERNAL else "intent"
+                # Disable zoom for EXTERNAL origin (programmatic selection) to preserve x-axis
+                # User selection from table should zoom, but programmatic selection after add should not
+                zoom = False if origin == SelectionOrigin.EXTERNAL else self._zoom_enabled
+                self._on_selected(
+                    EventSelection(
+                        event_id=str(event_ids[0]),
+                        roi_id=int(roi_id) if roi_id is not None else None,
+                        path=str(path) if path else None,
+                        event=event,
+                        options=EventSelectionOptions(
+                            zoom=zoom,
+                            zoom_pad_sec=self._zoom_pad_sec,
+                        ),
+                        origin=origin,
+                        phase=phase,
+                    )
+                )
         else:
             self._selected_event_id = None
-        self._selected_event_roi_id = None
-        self._selected_event_path = None
+            self._selected_event_roi_id = None
+            self._selected_event_path = None
         self._update_range_button_state()
         self._update_add_delete_button_state()
 
@@ -351,6 +403,19 @@ class KymEventView:
         else:
             self._set_range_notification_visible(False)
 
+    def _on_notification_dismissed(self, e) -> None:
+        """Handle notification dismiss event (either programmatic or user-initiated)."""
+        logger.debug("_on_notification_dismissed called, _dismissing_programmatically=%s", self._dismissing_programmatically)
+        if self._dismissing_programmatically:
+            # Programmatic dismiss - just clear the flag and reference
+            self._dismissing_programmatically = False
+            self._range_notification = None
+            return
+        # User clicked "Cancel" button on notification - clear reference and call cancel handler
+        logger.debug("User clicked Cancel button on notification")
+        self._range_notification = None  # Clear reference since notification is already dismissed
+        self._on_cancel_event_range_clicked()
+
     def _on_cancel_event_range_clicked(self) -> None:
         if not self._setting_kym_event_range_state and not self._adding_new_event:
             return
@@ -360,7 +425,9 @@ class KymEventView:
         self._emit_range_state(False)
         self._update_range_button_state()
         self._update_add_delete_button_state()
-        self._set_range_notification_visible(False)
+        # Only dismiss notification if it still exists (not already dismissed by user)
+        if self._range_notification is not None:
+            self._set_range_notification_visible(False)
 
     def _emit_range_state(self, enabled: bool) -> None:
         if self._on_range_state is None:
@@ -408,6 +475,7 @@ class KymEventView:
     def _set_range_notification_visible(self, visible: bool) -> None:
         if visible:
             if self._range_notification is not None:
+                self._dismissing_programmatically = True
                 self._range_notification.dismiss()
             message = (
                 "Draw a rectangle on the plot to add new event start/stop."
@@ -418,10 +486,13 @@ class KymEventView:
                 message,
                 color="warning",
                 timeout=None,
+                close_button="Cancel",
+                on_dismiss=self._on_notification_dismissed,
             )
         else:
             if self._range_notification is None:
                 return
+            self._dismissing_programmatically = True
             self._range_notification.dismiss()
             self._range_notification = None
 

@@ -102,14 +102,12 @@ class KymEventBindings:
             return
         self._logger.debug("add_kym_event(state) event_id=%s", e.event_id)
         report = self._current_file.get_kym_analysis().get_velocity_report()
-        safe_call(self._view.set_events, report)
-        # Select the newly created event
-        if e.event_id:
-            safe_call(
-                self._view.set_selected_event_ids,
-                [e.event_id],
-                origin=SelectionOrigin.EXTERNAL,
-            )
+        # Select the newly created event during set_events to ensure proper timing
+        safe_call(
+            self._view.set_events,
+            report,
+            select_event_id=e.event_id if e.event_id else None,
+        )
 
     def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
         """Refresh event table rows after deleting event and clear selection."""
