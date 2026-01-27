@@ -93,8 +93,10 @@ class TaskProgressView:
         self._status_label.text = self._task_state.message
 
         # Show/hide progress bar based on running state
-        if self._task_state.running:
+        # Also show if there's a message (even if not running, to show final status)
+        if self._task_state.running or (self._task_state.message and self._task_state.progress > 0):
             self._progress_bar.visible = True
         else:
             self._progress_bar.visible = False
-            self._progress_bar.value = 0.0
+            if not self._task_state.running:
+                self._progress_bar.value = 0.0

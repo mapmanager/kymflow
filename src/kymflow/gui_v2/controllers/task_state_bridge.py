@@ -104,6 +104,15 @@ class TaskStateBridgeController:
         if not self._is_client_alive():
             return
 
+        from kymflow.core.utils.logging import get_logger
+        logger = get_logger(__name__)
+        
+        logger.debug(
+            f"Emitting TaskStateChanged: running={self._task_state.running}, "
+            f"cancellable={self._task_state.cancellable}, progress={self._task_state.progress}, "
+            f"message={self._task_state.message}, task_type={self._task_type}"
+        )
+
         self._bus.emit(
             TaskStateChanged(
                 running=self._task_state.running,
@@ -111,6 +120,7 @@ class TaskStateBridgeController:
                 message=self._task_state.message,
                 cancellable=self._task_state.cancellable,
                 task_type=self._task_type,
+                phase="state",
             )
         )
 

@@ -233,27 +233,24 @@ class KymEventView:
                 event = VelocityEvent.from_dict(row_data)
                 self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
                 self._selected_event_path = str(path) if path else None
-                # Emit EventSelection to update plot highlighting
-                # Use "state" phase for EXTERNAL origin (programmatic selection) so it reaches state subscribers
-                # Use "intent" phase for EVENT_TABLE origin (user selection) to follow canonical event flow
-                phase = "state" if origin == SelectionOrigin.EXTERNAL else "intent"
-                # Disable zoom for EXTERNAL origin (programmatic selection) to preserve x-axis
-                # User selection from table should zoom, but programmatic selection after add should not
-                zoom = False if origin == SelectionOrigin.EXTERNAL else self._zoom_enabled
-                self._on_selected(
-                    EventSelection(
-                        event_id=str(event_ids[0]),
-                        roi_id=int(roi_id) if roi_id is not None else None,
-                        path=str(path) if path else None,
-                        event=event,
-                        options=EventSelectionOptions(
-                            zoom=zoom,
-                            zoom_pad_sec=self._zoom_pad_sec,
-                        ),
-                        origin=origin,
-                        phase=phase,
+                # Only emit EventSelection for user-initiated selections (EVENT_TABLE origin)
+                # EXTERNAL origin selections are programmatic and should NOT emit EventSelection
+                # to avoid infinite recursion: EXTERNAL → EventSelection → bindings → EXTERNAL
+                if origin == SelectionOrigin.EVENT_TABLE:
+                    self._on_selected(
+                        EventSelection(
+                            event_id=str(event_ids[0]),
+                            roi_id=int(roi_id) if roi_id is not None else None,
+                            path=str(path) if path else None,
+                            event=event,
+                            options=EventSelectionOptions(
+                                zoom=self._zoom_enabled,
+                                zoom_pad_sec=self._zoom_pad_sec,
+                            ),
+                            origin=origin,
+                            phase="intent",
+                        )
                     )
-                )
         else:
             self._selected_event_id = None
             self._selected_event_roi_id = None

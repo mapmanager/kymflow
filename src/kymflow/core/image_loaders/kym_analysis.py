@@ -8,6 +8,10 @@ must be explicitly defined before analysis.
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
+import os
+import queue
+import sys
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +38,39 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-ProgressCallback = Callable[[int, int], Any]
+# Temporary diagnostics to trace GUI imports during spawn
+def _check_gui_imports(context: str) -> None:
+    """Check if GUI modules are imported at this point.
+    
+    This is temporary diagnostic logging to identify import chains that pull
+    in GUI code during multiprocessing worker spawn.
+    
+    Args:
+        context: Description of where this check is happening (e.g., "module import").
+    """
+    process_name = mp.current_process().name
+    pid = os.getpid()
+    module_name = __name__
+    
+    has_gui_v2 = 'kymflow.gui_v2' in sys.modules
+    has_nicegui = 'nicegui' in sys.modules
+    gui_modules = [m for m in sys.modules.keys() if 'gui' in m.lower() or 'nicegui' in m.lower()]
+    
+    if has_gui_v2 or has_nicegui or gui_modules:
+        logger.warning(
+            f"GUI MODULES DETECTED [{context}]: "
+            f"pid={pid}, process={process_name}, module={module_name}, "
+            f"gui_v2={has_gui_v2}, nicegui={has_nicegui}, modules={gui_modules}"
+        )
+    else:
+        logger.debug(
+            f"No GUI modules detected [{context}]: "
+            f"pid={pid}, process={process_name}, module={module_name}"
+        )
+
+# Check on module import
+_check_gui_imports("kym_analysis module import")
+
 CancelCallback = Callable[[], bool]
 
 
@@ -225,7 +261,7 @@ class KymAnalysis:
         roi_id: int,
         window_size: int,
         *,
-        progress_callback: Optional[ProgressCallback] = None,
+        progress_queue: Optional[queue.Queue] = None,
         is_cancelled: Optional[CancelCallback] = None,
         use_multiprocessing: bool = True,
     ) -> None:
@@ -238,7 +274,10 @@ class KymAnalysis:
         Args:
             roi_id: Identifier of the ROI to analyze.
             window_size: Number of time lines per analysis window. Must be a multiple of 4.
-            progress_callback: Optional callback function(completed, total) for progress.
+            progress_queue: Optional queue to receive progress messages from the
+                parent process as tuples of the form ('progress', completed, total).
+                This is safe to consume from GUI/main threads. Progress is emitted
+                from the parent process only, never from worker processes.
             is_cancelled: Optional callback function() -> bool to check for cancellation.
             use_multiprocessing: If True, use multiprocessing for parallel computation.
         
@@ -266,6 +305,9 @@ class KymAnalysis:
         # logger.info(f'calling mp_analyze_flow() with roi {roi_id}:')
         # print(roi)
         
+        # Temporary diagnostic: check GUI imports before calling mp_analyze_flow
+        _check_gui_imports(f"analyze_roi before mp_analyze_flow (roi_id={roi_id})")
+        
         # Run analysis on the ROI region
         # mp_analyze_flow expects explicit dim0/dim1 bounds in the (time, space) convention.
         thetas, the_t, spread = mp_analyze_flow(
@@ -275,7 +317,7 @@ class KymAnalysis:
             stop_pixel,
             start_line,
             stop_line,
-            progress_callback=progress_callback,
+            progress_queue=progress_queue,
             is_cancelled=is_cancelled,
             use_multiprocessing=use_multiprocessing,
         )

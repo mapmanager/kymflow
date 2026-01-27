@@ -7,6 +7,7 @@ page application), state naturally persists across navigation without page reloa
 
 from __future__ import annotations
 
+import multiprocessing as mp
 from pathlib import Path
 from typing import Optional
 
@@ -51,6 +52,23 @@ class AppContext:
     def __init__(self) -> None:
         """Initialize the context (only runs once due to singleton)."""
         if self._initialized:
+            return
+        
+        # CRITICAL: Do NOT initialize GUI state in worker processes
+        # Workers will re-import this module during spawn, and we must not create GUI objects
+        current_process = mp.current_process()
+        is_main_process = current_process.name == "MainProcess"
+        
+        if not is_main_process:
+            logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
+            # Set initialized to True to prevent re-initialization attempts
+            self._initialized = True
+            # Create minimal dummy attributes to avoid AttributeError
+            self.app_state = None
+            self.home_task = None
+            self.batch_task = None
+            self.batch_overall_task = None
+            self.default_folder = Path.home() / "data"
             return
             
         logger.info("Initializing AppContext singleton")

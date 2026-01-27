@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sys
+import multiprocessing as mp
 from multiprocessing import freeze_support
 from pathlib import Path
 
@@ -39,10 +40,10 @@ setup_logging(
 # ---------------------------------------------------------------------
 # Dev folder (hard-coded, env overridable)
 # ---------------------------------------------------------------------
-# _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Sites/kymflow_outer/kymflow/tests/data")
+_DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Sites/kymflow_outer/kymflow/tests/data")
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/declan-data-analyzed")
 
-_DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download")
+# _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download")
 
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/data/20251204")
 
@@ -50,6 +51,7 @@ DEV_FOLDER = Path(os.getenv("KYMFLOW_DEV_FOLDER", str(_DEFAULT_DEV_FOLDER))).exp
 USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "1") == "1"
 
 # Shared application context (singleton, process-level)
+# AppContext.__init__ will check if we're in a worker process and skip initialization
 context = AppContext()
 
 
@@ -188,6 +190,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         DEV_FOLDER,
     )
 
+    reload = False
     ui.run(
         port=DEFAULT_PORT,
         reload=reload,
@@ -200,5 +203,15 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
 
 if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
     freeze_support()
-    logger.info(f"__name__: {__name__}")
-    main()
+    # CRITICAL: Only start GUI in the actual main process, not in worker processes
+    # Worker processes will have __name__ == "__mp_main__" but process name != "MainProcess"
+    current_process = mp.current_process()
+    is_main_process = current_process.name == "MainProcess"
+    
+    logger.info(f"__name__: {__name__}, process: {current_process.name}, is_main: {is_main_process}")
+    
+    if is_main_process:
+        main()
+    else:
+        # This is a worker process - do NOT start the GUI
+        logger.debug(f"Skipping GUI startup in worker process: {current_process.name}")

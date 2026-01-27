@@ -64,6 +64,7 @@ class TaskStateChanged:
         message: Status message describing current task state.
         cancellable: Whether the task can be cancelled.
         task_type: Type of task - "home", "batch", or "batch_overall".
+        phase: Event phase - always "state".
     """
 
     running: bool
@@ -71,5 +72,6 @@ class TaskStateChanged:
     message: str
     cancellable: bool
     task_type: Literal["home", "batch", "batch_overall"]
+    phase: Literal["state"] = "state"
 
 

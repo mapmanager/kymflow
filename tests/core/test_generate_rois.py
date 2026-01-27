@@ -15,6 +15,8 @@ Usage:
 
 from __future__ import annotations
 
+import queue
+import threading
 from pathlib import Path
 import sys
 import pytest
@@ -28,30 +30,44 @@ setup_logging(level="INFO")
 logger = get_logger(__name__)
 
 
-def create_progress_callback(roi_id: int, roi_label: str = "") -> callable:
-    """Create a progress callback function that prints to console.
+def create_progress_queue(roi_id: int, roi_label: str = "") -> queue.Queue:
+    """Create a progress queue and start a thread to drain and print progress.
     
     Args:
         roi_id: ROI identifier for display
         roi_label: Optional label for the ROI (e.g., "Full Image", "Center Region")
     
     Returns:
-        Callback function that accepts (completed: int, total: int)
+        A queue that receives progress messages and prints them.
     """
     label = f"ROI {roi_id}"
     if roi_label:
         label = f"{label} ({roi_label})"
     
-    def progress_cb(completed: int, total: int) -> None:
-        if total > 0:
-            pct = (completed / total) * 100
-            print(f"  {label}: {completed}/{total} windows ({pct:.1f}%)", end="\r")
-            if completed >= total:
-                print()  # Newline when complete
-        else:
-            print(f"  {label}: {completed} windows", end="\r")
+    progress_q: queue.Queue = queue.Queue()
     
-    return progress_cb
+    def _drain_and_print() -> None:
+        """Drain queue and print progress messages."""
+        while True:
+            try:
+                msg = progress_q.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            if msg[0] == "progress":
+                _, completed, total = msg
+                if total > 0:
+                    pct = (completed / total) * 100
+                    print(f"  {label}: {completed}/{total} windows ({pct:.1f}%)", end="\r")
+                    if completed >= total:
+                        print()  # Newline when complete
+                else:
+                    print(f"  {label}: {completed} windows", end="\r")
+            elif msg[0] == "done":
+                break
+    
+    # Start daemon thread to drain queue
+    threading.Thread(target=_drain_and_print, daemon=True).start()
+    return progress_q
 
 @pytest.fixture
 def data_dir() -> Path:
@@ -149,7 +165,7 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     kym_image.get_kym_analysis().analyze_roi(
         roi1.id,
         window_size,
-        progress_callback=create_progress_callback(roi1.id, "Full Image"),
+        progress_queue=create_progress_queue(roi1.id, "Full Image"),
         use_multiprocessing=True,
     )
     logger.info(f"✓ ROI {roi1.id} analysis complete")
@@ -159,7 +175,7 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     kym_image.get_kym_analysis().analyze_roi(
         roi2.id,
         window_size,
-        progress_callback=create_progress_callback(roi2.id, "Center Region"),
+        progress_queue=create_progress_queue(roi2.id, "Center Region"),
         use_multiprocessing=True,
     )
     logger.info(f"✓ ROI {roi2.id} analysis complete")
@@ -169,7 +185,7 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     kym_image.get_kym_analysis().analyze_roi(
         roi3.id,
         window_size,
-        progress_callback=create_progress_callback(roi3.id, "Left Region"),
+        progress_queue=create_progress_queue(roi3.id, "Left Region"),
         use_multiprocessing=True,
     )
     logger.info(f"✓ ROI {roi3.id} analysis complete")

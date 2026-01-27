@@ -9,9 +9,12 @@ search to efficiently determine flow angles.
 from __future__ import annotations
 
 import math
+import multiprocessing as mp
 import os
+import sys
 import time
-from typing import Callable, Optional, Tuple, Any
+import queue
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 from multiprocessing import Pool
@@ -20,6 +23,39 @@ from skimage.transform import radon
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Temporary diagnostics to trace GUI imports during spawn
+def _check_gui_imports(context: str) -> None:
+    """Check if GUI modules are imported at this point.
+    
+    This is temporary diagnostic logging to identify import chains that pull
+    in GUI code during multiprocessing worker spawn.
+    
+    Args:
+        context: Description of where this check is happening (e.g., "module import").
+    """
+    process_name = mp.current_process().name
+    pid = os.getpid()
+    module_name = __name__
+    
+    has_gui_v2 = 'kymflow.gui_v2' in sys.modules
+    has_nicegui = 'nicegui' in sys.modules
+    gui_modules = [m for m in sys.modules.keys() if 'gui' in m.lower() or 'nicegui' in m.lower()]
+    
+    if has_gui_v2 or has_nicegui or gui_modules:
+        logger.warning(
+            f"GUI MODULES DETECTED [{context}]: "
+            f"pid={pid}, process={process_name}, module={module_name}, "
+            f"gui_v2={has_gui_v2}, nicegui={has_nicegui}, modules={gui_modules}"
+        )
+    else:
+        logger.debug(
+            f"No GUI modules detected [{context}]: "
+            f"pid={pid}, process={process_name}, module={module_name}"
+        )
+
+# Check on module import
+_check_gui_imports("kym_flow_radon module import")
 
 class FlowCancelled(Exception):
     """Exception raised when flow analysis is cancelled.
@@ -91,7 +127,7 @@ def mp_analyze_flow(
     dim1_stop: Optional[int],
     *,
     verbose: bool = False,
-    progress_callback: Optional[Callable[[int, int], Any]] = None,
+    progress_queue: Optional[queue.Queue] = None,
     progress_every: int = 1,
     is_cancelled: Optional[Callable[[], bool]] = None,
     use_multiprocessing: bool = True,
@@ -129,8 +165,10 @@ def mp_analyze_flow(
         stop_line: Stop index in time dimension (axis 0), exclusive.
             If None, uses full height (n_time).
         verbose: If True, prints timing and shape information to stdout.
-        progress_callback: Optional callable(completed, total_windows) called
-            periodically to report progress.
+        progress_queue: Optional queue to receive progress messages from the
+            parent process as tuples of the form ('progress', completed, total).
+            This is safe to consume from GUI/main threads. Progress is emitted
+            from the parent process only, never from worker processes.
         progress_every: Emit progress every N completed windows. Defaults to 1.
         is_cancelled: Optional callable() -> bool that returns True if
             computation should be cancelled.
@@ -156,7 +194,7 @@ def mp_analyze_flow(
     #     raise ValueError(f"data must be 2D (time, space); got shape {data.shape}")
 
     if dim0_start is None:
-        start_pixel = 0
+        dim0_start = 0
     if dim0_stop is None:
         dim0_stop = data.shape[0]
     if dim1_start is None:
@@ -200,20 +238,37 @@ def mp_analyze_flow(
     completed = 0
     last_emit = 0
 
+    # Emit initial progress so GUIs can show total work immediately.
+    if progress_queue is not None:
+        try:
+            progress_queue.put(("progress", 0, nsteps))
+        except Exception:
+            pass
+
     def cancelled() -> bool:
         return bool(is_cancelled and is_cancelled())
 
-    def maybe_progress():
+    def maybe_progress() -> None:
+        """Emit progress from the *parent process* only.
+
+        This function is safe to call from either the main thread or a background
+        thread, but it must never be invoked from within multiprocessing worker
+        processes. In this module, it is only called in the parent process.
+        """
         nonlocal last_emit, completed
-        if progress_callback is None:
+
+        if (completed - last_emit) < max(1, progress_every):
             return
-        if (completed - last_emit) >= max(1, progress_every):
+
+        # Queue-based progress (queue-only API)
+        if progress_queue is not None:
             try:
-                progress_callback(completed, nsteps)
+                progress_queue.put(("progress", completed, nsteps))
             except Exception:
-                # Swallow progress errors; they shouldn't kill the computation.
+                # Progress must never crash analysis
                 pass
-            last_emit = completed
+
+        last_emit = completed
 
     # --- Multiprocessing path ---
     if use_multiprocessing and nsteps > 1:
@@ -291,9 +346,9 @@ def mp_analyze_flow(
             maybe_progress()
 
     # Final progress update
-    if progress_callback is not None:
+    if progress_queue is not None:
         try:
-            progress_callback(nsteps, nsteps)
+            progress_queue.put(("progress", nsteps, nsteps))
         except Exception:
             pass
 
