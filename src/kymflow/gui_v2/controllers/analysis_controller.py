@@ -74,6 +74,26 @@ class AnalysisController:
             ui.notify("ROI selection required", color="warning")
             return
 
+        # Verify ROI exists in the selected file
+        roi_ids = kf.rois.get_roi_ids()
+        if e.roi_id not in roi_ids:
+            logger.warning(
+                "AnalysisStart: ROI %s not found in file %s (available: %s)",
+                e.roi_id,
+                kf.path,
+                roi_ids,
+            )
+            ui.notify(f"ROI {e.roi_id} not found in selected file", color="warning")
+            return
+
+        # Log for debugging
+        logger.info(
+            "Starting analysis: file=%s, roi_id=%s, window_size=%s",
+            kf.path,
+            e.roi_id,
+            e.window_size,
+        )
+
         # Start analysis in background thread
         run_flow_analysis(
             kf,
@@ -88,14 +108,21 @@ class AnalysisController:
 
         Called by run_flow_analysis when analysis completes. Updates AppState
         to notify that metadata has changed (analysis results are stored in the file).
+        
+        Note: We do NOT call refresh_file_rows() here because:
+        - Analysis results are stored in memory, not on disk
+        - refresh_file_rows() would reload from disk, losing unsaved changes
+        - The MetadataUpdate event will trigger FileTableBindings to refresh the table view
+        - Only save operations should trigger refresh_file_rows() (files on disk changed)
 
         Args:
             kf: KymImage instance that was analyzed.
             success: Whether analysis completed successfully.
         """
         if success:
+            # This triggers MetadataUpdate event, which refreshes the file table view
+            # without reloading from disk
             self._app_state.update_metadata(kf)
-            self._app_state.refresh_file_rows()
 
     def _on_analysis_cancel(self, e: AnalysisCancel) -> None:
         """Handle analysis cancel intent event.

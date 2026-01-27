@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Literal, Any
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
     from kymflow.core.image_loaders.kym_image import KymImage
+    from kymflow.core.image_loaders.roi import RoiBounds
     from kymflow.gui_v2.state import ImageDisplayParams
 else:
     from kymflow.gui_v2.state import ImageDisplayParams
@@ -33,6 +34,7 @@ class SelectionOrigin(str, Enum):
         EXTERNAL: Selection originated from external source (e.g., programmatic update).
         RESTORE: Selection originated from restoring saved selection on page load.
         EVENT_TABLE: Selection originated from the event table.
+        ANALYSIS_TOOLBAR: Selection originated from analysis toolbar (e.g., ROI dropdown).
     """
 
     FILE_TABLE = "file_table"
@@ -40,6 +42,7 @@ class SelectionOrigin(str, Enum):
     EXTERNAL = "external"
     RESTORE = "restore"
     EVENT_TABLE = "event_table"
+    ANALYSIS_TOOLBAR = "analysis_toolbar"
 
 
 @dataclass(frozen=True, slots=True)
@@ -428,5 +431,122 @@ class DeleteKymEvent:
     event_id: str
     roi_id: int | None
     path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class AddRoi:
+    """Add ROI event (intent or state phase).
+
+    Purpose: Create a new ROI with default full-image bounds.
+    Triggered by: Intent from AnalysisToolbarView "Add ROI" button.
+    Consumed by: AddRoiController (intent → KymImage.rois.create_roi()).
+
+    Attributes:
+        roi_id: ROI ID after creation (None in intent, set in state).
+        path: File path (optional, for validation).
+        origin: SelectionOrigin indicating where the add came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    roi_id: int | None
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteRoi:
+    """Delete ROI event (intent or state phase).
+
+    Purpose: Remove an ROI by roi_id.
+    Triggered by: Intent from AnalysisToolbarView "Delete ROI" button (with confirmation).
+    Consumed by: DeleteRoiController (intent → KymImage.rois.delete()).
+
+    Attributes:
+        roi_id: ROI ID to delete.
+        path: File path (optional, for validation).
+        origin: SelectionOrigin indicating where the delete came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    roi_id: int
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class EditRoi:
+    """Edit ROI event (intent or state phase).
+
+    Purpose: Update ROI bounds (and optionally other attributes).
+    Triggered by: Intent from AnalysisToolbarView "Edit ROI" button → SetRoiEditState → SetRoiBounds flow.
+    Consumed by: EditRoiController (intent → KymImage.rois.edit_roi()).
+
+    Attributes:
+        roi_id: ROI ID to edit.
+        bounds: New RoiBounds (optional, None means unchanged).
+        path: File path (optional, for validation).
+        origin: SelectionOrigin indicating where the edit came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    roi_id: int
+    bounds: "RoiBounds | None"
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class SetRoiEditState:
+    """Arm/disarm the next Plotly rectangle selection for editing ROI bounds.
+
+    Purpose: Toggle UI state where next rectangle selection proposes new ROI bounds.
+    Triggered by: Intent from AnalysisToolbarView "Edit ROI" button.
+    Consumed by: ImageLineViewerBindings (state → enable/disable Plotly dragmode).
+
+    Attributes:
+        enabled: Whether the edit state is active.
+        roi_id: Active ROI ID (required when enabled=True).
+        path: File path (optional, for validation).
+        origin: SelectionOrigin indicating where the toggle came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    enabled: bool
+    roi_id: int | None
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class SetRoiBounds:
+    """Propose new bounds for the active ROI.
+
+    Purpose: Carry rectangle bounds from Plotly selection to EditRoiController.
+    Triggered by: Intent from ImageLineViewerView when armed and valid rect selection occurs.
+    Consumed by: EditRoiController (validates, then emits EditRoi).
+
+    Attributes:
+        roi_id: ROI ID that the bounds apply to.
+        path: File path (optional, for validation).
+        x0: Left edge (dim1_start).
+        x1: Right edge (dim1_stop).
+        y0: Top edge (dim0_start).
+        y1: Bottom edge (dim0_stop).
+        origin: SelectionOrigin indicating where the proposal came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    roi_id: int | None
+    path: str | None
+    x0: float
+    x1: float
+    y0: float
+    y1: float
     origin: SelectionOrigin
     phase: EventPhase

@@ -19,15 +19,24 @@ from kymflow.gui_v2.controllers.velocity_event_update_controller import (
     VelocityEventUpdateController,
 )
 from kymflow.gui_v2.controllers.add_kym_event_controller import AddKymEventController
+from kymflow.gui_v2.controllers.add_roi_controller import AddRoiController
 from kymflow.gui_v2.controllers.delete_kym_event_controller import (
     DeleteKymEventController,
+)
+from kymflow.gui_v2.controllers.delete_roi_controller import DeleteRoiController
+from kymflow.gui_v2.controllers.edit_roi_controller import EditRoiController
+from kymflow.gui_v2.controllers.roi_edit_state_controller import (
+    RoiEditStateController,
 )
 
 __all__ = [
     "AnalysisController",
     "AppStateBridgeController",
     "AddKymEventController",
+    "AddRoiController",
     "DeleteKymEventController",
+    "DeleteRoiController",
+    "EditRoiController",
     "EventSelectionController",
     "FileSelectionController",
     "FileTablePersistenceController",
@@ -36,6 +45,7 @@ __all__ = [
     "KymEventRangeStateController",
     "MetadataController",
     "ROISelectionController",
+    "RoiEditStateController",
     "SaveController",
     "TaskStateBridgeController",
     "VelocityEventUpdateController",

@@ -8,13 +8,18 @@ from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
     AddKymEvent,
+    AddRoi,
     DeleteKymEvent,
+    DeleteRoi,
+    EditRoi,
     EventSelection,
     FileSelection,
     ROISelection,
     ImageDisplayChange,
     MetadataUpdate,
     SetKymEventRangeState,
+    SetRoiBounds,
+    SetRoiEditState,
     VelocityEventUpdate,
 )
 from kymflow.gui_v2.events_state import ThemeChanged
@@ -71,6 +76,10 @@ class ImageLineViewerBindings:
         bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         bus.subscribe_state(AddKymEvent, self._on_add_kym_event)
         bus.subscribe_state(DeleteKymEvent, self._on_delete_kym_event)
+        bus.subscribe_state(SetRoiEditState, self._on_roi_edit_state)
+        bus.subscribe_state(EditRoi, self._on_roi_edited)
+        bus.subscribe_state(DeleteRoi, self._on_roi_deleted)
+        bus.subscribe_intent(SetRoiBounds, self._on_roi_bounds)
         self._subscribed = True
 
         self._logger = get_logger(__name__)
@@ -95,6 +104,10 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         self._bus.unsubscribe_state(AddKymEvent, self._on_add_kym_event)
         self._bus.unsubscribe_state(DeleteKymEvent, self._on_delete_kym_event)
+        self._bus.unsubscribe_state(SetRoiEditState, self._on_roi_edit_state)
+        self._bus.unsubscribe_state(EditRoi, self._on_roi_edited)
+        self._bus.unsubscribe_state(DeleteRoi, self._on_roi_deleted)
+        self._bus.unsubscribe_intent(SetRoiBounds, self._on_roi_bounds)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -191,3 +204,59 @@ class ImageLineViewerBindings:
         """Handle delete kym event by refreshing overlays."""
         self._logger.debug("delete_kym_event(state) event_id=%s", e.event_id)
         safe_call(self._view.refresh_velocity_events)
+
+    def _on_roi_edit_state(self, e: SetRoiEditState) -> None:
+        """Handle ROI edit state change."""
+        self._logger.debug(
+            "roi_edit_state(enabled=%s, roi_id=%s)", e.enabled, e.roi_id
+        )
+        safe_call(
+            self._view.set_roi_edit_enabled,
+            e.enabled,
+            roi_id=e.roi_id,
+            path=e.path,
+        )
+
+    def _on_roi_bounds(self, e: SetRoiBounds) -> None:
+        """Handle SetRoiBounds intent event - convert to EditRoi."""
+        self._logger.debug(
+            "roi_bounds(intent) roi_id=%s x=[%s, %s] y=[%s, %s]",
+            e.roi_id,
+            e.x0,
+            e.x1,
+            e.y0,
+            e.y1,
+        )
+        from kymflow.core.image_loaders.roi import RoiBounds
+
+        # Convert Plotly coordinates to RoiBounds
+        bounds = RoiBounds(
+            dim0_start=int(min(e.y0, e.y1)),
+            dim0_stop=int(max(e.y0, e.y1)),
+            dim1_start=int(min(e.x0, e.x1)),
+            dim1_stop=int(max(e.x0, e.x1)),
+        )
+        
+        # Emit EditRoi intent event
+        from kymflow.gui_v2.events import EditRoi
+        self._bus.emit(
+            EditRoi(
+                roi_id=e.roi_id if e.roi_id is not None else 0,
+                bounds=bounds,
+                path=e.path,
+                origin=e.origin,
+                phase="intent",
+            )
+        )
+
+    def _on_roi_edited(self, e: EditRoi) -> None:
+        """Handle ROI edited state event - refresh plot."""
+        self._logger.debug("roi_edited(state) roi_id=%s", e.roi_id)
+        # Refresh plot with updated ROI bounds
+        safe_call(self._view.set_selected_roi, e.roi_id)
+
+    def _on_roi_deleted(self, e: DeleteRoi) -> None:
+        """Handle ROI deleted state event - refresh plot."""
+        self._logger.debug("roi_deleted(state) roi_id=%s", e.roi_id)
+        # Refresh plot
+        safe_call(self._view._render_combined)

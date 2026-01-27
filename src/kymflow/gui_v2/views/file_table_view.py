@@ -151,7 +151,12 @@ class FileTableView:
             self._grid.set_data(rows)
 
     def refresh_rows(self) -> None:
-        """Refresh table rows from cached files (used after metadata updates)."""
+        """Refresh table rows from cached files (used after metadata updates).
+        
+        Note: This method calls set_files() which calls _grid.set_data(), which
+        clears the selection. The caller should restore the selection after calling
+        this method.
+        """
         if not self._files:
             return
         self.set_files(self._files)

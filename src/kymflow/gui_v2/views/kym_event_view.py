@@ -187,14 +187,14 @@ class KymEventView:
         """
         self._all_rows = list(rows)
         # Extract current file path from first row if available
+        # If rows are empty, keep existing _current_file_path (don't reset to None)
+        # This allows the label to show the correct file even when there are no events
         if self._all_rows:
             first_path = self._all_rows[0].get("path")
             if first_path:
                 self._current_file_path = str(first_path)
-            else:
-                self._current_file_path = None
-        else:
-            self._current_file_path = None
+            # If first row has no path, don't update _current_file_path (keep existing)
+        # If rows are empty, don't update _current_file_path (keep existing)
         self._update_file_path_label()
         self._apply_filter()
         

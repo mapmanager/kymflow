@@ -11,9 +11,12 @@ from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers import (
     AddKymEventController,
+    AddRoiController,
     AnalysisController,
     AppStateBridgeController,
     DeleteKymEventController,
+    DeleteRoiController,
+    EditRoiController,
     EventSelectionController,
     FileSelectionController,
     FileTablePersistenceController,
@@ -22,6 +25,7 @@ from kymflow.gui_v2.controllers import (
     KymEventRangeStateController,
     MetadataController,
     ROISelectionController,
+    RoiEditStateController,
     SaveController,
     TaskStateBridgeController,
     VelocityEventUpdateController,
@@ -119,8 +123,8 @@ class HomePage(BasePage):
             selection_mode="single",
         )
         self._image_line_viewer = ImageLineViewerView(
-            on_roi_selected=bus.emit,
             on_kym_event_x_range=bus.emit,
+            on_set_roi_bounds=bus.emit,
         )
         self._event_view = KymEventView(
             on_selected=bus.emit,
@@ -136,7 +140,12 @@ class HomePage(BasePage):
 
         # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
-            on_analysis_start=bus.emit, on_analysis_cancel=bus.emit
+            on_analysis_start=bus.emit,
+            on_analysis_cancel=bus.emit,
+            on_add_roi=bus.emit,
+            on_delete_roi=bus.emit,
+            on_set_roi_edit_state=bus.emit,
+            on_roi_selected=bus.emit,
         )
         self._drawer_task_progress_view = TaskProgressView()
         self._drawer_save_buttons_view = SaveButtonsView(
@@ -227,6 +236,16 @@ class HomePage(BasePage):
         self._task_state_bridge = TaskStateBridgeController(
             self.context.home_task, self.bus, task_type="home"
         )
+        self._add_roi_controller = AddRoiController(
+            self.context.app_state, self.bus
+        )
+        self._delete_roi_controller = DeleteRoiController(
+            self.context.app_state, self.bus
+        )
+        self._edit_roi_controller = EditRoiController(
+            self.context.app_state, self.bus
+        )
+        self._roi_edit_state_controller = RoiEditStateController(self.bus)
 
         self._persistence = FileTablePersistenceController(
             self.context.app_state,
@@ -235,7 +254,9 @@ class HomePage(BasePage):
         )
 
         # Bindings (subscribe to events once per client)
-        self._table_bindings = FileTableBindings(self.bus, self._table_view)
+        self._table_bindings = FileTableBindings(
+            self.bus, self._table_view, app_state=self.context.app_state
+        )
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
         )

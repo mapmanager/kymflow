@@ -29,35 +29,31 @@ from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
     EventSelection,
-    ROISelection,
     SelectionOrigin,
     SetKymEventXRange,
+    SetRoiBounds,
 )
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-OnROISelected = Callable[[ROISelection], None]
 OnKymEventXRange = Callable[[SetKymEventXRange], None]
+OnSetRoiBounds = Callable[[SetRoiBounds], None]
 
 
 class ImageLineViewerView:
     """Image/line viewer view component using Plotly.
 
-    This view displays a combined kymograph image and velocity plot with ROI
-    selection, filter controls, and zoom controls. Users can select ROIs from
-    the dropdown, which triggers ROISelection events.
+    This view displays a combined kymograph image and velocity plot with filter
+    controls and zoom controls.
 
     Lifecycle:
         - UI elements are created in render() (not __init__) to ensure correct
           DOM placement within NiceGUI's client context
         - Data updates via setter methods (called by bindings)
-        - Events emitted via on_roi_selected callback
 
     Attributes:
-        _on_roi_selected: Callback function that receives ROISelection events.
         _plot: Plotly plot component (created in render()).
-        _roi_select: ROI selector dropdown (created in render()).
         _current_file: Currently selected file (for rendering).
         _current_roi_id: Currently selected ROI ID (for rendering).
         _theme: Current theme mode.
@@ -71,20 +67,20 @@ class ImageLineViewerView:
     def __init__(
         self,
         *,
-        on_roi_selected: OnROISelected,
         on_kym_event_x_range: OnKymEventXRange | None = None,
+        on_set_roi_bounds: OnSetRoiBounds | None = None,
     ) -> None:
         """Initialize image/line viewer view.
 
         Args:
-            on_roi_selected: Callback function that receives ROISelection events.
+            on_kym_event_x_range: Callback function that receives SetKymEventXRange events.
+            on_set_roi_bounds: Callback function that receives SetRoiBounds events.
         """
-        self._on_roi_selected = on_roi_selected
         self._on_kym_event_x_range = on_kym_event_x_range
+        self._on_set_roi_bounds = on_set_roi_bounds
 
         # UI components (created in render())
         self._plot: Optional[ui.plotly] = None
-        self._roi_select: Optional[ui.select] = None
         self._plot_div_id: str = "kymflow_image_line_plot"
 
         # State (theme will be set by bindings from AppState)
@@ -96,7 +92,6 @@ class ImageLineViewerView:
         self._original_y_values: Optional[np.ndarray] = None
         self._original_time_values: Optional[np.ndarray] = None
         self._uirevision: int = 0
-        self._suppress_roi_emit: bool = False  # Suppress ROI dropdown on_change during programmatic updates
         
         # Filter state (stored instead of reading from checkboxes)
         self._remove_outliers: bool = False
@@ -107,6 +102,11 @@ class ImageLineViewerView:
         self._range_path: Optional[str] = None
         self._pending_range_zoom: Optional[tuple[float, float]] = None
         self._selected_event_id: str | None = None  # Track selected event for visual highlighting
+        
+        # ROI edit selection state
+        self._awaiting_roi_edit: bool = False
+        self._edit_roi_id: Optional[int] = None
+        self._edit_roi_path: Optional[str] = None
 
     def render(self) -> None:
         """Create the viewer UI inside the current container.
@@ -122,13 +122,6 @@ class ImageLineViewerView:
         # Always reset UI element references - NiceGUI will clean up old elements
         # This ensures we create fresh elements in the new container context
         self._plot = None
-        self._roi_select = None
-        # Reset suppression flag to ensure clean state
-        self._suppress_roi_emit = False
-
-        # ROI selector dropdown
-        # Use on_change callback (NiceGUI recommended API) instead of on("update:model-value")
-        self._roi_select = ui.select(options={}, label="ROI", on_change=self._on_roi_dropdown_change).classes("min-w-32")
 
         # Plot with larger height to accommodate both subplots
         self._plot = ui.plotly(go.Figure()).classes("w-full")
@@ -160,17 +153,20 @@ class ImageLineViewerView:
 
         payload: Dict[str, Any] = e.args  # <-- dict
 
-        logger.debug("plotly_relayout received (awaiting_range=%s)", self._awaiting_kym_event_range)
+        logger.debug("plotly_relayout received (awaiting_range=%s, awaiting_roi_edit=%s)", 
+                     self._awaiting_kym_event_range, self._awaiting_roi_edit)
         logger.info('=== in on_relayout() payload is:')
         from pprint import pprint
         pprint(payload)
 
-        x0, x1 = None, None  # default to no selection
+        x0, x1, y0, y1 = None, None, None, None  # default to no selection
         if 'selections[0].x0' in payload.keys():
             logger.info('  update "selections[0].x0" found')
             x0  = payload['selections[0].x0']
             x1  = payload['selections[0].x1']
-            logger.info(f"  -> update Selection: x-range = [{x0}, {x1}]")
+            y0  = payload.get('selections[0].y0')
+            y1  = payload.get('selections[0].y1')
+            logger.info(f"  -> update Selection: x-range = [{x0}, {x1}], y-range = [{y0}, {y1}]")
         elif 'selections' not in payload.keys():
             # print('  no selection found')
             return
@@ -186,8 +182,55 @@ class ImageLineViewerView:
                         continue
                     x0 = selection['x0']
                     x1 = selection['x1']
-                    logger.info(f"  --> new Selection: {_type} x-range = [{x0}, {x1}] (idx={_idx})")
+                    y0 = selection.get('y0')
+                    y1 = selection.get('y1')
+                    logger.info(f"  --> new Selection: {_type} x-range = [{x0}, {x1}], y-range = [{y0}, {y1}] (idx={_idx})")
 
+        # Handle ROI edit rectangle selection (requires both x and y coordinates)
+        if self._awaiting_roi_edit:
+            if x0 is None or x1 is None or y0 is None or y1 is None:
+                return
+            if not all(isinstance(v, (int, float)) for v in [x0, x1, y0, y1]):
+                return
+            if self._on_set_roi_bounds is None:
+                return
+            
+            x_min = float(min(x0, x1))
+            x_max = float(max(x0, x1))
+            y_min = float(min(y0, y1))
+            y_max = float(max(y0, y1))
+            
+            # Convert to RoiBounds with logging
+            dim0_start = int(y_min)
+            dim0_stop = int(y_max)
+            dim1_start = int(x_min)
+            dim1_stop = int(x_max)
+            
+            logger.debug(
+                "ROI edit selection: Plotly coords x=[%s, %s], y=[%s, %s] -> "
+                "RoiBounds dim0=[%s, %s], dim1=[%s, %s]",
+                x_min, x_max, y_min, y_max,
+                dim0_start, dim0_stop, dim1_start, dim1_stop
+            )
+            
+            self._awaiting_roi_edit = False
+            self._on_set_roi_bounds(
+                SetRoiBounds(
+                    roi_id=self._edit_roi_id,
+                    path=self._edit_roi_path,
+                    x0=x_min,
+                    x1=x_max,
+                    y0=y_min,
+                    y1=y_max,
+                    origin=SelectionOrigin.IMAGE_VIEWER,
+                    phase="intent",
+                )
+            )
+            # Clear drawn rectangle/selected points after accepting selection.
+            self._clear_plot_selections()
+            return
+
+        # Handle kym event range selection (x-range only)
         if not self._awaiting_kym_event_range:
             return
         if x0 is None or x1 is None:
@@ -249,6 +292,36 @@ class ImageLineViewerView:
         if not enabled:
             self._clear_plot_selections()
 
+    def set_roi_edit_enabled(
+        self,
+        enabled: bool,
+        *,
+        roi_id: Optional[int],
+        path: Optional[str],
+    ) -> None:
+        """Toggle Plotly dragmode and arm the next rectangle selection for ROI editing.
+        
+        This operates on the kym image/heatmap Plotly plot (NOT the 1D velocity plot).
+        
+        Args:
+            enabled: Whether to enable ROI edit mode.
+            roi_id: ROI ID to edit (required when enabled=True).
+            path: File path (optional, for validation).
+        """
+        logger.debug(
+            "set_roi_edit_enabled(enabled=%s, roi_id=%s, path=%s)",
+            enabled,
+            roi_id,
+            path,
+        )
+        self._awaiting_roi_edit = enabled
+        self._edit_roi_id = roi_id
+        self._edit_roi_path = path
+        dragmode = "select" if enabled else "zoom"
+        self._set_dragmode(dragmode)
+        if not enabled:
+            self._clear_plot_selections()
+
     def _set_dragmode(self, dragmode: Optional[str]) -> None:
         """Set Plotly dragmode on the current plot."""
         js = f"""
@@ -294,9 +367,6 @@ class ImageLineViewerView:
     def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
         """Internal implementation of set_selected_file."""
         self._current_file = file
-        # Update dropdown options (ROI selection will be updated by ROISelection(phase="state") event
-        # that AppState.select_file() automatically triggers)
-        self._update_roi_dropdown()
         # Clear current ROI - will be set when ROISelection(phase="state") event arrives
         self._current_roi_id = None
         self._render_combined()
@@ -318,29 +388,6 @@ class ImageLineViewerView:
         """Internal implementation of set_selected_roi."""
         self._current_roi_id = roi_id
         logger.info(f"set _current_roi_id to '{roi_id}' {type(roi_id)}")
-        if self._roi_select is not None:
-            # Ensure options are up to date before setting value
-            if self._current_file is not None:
-                roi_ids = self._current_file.rois.get_roi_ids()
-                options = {rid: f"ROI {rid}" for rid in roi_ids}
-                # Suppress on_change callback during programmatic update to prevent feedback loop
-                self._suppress_roi_emit = True
-                try:
-                    # Only set value if ROI is valid and in options
-                    if roi_id is not None and roi_id in roi_ids:
-                        self._roi_select.set_options(options, value=roi_id)
-                    else:
-                        # Clear selection if ROI is invalid
-                        self._roi_select.set_options(options, value=None)
-                finally:
-                    self._suppress_roi_emit = False
-            else:
-                # No file selected, clear options and value
-                self._suppress_roi_emit = True
-                try:
-                    self._roi_select.set_options({}, value=None)
-                finally:
-                    self._suppress_roi_emit = False
         self._render_combined()
 
     def set_theme(self, theme: ThemeMode) -> None:
@@ -467,49 +514,6 @@ class ImageLineViewerView:
         if file == self._current_file:
             self._render_combined()
 
-    def _update_roi_dropdown(self) -> None:
-        """Update ROI dropdown options based on current file.
-
-        Note: AppState.select_file() already automatically selects the first ROI
-        if available, so we just sync the dropdown with the current ROI selection.
-        """
-        if self._roi_select is None:
-            return
-
-        kf = self._current_file
-        if kf is None:
-            # Use set_options() which handles both setting options and calling update()
-            self._roi_select.set_options({}, value=None)
-            # No file selected, hide dropdown
-            self._roi_select.visible = False
-            return
-
-        # Use RoiSet.get_roi_ids() public API instead of accessing ROI objects directly
-        roi_ids = kf.rois.get_roi_ids()
-        # NiceGUI select expects options as dict: {value: label} or list of values
-        # Using dict format: {roi_id: f"ROI {roi_id}"}
-        options = {roi_id: f"ROI {roi_id}" for roi_id in roi_ids}
-        
-        logger.info(f'roi options is:{options}')
-        logger.info(f'self._current_roi_id is:{self._current_roi_id}')
-
-        # Sync dropdown with current ROI (AppState.select_file() already handles first ROI selection)
-        # Use set_options() which updates options and sets value atomically
-        # Suppress on_change callback during programmatic update to prevent feedback loop
-        self._suppress_roi_emit = True
-        try:
-            if self._current_roi_id is not None and self._current_roi_id in roi_ids:
-                self._roi_select.set_options(options, value=self._current_roi_id)
-            else:
-                # Current ROI is invalid or None, set options without value
-                # Dropdown will be synced when ROISelection(phase="state") event arrives
-                self._roi_select.set_options(options, value=None)
-        finally:
-            self._suppress_roi_emit = False
-        
-        # Hide dropdown if 0 or 1 ROIs (no selection needed)
-        num_rois = kf.rois.numRois()
-        self._roi_select.visible = (num_rois > 1)
 
     def _render_combined(self) -> None:
         """Render the combined image and line plot."""
@@ -601,22 +605,6 @@ class ImageLineViewerView:
                 raise
             # Client deleted, silently ignore
 
-    def _on_roi_dropdown_change(self) -> None:
-        """Handle ROI dropdown selection change."""
-        if self._roi_select is None:
-            return
-        # Suppress events during programmatic updates to prevent feedback loop
-        if self._suppress_roi_emit:
-            return
-        roi_id = self._roi_select.value
-        # Emit intent event
-        self._on_roi_selected(
-            ROISelection(
-                roi_id=roi_id,
-                origin=SelectionOrigin.IMAGE_VIEWER,
-                phase="intent",
-            )
-        )
 
     def _update_line_plot_partial(self) -> None:
         """Update only the Scatter trace y-values when filters change, preserving zoom."""

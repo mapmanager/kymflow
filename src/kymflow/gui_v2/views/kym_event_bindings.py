@@ -59,7 +59,14 @@ class KymEventBindings:
         if e.file is None:
             safe_call(self._view.set_events, [])
             safe_call(self._view.set_selected_event_ids, [], origin=SelectionOrigin.EXTERNAL)
+            # Update file path label to show "No file selected"
+            self._view._current_file_path = None
+            safe_call(self._view._update_file_path_label)
             return
+        # Update file path from the selected file (even if no events exist)
+        if hasattr(e.file, "path") and e.file.path:
+            self._view._current_file_path = str(e.file.path)
+            safe_call(self._view._update_file_path_label)
         report = e.file.get_kym_analysis().get_velocity_report()
         safe_call(self._view.set_events, report)
 

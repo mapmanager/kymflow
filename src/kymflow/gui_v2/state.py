@@ -197,9 +197,38 @@ class AppState:
                 logger.exception("Error in selection_changed handler")
     
     def refresh_file_rows(self) -> None:
-        """Refresh file list (reloads current folder)."""
-        if self.folder:
-            self.load_folder(self.folder, depth=self.folder_depth)
+        """Refresh file list (reloads current folder), preserving current file/ROI selection."""
+        if not self.folder:
+            return
+        
+        # Preserve current selection before reloading
+        selected_path = None
+        selected_roi_id = None
+        if self.selected_file is not None and hasattr(self.selected_file, "path"):
+            selected_path = str(self.selected_file.path)
+            selected_roi_id = self.selected_roi_id
+        
+        # Reload folder (this will select first file by default)
+        self.load_folder(self.folder, depth=self.folder_depth)
+        
+        # Restore previous selection if it still exists
+        if selected_path is not None:
+            for f in self.files:
+                if str(f.path) == selected_path:
+                    # Found the previously selected file, restore selection
+                    self.select_file(f)
+                    # Restore ROI selection if it still exists in the file
+                    if selected_roi_id is not None:
+                        roi_ids = f.rois.get_roi_ids()
+                        if selected_roi_id in roi_ids:
+                            self.select_roi(selected_roi_id)
+                        elif roi_ids:
+                            # ROI was deleted, select first available
+                            self.select_roi(roi_ids[0])
+                        else:
+                            # No ROIs, clear selection
+                            self.select_roi(None)
+                    break
     
     def set_theme(self, mode: ThemeMode) -> None:
         """Set theme mode and notify handlers."""
