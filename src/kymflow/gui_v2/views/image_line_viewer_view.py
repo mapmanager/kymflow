@@ -81,7 +81,9 @@ class ImageLineViewerView:
 
         # UI components (created in render())
         self._plot: Optional[ui.plotly] = None
+        self._plot_container: Optional[ui.element] = None
         self._plot_div_id: str = "kymflow_image_line_plot"
+        self._last_num_rows: int | None = None
 
         # State (theme will be set by bindings from AppState)
         self._current_file: Optional[KymImage] = None
@@ -122,9 +124,16 @@ class ImageLineViewerView:
         # Always reset UI element references - NiceGUI will clean up old elements
         # This ensures we create fresh elements in the new container context
         self._plot = None
+        self._plot_container = None
 
         # Plot with larger height to accommodate both subplots
-        self._plot = ui.plotly(go.Figure()).classes("w-full")
+        self._plot_container = ui.column().classes("w-full")
+        with self._plot_container:
+            self._create_plot(go.Figure())
+
+    def _create_plot(self, fig: go.Figure) -> None:
+        """Create a fresh plot element inside the current container."""
+        self._plot = ui.plotly(fig).classes("w-full")
         # Stable DOM id for JS access (dragmode toggling).
         self._plot.props(f"id={self._plot_div_id}")
         # abb when implementing getting user drawrect/rect selection
@@ -366,6 +375,15 @@ class ImageLineViewerView:
 
     def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
         """Internal implementation of set_selected_file."""
+        if file is not None:
+            try:
+                file.load_channel(1)
+            except Exception as exc:
+                logger.warning(
+                    "ImageLineViewerView failed to load channel=1 for file=%s: %s",
+                    str(file.path) if hasattr(file, "path") else None,
+                    exc,
+                )
         self._current_file = file
         # Clear current ROI - will be set when ROISelection(phase="state") event arrives
         self._current_roi_id = None
@@ -553,7 +571,6 @@ class ImageLineViewerView:
             plot_rois=plot_rois,
             selected_event_id=self._selected_event_id,
         )
-
         # Store original unfiltered y-values for partial updates
         if kf is not None and roi_id is not None:
             kym_analysis = kf.get_kym_analysis()
@@ -573,6 +590,21 @@ class ImageLineViewerView:
         # Store figure reference
         self._set_uirevision(fig)
         self._current_figure = fig
+        # Detect grid changes (1 row vs 2 rows) and rebuild plot if needed
+        num_rows = 2 if getattr(fig.layout, "yaxis2", None) is not None else 1
+        if self._last_num_rows is None:
+            self._last_num_rows = num_rows
+        elif num_rows != self._last_num_rows and self._plot_container is not None:
+            logger.debug(
+                "pyinstaller bug fix rebuild plot on grid change %s -> %s",
+                self._last_num_rows,
+                num_rows,
+            )
+            self._last_num_rows = num_rows
+            self._plot_container.clear()
+            with self._plot_container:
+                self._create_plot(fig)
+            return
         try:
             self._plot.update_figure(fig)
         except RuntimeError as e:

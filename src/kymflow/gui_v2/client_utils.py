@@ -36,6 +36,7 @@ def safe_call(func: Callable, *args, **kwargs) -> None:
         func(*args, **kwargs)
     except RuntimeError as e:
         # Silently ignore "client deleted" errors
-        if "deleted" not in str(e).lower():
-            raise
+        if "deleted" in str(e).lower():
+            return
+        raise
 

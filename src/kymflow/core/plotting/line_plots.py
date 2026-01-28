@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Union, Callable
-from dataclasses import dataclass
+from typing import Optional, Union
 
 import numpy as np
 import plotly.graph_objects as go
@@ -282,7 +281,6 @@ def plot_image_line_plotly(
     )
 
     # Configure top subplot axes using header labels
-    x_label = kf.header.labels[0] if transpose else kf.header.labels[1]  # Time dimension
     y_label = kf.header.labels[1] if transpose else kf.header.labels[0]  # Space dimension
     fig.update_xaxes(
         title_text="",
@@ -1003,6 +1001,7 @@ def plot_image_line_plotly_v3(
         vertical_spacing=0.025,
         row_heights=row_heights,
     )
+
 
     # Handle None KymFile (minimal layout for early return)
     if kf is None:

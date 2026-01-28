@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Callable, Iterable, List, Optional
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from nicegui import ui
 from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
 # from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
@@ -96,6 +97,7 @@ class FileTableView:
 
         # self._grid: CustomAgGrid | None = None
         self._grid: CustomAgGrid_v2 | None = None
+        self._grid_container: Optional[ui.element] = None  # pyinstaller table view
         self._suppress_emit: bool = False
 
         # Keep latest rows so if FileListChanged arrives before render(),
@@ -118,6 +120,7 @@ class FileTableView:
         # Always reset grid reference - NiceGUI will clean up old elements
         # This ensures we create fresh elements in the new container context
         self._grid = None
+        self._grid_container = None
 
         grid_cfg = GridConfig(
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
@@ -129,14 +132,21 @@ class FileTableView:
         #     setattr(grid_cfg, "row_id_field", "path")
 
         # Create the grid *now*, inside whatever container the caller opened.
-        # self._grid = CustomAgGrid(
-        self._grid = CustomAgGrid_v2(
-            data=self._pending_rows,
-            columns=_default_columns(),
-            grid_config=grid_cfg,
-        )
-        self._grid.on_row_selected(self._on_row_selected)
-        self._grid.on_cell_edited(self._on_cell_edited)
+        self._grid_container = ui.column().classes("w-full")  # pyinstaller table view
+        self._create_grid(self._pending_rows, grid_cfg)
+
+    def _create_grid(self, rows: Rows, grid_cfg: GridConfig) -> None:
+        """Create a fresh grid instance inside the current container."""
+        if self._grid_container is None:
+            return
+        with self._grid_container:
+            self._grid = CustomAgGrid_v2(
+                data=rows,
+                columns=_default_columns(),
+                grid_config=grid_cfg,
+            )
+            self._grid.on_row_selected(self._on_row_selected)
+            self._grid.on_cell_edited(self._on_cell_edited)
 
     def set_files(self, files: Iterable[KymImage]) -> None:
         """Update table contents from KymImage list."""
@@ -147,7 +157,16 @@ class FileTableView:
         }
         rows: Rows = [f.getRowDict() for f in files_list]
         self._pending_rows = rows
-        if self._grid is not None:
+        if self._grid_container is not None:
+            # Aggressive: rebuild grid to guarantee UI refresh in frozen apps
+            self._grid_container.clear()  # pyinstaller table view
+            self._create_grid(rows, GridConfig(
+                selection_mode=self._selection_mode,  # type: ignore[arg-type]
+                height="24rem",
+                row_id_field="path",
+                show_row_index=True,
+            ))
+        elif self._grid is not None:
             self._grid.set_data(rows)
 
     def refresh_rows(self) -> None:

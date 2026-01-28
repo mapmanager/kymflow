@@ -35,7 +35,7 @@ SCHEMA_VERSION: int = 1
 # Defaults
 DEFAULT_FOLDER_DEPTH: int = 1
 DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
-MAX_RECENTS: int = 20
+MAX_RECENTS: int = 10
 
 
 def _normalize_folder_path(path: str | Path) -> str:

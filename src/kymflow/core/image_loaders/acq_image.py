@@ -404,7 +404,19 @@ class AcqImage:
         ndim = self.img_ndim
         
         if ndim is None:
-            return None
+            # Fallback: infer ndim from loaded data if header isn't initialized yet
+            inferred_ndim = getattr(channel_data, "ndim", None)
+            if inferred_ndim in (2, 3):
+                ndim = inferred_ndim
+                if ndim == 2:
+                    return channel_data
+                if slice_num < 0 or slice_num >= self.img_num_slices:
+                    raise ValueError(
+                        f"Slice number must be between 0 and {self.img_num_slices-1}, got {slice_num}"
+                    )
+                return channel_data[slice_num, :, :]
+            else:
+                return None
         elif ndim == 2:
             return channel_data
         elif ndim == 3:

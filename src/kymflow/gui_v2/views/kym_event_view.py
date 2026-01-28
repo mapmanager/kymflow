@@ -101,6 +101,7 @@ class KymEventView:
         self._on_delete_event = on_delete_event
         self._selection_mode = selection_mode
         self._grid: CustomAgGrid_v2 | None = None
+        self._grid_container: ui.element | None = None  # pyinstaller event table
         self._suppress_emit: bool = False
         self._pending_rows: Rows = []
         self._all_rows: Rows = []
@@ -124,6 +125,7 @@ class KymEventView:
     def render(self) -> None:
         """Create the grid UI inside the current container."""
         self._grid = None
+        self._grid_container = None  # pyinstaller event table
         with ui.row().classes("w-full items-start gap-4"):
             with ui.column().classes("w-40 shrink-0"):
                 ui.label("Event Controls").classes("text-sm text-gray-500")
@@ -156,19 +158,27 @@ class KymEventView:
                 self._update_add_delete_button_state()
 
             with ui.column().classes("grow"):
-                grid_cfg = GridConfig(
-                    selection_mode=self._selection_mode,  # type: ignore[arg-type]
-                    height="16rem",
-                    row_id_field="event_id",
-                    show_row_index=True,
-                )
-                self._grid = CustomAgGrid_v2(
-                    data=self._pending_rows,
-                    columns=_default_columns(),
-                    grid_config=grid_cfg,
-                )
-                self._grid.on_row_selected(self._on_row_selected)
-                self._grid.on_cell_edited(self._on_cell_edited)
+                self._grid_container = ui.column().classes("w-full")  # pyinstaller event table
+                self._create_grid(self._pending_rows)
+
+    def _create_grid(self, rows: Rows) -> None:
+        """Create a fresh grid instance inside the current container."""
+        if self._grid_container is None:
+            return
+        grid_cfg = GridConfig(
+            selection_mode=self._selection_mode,  # type: ignore[arg-type]
+            height="16rem",
+            row_id_field="event_id",
+            show_row_index=True,
+        )
+        with self._grid_container:
+            self._grid = CustomAgGrid_v2(
+                data=rows,
+                columns=_default_columns(),
+                grid_config=grid_cfg,
+            )
+            self._grid.on_row_selected(self._on_row_selected)
+            self._grid.on_cell_edited(self._on_cell_edited)
 
     def _set_zoom_enabled(self, value: bool) -> None:
         self._zoom_enabled = value
@@ -271,7 +281,11 @@ class KymEventView:
                 row for row in self._all_rows if row.get("roi_id") == self._roi_filter
             ]
         self._pending_rows = rows
-        if self._grid is not None:
+        if self._grid_container is not None:
+            # Aggressive: rebuild grid to guarantee UI refresh in frozen apps
+            self._grid_container.clear()  # pyinstaller event table
+            self._create_grid(rows)
+        elif self._grid is not None:
             self._grid.set_data(rows)
 
     def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:

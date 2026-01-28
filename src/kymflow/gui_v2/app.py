@@ -15,6 +15,52 @@ import multiprocessing as mp
 from multiprocessing import freeze_support
 from pathlib import Path
 
+#
+# added for pyinstaller
+# --- Matplotlib cache: MUST run before importing anything that might import matplotlib ---
+from platformdirs import user_cache_dir
+
+def _init_mpl_cache_dir() -> None:
+    """Ensure Matplotlib uses a stable, writable cache dir (works for frozen + dev)."""
+    cache_root = Path(user_cache_dir("kymflow")) / "matplotlib"
+    cache_root.mkdir(parents=True, exist_ok=True)
+
+    # Critical: forces font cache + other mpl caches to live here
+    os.environ.setdefault("MPLCONFIGDIR", str(cache_root))
+
+    # Optional but often helpful for frozen apps that only render/save figures
+    # (If you truly need interactive mpl backends, remove this.)
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
+
+def _warm_mpl_font_cache_once() -> None:
+    """
+    Warm font cache in the MAIN process only.
+    Uses a sentinel file so the warm step runs once per user cache dir.
+    """
+    mpl_dir = Path(os.environ["MPLCONFIGDIR"])
+    sentinel = mpl_dir / ".fontcache_warmed_v1"
+
+    if sentinel.exists():
+        return
+
+    try:
+        import matplotlib  # noqa: F401
+        from matplotlib import font_manager
+
+        # Trigger cache creation/loading
+        _ = font_manager.fontManager  # noqa: F841
+        font_manager.findSystemFonts()
+
+        sentinel.write_text("ok\n", encoding="utf-8")
+    except Exception:
+        # Never block app startup if mpl cache warming fails
+        pass
+
+
+_init_mpl_cache_dir()
+# -------------------------------------------------------------------
+
 from nicegui import ui
 
 from kymflow.core.utils.logging import get_logger, setup_logging
@@ -199,6 +245,10 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         DEV_FOLDER,
     )
 
+    # abb for pyinstaller
+    # Warm matplotlib cache once (main process only; safe in frozen builds)
+    _warm_mpl_font_cache_once()
+    
     reload = False
     ui.run(
         port=DEFAULT_PORT,
