@@ -30,17 +30,28 @@ def _col(
     header: Optional[str] = None,
     *,
     width: Optional[int] = None,
+    min_width: Optional[int] = None,
+    flex: Optional[int] = None,
     hide: bool = False,
     cell_class: Optional[str] = None,
     editable: bool = False,
 ) -> ColumnConfig:
     extra: dict[str, object] = {}
+
+    # Prefer responsive sizing: flex + minWidth.
+    # Only set fixed width if you really want it.
     if width is not None:
         extra["width"] = width
+    if min_width is not None:
+        extra["minWidth"] = min_width
+    if flex is not None:
+        extra["flex"] = flex
+
     if hide:
         extra["hide"] = True
     if cell_class is not None:
         extra["cellClass"] = cell_class
+
     return ColumnConfig(
         field=field,
         header=header,
@@ -48,25 +59,18 @@ def _col(
         extra_grid_options=extra,
     )
 
-
 def _default_columns() -> list[ColumnConfig]:
     return [
-        _col("File Name", "File Name", width=260),
+        _col("File Name", "File Name", flex=2, min_width=200),
         _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center"),
         _col("Saved", "Saved", width=80, cell_class="ag-cell-center"),
         _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
-        _col("Parent Folder", "Parent", width=180),
-        _col("Grandparent Folder", "Grandparent", width=200),
-        # _col("pixels", "pixels", width=110, cell_class="ag-cell-right"),
-        # _col("lines", "lines", width=110, cell_class="ag-cell-right"),
+        _col("Parent Folder", "Parent", flex=1, min_width=120),
+        _col("Grandparent Folder", "Grandparent", flex=1, min_width=120),
         _col("duration (s)", "Duration (s)", width=140, cell_class="ag-cell-right"),
         _col("length (um)", "Length (um)", width=140, cell_class="ag-cell-right"),
-        # _col("ms/line", "ms/line", width=120, cell_class="ag-cell-right"),
-        # _col("um/pixel", "um/pixel", width=120, cell_class="ag-cell-right"),
-        _col("note", "Note", width=240, editable=True),
-        _col("path", "path", hide=True),  # keep for row id + selection, but hide
+        _col("note", "Note", flex=1, min_width=160, editable=True),
     ]
-
 
 class FileTableView:
     """File table view component using CustomAgGrid.
@@ -130,7 +134,7 @@ class FileTableView:
 
         grid_cfg = GridConfig(
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
-            height="24rem",
+            # height="24rem",
             row_id_field="path",
             show_row_index=True,
         )
@@ -138,7 +142,12 @@ class FileTableView:
         #     setattr(grid_cfg, "row_id_field", "path")
 
         # Create the grid *now*, inside whatever container the caller opened.
-        self._grid_container = ui.column().classes("w-full")  # pyinstaller table view
+        # self._grid_container = ui.column().classes("w-full h-full")  # pyinstaller table view
+        # self._grid_container = ui.column().classes("w-full")  # pyinstaller table view
+        # self._grid_container = ui.column().classes("w-full h-full min-w-0 overflow-x-auto")
+        # self._grid_container = ui.column().classes("w-full h-full")
+        # abb 20260129 trying to fix custom table so it is top aligned
+        self._grid_container = ui.column().classes("w-full h-full min-h-0 items-start justify-start")
         self._create_grid(self._pending_rows, grid_cfg)
         self._update_interaction_state()
 

@@ -448,7 +448,7 @@ class HomePage(BasePage):
         self._folder_view.render(initial_folder=initial_folder)
 
         # Splitter parameters (percentages, vertical layout). Tweak these as needed.
-        file_plot_splitter = {"value": 30, "limits": (0, 60)}
+        file_plot_splitter = {"value": 15, "limits": (0, 60)}
         plot_event_splitter = {"value": 50, "limits": (30, 90)}
         # Remember last open sizes for double-click min/max toggles.
         file_plot_last = {"value": file_plot_splitter["value"]}
@@ -473,7 +473,17 @@ class HomePage(BasePage):
                         file_plot_splitter_ui.value = file_plot_last["value"] or max_val
                 # TOP: File table
                 with file_plot_splitter_ui.before:
-                    self._table_view.render()
+                    # with ui.column().classes("w-full h-full min-w-0 overflow-x-auto"):
+
+                    # abb 20260129 gpt
+                    # with ui.column().classes('w-full h-full min-h-0 flex flex-col overflow-hidden'):
+
+                    # abb 20260129 trying to fix custom table so it is top aligned
+                    with ui.column().classes("w-full h-full min-w-0 overflow-x-auto items-start justify-start"):
+
+                        self._table_view.render()
+                        # abb 20260129 gpt, everything inside must also respect min-h-0 if it’s a flex child
+                        # self._table_view.root.classes('w-full h-full min-h-0 flex-1 overflow-hidden')
 
                     # Populate with current state (if already loaded, shows immediately)
                     self._table_view.set_files(list(self.context.app_state.files))

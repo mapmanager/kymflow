@@ -126,7 +126,7 @@ class KymEventView:
         """Create the grid UI inside the current container."""
         self._grid = None
         self._grid_container = None  # pyinstaller event table
-        with ui.row().classes("w-full items-start gap-4"):
+        with ui.row().classes("w-full items-center gap-2"):
             with ui.column().classes("w-40 shrink-0"):
                 ui.label("Event Controls").classes("text-sm text-gray-500")
                 self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
@@ -140,20 +140,20 @@ class KymEventView:
                     self._set_range_button = ui.button(
                         "Set Start/Stop",
                         on_click=self._on_set_event_range_clicked,
-                    ).props("dense")
+                    ).props("dense").classes('text-sm')
                     self._cancel_range_button = ui.button(
                         "Cancel",
                         on_click=self._on_cancel_event_range_clicked,
-                    ).props("dense")
+                    ).props("dense").classes('text-sm')
                 with ui.row().classes("w-full gap-2"):
                     self._add_event_button = ui.button(
                         "Add Event",
                         on_click=self._on_add_event_clicked,
-                    ).props("dense")
+                    ).props("dense").classes('text-sm')
                     self._delete_event_button = ui.button(
                         "Delete Event",
                         on_click=self._on_delete_event_clicked,
-                    ).props("dense")
+                    ).props("dense").classes('text-sm')
                 self._update_range_button_state()
                 self._update_add_delete_button_state()
 
@@ -168,7 +168,7 @@ class KymEventView:
             return
         grid_cfg = GridConfig(
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
-            height="16rem",
+            # height="16rem",
             row_id_field="event_id",
             show_row_index=True,
         )

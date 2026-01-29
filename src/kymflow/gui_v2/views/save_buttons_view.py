@@ -80,13 +80,15 @@ class SaveButtonsView:
         self._save_selected_button = None
         self._save_all_button = None
 
-        with ui.row().classes("gap-2 items-center"):
+        with ui.row().classes("gap-2 items-start"):
             self._save_selected_button = ui.button(
-                "Save Selected", on_click=self._on_save_selected_click, icon="save"
-            )
+                "Save Selected",
+                on_click=self._on_save_selected_click, icon="save"
+            ).props('dense').classes('text-sm')
             self._save_all_button = ui.button(
-                "Save All", on_click=self._on_save_all_click, icon="save_alt"
-            )
+                "Save All",
+                on_click=self._on_save_all_click
+            ).props('dense').classes('text-sm')
 
         # Initialize button states
         self._update_button_states()

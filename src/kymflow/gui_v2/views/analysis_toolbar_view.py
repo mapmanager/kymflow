@@ -134,30 +134,32 @@ class AnalysisToolbarView:
             ui.label("File").classes("text-sm text-gray-500")
             self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
         
+        # ROI management section
+        with ui.row().classes("items-end gap-2"):
+            # ROI selector dropdown (always visible, disabled when 0 ROIs)
+            self._roi_select = ui.select(
+                options={},
+                label="ROI",
+                on_change=self._on_roi_dropdown_change,
+            ).classes("min-w-32")
+        with ui.row().classes("items-end gap-2"):
+            self._add_roi_button = ui.button("Add ROI", on_click=self._on_add_roi_click).props("dense").classes("text-sm")
+            self._delete_roi_button = ui.button("Delete ROI", on_click=self._on_delete_roi_click).props("dense").classes("text-sm")
+            self._edit_roi_button = ui.button("Edit ROI", on_click=self._on_edit_roi_click).props("dense").classes("text-sm")
+
         # Analysis controls
         with ui.row().classes("items-end gap-2"):
-            ui.label("Analysis").classes("text-lg font-semibold")
+            # ui.label("Analysis").classes("text-lg font-semibold")
+            ui.label("Analysis")
             self._window_select = ui.select(
                 options=[16, 32, 64, 128, 256],
                 value=16,
                 label="Window Points",
             ).classes("w-32")
-            self._start_button = ui.button("Analyze Flow", on_click=self._on_start_click)
-            self._cancel_button = ui.button("Cancel", on_click=self._on_cancel_click)
-        
-        # ROI management section
         with ui.row().classes("items-end gap-2"):
-            ui.label("ROI").classes("text-lg font-semibold")
-            # ROI selector dropdown (always visible, disabled when 0 ROIs)
-            self._roi_select = ui.select(
-                options={}, 
-                label="ROI", 
-                on_change=self._on_roi_dropdown_change
-            ).classes("min-w-32")
-            self._add_roi_button = ui.button("Add ROI", on_click=self._on_add_roi_click)
-            self._delete_roi_button = ui.button("Delete ROI", on_click=self._on_delete_roi_click)
-            self._edit_roi_button = ui.button("Edit ROI", on_click=self._on_edit_roi_click)
-        
+            self._start_button = ui.button("Analyze Flow", on_click=self._on_start_click).props("dense").classes("text-sm")
+            self._cancel_button = ui.button("Cancel", on_click=self._on_cancel_click).props("dense").classes("text-sm")
+
         # Progress bar and label (hidden by default, shown when task is running)
         with ui.column().classes("w-full gap-1"):
             self._progress_bar = ui.linear_progress(value=0.0).props("instant-feedback").classes("w-full")
@@ -165,7 +167,7 @@ class AnalysisToolbarView:
             # Start hidden, will be shown when task starts
             self._progress_bar.visible = False
             # self._progress_label.visible = False
-
+        
         # Initialize button states
         self._update_button_states()
 

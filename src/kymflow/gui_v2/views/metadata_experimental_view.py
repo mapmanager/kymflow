@@ -83,7 +83,8 @@ class MetadataExperimentalView:
         self._read_only_fields = {f["name"]: f for f in visible_schema if not f["editable"]}
 
         # Create widgets dynamically based on schema (preserve order)
-        with ui.grid(columns=3).classes("w-full gap-2"):
+        _numColumns = 2
+        with ui.grid(columns=_numColumns).classes("w-full gap-2"):
             # Iterate through visible schema in order to preserve field ordering
             for field_def in visible_schema:
                 widget_classes = "w-full"

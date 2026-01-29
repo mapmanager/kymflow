@@ -127,11 +127,8 @@ class DrawerView:
                             # Save buttons section
                             self._save_buttons_view.render()
 
-                            # Analysis toolbar section - in disclosure triangle
-                            with ui.expansion("Flow Analysis", value=True) \
-                                .props('header-class="my-expansion-header-shift-left"') \
-                                .classes("w-full"):
-                                self._analysis_toolbar_view.render()
+                            # Analysis toolbar section
+                            self._analysis_toolbar_view.render()
                             
                             # Task progress section
                             # COMMENTED OUT: Progress toolbar is currently broken because multiprocessing
@@ -141,8 +138,8 @@ class DrawerView:
                             # ui.label("Progress").classes("text-sm font-semibold mt-2")
                             # self._drawer_task_progress_view.render()
                             
-                            # Stall analysis section - in disclosure triangle
-                            with ui.expansion("Stall Analysis", value=True) \
+                            # Stall analysis section - in disclosure triangle (default closed)
+                            with ui.expansion("Stall Analysis", value=False) \
                                 .props('header-class="my-expansion-header-shift-left"') \
                                 .classes("w-full"):
                                 self._stall_analysis_toolbar_view.render()

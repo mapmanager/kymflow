@@ -55,7 +55,7 @@ class KymImage(AcqImage):
                     ndim=2,  # kymographs are always 2D
                     voxels=[seconds_per_line, um_per_pixel],
                     voxels_units=["s", "um"],
-                    labels=["time (s)", "space (um)"],
+                    labels=["Time (s)", "Space (um)"],
                     physical_size=None  # Will be computed
                 )
                 # Compute physical_size
