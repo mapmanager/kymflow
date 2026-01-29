@@ -372,13 +372,19 @@ class HomePage(BasePage):
         build_header(self.context, dark_mode, drawer_toggle_callback=None)
         self._register_full_zoom_shortcut()
 
-        # Add CSS for splitter handle container
+        # Add CSS for splitter handle container + small split handles
         ui.add_css("""
             .handle_wrap {
                 height: 100%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
+            }
+            .splitter_handle {
+                width: 26px;
+                height: 5px;
+                border-radius: 4px;
+                background: rgba(148, 163, 184, 0.8);
             }
         """)
 
@@ -441,47 +447,98 @@ class HomePage(BasePage):
         initial_folder = self.context.app_state.folder or Path(".")
         self._folder_view.render(initial_folder=initial_folder)
 
+        # Splitter parameters (percentages, vertical layout). Tweak these as needed.
+        file_plot_splitter = {"value": 30, "limits": (0, 60)}
+        plot_event_splitter = {"value": 50, "limits": (30, 90)}
+        # Remember last open sizes for double-click min/max toggles.
+        file_plot_last = {"value": file_plot_splitter["value"]}
+        plot_event_last = {"value": plot_event_splitter["value"]}
+
         # File table SECOND (creates grid ui here) - in disclosure triangle
         # with ui.expansion("Files", value=True).classes("w-full"):
         if 1:
-            self._table_view.render()
+            # Splitter between file table (top) and plot/event area (bottom).
+            with ui.splitter(
+                value=file_plot_splitter["value"],
+                limits=file_plot_splitter["limits"],
+                horizontal=True,
+            ).classes("w-full flex-grow min-h-0") as file_plot_splitter_ui:
+                def _toggle_file_plot_splitter() -> None:
+                    """Double-click: snap file/plot splitter to min/max with memory."""
+                    min_val, max_val = file_plot_splitter["limits"]
+                    if file_plot_splitter_ui.value > (min_val + 1):
+                        file_plot_last["value"] = file_plot_splitter_ui.value
+                        file_plot_splitter_ui.value = min_val
+                    else:
+                        file_plot_splitter_ui.value = file_plot_last["value"] or max_val
+                # TOP: File table
+                with file_plot_splitter_ui.before:
+                    self._table_view.render()
 
-            # Populate with current state (if already loaded, shows immediately)
-            self._table_view.set_files(list(self.context.app_state.files))
+                    # Populate with current state (if already loaded, shows immediately)
+                    self._table_view.set_files(list(self.context.app_state.files))
 
-            # Restore current selection from AppState (ensures visibility on navigation back)
-            # This handles both initial load and navigation back scenarios
-            current_file = self.context.app_state.selected_file
-            if current_file is not None and hasattr(current_file, "path"):
-                self._table_view.set_selected_paths(
-                    [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
-                )
+                    # Restore current selection from AppState (ensures visibility on navigation back)
+                    # This handles both initial load and navigation back scenarios
+                    current_file = self.context.app_state.selected_file
+                    if current_file is not None and hasattr(current_file, "path"):
+                        self._table_view.set_selected_paths(
+                            [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
+                        )
 
-        # Image/line viewer THIRD (creates plot ui here) - in disclosure triangle
-        # abb turned off expansion
-        # with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
-        if 1:
-            self._image_line_viewer.render()
+                # BOTTOM: Image/line viewer + event table in a nested splitter
+                # abb turned off expansion
+                # with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
+                with file_plot_splitter_ui.after:
+                    with ui.splitter(
+                        value=plot_event_splitter["value"],
+                        limits=plot_event_splitter["limits"],
+                        horizontal=True,
+                    ).classes("w-full flex-grow min-h-0") as plot_splitter:
+                        def _toggle_plot_event_splitter() -> None:
+                            """Double-click: snap plot/event splitter to min/max with memory."""
+                            min_val, max_val = plot_event_splitter["limits"]
+                            if plot_splitter.value > (min_val + 1):
+                                plot_event_last["value"] = plot_splitter.value
+                                plot_splitter.value = min_val
+                            else:
+                                plot_splitter.value = plot_event_last["value"] or max_val
+                        # TOP: Image/line viewer
+                        with plot_splitter.before:
+                            self._image_line_viewer.render()
 
-            # Initialize viewer with current AppState (if already set)
-            # This ensures viewer shows current selection/theme on first render
-            current_file = self.context.app_state.selected_file
-            if current_file is not None:
-                self._image_line_viewer.set_selected_file(current_file)
-            current_roi = self.context.app_state.selected_roi_id
-            if current_roi is not None:
-                self._image_line_viewer.set_selected_roi(current_roi)
-            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+                            # Initialize viewer with current AppState (if already set)
+                            # This ensures viewer shows current selection/theme on first render
+                            current_file = self.context.app_state.selected_file
+                            if current_file is not None:
+                                self._image_line_viewer.set_selected_file(current_file)
+                            current_roi = self.context.app_state.selected_roi_id
+                            if current_roi is not None:
+                                self._image_line_viewer.set_selected_roi(current_roi)
+                            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
 
-        if 1:
-            self._event_view.render()
-            current_file = self.context.app_state.selected_file
-            if current_file is not None:
-                report = current_file.get_kym_analysis().get_velocity_report()
-                self._event_view.set_events(report)
-            current_roi = self.context.app_state.selected_roi_id
-            if current_roi is not None:
-                self._event_view.set_selected_roi(current_roi)
+                        # BOTTOM: Event table
+                        with plot_splitter.after:
+                            self._event_view.render()
+                            current_file = self.context.app_state.selected_file
+                            if current_file is not None:
+                                report = current_file.get_kym_analysis().get_velocity_report()
+                                self._event_view.set_events(report)
+                            current_roi = self.context.app_state.selected_roi_id
+                            if current_roi is not None:
+                                self._event_view.set_selected_roi(current_roi)
+
+                        # Draw a small visual handle on the nested splitter separator.
+                        with plot_splitter.separator:
+                            ui.element("div").classes("splitter_handle").on(
+                                "dblclick", lambda _e: _toggle_plot_event_splitter()
+                            )
+
+                # Draw a small visual handle on the file/plot splitter separator.
+                with file_plot_splitter_ui.separator:
+                    ui.element("div").classes("splitter_handle").on(
+                        "dblclick", lambda _e: _toggle_file_plot_splitter()
+                    )
 
         # Restore selection once per client (after UI is created)
         if not self._restored_once:

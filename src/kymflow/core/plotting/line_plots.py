@@ -974,9 +974,10 @@ def plot_image_line_plotly_v3(
     font_dict = {"color": fg_color}
     grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
     
+    # abb let page layout decide
     # Configurable plot height
-    plot_height = 300
-    logger.warning(f'HARD CODING plot_height: {plot_height}')
+    # plot_height = 300
+    # logger.warning(f'HARD CODING plot_height: {plot_height}')
 
     # Determine number of rows: 1 for image + N for line plots
     if selected_roi_id is not None and isinstance(selected_roi_id, int):
@@ -993,8 +994,8 @@ def plot_image_line_plotly_v3(
         row_heights = [1.0]
     else:
         # Image gets 40%, line plots share the remaining 60%
-        image_height = 0.4
-        line_height_per_plot = 0.6 / num_line_plots
+        image_height = 0.6
+        line_height_per_plot = 0.4 / num_line_plots
         row_heights = [image_height] + [line_height_per_plot] * num_line_plots
 
     # Create subplots
@@ -1002,7 +1003,7 @@ def plot_image_line_plotly_v3(
         rows=num_rows,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.025,
+        vertical_spacing=0.025,  # 0.025
         row_heights=row_heights,
     )
 
@@ -1014,7 +1015,7 @@ def plot_image_line_plotly_v3(
             paper_bgcolor=bg_color,
             plot_bgcolor=bg_color,
             font=font_dict,
-            height=plot_height,
+            # height=plot_height,
         )
         return fig
 
@@ -1027,7 +1028,7 @@ def plot_image_line_plotly_v3(
             paper_bgcolor=bg_color,
             plot_bgcolor=bg_color,
             font=font_dict,
-            height=plot_height,
+            # height=plot_height,
         )
         return fig
 
@@ -1132,7 +1133,7 @@ def plot_image_line_plotly_v3(
         "paper_bgcolor": bg_color,
         "plot_bgcolor": bg_color,
         "font": font_dict,
-        "height": plot_height,
+        # "height": plot_height,
         "margin": dict(l=10, r=10, t=10, b=10),
         "uirevision": "kymflow-plot",
         "dragmode": "zoom",

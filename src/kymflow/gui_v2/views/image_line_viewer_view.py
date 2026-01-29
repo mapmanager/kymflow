@@ -126,15 +126,16 @@ class ImageLineViewerView:
         self._plot = None
         self._plot_container = None
 
-        # Plot with larger height to accommodate both subplots
-        self._plot_container = ui.column().classes("w-full")
+        # Plot container fills available height so nested splitters can resize vertically.
+        self._plot_container = ui.column().classes("w-full h-full")
         with self._plot_container:
             self._create_plot(go.Figure())
 
     def _create_plot(self, fig: go.Figure) -> None:
         """Create a fresh plot element inside the current container."""
         logger.debug(f'=== this may be overkill')
-        self._plot = ui.plotly(fig).classes("w-full")
+        # Plotly element stretches to container height for splitter resize support.
+        self._plot = ui.plotly(fig).classes("w-full h-full")
         # Stable DOM id for JS access (dragmode toggling).
         self._plot.props(f"id={self._plot_div_id}")
         # abb when implementing getting user drawrect/rect selection
