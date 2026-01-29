@@ -696,6 +696,72 @@ def test_roiset_create_roi_with_none_bounds_3d() -> None:
     logger.info("  - RoiSet.create_roi() with bounds=None for 3D image works correctly")
 
 
+def test_roiset_create_roi_marks_dirty() -> None:
+    """Test that create_roi() marks AcqImage as dirty."""
+    logger.info("Testing RoiSet.create_roi() marks dirty")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Initially should not be dirty
+    assert acq_image.is_metadata_dirty is False
+    
+    # Create ROI - should mark as dirty
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    acq_image.rois.create_roi(bounds=bounds, channel=1)
+    
+    assert acq_image.is_metadata_dirty is True
+    
+    logger.info("  - create_roi() marks dirty correctly")
+
+
+def test_roiset_delete_marks_dirty() -> None:
+    """Test that delete() marks AcqImage as dirty."""
+    logger.info("Testing RoiSet.delete() marks dirty")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1)
+    
+    # Clear dirty flag
+    acq_image.clear_metadata_dirty()
+    assert acq_image.is_metadata_dirty is False
+    
+    # Delete ROI - should mark as dirty
+    acq_image.rois.delete(roi.id)
+    assert acq_image.is_metadata_dirty is True
+    
+    logger.info("  - delete() marks dirty correctly")
+
+
+def test_roiset_clear_marks_dirty() -> None:
+    """Test that clear() marks AcqImage as dirty."""
+    logger.info("Testing RoiSet.clear() marks dirty")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create multiple ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    acq_image.rois.create_roi(bounds=bounds2, channel=1)
+    
+    # Clear dirty flag
+    acq_image.clear_metadata_dirty()
+    assert acq_image.is_metadata_dirty is False
+    
+    # Clear all ROIs - should mark as dirty
+    acq_image.rois.clear()
+    assert acq_image.is_metadata_dirty is True
+    assert acq_image.rois.numRois() == 0
+    
+    logger.info("  - clear() marks dirty correctly")
+
+
 def test_roiset_create_roi_bounds_none_vs_explicit() -> None:
     """Test that create_roi(bounds=None) and explicit full-image bounds are equivalent."""
     logger.info("Testing create_roi(bounds=None) vs explicit full-image bounds")

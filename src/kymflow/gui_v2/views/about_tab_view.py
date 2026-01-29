@@ -28,7 +28,7 @@ class AboutTabView:
     def render(self) -> None:
         """Create the About tab UI inside the current container."""
         # Version information card
-        version_info = getVersionInfo()
+        version_info = getVersionInfo_gui()
         # with ui.card().classes("w-full p-4 gap-2"):
         if 1:
             ui.label("Version info").classes("text-lg font-semibold")
@@ -60,4 +60,17 @@ class AboutTabView:
             ui.code(log_content).classes("w-full text-sm").style(
                 "white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow: auto;"
             )
+
+
+def getVersionInfo_gui() -> dict:
+    """Get version info with GUI-specific details included."""
+    version_info = getVersionInfo()
+
+    import nicegui
+    import kymflow.gui_v2 as kymflow_gui
+
+    version_info["KymFlow GUI version"] = kymflow_gui.__version__  # noqa: SLF001
+    version_info["NiceGUI version"] = nicegui.__version__
+
+    return version_info
 

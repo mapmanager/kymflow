@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
@@ -286,12 +287,53 @@ def test_kymanalysis_dirty_flag() -> None:
     roi = kym_image.rois.get(1)
     assert roi is not None
     kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
-    assert kym_analysis._dirty is True
+    assert kym_analysis.is_dirty is True
     
     # After saving, should not be dirty
     saved = kym_analysis.save_analysis()
     if saved:
-        assert kym_analysis._dirty is False
+        assert kym_analysis.is_dirty is False
+
+
+def test_kymanalysis_metadata_only_dirty() -> None:
+    """Test that metadata-only changes mark analysis as dirty and can be saved."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Initially should not be dirty
+    assert kym_analysis.is_dirty is False
+    
+    # Update experiment metadata - should mark as dirty
+    kym_image.update_experiment_metadata(species="mouse", region="cortex")
+    assert kym_image.is_metadata_dirty is True
+    assert kym_analysis.is_dirty is True
+    
+    # Update header metadata - should still be dirty
+    kym_image.update_header(voxels=[0.001, 0.284])
+    assert kym_image.is_metadata_dirty is True
+    assert kym_analysis.is_dirty is True
+    
+    # Save analysis (even without analysis data) - should save metadata and clear dirty
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        saved = kym_analysis.save_analysis()
+        assert saved is True
+        assert kym_image.is_metadata_dirty is False
+        assert kym_analysis.is_dirty is False
+        
+        # Verify metadata was saved
+        metadata_file = test_file.with_suffix('.json')
+        assert metadata_file.exists()
+        
+        import json
+        with open(metadata_file, 'r') as f:
+            data = json.load(f)
+        assert data["experiment_metadata"]["species"] == "mouse"
+        assert data["experiment_metadata"]["region"] == "cortex"
 
 
 

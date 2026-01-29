@@ -371,3 +371,51 @@ def test_acq_image_getRowDict_shallow_path() -> None:
     
     logger.info(f"  - getRowDict() with shallow path: parent1={row_dict['parent1']}, parent2={row_dict['parent2']}, parent3={row_dict['parent3']}")
 
+
+def test_acq_image_metadata_dirty_flag() -> None:
+    """Test that metadata dirty flag is set correctly."""
+    logger.info("Testing AcqImage metadata dirty flag")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=test_image)
+    
+    # Initially should not be dirty
+    assert acq.is_metadata_dirty is False
+    
+    # Update experiment metadata - should mark as dirty
+    acq.update_experiment_metadata(species="mouse")
+    assert acq.is_metadata_dirty is True
+    
+    # Update header - should still be dirty
+    acq.update_header(voxels=[0.001, 0.284])
+    assert acq.is_metadata_dirty is True
+    
+    # Clear dirty flag
+    acq.clear_metadata_dirty()
+    assert acq.is_metadata_dirty is False
+    
+    logger.info("  - Metadata dirty flag works correctly")
+
+
+def test_acq_image_save_metadata_clears_dirty() -> None:
+    """Test that save_metadata() clears dirty flag."""
+    logger.info("Testing AcqImage save_metadata() clears dirty flag")
+    
+    from tempfile import TemporaryDirectory
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        test_image = np.zeros((100, 200), dtype=np.uint8)
+        acq = AcqImage(path=test_file, img_data=test_image)
+        
+        # Update metadata
+        acq.update_experiment_metadata(species="mouse", region="cortex")
+        assert acq.is_metadata_dirty is True
+        
+        # Save metadata
+        saved = acq.save_metadata()
+        assert saved is True
+        assert acq.is_metadata_dirty is False
+        
+        logger.info("  - save_metadata() clears dirty flag correctly")
+

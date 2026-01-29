@@ -1,4 +1,8 @@
-"""Simple test to generate and inspect stall analysis results."""
+"""Simple test to generate and inspect stall analysis results.
+
+DEPRECATED: Stall analysis tests are deprecated in favor of velocity event analysis.
+This test is kept for reference but is skipped by default.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,8 @@ from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)
+
+pytestmark = pytest.mark.skip(reason="Stall analysis tests are deprecated in favor of velocity event analysis")
 
 
 @pytest.mark.requires_data

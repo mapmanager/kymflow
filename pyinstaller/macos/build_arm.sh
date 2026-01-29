@@ -29,6 +29,9 @@ conda activate "${CONDA_ENV_NAME}"
 pip install --upgrade pip
 pip install -e '../../.[gui]'
 pip install -e '../../../nicewidgets/.'  # abb 2026
+
+pip install nicegui==3.6.0
+
 pip install pyinstaller
 
 # dry run gui
@@ -59,4 +62,7 @@ export KYMFLOW_GUI_RELOAD=0
 
 # nicegui-pack --windowed --name "KymFlow" --icon "kymflow_transparent.icns" ../../src/kymflow/gui/main.py
 # nicegui-pack --windowed --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/gui/main.py
-nicegui-pack --windowed --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/gui_v2/app.py
+
+ls -l "$(which nicegui-pack)"
+
+nicegui-pack --windowed --clean --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/gui_v2/app.py

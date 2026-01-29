@@ -97,7 +97,7 @@ class AnalysisToolbarView:
         self._roi_select: Optional[ui.select] = None
         self._file_path_label: Optional[ui.label] = None
         self._progress_bar: Optional[ui.linear_progress] = None
-        self._progress_label: Optional[ui.label] = None
+        # self._progress_label: Optional[ui.label] = None
 
         # State
         self._current_file: Optional[KymImage] = None
@@ -125,7 +125,7 @@ class AnalysisToolbarView:
         self._roi_select = None
         self._file_path_label = None
         self._progress_bar = None
-        self._progress_label = None
+        # self._progress_label = None
         # Reset suppression flag to ensure clean state
         self._suppress_roi_emit = False
 
@@ -161,10 +161,10 @@ class AnalysisToolbarView:
         # Progress bar and label (hidden by default, shown when task is running)
         with ui.column().classes("w-full gap-1"):
             self._progress_bar = ui.linear_progress(value=0.0).props("instant-feedback").classes("w-full")
-            self._progress_label = ui.label("").classes("text-sm text-gray-600")
+            # self._progress_label = ui.label("").classes("text-sm text-gray-600")
             # Start hidden, will be shown when task starts
             self._progress_bar.visible = False
-            self._progress_label.visible = False
+            # self._progress_label.visible = False
 
         # Initialize button states
         self._update_button_states()
@@ -303,7 +303,8 @@ class AnalysisToolbarView:
             self._cancel_button.disable()
         
         # Update progress bar and label
-        if self._progress_bar is None or self._progress_label is None:
+        # if self._progress_bar is None or self._progress_label is None:
+        if self._progress_bar is None:
             # logger.warning(f"Progress bar or label is None! progress_bar={self._progress_bar}, progress_label={self._progress_label}")
             return
         
@@ -320,16 +321,16 @@ class AnalysisToolbarView:
         
         if should_show:
             self._progress_bar.visible = True
-            self._progress_label.visible = True
+            # self._progress_label.visible = True
             self._progress_bar.value = float(self._task_state.progress)
-            self._progress_label.text = self._task_state.message or ""
+            # self._progress_label.text = self._task_state.message or ""
         else:
             # Hide when not running and no message
             # logger.debug(f"PROGRESS BAR: Hiding: running={running}, task_state={self._task_state is not None}")
             self._progress_bar.visible = False
-            self._progress_label.visible = False
+            # self._progress_label.visible = False
             self._progress_bar.value = 0.0
-            self._progress_label.text = ""
+            # self._progress_label.text = ""
 
     def _on_start_click(self) -> None:
         """Handle Analyze Flow button click."""

@@ -1,4 +1,8 @@
-"""Tests for stall analysis functionality."""
+"""Tests for stall analysis functionality.
+
+DEPRECATED: Stall analysis tests are deprecated in favor of velocity event analysis.
+These tests are kept for reference but are skipped by default.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,8 @@ from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)
+
+pytestmark = pytest.mark.skip(reason="Stall analysis tests are deprecated in favor of velocity event analysis")
 
 
 class TestStallDataclass:

@@ -296,7 +296,13 @@ def run_batch_flow_analysis(
                     continue
 
                 # Choose ROI: if multiple, analyze each? Current behavior: analyze all ROIs sequentially.
-                roi_ids = list(kym_file.rois.keys())
+                roi_ids = kym_file.rois.get_roi_ids()
+                
+                # Skip files with no ROIs
+                if not roi_ids:
+                    overall_done += 1
+                    progress_q.put(("overall", (overall_done, total_files)))
+                    continue
 
                 for roi_id in roi_ids:
                     if cancel_event.is_set():

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -91,20 +92,41 @@ def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> No
     roi = sample_kym_file.rois.create_roi(bounds=bounds, note="Test ROI")
     roi_id = roi.id
     
-    # Run analysis with provided roi_id
-    run_flow_analysis(
-        sample_kym_file,
-        task_state,
-        window_size=16,
-        roi_id=roi_id,
-        on_result=on_result,
-    )
+    # Store timer callback so we can call it manually
+    timer_callback = None
+    mock_timer = MagicMock()
     
-    # Wait for analysis to complete
-    timeout = 10.0
-    start_time = time.time()
-    while task_state.running and (time.time() - start_time) < timeout:
-        time.sleep(0.1)
+    def mock_timer_func(interval: float, callback) -> MagicMock:
+        nonlocal timer_callback
+        timer_callback = callback
+        return mock_timer
+    
+    # Run analysis with provided roi_id
+    with patch("kymflow.gui_v2.tasks.ui.timer", side_effect=mock_timer_func):
+        run_flow_analysis(
+            sample_kym_file,
+            task_state,
+            window_size=16,
+            roi_id=roi_id,
+            on_result=on_result,
+        )
+        
+        # Wait for analysis to complete, manually draining queue
+        timeout = 10.0
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            # Manually call timer callback to drain queue
+            if timer_callback is not None:
+                timer_callback()
+            
+            # Check if analysis completed
+            if sample_kym_file.get_kym_analysis().has_analysis(roi_id):
+                # Drain queue one more time to update task_state
+                if timer_callback is not None:
+                    timer_callback()
+                break
+            
+            time.sleep(0.1)
     
     # Check that only one ROI exists (no new one created)
     roi_ids = sample_kym_file.rois.get_roi_ids()
@@ -112,8 +134,9 @@ def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> No
     assert roi_ids[0] == roi_id
     
     # Check that analysis was performed on the correct ROI
-    assert task_state.message == "Done"
     assert sample_kym_file.get_kym_analysis().has_analysis(roi_id)
+    # task_state.message should be "Done" after queue is drained
+    assert task_state.message == "Done"
 
 
 def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymImage) -> None:
@@ -146,21 +169,43 @@ def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymIm
         def on_batch_complete(cancelled: bool) -> None:
             pass
         
-        # Run batch analysis
-        run_batch_flow_analysis(
-            files,
-            per_file_task,
-            overall_task,
-            window_size=16,
-            on_file_complete=on_file_complete,
-            on_batch_complete=on_batch_complete,
-        )
+        # Store timer callback so we can call it manually
+        timer_callback = None
+        mock_timer = MagicMock()
         
-        # Wait for batch to complete
-        timeout = 20.0
-        start_time = time.time()
-        while overall_task.running and (time.time() - start_time) < timeout:
-            time.sleep(0.1)
+        def mock_timer_func(interval: float, callback) -> MagicMock:
+            nonlocal timer_callback
+            timer_callback = callback
+            return mock_timer
+        
+        # Run batch analysis
+        with patch("kymflow.gui_v2.tasks.ui.timer", side_effect=mock_timer_func):
+            run_batch_flow_analysis(
+                files,
+                per_file_task,
+                overall_task,
+                window_size=16,
+                on_file_complete=on_file_complete,
+                on_batch_complete=on_batch_complete,
+            )
+            
+            # Wait for batch to complete, manually draining queue
+            timeout = 20.0
+            start_time = time.time()
+            while (time.time() - start_time) < timeout:
+                # Manually call timer callback to drain queue
+                if timer_callback is not None:
+                    timer_callback()
+                
+                # Check if analysis completed for the file with ROI
+                if sample_kym_file.get_kym_analysis().has_analysis(roi1.id):
+                    # Analysis completed, drain queue a few more times to ensure callbacks are processed
+                    for _ in range(10):
+                        if timer_callback is not None:
+                            timer_callback()
+                    break
+                
+                time.sleep(0.1)
         
         # Check that no new ROIs were created
         assert sample_kym_file.rois.numRois() == 1  # Still only the one we created
@@ -171,7 +216,9 @@ def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymIm
         assert not kym_file2.get_kym_analysis().has_analysis()  # No analysis for skipped file
         
         # Check that completion callback was only called once (for the file with ROI)
-        assert file_completed["count"] == 1
+        # Note: The callback is called when the queue is drained, so we need to ensure
+        # the queue has been drained after analysis completes
+        assert file_completed["count"] == 1, f"Expected file_completed count to be 1, got {file_completed['count']}"
 
 
 def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
@@ -182,26 +229,43 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = sample_kym_file.rois.create_roi(bounds=bounds)
     
+    # Store timer callback so we can call it manually
+    timer_callback = None
+    mock_timer = MagicMock()
+    
+    def mock_timer_func(interval: float, callback) -> MagicMock:
+        nonlocal timer_callback
+        timer_callback = callback
+        return mock_timer
+    
     # Start analysis
-    run_flow_analysis(
-        sample_kym_file,
-        task_state,
-        window_size=16,
-        roi_id=roi.id,
-    )
-    
-    # Wait a bit for analysis to start
-    time.sleep(0.5)
-    
-    # Cancel the analysis
-    if task_state.running:
-        task_state.request_cancel()
-    
-    # Wait for cancellation to complete
-    timeout = 5.0
-    start_time = time.time()
-    while task_state.running and (time.time() - start_time) < timeout:
-        time.sleep(0.1)
+    with patch("kymflow.gui_v2.tasks.ui.timer", side_effect=mock_timer_func):
+        run_flow_analysis(
+            sample_kym_file,
+            task_state,
+            window_size=16,
+            roi_id=roi.id,
+        )
+        
+        # Wait a bit for analysis to start
+        time.sleep(0.5)
+        
+        # Cancel the analysis
+        if task_state.running:
+            task_state.request_cancel()
+        
+        # Wait for cancellation to complete, manually draining queue
+        timeout = 5.0
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            # Manually call timer callback to drain queue
+            if timer_callback is not None:
+                timer_callback()
+            
+            if not task_state.running:
+                break
+            
+            time.sleep(0.1)
     
     # Check that analysis was cancelled
     assert not task_state.running

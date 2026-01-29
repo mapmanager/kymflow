@@ -11,7 +11,7 @@ from kymflow.gui_v2.events import FileSelection, SelectionOrigin
 
 
 @dataclass(frozen=True)
-class TestEvent:
+class BusTestEvent:
     """Test event for bus testing."""
 
     value: int
@@ -19,13 +19,13 @@ class TestEvent:
 
 def test_bus_subscribe_emit(bus: EventBus) -> None:
     """Test basic subscribe and emit functionality."""
-    received: list[TestEvent] = []
+    received: list[BusTestEvent] = []
 
-    def handler(event: TestEvent) -> None:
+    def handler(event: BusTestEvent) -> None:
         received.append(event)
 
-    bus.subscribe(TestEvent, handler)
-    bus.emit(TestEvent(value=42))
+    bus.subscribe(BusTestEvent, handler)
+    bus.emit(BusTestEvent(value=42))
 
     assert len(received) == 1
     assert received[0].value == 42
@@ -35,35 +35,35 @@ def test_bus_deduplicate_subscriptions(bus: EventBus) -> None:
     """Test that duplicate subscriptions are prevented."""
     call_count = 0
 
-    def handler(_event: TestEvent) -> None:
+    def handler(_event: BusTestEvent) -> None:
         nonlocal call_count
         call_count += 1
 
     # Subscribe same handler twice
-    bus.subscribe(TestEvent, handler)
-    bus.subscribe(TestEvent, handler)
+    bus.subscribe(BusTestEvent, handler)
+    bus.subscribe(BusTestEvent, handler)
 
     # Emit event - should only call handler once
-    bus.emit(TestEvent(value=1))
+    bus.emit(BusTestEvent(value=1))
 
     assert call_count == 1
 
 
 def test_bus_multiple_handlers(bus: EventBus) -> None:
     """Test that multiple handlers receive events."""
-    received_1: list[TestEvent] = []
-    received_2: list[TestEvent] = []
+    received_1: list[BusTestEvent] = []
+    received_2: list[BusTestEvent] = []
 
-    def handler1(event: TestEvent) -> None:
+    def handler1(event: BusTestEvent) -> None:
         received_1.append(event)
 
-    def handler2(event: TestEvent) -> None:
+    def handler2(event: BusTestEvent) -> None:
         received_2.append(event)
 
-    bus.subscribe(TestEvent, handler1)
-    bus.subscribe(TestEvent, handler2)
+    bus.subscribe(BusTestEvent, handler1)
+    bus.subscribe(BusTestEvent, handler2)
 
-    bus.emit(TestEvent(value=99))
+    bus.emit(BusTestEvent(value=99))
 
     assert len(received_1) == 1
     assert len(received_2) == 1
@@ -75,16 +75,16 @@ def test_bus_unsubscribe(bus: EventBus) -> None:
     """Test unsubscribing handlers."""
     call_count = 0
 
-    def handler(_event: TestEvent) -> None:
+    def handler(_event: BusTestEvent) -> None:
         nonlocal call_count
         call_count += 1
 
-    bus.subscribe(TestEvent, handler)
-    bus.emit(TestEvent(value=1))
+    bus.subscribe(BusTestEvent, handler)
+    bus.emit(BusTestEvent(value=1))
     assert call_count == 1
 
-    bus.unsubscribe(TestEvent, handler)
-    bus.emit(TestEvent(value=2))
+    bus.unsubscribe(BusTestEvent, handler)
+    bus.emit(BusTestEvent(value=2))
     assert call_count == 1  # Should not increment
 
 
@@ -93,25 +93,25 @@ def test_bus_per_client_isolation() -> None:
     bus1 = EventBus(client_id="client-1", config=BusConfig(trace=False))
     bus2 = EventBus(client_id="client-2", config=BusConfig(trace=False))
 
-    received_1: list[TestEvent] = []
-    received_2: list[TestEvent] = []
+    received_1: list[BusTestEvent] = []
+    received_2: list[BusTestEvent] = []
 
-    def handler1(event: TestEvent) -> None:
+    def handler1(event: BusTestEvent) -> None:
         received_1.append(event)
 
-    def handler2(event: TestEvent) -> None:
+    def handler2(event: BusTestEvent) -> None:
         received_2.append(event)
 
-    bus1.subscribe(TestEvent, handler1)
-    bus2.subscribe(TestEvent, handler2)
+    bus1.subscribe(BusTestEvent, handler1)
+    bus2.subscribe(BusTestEvent, handler2)
 
     # Emit on bus1 - only handler1 should receive it
-    bus1.emit(TestEvent(value=1))
+    bus1.emit(BusTestEvent(value=1))
     assert len(received_1) == 1
     assert len(received_2) == 0
 
     # Emit on bus2 - only handler2 should receive it
-    bus2.emit(TestEvent(value=2))
+    bus2.emit(BusTestEvent(value=2))
     assert len(received_1) == 1  # Unchanged
     assert len(received_2) == 1
 
@@ -120,16 +120,16 @@ def test_bus_clear(bus: EventBus) -> None:
     """Test clearing all subscriptions."""
     call_count = 0
 
-    def handler(_event: TestEvent) -> None:
+    def handler(_event: BusTestEvent) -> None:
         nonlocal call_count
         call_count += 1
 
-    bus.subscribe(TestEvent, handler)
-    bus.emit(TestEvent(value=1))
+    bus.subscribe(BusTestEvent, handler)
+    bus.emit(BusTestEvent(value=1))
     assert call_count == 1
 
     bus.clear()
-    bus.emit(TestEvent(value=2))
+    bus.emit(BusTestEvent(value=2))
     assert call_count == 1  # Should not increment
 
 
@@ -157,7 +157,7 @@ def test_bus_type_safety() -> None:
     assert len(file_selection_received) == 1
 
     # Emit different event type - handler should not receive it
-    bus.emit(TestEvent(value=42))
+    bus.emit(BusTestEvent(value=42))
     assert len(file_selection_received) == 1  # Unchanged
 
 

@@ -85,8 +85,8 @@ class AppState:
         self.selected_event_origin: Optional[Any] = None
         self.theme_mode: ThemeMode = ThemeMode.DARK
         
-        logger.warning("declan 2026 hard coding depth to 3")
-        self.folder_depth: int = 3  # 1
+        # logger.warning("declan 2026 hard coding depth to 3")
+        self.folder_depth: int = 1  # 1
         
         # Callback registries (like grid_gpt.py pattern)
         self._file_list_changed_handlers: List[FileListChangedHandler] = []

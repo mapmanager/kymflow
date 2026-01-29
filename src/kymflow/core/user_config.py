@@ -29,13 +29,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from platformdirs import user_config_dir
 
+from kymflow.core.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 # Increment when you make a breaking change to the on-disk JSON schema.
 SCHEMA_VERSION: int = 1
 
 # Defaults
 DEFAULT_FOLDER_DEPTH: int = 1
 DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
-MAX_RECENTS: int = 10
+MAX_RECENTS: int = 15
 
 
 def _normalize_folder_path(path: str | Path) -> str:
@@ -257,6 +261,8 @@ class UserConfig:
         """Write config to disk."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = self.data.to_json_dict()
+        logger.info('saving user_config to disk')
+        logger.info(f'payload: {payload}')
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def ensure_exists(self) -> None:

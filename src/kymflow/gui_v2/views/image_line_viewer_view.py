@@ -559,7 +559,7 @@ class ImageLineViewerView:
         num_rois = kf.rois.numRois() if kf is not None else 0
         plot_rois = (num_rois > 1)
 
-        # logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
+        logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
         # logger.debug(f'  kf={kf}')
         # logger.debug(f'  selected_roi_id roi_id={roi_id}')
         # logger.debug(f'  plot_rois plot_rois={plot_rois}')

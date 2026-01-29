@@ -20,6 +20,8 @@ from pathlib import Path
 # --- Matplotlib cache: MUST run before importing anything that might import matplotlib ---
 from platformdirs import user_cache_dir
 
+# from kymflow.gui_v2._window_size_timer import install_native_window_persistence
+
 def _init_mpl_cache_dir() -> None:
     """Ensure Matplotlib uses a stable, writable cache dir (works for frozen + dev)."""
     cache_root = Path(user_cache_dir("kymflow")) / "matplotlib"
@@ -103,6 +105,8 @@ USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "1") == "1"
 # AppContext.__init__ will check if we're in a worker process and skip initialization
 context = AppContext()
 
+# abb setting window size hook
+_native_window_persistence_installed = False
 
 @ui.page("/")
 def home() -> None:
@@ -111,6 +115,12 @@ def home() -> None:
     Uses cached page instances to prevent recreation on navigation.
     Each browser tab/window gets its own isolated session.
     """
+
+    # global _native_window_persistence_installed
+    # if not _native_window_persistence_installed:
+    #     _native_window_persistence_installed = True
+    #     ui.timer(0.2, lambda: install_native_window_persistence(context.user_config), once=True)
+
     ui.page_title("KymFlow")
     inject_global_styles()
 
@@ -249,15 +259,21 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
     # Warm matplotlib cache once (main process only; safe in frozen builds)
     _warm_mpl_font_cache_once()
     
+    x, y, w, h = context.user_config.get_window_rect()
+    # logger.info(f"user_config window_rect: {x}, {y}, {w}, {h}")
+
     reload = False
+    native = True
     ui.run(
         port=DEFAULT_PORT,
         reload=reload,
         native=native,
-        window_size=(1200, 800),
+        window_size=(w, h),
         storage_secret=STORAGE_SECRET,
         title="KymFlow",
     )
+
+    logger.info('here')
 
 
 if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
