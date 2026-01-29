@@ -134,8 +134,6 @@ class SaveButtonsView:
         if running:
             self._save_selected_button.disable()
             self._save_all_button.disable()
-            self._save_selected_button.props("color=red")
-            self._save_all_button.props("color=red")
         else:
             # Save Selected: enabled when file is selected (and not running)
             has_file = self._current_file is not None
@@ -146,9 +144,6 @@ class SaveButtonsView:
 
             # Save All: always enabled when not running (will check files in controller)
             self._save_all_button.enable()
-
-            self._save_selected_button.props(remove="color")
-            self._save_all_button.props(remove="color")
 
     def _on_save_selected_click(self) -> None:
         """Handle Save Selected button click."""

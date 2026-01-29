@@ -13,6 +13,8 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import FolderChosen
 from kymflow.gui_v2.views.folder_picker import _prompt_for_directory_pywebview
+from kymflow.gui_v2.events_state import TaskStateChanged
+from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.user_config import UserConfig
 
 logger = get_logger(__name__)
@@ -49,6 +51,10 @@ class FolderSelectorView:
         self._current_folder: Path = Path(".")
         self._folder_display: Optional[ui.label] = None
         self._recent_select: Optional[ui.select] = None
+        self._choose_button: Optional[ui.button] = None
+        self._reload_button: Optional[ui.button] = None
+        self._depth_input: Optional[ui.number] = None
+        self._task_state: Optional[TaskStateChanged] = None
 
     def render(self, *, initial_folder: Path) -> None:
         """Create the folder selector UI inside the current container.
@@ -66,8 +72,6 @@ class FolderSelectorView:
         def _emit() -> None:
             logger.info("FolderSelectorView emit FolderChosen(%s)", self._current_folder)
             self._bus.emit(FolderChosen(folder=str(self._current_folder)))
-            if self._folder_display is not None:
-                self._folder_display.set_text(f"Folder: {self._current_folder}")
 
         async def _choose_folder() -> None:
             """Handle folder selection button click."""
@@ -112,13 +116,10 @@ class FolderSelectorView:
                 # Use pywebview implementation (async)
                 selected = await _prompt_for_directory_pywebview(self._current_folder)
                 if selected:
-                    # Update and emit event
-                    self._current_folder = Path(selected)
-                    self._bus.emit(FolderChosen(folder=str(self._current_folder)))
-                    if self._folder_display is not None:
-                        self._folder_display.set_text(f"Folder: {self._current_folder}")
-                    logger.info("Folder selected: %s", self._current_folder)
-                    ui.notify(f"Folder selected: {self._current_folder}", type="positive")
+                    # Emit event (label updates after load)
+                    self._bus.emit(FolderChosen(folder=str(Path(selected))))
+                    logger.info("Folder selected: %s", selected)
+                    ui.notify(f"Folder selected: {selected}", type="positive")
                 # If selected is None, user cancelled - no notification needed
             except Exception as exc:
                 logger.error("Folder selection failed: %s", exc, exc_info=True)
@@ -147,13 +148,14 @@ class FolderSelectorView:
             # Emit FolderChosen with path and depth
             logger.info(f"Recent folder selected: {selected_path} (depth={depth})")
             self._bus.emit(FolderChosen(folder=selected_path, depth=depth))
-            if self._folder_display is not None:
-                self._folder_display.set_text(f"Folder: {selected_path}")
 
         # Always reset UI element reference - NiceGUI will clean up old elements
         # This ensures we create fresh elements in the new container context
         self._folder_display = None
         self._recent_select = None
+        self._choose_button = None
+        self._reload_button = None
+        self._depth_input = None
 
         # Build recent folders options
         recent_options: dict[str, str] = {}
@@ -180,11 +182,61 @@ class FolderSelectorView:
             
             # Always enable the button - check happens dynamically when clicked
             # This avoids timing issues with pywebview window initialization
-            ui.button("Choose folder", on_click=_choose_folder)
-            ui.button("Reload", on_click=_emit)
+            self._choose_button = ui.button("Choose folder", on_click=_choose_folder)
+            self._reload_button = ui.button("Reload", on_click=_emit)
 
             ui.label("Depth:").classes("ml-2")
-            depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-20")
-            depth_input.bind_value(self._app_state, "folder_depth")
+            self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-20")
+            self._depth_input.bind_value(self._app_state, "folder_depth")
 
             self._folder_display = ui.label(f"Folder: {self._current_folder}")
+        self._update_controls_state()
+        self.set_folder_from_state()
+
+    def set_task_state(self, task_state: TaskStateChanged) -> None:
+        """Update view for task state changes."""
+        safe_call(self._set_task_state_impl, task_state)
+
+    def _set_task_state_impl(self, task_state: TaskStateChanged) -> None:
+        """Internal implementation of set_task_state."""
+        self._task_state = task_state
+        self._update_controls_state()
+
+    def _update_controls_state(self) -> None:
+        """Enable/disable folder controls based on task running state."""
+        running = self._task_state.running if self._task_state else False
+        if self._recent_select is not None:
+            if running:
+                self._recent_select.disable()
+            else:
+                options = getattr(self._recent_select, "options", None)
+                if options:
+                    self._recent_select.enable()
+                else:
+                    self._recent_select.disable()
+        if self._choose_button is not None:
+            if running:
+                self._choose_button.disable()
+            else:
+                self._choose_button.enable()
+        if self._reload_button is not None:
+            if running:
+                self._reload_button.disable()
+            else:
+                self._reload_button.enable()
+        if self._depth_input is not None:
+            if running:
+                self._depth_input.disable()
+            else:
+                self._depth_input.enable()
+
+    def set_folder_from_state(self) -> None:
+        """Update folder display to match AppState."""
+        folder = self._app_state.folder or self._current_folder
+        self._current_folder = folder
+        if self._folder_display is not None:
+            self._folder_display.set_text(f"Folder: {self._current_folder}")
+        if self._recent_select is not None:
+            options = getattr(self._recent_select, "options", None)
+            if options and str(self._current_folder) in options:
+                self._recent_select.set_value(str(self._current_folder))

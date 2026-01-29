@@ -68,10 +68,9 @@ class SaveController:
             ui.notify("No file selected", color="warning")
             return
 
-        # Check if any ROI has analysis
         kym_analysis = kf.get_kym_analysis()
-        if not kym_analysis.has_analysis():
-            ui.notify(f"No analysis found for {kf.path.name}", color="warning")
+        if not kym_analysis.is_dirty:
+            ui.notify(f"Nothing to save for {kf.path.name}", color="info")
             return
 
         try:
@@ -102,9 +101,8 @@ class SaveController:
         error_count = 0
 
         for kf in self._app_state.files:
-            # Check if any ROI has analysis
             kym_analysis = kf.get_kym_analysis()
-            if not kym_analysis.has_analysis():
+            if not kym_analysis.is_dirty:
                 skipped_count += 1
                 continue
 

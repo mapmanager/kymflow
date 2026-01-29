@@ -13,11 +13,9 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.plotting.theme import ThemeMode
-    from kymflow.gui_v2.state import ImageDisplayParams
 else:
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.plotting.theme import ThemeMode
-    from kymflow.gui_v2.state import ImageDisplayParams
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,4 +72,24 @@ class TaskStateChanged:
     task_type: Literal["home", "batch", "batch_overall"]
     phase: Literal["state"] = "state"
 
+
+@dataclass(frozen=True, slots=True)
+class AnalysisCompleted:
+    """Analysis completion notification.
+
+    Emitted by AnalysisController when a flow analysis finishes successfully.
+    Views can subscribe to refresh analysis-dependent UI without relying on
+    MetadataUpdate.
+
+    Attributes:
+        file: KymImage instance that was analyzed.
+        roi_id: ROI ID that was analyzed.
+        success: Whether analysis completed successfully.
+        phase: Event phase - always "state".
+    """
+
+    file: KymImage
+    roi_id: int | None
+    success: bool
+    phase: Literal["state"] = "state"
 

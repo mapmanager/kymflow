@@ -256,6 +256,17 @@ class AcqImageList(Generic[T]):
     def __len__(self) -> int:
         """Return the number of images in the list."""
         return len(self.images)
+
+    def any_dirty_analysis(self) -> bool:
+        """Return True if any image has unsaved analysis or metadata."""
+        for image in self.images:
+            if hasattr(image, "get_kym_analysis"):
+                try:
+                    if image.get_kym_analysis().is_dirty:
+                        return True
+                except Exception:
+                    continue
+        return False
     
     def __getitem__(self, index: int) -> T:
         """Get image by index.

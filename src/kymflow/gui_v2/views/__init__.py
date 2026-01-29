@@ -22,6 +22,7 @@ from kymflow.gui_v2.views.task_progress_view import TaskProgressView
 from kymflow.gui_v2.views.analysis_toolbar_bindings import AnalysisToolbarBindings
 from kymflow.gui_v2.views.contrast_bindings import ContrastBindings
 from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
+from kymflow.gui_v2.views.folder_selector_bindings import FolderSelectorBindings
 from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
 from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
@@ -52,6 +53,7 @@ __all__ = [
     "AnalysisToolbarBindings",
     "ContrastBindings",
     "FileTableBindings",
+    "FolderSelectorBindings",
     "ImageLineViewerBindings",
     "KymEventBindings",
     "LinePlotControlsBindings",

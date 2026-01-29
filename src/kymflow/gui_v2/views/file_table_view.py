@@ -11,7 +11,10 @@ from typing import Callable, Iterable, List, Optional
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from nicegui import ui
+from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events_state import TaskStateChanged
+from kymflow.core.utils.logging import get_logger
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
 # from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
 from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
@@ -20,6 +23,7 @@ Rows = List[dict[str, object]]
 OnSelected = Callable[[FileSelection], None]
 OnMetadataUpdate = Callable[[MetadataUpdate], None]
 
+logger = get_logger(__name__)
 
 def _col(
     field: str,
@@ -50,15 +54,16 @@ def _default_columns() -> list[ColumnConfig]:
         _col("File Name", "File Name", width=260),
         _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center"),
         _col("Saved", "Saved", width=80, cell_class="ag-cell-center"),
-        _col("Num ROIS", "Num ROIS", width=100, cell_class="ag-cell-right"),
-        _col("Parent Folder", "Parent Folder", width=180),
-        _col("Grandparent Folder", "Grandparent Folder", width=200),
-        _col("pixels", "pixels", width=110, cell_class="ag-cell-right"),
-        _col("lines", "lines", width=110, cell_class="ag-cell-right"),
-        _col("duration (s)", "duration (s)", width=140, cell_class="ag-cell-right"),
-        _col("ms/line", "ms/line", width=120, cell_class="ag-cell-right"),
-        _col("um/pixel", "um/pixel", width=120, cell_class="ag-cell-right"),
-        _col("note", "note", width=240, editable=True),
+        _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
+        _col("Parent Folder", "Parent", width=180),
+        _col("Grandparent Folder", "Grandparent", width=200),
+        # _col("pixels", "pixels", width=110, cell_class="ag-cell-right"),
+        # _col("lines", "lines", width=110, cell_class="ag-cell-right"),
+        _col("duration (s)", "Duration (s)", width=140, cell_class="ag-cell-right"),
+        _col("length (um)", "Length (um)", width=140, cell_class="ag-cell-right"),
+        # _col("ms/line", "ms/line", width=120, cell_class="ag-cell-right"),
+        # _col("um/pixel", "um/pixel", width=120, cell_class="ag-cell-right"),
+        _col("note", "Note", width=240, editable=True),
         _col("path", "path", hide=True),  # keep for row id + selection, but hide
     ]
 
@@ -99,6 +104,7 @@ class FileTableView:
         self._grid: CustomAgGrid_v2 | None = None
         self._grid_container: Optional[ui.element] = None  # pyinstaller table view
         self._suppress_emit: bool = False
+        self._task_state: Optional[TaskStateChanged] = None
 
         # Keep latest rows so if FileListChanged arrives before render(),
         # we can populate when render() happens.
@@ -134,6 +140,7 @@ class FileTableView:
         # Create the grid *now*, inside whatever container the caller opened.
         self._grid_container = ui.column().classes("w-full")  # pyinstaller table view
         self._create_grid(self._pending_rows, grid_cfg)
+        self._update_interaction_state()
 
     def _create_grid(self, rows: Rows, grid_cfg: GridConfig) -> None:
         """Create a fresh grid instance inside the current container."""
@@ -144,6 +151,7 @@ class FileTableView:
                 data=rows,
                 columns=_default_columns(),
                 grid_config=grid_cfg,
+                runtimeWidgetName="FileTableView",
             )
             self._grid.on_row_selected(self._on_row_selected)
             self._grid.on_cell_edited(self._on_cell_edited)
@@ -156,17 +164,12 @@ class FileTableView:
             str(f.path): f for f in files_list if getattr(f, "path", None) is not None
         }
         rows: Rows = [f.getRowDict() for f in files_list]
+        rows_unchanged = rows == self._pending_rows
         self._pending_rows = rows
-        if self._grid_container is not None:
-            # Aggressive: rebuild grid to guarantee UI refresh in frozen apps
-            self._grid_container.clear()  # pyinstaller table view
-            self._create_grid(rows, GridConfig(
-                selection_mode=self._selection_mode,  # type: ignore[arg-type]
-                height="24rem",
-                row_id_field="path",
-                show_row_index=True,
-            ))
-        elif self._grid is not None:
+        if rows_unchanged and self._grid is not None:
+            logger.debug("FileTableView.set_files: rows unchanged; skip refresh")
+            return
+        if self._grid is not None:
             self._grid.set_data(rows)
 
     def refresh_rows(self) -> None:
@@ -190,6 +193,25 @@ class FileTableView:
                 self._grid.set_selected_row_ids(paths, origin=origin.value)
         finally:
             self._suppress_emit = False
+
+    def set_task_state(self, task_state: TaskStateChanged) -> None:
+        """Update view for task state changes."""
+        safe_call(self._set_task_state_impl, task_state)
+
+    def _set_task_state_impl(self, task_state: TaskStateChanged) -> None:
+        """Internal implementation of set_task_state."""
+        self._task_state = task_state
+        self._update_interaction_state()
+
+    def _update_interaction_state(self) -> None:
+        """Enable/disable user interaction based on task running state."""
+        if self._grid_container is None:
+            return
+        running = self._task_state.running if self._task_state else False
+        if running:
+            self._grid_container.classes(add="pointer-events-none opacity-60")
+        else:
+            self._grid_container.classes(remove="pointer-events-none opacity-60")
 
     def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:
         """Handle user selecting a row."""

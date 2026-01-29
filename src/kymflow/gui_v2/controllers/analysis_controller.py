@@ -6,6 +6,7 @@ This module provides a controller that translates user analysis intents
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nicegui import ui
@@ -15,6 +16,7 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.tasks import run_flow_analysis
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import AnalysisCancel, AnalysisStart
+from kymflow.gui_v2.events_state import AnalysisCompleted
 from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -52,6 +54,7 @@ class AnalysisController:
         """
         self._app_state: AppState = app_state
         self._task_state: TaskState = task_state
+        self._bus: EventBus = bus
         bus.subscribe_intent(AnalysisStart, self._on_analysis_start)
         bus.subscribe_intent(AnalysisCancel, self._on_analysis_cancel)
 
@@ -100,10 +103,10 @@ class AnalysisController:
             self._task_state,
             window_size=e.window_size,
             roi_id=e.roi_id,
-            on_result=lambda success: self._on_analysis_complete(kf, success),
+            on_result=lambda success: self._on_analysis_complete(kf, e.roi_id, success),
         )
 
-    def _on_analysis_complete(self, kf, success: bool) -> None:
+    def _on_analysis_complete(self, kf, roi_id: int | None, success: bool) -> None:
         """Handle analysis completion callback.
 
         Called by run_flow_analysis when analysis completes. Updates AppState
@@ -120,9 +123,16 @@ class AnalysisController:
             success: Whether analysis completed successfully.
         """
         if success:
-            # This triggers MetadataUpdate event, which refreshes the file table view
-            # without reloading from disk
-            self._app_state.update_metadata(kf)
+            self._bus.emit(
+                AnalysisCompleted(
+                    file=kf,
+                    roi_id=roi_id,
+                    success=True,
+                )
+            )
+            # This previously triggered MetadataUpdate to refresh UI, but we now
+            # emit AnalysisCompleted for analysis-driven refreshes.
+            # self._app_state.update_metadata(kf)
 
     def _on_analysis_cancel(self, e: AnalysisCancel) -> None:
         """Handle analysis cancel intent event.
@@ -132,4 +142,12 @@ class AnalysisController:
         Args:
             e: AnalysisCancel event (phase="intent").
         """
+        if self._task_state.running:
+            kf = self._app_state.selected_file
+            if kf and kf.path:
+                file_stem = Path(kf.path).stem
+            else:
+                file_stem = "unknown file"
+            roi_id = self._app_state.selected_roi_id
+            ui.notify(f"Flow analysis canceled for {file_stem} ROI {roi_id}", color="info")
         self._task_state.request_cancel()

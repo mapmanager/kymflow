@@ -16,6 +16,7 @@ from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.metadata import ExperimentMetadata
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -57,6 +58,7 @@ class MetadataExperimentalView:
 
         # State
         self._current_file: Optional[KymImage] = None
+        self._task_state: Optional[TaskStateChanged] = None
 
     def render(self) -> None:
         """Create the metadata form UI inside the current container.
@@ -116,6 +118,7 @@ class MetadataExperimentalView:
                         )
 
                 self._widgets[field_name] = widget
+        self._update_widget_states()
 
     def set_selected_file(self, file: Optional[KymImage]) -> None:
         """Populate form fields from file metadata.
@@ -128,6 +131,15 @@ class MetadataExperimentalView:
             file: Selected KymImage instance, or None if selection cleared.
         """
         safe_call(self._set_selected_file_impl, file)
+
+    def set_task_state(self, task_state: TaskStateChanged) -> None:
+        """Update view for task state changes."""
+        safe_call(self._set_task_state_impl, task_state)
+
+    def _set_task_state_impl(self, task_state: TaskStateChanged) -> None:
+        """Internal implementation of set_task_state."""
+        self._task_state = task_state
+        self._update_widget_states()
 
     def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
         """Internal implementation of set_selected_file."""
@@ -162,6 +174,15 @@ class MetadataExperimentalView:
         for widget in self._widgets.values():
             widget.set_value("")
 
+    def _update_widget_states(self) -> None:
+        """Enable/disable editable fields based on task running state."""
+        running = self._task_state.running if self._task_state else False
+        for field_name, widget in self._widgets.items():
+            if field_name in self._read_only_fields:
+                widget.set_enabled(False)
+            else:
+                widget.set_enabled(not running)
+
     def _on_field_blur(self, field_name: str, widget: ui.input | ui.textarea) -> None:
         """Update metadata when field loses focus or Enter is pressed.
 
@@ -172,10 +193,13 @@ class MetadataExperimentalView:
             widget: The widget that triggered the update.
         """
         if not self._current_file:
+            logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
             return
 
         # Get value from widget
         value = widget.value
+
+        logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
 
         # Emit intent event
         self._on_metadata_update(

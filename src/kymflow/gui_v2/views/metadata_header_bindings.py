@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import FileSelection, MetadataUpdate
+from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ class MetadataHeaderBindings:
         # Subscribe to state change events
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(MetadataUpdate, self._on_metadata_update)
+        bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -62,6 +64,7 @@ class MetadataHeaderBindings:
 
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_update)
+        self._bus.unsubscribe_state(TaskStateChanged, self._on_task_state_changed)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -88,3 +91,8 @@ class MetadataHeaderBindings:
         # Only refresh if this is a header metadata update
         if e.metadata_type == "header":
             safe_call(self._view.set_selected_file, e.file)
+
+    def _on_task_state_changed(self, e: TaskStateChanged) -> None:
+        """Handle task state changes by disabling/enabling inputs."""
+        if e.task_type == "home":
+            safe_call(self._view.set_task_state, e)

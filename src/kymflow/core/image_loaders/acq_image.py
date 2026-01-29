@@ -48,6 +48,7 @@ class AcqImage:
         
         # Experimental metadata
         self._experiment_metadata = ExperimentMetadata()
+        self._metadata_dirty: bool = False
         
         # ROI set (lazy initialization)
         self._roi_set: "RoiSet" | None = None
@@ -466,11 +467,15 @@ class AcqImage:
             **fields: Keyword arguments mapping field names to new values.
                 Only fields that exist in ExperimentMetadata are updated.
         """
+        updated = False
         for key, value in fields.items():
             if hasattr(self._experiment_metadata, key):
                 setattr(self._experiment_metadata, key, value)
+                updated = True
             else:
                 logger.warning(f"Unknown field '{key}' in experiment metadata")
+        if updated:
+            self.mark_metadata_dirty()
     
     def update_header(self, **fields: Any) -> None:
         """Update stored header metadata fields.
@@ -482,11 +487,28 @@ class AcqImage:
             **fields: Keyword arguments mapping field names to new values.
                 Only fields that exist in AcqImgHeader are updated.
         """
+        updated = False
         for key, value in fields.items():
             if hasattr(self._header, key):
                 setattr(self._header, key, value)
+                updated = True
             else:
                 logger.warning(f"Unknown field '{key}' in header metadata")
+        if updated:
+            self.mark_metadata_dirty()
+
+    def mark_metadata_dirty(self) -> None:
+        """Mark metadata/ROI state as dirty (needs save)."""
+        self._metadata_dirty = True
+
+    def clear_metadata_dirty(self) -> None:
+        """Clear metadata/ROI dirty state after saving."""
+        self._metadata_dirty = False
+
+    @property
+    def is_metadata_dirty(self) -> bool:
+        """Return True if metadata/ROIs have unsaved changes."""
+        return self._metadata_dirty
     
     @property
     def rois(self) -> "RoiSet":
@@ -613,6 +635,7 @@ class AcqImage:
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2, default=str)
             # logger.info(f"Saved metadata to {metadata_path}")
+            self.clear_metadata_dirty()
             return True
         except Exception as e:
             logger.error(f"Failed to save metadata to {metadata_path}: {e}")

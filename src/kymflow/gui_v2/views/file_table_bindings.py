@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
-from kymflow.gui_v2.events_state import FileListChanged
+from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged, TaskStateChanged
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.core.utils.logging import get_logger
 
@@ -60,6 +60,8 @@ class FileTableBindings:
         bus.subscribe(FileListChanged, self._on_file_list_changed)
         bus.subscribe_state(FileSelection, self._on_selected_file_changed)
         bus.subscribe_state(MetadataUpdate, self._on_metadata_update)
+        bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
+        bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -75,6 +77,8 @@ class FileTableBindings:
         self._bus.unsubscribe(FileListChanged, self._on_file_list_changed)
         self._bus.unsubscribe_state(FileSelection, self._on_selected_file_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_update)
+        self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
+        self._bus.unsubscribe_state(TaskStateChanged, self._on_task_state_changed)
         self._subscribed = False
 
     def _on_file_list_changed(self, e: FileListChanged) -> None:
@@ -86,6 +90,7 @@ class FileTableBindings:
         Args:
             e: FileListChanged event containing the new file list.
         """
+        logger.debug("FileTableBindings._on_file_list_changed: files=%s", len(e.files))
         safe_call(self._table.set_files, e.files)
 
     def _on_selected_file_changed(self, e: FileSelection) -> None:
@@ -98,9 +103,10 @@ class FileTableBindings:
         Args:
             e: FileSelection event (phase="state") containing the new selection and origin.
         """
-        # Prevent feedback loop: if selection came from the table, don't re-select
-        if e.origin == SelectionOrigin.FILE_TABLE:
-            return
+        # Always sync selection from AppState, even if origin was FILE_TABLE.
+        # This prevents selection loss when the table is rebuilt during UI updates.
+
+        logger.debug(f'pyinstaller FileSelection e={e}')
 
         # Track currently selected file path for restoration after metadata updates
         if e.file is None:
@@ -124,12 +130,31 @@ class FileTableBindings:
         Simply refreshes the table data to show updated metadata (e.g., analysis status),
         while preserving the currently selected file from AppState.
         """
+        logger.debug(f'pyinstaller e={e}')
+        self._refresh_rows_preserve_selection()
+
+    def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
+        """Handle analysis completion by refreshing table rows."""
+        logger.debug("analysis_completed file=%s roi_id=%s success=%s", e.file, e.roi_id, e.success)
+        if not e.success:
+            return
+        self._refresh_rows_preserve_selection()
+
+    def _on_task_state_changed(self, e: TaskStateChanged) -> None:
+        """Handle task state changes by disabling/enabling table interactions."""
+        if e.task_type == "home":
+            safe_call(self._table.set_task_state, e)
+
+    def _refresh_rows_preserve_selection(self) -> None:
+        """Refresh table rows and restore selection."""
+
         # Get currently selected file path from AppState (source of truth)
         selected_path = None
         if self._app_state is not None and self._app_state.selected_file is not None:
             if hasattr(self._app_state.selected_file, "path"):
                 selected_path = str(self._app_state.selected_file.path)
         
+        logger.debug(f'pyinstaller selected_path={selected_path}')
         # Refresh the table rows (this clears selection in the grid)
         safe_call(self._table.refresh_rows)
         

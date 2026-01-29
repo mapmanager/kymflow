@@ -407,7 +407,7 @@ class AcqImgHeader:
     voxels: list[float] | None = field(
         default=None,
         metadata=field_metadata(
-            editable=True,
+            editable=False,
             label="Voxel Size",
             widget_type="text",
             grid_span=1,
@@ -416,7 +416,7 @@ class AcqImgHeader:
     voxels_units: list[str] | None = field(
         default=None,
         metadata=field_metadata(
-            editable=True,
+            editable=False,
             label="Voxel Units",
             widget_type="text",
             grid_span=1,
@@ -425,7 +425,7 @@ class AcqImgHeader:
     labels: list[str] | None = field(
         default=None,
         metadata=field_metadata(
-            editable=True,
+            editable=False,
             label="Axis Labels",
             widget_type="text",
             grid_span=1,
@@ -642,7 +642,7 @@ class AcqImgHeader:
                     "label": meta.get(
                         "label", field_obj.name.replace("_", " ").title()
                     ),
-                    "editable": meta.get("editable", True),
+                    "editable": meta.get("editable", False),
                     "widget_type": meta.get("widget_type", "text"),
                     "grid_span": meta.get("grid_span", 1),
                     "visible": meta.get("visible", True),

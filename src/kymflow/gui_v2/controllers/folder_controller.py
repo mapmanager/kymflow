@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from nicegui import ui
+
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import FolderChosen
@@ -66,11 +68,39 @@ class FolderController:
         # If depth is provided, set it before loading (e.g., from config or recent select)
         if e.depth is not None:
             self._app_state.folder_depth = e.depth
-        
-        # Load folder with current depth (either from event or existing app_state value)
-        self._app_state.load_folder(Path(e.folder), depth=self._app_state.folder_depth)
-        
-        # Persist to user config after successful load
+
+        folder = Path(e.folder)
+        if self._app_state.files and self._app_state.files.any_dirty_analysis():
+            self._show_unsaved_dialog(folder)
+            return
+
+        self._load_folder(folder)
+
+    def _load_folder(self, folder: Path) -> None:
+        """Load folder with current depth and persist to config."""
+        self._app_state.load_folder(folder, depth=self._app_state.folder_depth)
         if self._user_config is not None:
-            self._user_config.push_recent_folder(e.folder, depth=self._app_state.folder_depth)
+            self._user_config.push_recent_folder(str(folder), depth=self._app_state.folder_depth)
             self._user_config.save()
+
+    def _show_unsaved_dialog(self, folder: Path) -> None:
+        """Prompt before switching folders if unsaved changes exist."""
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Unsaved changes").classes("text-lg font-semibold")
+            ui.label(
+                "Analysis/metadata edits are not saved. "
+                "If you switch folders now, those changes will be lost."
+            ).classes("text-sm")
+            with ui.row():
+                ui.button("Cancel", on_click=dialog.close).props("outline")
+                ui.button(
+                    "Switch folder",
+                    on_click=lambda: self._confirm_switch_folder(dialog, folder),
+                ).props("color=red")
+
+        dialog.open()
+
+    def _confirm_switch_folder(self, dialog, folder: Path) -> None:
+        """Confirm folder switch after unsaved changes warning."""
+        dialog.close()
+        self._load_folder(folder)

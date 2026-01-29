@@ -133,6 +133,7 @@ class ImageLineViewerView:
 
     def _create_plot(self, fig: go.Figure) -> None:
         """Create a fresh plot element inside the current container."""
+        logger.debug(f'=== this may be overkill')
         self._plot = ui.plotly(fig).classes("w-full")
         # Stable DOM id for JS access (dragmode toggling).
         self._plot.props(f"id={self._plot_div_id}")
@@ -535,6 +536,7 @@ class ImageLineViewerView:
 
     def _render_combined(self) -> None:
         """Render the combined image and line plot."""
+        
         kf = self._current_file
         theme = self._theme
         display_params = self._display_params
@@ -557,6 +559,12 @@ class ImageLineViewerView:
         num_rois = kf.rois.numRois() if kf is not None else 0
         plot_rois = (num_rois > 1)
 
+        # logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
+        # logger.debug(f'  kf={kf}')
+        # logger.debug(f'  selected_roi_id roi_id={roi_id}')
+        # logger.debug(f'  plot_rois plot_rois={plot_rois}')
+        # logger.debug(f'  selected_event_id self.selected_event_id={self._selected_event_id}')
+        
         fig = plot_image_line_plotly_v3(
             kf=kf,
             yStat="velocity",
@@ -594,18 +602,21 @@ class ImageLineViewerView:
         num_rows = 2 if getattr(fig.layout, "yaxis2", None) is not None else 1
         if self._last_num_rows is None:
             self._last_num_rows = num_rows
-        elif num_rows != self._last_num_rows and self._plot_container is not None:
-            logger.debug(
-                "pyinstaller bug fix rebuild plot on grid change %s -> %s",
-                self._last_num_rows,
-                num_rows,
-            )
-            self._last_num_rows = num_rows
-            self._plot_container.clear()
-            with self._plot_container:
-                self._create_plot(fig)
-            return
+
+        # elif num_rows != self._last_num_rows and self._plot_container is not None:
+        #     logger.debug(
+        #         "pyinstaller bug fix rebuild plot on grid change %s -> %s",
+        #         self._last_num_rows,
+        #         num_rows,
+        #     )
+        #     self._last_num_rows = num_rows
+        #     self._plot_container.clear()
+        #     with self._plot_container:
+        #         self._create_plot(fig)
+        #     return
+
         try:
+            # abb this is a core plot function !!!
             self._plot.update_figure(fig)
         except RuntimeError as e:
             logger.error(f"Error updating figure: {e}")
@@ -688,10 +699,13 @@ class ImageLineViewerView:
         if self._plot is None:
             return
         try:
+            logger.debug(f'pyinstaller calling _plot.update_figure(fig)')
             self._plot.update_figure(fig)
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
+            else:
+                logger.debug(f'pyinstaller swallowed/skipped Client deleted RuntimeError: {e}')
             # Client deleted, silently ignore
 
     def apply_filters(self, remove_outliers: bool, median_filter: bool) -> None:

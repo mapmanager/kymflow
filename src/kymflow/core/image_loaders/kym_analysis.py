@@ -184,6 +184,11 @@ class KymAnalysis:
             return bool(self._analysis_metadata)
         return roi_id in self._analysis_metadata
 
+    @property
+    def is_dirty(self) -> bool:
+        """Return True if analysis or metadata/ROI changes are unsaved."""
+        return self._dirty or self.acq_image.is_metadata_dirty
+
     def get_analysis_metadata(self, roi_id: int) -> RoiAnalysisMetadata | None:
         """Return analysis metadata for roi_id, or None if not analyzed."""
         return self._analysis_metadata.get(roi_id)
@@ -399,70 +404,72 @@ class KymAnalysis:
         if primary_path is None:
             logger.warning("No path provided, analysis cannot be saved")
             return False
-        
-        if not self._dirty:
+
+        if not self.is_dirty:
             logger.info(f"Analysis does not need to be saved for {primary_path.name}")
             return False
-        
-        if self._df is None or len(self._df) == 0:
-            logger.warning(f"No analysis to save for {primary_path.name}")
-            return False
-        
+
         # Save ROIs and metadata first (ensures ROIs are persisted)
         # This saves header, experiment_metadata, and ROIs to metadata.json
         metadata_saved = self.acq_image.save_metadata()
         if not metadata_saved:
             logger.warning("Failed to save metadata (ROIs), but continuing with analysis save")
-        
-        csv_path, json_path = self._get_save_paths()
-        
-        # Create analysis folder if it doesn't exist
-        analysis_folder = csv_path.parent
-        analysis_folder.mkdir(parents=True, exist_ok=True)
-        
-        # Save CSV
-        self._df.to_csv(csv_path, index=False)
-        
-        # logger.info(f"Saved analysis CSV to {csv_path}")
-        
-        # Reconcile to current ROIs (single source of truth)
-        current_roi_ids = {roi.id for roi in self.acq_image.rois}
-        if self._df is not None and 'roi_id' in self._df.columns:
-            self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
-        self._analysis_metadata = {
-            rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
-        }
 
-        # Prepare JSON data (analysis metadata only; no ROI geometry)
-        json_data = {
-            "version": "2.0",
-            "analysis_metadata": {
-                str(rid): {
-                    "roi_id": meta.roi_id,
-                    "algorithm": meta.algorithm,
-                    "window_size": meta.window_size,
-                    "analyzed_at": meta.analyzed_at,
-                    "roi_revision_at_analysis": meta.roi_revision_at_analysis,
-                }
-                for rid, meta in self._analysis_metadata.items()
-            },
-            "stall_analysis": {
-                str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
-            },
-            "velocity_events": {
-                str(rid): [ev.to_dict() for ev in evs]
-                for rid, evs in self._velocity_events.items()
-            },
-        }
-        
-        # Save JSON
-        with open(json_path, "w") as f:
-            json.dump(json_data, f, indent=2, default=str)
-        
-        # logger.info(f"Saved analysis metadata to {json_path}")
-        
-        self._dirty = False
-        return True
+        analysis_saved = False
+        if self._df is not None and len(self._df) > 0:
+            csv_path, json_path = self._get_save_paths()
+
+            # Create analysis folder if it doesn't exist
+            analysis_folder = csv_path.parent
+            analysis_folder.mkdir(parents=True, exist_ok=True)
+
+            # Save CSV
+            self._df.to_csv(csv_path, index=False)
+
+            # logger.info(f"Saved analysis CSV to {csv_path}")
+
+            # Reconcile to current ROIs (single source of truth)
+            current_roi_ids = {roi.id for roi in self.acq_image.rois}
+            if self._df is not None and 'roi_id' in self._df.columns:
+                self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
+            self._analysis_metadata = {
+                rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
+            }
+
+            # Prepare JSON data (analysis metadata only; no ROI geometry)
+            json_data = {
+                "version": "2.0",
+                "analysis_metadata": {
+                    str(rid): {
+                        "roi_id": meta.roi_id,
+                        "algorithm": meta.algorithm,
+                        "window_size": meta.window_size,
+                        "analyzed_at": meta.analyzed_at,
+                        "roi_revision_at_analysis": meta.roi_revision_at_analysis,
+                    }
+                    for rid, meta in self._analysis_metadata.items()
+                },
+                "stall_analysis": {
+                    str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
+                },
+                "velocity_events": {
+                    str(rid): [ev.to_dict() for ev in evs]
+                    for rid, evs in self._velocity_events.items()
+                },
+            }
+
+            # Save JSON
+            with open(json_path, "w") as f:
+                json.dump(json_data, f, indent=2, default=str)
+
+            # logger.info(f"Saved analysis metadata to {json_path}")
+
+            self._dirty = False
+            analysis_saved = True
+        elif self._dirty:
+            logger.info("Analysis dirty but no analysis data to save for %s", primary_path.name)
+
+        return metadata_saved or analysis_saved
     
     def load_analysis(self) -> bool:
         """Load analysis results from CSV and JSON files.

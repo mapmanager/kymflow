@@ -231,13 +231,19 @@ class KymImage(AcqImage):
         result = {
             "File Name": representative_path.name if representative_path is not None else None,
             "Analyzed": "✓" if self.get_kym_analysis().has_analysis() else "",
-            "Saved": "✓" if not self.get_kym_analysis()._dirty else "",
+            "Saved": "✓" if not self.get_kym_analysis().is_dirty else "",
             "Num ROIS": self.rois.numRois(),
             "Parent Folder": representative_path.parent.name if representative_path is not None else None,
             "Grandparent Folder": representative_path.parent.parent.name if representative_path is not None and len(representative_path.parent.parts) > 0 else None,
             "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",
             "lines": self.num_lines if self.num_lines is not None else "-",
-            "duration (s)": self.header.physical_size[0] if self.header.physical_size and len(self.header.physical_size) > 0 else "-",
+            
+            # round to 3 decimal
+            "duration (s)": round(self.header.physical_size[0], 3) if self.header.physical_size and len(self.header.physical_size) > 0 else "-",
+
+            # round to 1 decimal
+            "length (um)": round(self.header.physical_size[1], 1) if self.header.physical_size and len(self.header.physical_size) > 1 else "-",  # abb
+            
             "ms/line": round(self.seconds_per_line * 1000, 2) if self.seconds_per_line is not None else "-",
             "um/pixel": self.um_per_pixel if self.um_per_pixel is not None else "-",
             "note": self.experiment_metadata.note or "-",

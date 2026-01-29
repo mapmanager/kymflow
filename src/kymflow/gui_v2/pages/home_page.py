@@ -42,6 +42,7 @@ from kymflow.gui_v2.views import (
     FileTableBindings,
     FileTableView,
     FolderSelectorView,
+    FolderSelectorBindings,
     ImageLineViewerBindings,
     ImageLineViewerView,
     KymEventBindings,
@@ -135,6 +136,7 @@ class HomePage(BasePage):
             selection_mode="single",
         )
         self._table_bindings: FileTableBindings | None = None
+        self._folder_bindings: FolderSelectorBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
         self._event_bindings: KymEventBindings | None = None
 
@@ -259,6 +261,7 @@ class HomePage(BasePage):
         self._table_bindings = FileTableBindings(
             self.bus, self._table_view, app_state=self.context.app_state
         )
+        self._folder_bindings = FolderSelectorBindings(self.bus, self._folder_view)
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
         )

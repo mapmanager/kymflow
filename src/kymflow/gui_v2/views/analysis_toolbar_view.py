@@ -236,24 +236,49 @@ class AnalysisToolbarView:
         has_file = self._current_file is not None
         has_roi = self._current_roi_id is not None
         
+        if self._window_select is not None:
+            if running:
+                self._window_select.disable()
+            else:
+                self._window_select.enable()
+
+        if self._roi_select is not None:
+            if running:
+                self._roi_select.disable()
+            else:
+                if self._current_file is None:
+                    self._roi_select.disable()
+                else:
+                    num_rois = self._current_file.rois.numRois()
+                    if num_rois == 0:
+                        self._roi_select.disable()
+                    else:
+                        self._roi_select.enable()
+
         # ROI button states
         if self._add_roi_button is not None:
             # Add ROI: enabled when file is selected
-            if has_file:
+            if running:
+                self._add_roi_button.disable()
+            elif has_file:
                 self._add_roi_button.enable()
             else:
                 self._add_roi_button.disable()
         
         if self._delete_roi_button is not None:
             # Delete ROI: enabled when file is selected AND ROI is selected
-            if has_file and has_roi:
+            if running:
+                self._delete_roi_button.disable()
+            elif has_file and has_roi:
                 self._delete_roi_button.enable()
             else:
                 self._delete_roi_button.disable()
         
         if self._edit_roi_button is not None:
             # Edit ROI: enabled when file is selected AND ROI is selected
-            if has_file and has_roi:
+            if running:
+                self._edit_roi_button.disable()
+            elif has_file and has_roi:
                 self._edit_roi_button.enable()
             else:
                 self._edit_roi_button.disable()
@@ -268,21 +293,14 @@ class AnalysisToolbarView:
         # Start button: enabled when not running, file selected, and ROI selected
         if running or not has_file or not has_roi:
             self._start_button.disable()
-            if running:
-                self._start_button.props("color=red")
-            else:
-                self._start_button.props(remove="color")
         else:
             self._start_button.enable()
-            self._start_button.props(remove="color")
 
         # Cancel button: enabled only when running and cancellable
         if running and cancellable:
             self._cancel_button.enable()
-            self._cancel_button.props("color=red")
         else:
             self._cancel_button.disable()
-            self._cancel_button.props(remove="color")
         
         # Update progress bar and label
         if self._progress_bar is None or self._progress_label is None:
@@ -330,17 +348,51 @@ class AnalysisToolbarView:
 
         # Verify file is still valid (safety check)
         if self._current_file is None:
-            from nicegui import ui
             ui.notify("Select a file first", color="warning")
             return
 
         # Require ROI selection before starting analysis
         if self._current_roi_id is None:
-            from nicegui import ui
             ui.notify("Select an ROI first", color="warning")
             return
 
-        # Emit intent event with selected ROI ID
+        # Check for existing analysis on the selected ROI
+        try:
+            has_analysis = self._current_file.get_kym_analysis().has_analysis(
+                self._current_roi_id
+            )
+        except Exception:
+            has_analysis = False
+
+        if has_analysis:
+            from pathlib import Path
+
+            file_stem = (
+                Path(self._current_file.path).stem
+                if self._current_file.path is not None
+                else "unknown file"
+            )
+            roi_id = self._current_roi_id
+
+            with ui.dialog() as dialog, ui.card():
+                ui.label("Analysis already exists").classes("text-lg font-semibold")
+                ui.label(
+                    f"{file_stem} roi {roi_id} already has flow analysis, do you want to proceed"
+                ).classes("text-sm")
+                with ui.row():
+                    ui.button("Cancel", on_click=dialog.close).props("outline")
+                    ui.button(
+                        "Proceed",
+                        on_click=lambda: self._confirm_start_analysis(dialog, window_size),
+                    )
+
+            dialog.open()
+            return
+
+        self._emit_analysis_start(window_size)
+
+    def _emit_analysis_start(self, window_size: int) -> None:
+        """Emit analysis start intent event."""
         self._on_analysis_start(
             AnalysisStart(
                 window_size=window_size,
@@ -348,6 +400,11 @@ class AnalysisToolbarView:
                 phase="intent",
             )
         )
+
+    def _confirm_start_analysis(self, dialog, window_size: int) -> None:
+        """Confirm analysis start after warning dialog."""
+        dialog.close()
+        self._emit_analysis_start(window_size)
 
     def _on_cancel_click(self) -> None:
         """Handle Cancel button click."""

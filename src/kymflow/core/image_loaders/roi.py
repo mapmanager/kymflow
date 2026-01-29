@@ -319,6 +319,7 @@ class RoiSet:
         )
         self._rois[roi.id] = roi
         self._next_id += 1
+        self.acq_image.mark_metadata_dirty()
         return roi
 
     def edit_roi(
@@ -354,9 +355,12 @@ class RoiSet:
         old_geom = (old_bounds.dim0_start, old_bounds.dim0_stop, old_bounds.dim1_start, old_bounds.dim1_stop, roi.channel, roi.z)
         
         # Update channel if provided
+        changed = False
         if channel is not None:
             self._validate_channel(channel)
-            roi.channel = channel
+            if roi.channel != channel:
+                roi.channel = channel
+                changed = True
         
         # Get bounds for validation
         image_bounds = self._get_image_bounds()
@@ -370,24 +374,33 @@ class RoiSet:
             elif z >= image_bounds.num_slices:
                 logger.warning(f"z coordinate {z} exceeds num_slices {image_bounds.num_slices}, clamping to {image_bounds.num_slices-1}")
                 z = image_bounds.num_slices - 1
-            roi.z = z
+            if roi.z != z:
+                roi.z = z
+                changed = True
         
         # Update coordinates if provided
         if bounds is not None:
             # Clamp coordinates to image bounds
             size = ImageSize(width=image_bounds.width, height=image_bounds.height)
             clamped_bounds = clamp_coordinates_to_size(bounds, size)
-            roi.bounds = clamped_bounds
+            if roi.bounds != clamped_bounds:
+                roi.bounds = clamped_bounds
+                changed = True
         
         # Update name and note if provided
-        if name is not None:
+        if name is not None and roi.name != name:
             roi.name = name
-        if note is not None:
+            changed = True
+        if note is not None and roi.note != note:
             roi.note = note
+            changed = True
 
         new_geom = (roi.bounds.dim0_start, roi.bounds.dim0_stop, roi.bounds.dim1_start, roi.bounds.dim1_stop, roi.channel, roi.z)
         if new_geom != old_geom:
             roi.revision += 1
+            changed = True
+        if changed:
+            self.acq_image.mark_metadata_dirty()
     
     def delete(self, roi_id: int) -> None:
         """Remove the ROI with the given id, if it exists.
@@ -395,7 +408,9 @@ class RoiSet:
         Args:
             roi_id: Identifier of the ROI to remove.
         """
-        self._rois.pop(roi_id, None)
+        removed = self._rois.pop(roi_id, None)
+        if removed is not None:
+            self.acq_image.mark_metadata_dirty()
 
     def clear(self) -> int:
         """Delete all ROIs and reset internal id counter.
@@ -406,6 +421,8 @@ class RoiSet:
         n = len(self._rois)
         self._rois.clear()
         self._next_id = 1
+        if n > 0:
+            self.acq_image.mark_metadata_dirty()
         return n
 
     def get(self, roi_id: int) -> ROI | None:

@@ -8,7 +8,6 @@ from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
     AddKymEvent,
-    AddRoi,
     DeleteKymEvent,
     DeleteRoi,
     EditRoi,
@@ -22,7 +21,7 @@ from kymflow.gui_v2.events import (
     SetRoiEditState,
     VelocityEventUpdate,
 )
-from kymflow.gui_v2.events_state import ThemeChanged
+from kymflow.gui_v2.events_state import AnalysisCompleted, ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
 from kymflow.core.utils.logging import get_logger
 
@@ -71,7 +70,11 @@ class ImageLineViewerBindings:
         bus.subscribe_state(EventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        
+        # abb we have this so our plotly plots update after 'analyze flow'
         bus.subscribe_state(MetadataUpdate, self._on_metadata_changed)
+        
+        bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         bus.subscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
         bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         bus.subscribe_state(AddKymEvent, self._on_add_kym_event)
@@ -100,6 +103,7 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_changed)
+        self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._bus.unsubscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
         self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         self._bus.unsubscribe_state(AddKymEvent, self._on_add_kym_event)
@@ -164,6 +168,11 @@ class ImageLineViewerBindings:
             e: MetadataUpdate event (phase="state") containing the file whose metadata was updated.
         """
         safe_call(self._view.set_metadata, e.file)
+
+    def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
+        """Handle analysis completion by refreshing plot for current file."""
+        if e.success and e.file == self._view._current_file:  # noqa: SLF001
+            safe_call(self._view._render_combined)
 
     def _on_event_selected(self, e: EventSelection) -> None:
         """Handle EventSelection change event."""
