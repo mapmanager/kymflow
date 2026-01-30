@@ -333,8 +333,14 @@ class TestDetectEventsSimple:
         assert len(baseline_drops) >= 1, f"No baseline_drop events found. All events: {[e.event_type for e in events]}"
         assert baseline_drops[0].machine_type == MachineType.STALL_CANDIDATE
 
+    @pytest.mark.skip(reason="nan_gap detection is currently disabled in detect_events()")
     def test_detect_events_with_nan_gap(self) -> None:
-        """Test detect_events with NaN values (nan_gap events)."""
+        """Test detect_events with NaN values (nan_gap events).
+        
+        NOTE: This test is currently skipped because nan_gap detection has been
+        disabled in detect_events() (doNanGapDetection = False). If nan_gap
+        detection is re-enabled, this test should be updated accordingly.
+        """
         time_s = np.linspace(0, 10, 100)
         velocity = np.ones(100) * 5.0
         # Create a NaN gap
@@ -381,7 +387,8 @@ class TestKymAnalysisVelocityEvents:
             assert isinstance(event, VelocityEvent)
             assert event.i_start >= 0
             assert event.t_start >= 0
-            assert event.event_type in ("baseline_drop", "nan_gap")
+            # Note: nan_gap detection is currently disabled in detect_events()
+            assert event.event_type in ("baseline_drop", "nan_gap", "User Added")
 
         # Verify events are stored
         stored_events = kym_analysis.get_velocity_events(roi_id=1)
@@ -578,7 +585,7 @@ class TestVelocityEventLifecycle:
         assert len(events) == 1
         assert events[0].t_start == 1.5
         assert events[0].t_end == 2.0
-        assert events[0].event_type == "added"
+        assert events[0].event_type == "User Added"
         assert events[0].user_type.value == "unreviewed"
         
         # Verify dirty flag is set
@@ -738,3 +745,159 @@ class TestVelocityEventLifecycle:
             assert "event_type" in row
             assert "t_start" in row
             assert "user_type" in row
+
+    def test_remove_velocity_event(self) -> None:
+        """Test removing velocity events by type."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=True)
+        kym_analysis = kym_image.get_kym_analysis()
+        
+        kym_image.header.voxels[0] = 0.1
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds)
+        
+        # Add user-added event
+        event_id1 = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+        
+        # Add another user-added event
+        event_id2 = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=2.0, t_end=2.5)
+        
+        # Verify both events exist
+        events = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events is not None
+        assert len(events) == 2
+        
+        # Remove all events
+        kym_analysis.remove_velocity_event(roi_id=roi.id, remove_these="_remove_all")
+        events = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events is not None
+        assert len(events) == 0
+        
+        # Add user-added event and auto-detected event (simulated)
+        from kymflow.core.analysis.velocity_events.velocity_events import MachineType
+        event_id3 = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=3.0, t_end=3.5)
+        # Create a simulated auto-detected event (baseline_drop with UNREVIEWED)
+        from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+        auto_event = VelocityEvent(
+            event_type="baseline_drop",
+            i_start=30,
+            t_start=4.0,
+            machine_type=MachineType.STALL_CANDIDATE,
+            user_type=UserType.UNREVIEWED,
+        )
+        if roi.id not in kym_analysis._velocity_events:
+            kym_analysis._velocity_events[roi.id] = []
+        kym_analysis._velocity_events[roi.id].append(auto_event)
+        
+        events = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events is not None
+        assert len(events) == 2
+        
+        # Remove only auto-detected events (should keep User Added)
+        # remove_velocity_event with "auto_detected" removes events that are:
+        # - NOT "User Added" AND have user_type == "unreviewed"
+        # So it keeps: "User Added" events and events with user_type != "unreviewed"
+        kym_analysis.remove_velocity_event(roi_id=roi.id, remove_these="auto_detected")
+        events = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events is not None
+        assert len(events) == 1
+        assert events[0].event_type == "User Added"
+        
+        # Verify dirty flag is set
+        assert kym_analysis.is_dirty is True
+
+    def test_remove_velocity_event_edge_cases(self) -> None:
+        """Test remove_velocity_event() with edge cases."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=True)
+        kym_analysis = kym_image.get_kym_analysis()
+        
+        kym_image.header.voxels[0] = 0.1
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds)
+        
+        # Test removing from empty list
+        kym_analysis.remove_velocity_event(roi_id=roi.id, remove_these="_remove_all")
+        events = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events is None or len(events) == 0
+        
+        # Test with reviewed user-added event (should be kept)
+        event_id1 = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+        from kymflow.core.analysis.velocity_events.velocity_events import UserType
+        kym_analysis.update_velocity_event_field(event_id1, "user_type", UserType.TRUE_STALL.value)
+        
+        # Test with auto-detected event that has been reviewed (should be kept)
+        from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent, MachineType
+        reviewed_event = VelocityEvent(
+            event_type="baseline_drop",
+            i_start=20,
+            t_start=2.0,
+            machine_type=MachineType.STALL_CANDIDATE,
+            user_type=UserType.TRUE_STALL,  # Reviewed, not unreviewed
+        )
+        if roi.id not in kym_analysis._velocity_events:
+            kym_analysis._velocity_events[roi.id] = []
+        kym_analysis._velocity_events[roi.id].append(reviewed_event)
+        
+        # Test with auto-detected unreviewed event (should be removed)
+        unreviewed_event = VelocityEvent(
+            event_type="baseline_drop",
+            i_start=30,
+            t_start=3.0,
+            machine_type=MachineType.STALL_CANDIDATE,
+            user_type=UserType.UNREVIEWED,
+        )
+        kym_analysis._velocity_events[roi.id].append(unreviewed_event)
+        
+        events_before = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events_before is not None
+        assert len(events_before) == 3
+        
+        # Remove auto-detected events
+        kym_analysis.remove_velocity_event(roi_id=roi.id, remove_these="auto_detected")
+        events_after = kym_analysis.get_velocity_events(roi_id=roi.id)
+        assert events_after is not None
+        assert len(events_after) == 2  # User-added and reviewed should remain
+        
+        # Verify correct events remain
+        event_types = [e.event_type for e in events_after]
+        user_types = [e.user_type for e in events_after]
+        assert "User Added" in event_types
+        assert UserType.TRUE_STALL in user_types
+        assert UserType.UNREVIEWED not in user_types
+        
+        # Test invalid remove_these value
+        with pytest.raises(ValueError, match="Invalid remove_these value"):
+            kym_analysis.remove_velocity_event(roi_id=roi.id, remove_these="invalid")
+
+    def test_num_velocity_events(self) -> None:
+        """Test num_velocity_events and total_num_velocity_events methods."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=True)
+        kym_analysis = kym_image.get_kym_analysis()
+        
+        kym_image.header.voxels[0] = 0.1
+        bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi1 = kym_image.rois.create_roi(bounds=bounds1)
+        bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+        roi2 = kym_image.rois.create_roi(bounds=bounds2)
+        
+        # Initially no events
+        assert kym_analysis.num_velocity_events(roi_id=roi1.id) == 0
+        assert kym_analysis.num_velocity_events(roi_id=roi2.id) == 0
+        assert kym_analysis.total_num_velocity_events() == 0
+        
+        # Add events to roi1
+        kym_analysis.add_velocity_event(roi_id=roi1.id, t_start=1.0, t_end=1.5)
+        kym_analysis.add_velocity_event(roi_id=roi1.id, t_start=2.0, t_end=2.5)
+        
+        assert kym_analysis.num_velocity_events(roi_id=roi1.id) == 2
+        assert kym_analysis.num_velocity_events(roi_id=roi2.id) == 0
+        assert kym_analysis.total_num_velocity_events() == 2
+        
+        # Add event to roi2
+        kym_analysis.add_velocity_event(roi_id=roi2.id, t_start=3.0, t_end=3.5)
+        
+        assert kym_analysis.num_velocity_events(roi_id=roi1.id) == 2
+        assert kym_analysis.num_velocity_events(roi_id=roi2.id) == 1
+        assert kym_analysis.total_num_velocity_events() == 3

@@ -419,3 +419,147 @@ def test_acq_image_save_metadata_clears_dirty() -> None:
         
         logger.info("  - save_metadata() clears dirty flag correctly")
 
+
+def test_acq_image_get_dim_arange() -> None:
+    """Test get_dim_arange() method for physical unit arrays."""
+    logger.info("Testing AcqImage get_dim_arange()")
+    
+    # Create 2D image with voxel sizes
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=test_image)
+    acq.update_header(voxels=[0.001, 0.284])  # time, space in seconds and microns
+    
+    # Test dim=0 (time dimension)
+    dim0_arange = acq.get_dim_arange(0)
+    assert len(dim0_arange) == 100
+    assert dim0_arange[0] == 0.0
+    assert dim0_arange[1] == 0.001
+    assert dim0_arange[99] == 0.099
+    
+    # Test dim=1 (space dimension)
+    dim1_arange = acq.get_dim_arange(1)
+    assert len(dim1_arange) == 200
+    assert dim1_arange[0] == 0.0
+    assert dim1_arange[1] == 0.284
+    assert dim1_arange[199] == pytest.approx(199 * 0.284)
+    
+    # Test error cases
+    with pytest.raises(ValueError, match="Cannot get arange for dimension"):
+        acq.get_dim_arange(2)  # Invalid dimension
+    
+    # Test with None shape (need to provide a dummy path since AcqImage requires path or img_data)
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory() as tmpdir:
+        dummy_path = Path(tmpdir) / "dummy.tif"
+        dummy_path.touch()
+        acq2 = AcqImage(path=dummy_path, img_data=None)
+        with pytest.raises(ValueError, match="Cannot get arange for dimension"):
+            acq2.get_dim_arange(0)
+    
+    logger.info("  - get_dim_arange() works correctly")
+
+
+def test_acq_image_get_image_bounds() -> None:
+    """Test get_image_bounds() method."""
+    logger.info("Testing AcqImage get_image_bounds()")
+    
+    # Test 2D image
+    test_image_2d = np.zeros((100, 200), dtype=np.uint8)
+    acq_2d = AcqImage(path=None, img_data=test_image_2d)
+    acq_2d.update_header(shape=(100, 200), ndim=2)
+    
+    bounds_2d = acq_2d.get_image_bounds()
+    assert bounds_2d.width == 200
+    assert bounds_2d.height == 100
+    assert bounds_2d.num_slices == 1
+    
+    # Test 3D image
+    test_image_3d = np.zeros((50, 100, 200), dtype=np.uint8)
+    acq_3d = AcqImage(path=None, img_data=test_image_3d)
+    acq_3d.update_header(shape=(50, 100, 200), ndim=3)
+    
+    bounds_3d = acq_3d.get_image_bounds()
+    assert bounds_3d.width == 200
+    assert bounds_3d.height == 100
+    assert bounds_3d.num_slices == 50
+    
+    # Test error cases (need to provide a dummy path since AcqImage requires path or img_data)
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory() as tmpdir:
+        dummy_path = Path(tmpdir) / "dummy.tif"
+        dummy_path.touch()
+        acq_no_shape = AcqImage(path=dummy_path, img_data=None)
+        with pytest.raises(ValueError, match="Cannot determine image bounds"):
+            acq_no_shape.get_image_bounds()
+    
+    logger.info("  - get_image_bounds() works correctly")
+
+
+def test_acq_image_img_num_slices() -> None:
+    """Test img_num_slices property."""
+    logger.info("Testing AcqImage img_num_slices property")
+    
+    # Test 2D image
+    test_image_2d = np.zeros((100, 200), dtype=np.uint8)
+    acq_2d = AcqImage(path=None, img_data=test_image_2d)
+    assert acq_2d.img_num_slices == 1
+    
+    # Test 3D image
+    test_image_3d = np.zeros((50, 100, 200), dtype=np.uint8)
+    acq_3d = AcqImage(path=None, img_data=test_image_3d)
+    assert acq_3d.img_num_slices == 50
+    
+    # Test with None shape (need to provide a dummy path since AcqImage requires path or img_data)
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory() as tmpdir:
+        dummy_path = Path(tmpdir) / "dummy.tif"
+        dummy_path.touch()
+        acq_no_shape = AcqImage(path=dummy_path, img_data=None)
+        assert acq_no_shape.img_num_slices is None
+    
+    logger.info("  - img_num_slices property works correctly")
+
+
+def test_acq_image_get_roi_physical_coords() -> None:
+    """Test get_roi_physical_coords() method."""
+    logger.info("Testing AcqImage get_roi_physical_coords()")
+    
+    from kymflow.core.image_loaders.roi import RoiBounds
+    
+    # Create image with voxel sizes
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=test_image)
+    acq.update_header(voxels=[0.001, 0.284])  # time, space
+    
+    # Create ROI
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=20, dim1_stop=80)
+    roi = acq.rois.create_roi(bounds=bounds)
+    
+    # Get physical coordinates
+    physical_coords = acq.get_roi_physical_coords(roi.id)
+    assert physical_coords.dim0_start == pytest.approx(10 * 0.001)
+    assert physical_coords.dim0_stop == pytest.approx(50 * 0.001)
+    assert physical_coords.dim1_start == pytest.approx(20 * 0.284)
+    assert physical_coords.dim1_stop == pytest.approx(80 * 0.284)
+    
+    # Test error cases
+    with pytest.raises(ValueError, match="ROI.*not found"):
+        acq.get_roi_physical_coords(999)
+    
+    # Note: When img_data is provided, addColorChannel() automatically calls
+    # init_defaults_from_shape() which sets voxels=[1.0, 1.0] by default.
+    # To test the None voxels case, we need to manually clear voxels after creation.
+    acq_no_voxels = AcqImage(path=None, img_data=test_image)
+    acq_no_voxels._header.voxels = None  # Manually clear voxels to test error case
+    acq_no_voxels.rois.create_roi(bounds=bounds)
+    with pytest.raises(ValueError, match="header.voxels is None"):
+        acq_no_voxels.get_roi_physical_coords(1)
+    
+    acq_incomplete_voxels = AcqImage(path=None, img_data=test_image)
+    acq_incomplete_voxels.update_header(voxels=[0.001])  # Only one dimension
+    acq_incomplete_voxels.rois.create_roi(bounds=bounds)
+    with pytest.raises(ValueError, match="need at least 2 for 2D coordinates"):
+        acq_incomplete_voxels.get_roi_physical_coords(1)
+    
+    logger.info("  - get_roi_physical_coords() works correctly")
+

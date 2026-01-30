@@ -798,14 +798,31 @@ class KymAnalysis:
             roi_id: Identifier of the ROI.
             remove_these:
                 "_remove_all" to remove all events
-                "auto_detected" do not remove events with type='User Added' or user_type != 'unreviewed'
+                "auto_detected" removes only auto-detected events (keeps user-added and reviewed events)
+        
+        For "auto_detected" mode:
+            **What is kept (not removed):**
+            - Events with event_type == "User Added" (regardless of user_type)
+            - Events with user_type != "unreviewed" (regardless of event_type)
+            
+            **What is removed:**
+            - Events that are NOT "User Added" AND have user_type == "unreviewed"
+            - In other words: auto-detected events that haven't been reviewed yet
+            
+            This allows removing only the automatically detected events while preserving:
+            - All user-added events
+            - All events that have been reviewed/classified by the user
         """
         if remove_these == "_remove_all":
             self._velocity_events[roi_id] = []
         elif remove_these == "auto_detected":
-            # do not remove event_type "User Added"
-            # do not remove events with user_type != "unreviewed"
-            self._velocity_events[roi_id] = [event for event in self._velocity_events[roi_id] if event.event_type != "User Added" and event.user_type != "unreviewed"]
+            # Keep events that are "User Added" OR have user_type != "unreviewed"
+            # Remove events that are NOT "User Added" AND have user_type == "unreviewed"
+            self._velocity_events[roi_id] = [
+                event
+                for event in self._velocity_events[roi_id]
+                if event.event_type == "User Added" or event.user_type != "unreviewed"
+            ]
         else:
             raise ValueError(f"Invalid remove_these value: {remove_these}")
         self._dirty = True

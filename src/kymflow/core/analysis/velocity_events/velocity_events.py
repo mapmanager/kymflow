@@ -318,7 +318,87 @@ def detect_nan_gaps(
     min_duration_sec: float = 0.02,
     merge_gap_sec: float = 0.05,
 ) -> list[VelocityEvent]:
-    """Detect missing-evidence events where NaNs dominate a local time window."""
+    """Detect missing-evidence events where NaNs dominate a local time window.
+
+    This detector treats NaNs as "missing evidence" and emits an event when the local
+    density of NaNs becomes high enough (enter threshold), and ends the event when the
+    NaN density falls back low enough (exit threshold). To avoid rapid on/off flicker,
+    it uses hysteresis (enter_frac > exit_frac) plus optional merging of nearby runs.
+
+    Args:
+        time_s:
+            1D array-like of timestamps in seconds, same length as `velocity`.
+            Sampling is assumed approximately uniform; internal logic estimates sample
+            rate `fs` from the median time step.
+        velocity:
+            1D array-like of velocity values. NaNs are interpreted as missing evidence.
+
+        nan_win_sec:
+            Window size (seconds) used to compute the local NaN fraction `nan_frac[i]`.
+            For each sample i, nan_frac[i] is the mean of `is_nan` within a centered
+            window of ~nan_win_sec around i.
+
+            Larger values smooth the NaN fraction estimate and reduce sensitivity to
+            brief NaN flicker (fewer false positives), but can smear short gaps.
+            Smaller values react to brief NaN bursts and will produce more gap hits.
+
+            **Most important knob for reducing false positives due to NaN flicker.**
+
+        enter_frac:
+            Enter threshold for starting a NaN-gap event.
+            When `nan_frac[i] >= enter_frac`, the detector enters "gap" state.
+
+            Higher values require denser NaNs to call a gap (fewer hits).
+            Lower values call gaps more easily (more hits).
+
+            **Most important knob for “how much NaN is enough to be a gap.”**
+
+        exit_frac:
+            Exit threshold for ending a NaN-gap event (hysteresis).
+            When in gap state and `nan_frac[i] <= exit_frac`, the gap ends.
+
+            Must generally be <= enter_frac. Lower values make gaps “stickier”
+            (reduces rapid toggling and fragmentation). Higher values end gaps sooner
+            (can create more fragments).
+
+            Important primarily for reducing event fragmentation / flicker.
+
+        min_duration_sec:
+            Minimum duration (seconds) for an emitted NaN-gap event.
+            After computing runs, any event shorter than this is discarded.
+
+            Increase this to drop short blips (fewer false positives).
+
+        merge_gap_sec:
+            Merge adjacent NaN-gap runs that are separated by <= merge_gap_sec.
+            This is applied after hysteresis classification.
+
+            Increase this to combine fragmented gaps into fewer events.
+            Decrease this to keep gaps separate.
+
+    Returns:
+        List[VelocityEvent]:
+            Events with:
+              - event_type="nan_gap"
+              - machine_type=MachineType.NAN_GAP
+              - i_start/t_start, i_end/t_end
+              - duration_sec
+              - nan_fraction_in_event (fraction NaN within the event span)
+              - n_valid_in_event
+              - strength = nan_fraction_in_event * duration_sec (simple severity proxy)
+
+    How to tune (quick guidance):
+        If you are getting too many NaN-gap hits:
+          1) Increase `nan_win_sec` (smooths flicker; fewer on/off transitions)
+          2) Increase `enter_frac` (requires denser NaNs to count as a gap)
+          3) Increase `min_duration_sec` (drop short blips)
+          4) Increase `merge_gap_sec` (combine fragmented hits into fewer events)
+          5) Decrease `exit_frac` slightly (more hysteresis; less flicker)
+
+        Recommended starting point for “fewer false positives”:
+          nan_win_sec=0.20–0.40, enter_frac=0.60–0.80, exit_frac=0.30–0.50,
+          min_duration_sec=0.05–0.10, merge_gap_sec=0.10–0.20
+    """
     t = np.asarray(time_s, dtype=float)
     v = np.asarray(velocity, dtype=float)
     fs = estimate_fs(t)

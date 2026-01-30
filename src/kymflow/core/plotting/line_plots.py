@@ -724,6 +724,7 @@ def _add_velocity_event_overlays(
         fig.add_shape(**shape_dict)
 
 
+# DEPRECATED: This function is deprecated. Use plot_image_line_plotly_v3() instead.
 def plot_image_line_plotly_v2(
     kf: Optional[KymImage],
     channel: int = 1,
@@ -739,6 +740,9 @@ def plot_image_line_plotly_v2(
     transpose: bool = False,
 ) -> go.Figure:
     """Create a figure with kymograph image and one or more line plots for multiple ROIs.
+    
+    .. deprecated:: 
+        This function is deprecated. Use :func:`plot_image_line_plotly_v3` instead.
     
     This is an extended version of plot_image_line_plotly that supports plotting
     line plots for multiple ROIs, each in its own subplot row with stall overlays.

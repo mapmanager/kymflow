@@ -1,3 +1,11 @@
+# File: .github/workflows/tests.yml
+#
+# Overview:
+# - Runs unit tests on Python 3.11 and 3.12
+# - Installs nicewidgets directly from GitHub (not PyPI)
+# - Collects coverage separately for core/ and gui_v2/
+# - Uploads flagged coverage reports to Codecov for separate badges
+
 name: Tests
 
 on:
@@ -10,12 +18,13 @@ jobs:
   test:
     name: Run tests with coverage
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -28,28 +37,48 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-          # Install nicewidgets from GitHub (NOT PyPI)
+          # Install nicewidgets from GitHub (not PyPI)
           python -m pip install "nicewidgets @ git+https://github.com/mapmanager/nicewidgets.git"
 
-          # Install kymflow + extras from this repo
+          # Install kymflow with test + gui extras
           python -m pip install ".[test,gui]"
 
-      - name: Run tests with coverage
+      # -------------------------
+      # Core coverage
+      # -------------------------
+      - name: Run core tests with coverage
         run: |
           pytest \
             --cov=src/kymflow/core \
-            --cov=src/kymflow/gui_v2 \
-            --cov-report=xml \
+            --cov-report=xml:coverage-core.xml \
             --cov-report=term \
-            --cov-report=html \
             tests/
 
-      - name: Upload coverage to Codecov
+      - name: Upload core coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ./coverage.xml
-          flags: unittests,py${{ matrix.python-version }}
-          name: kymflow-${{ matrix.python-version }}
-          fail_ci_if_error: false
+          files: ./coverage-core.xml
+          flags: core
+          name: kymflow-core-py${{ matrix.python-version }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
+          fail_ci_if_error: false
+
+      # -------------------------
+      # gui_v2 coverage
+      # -------------------------
+      - name: Run gui_v2 tests with coverage
+        run: |
+          pytest \
+            --cov=src/kymflow/gui_v2 \
+            --cov-report=xml:coverage-gui_v2.xml \
+            --cov-report=term \
+            tests/
+
+      - name: Upload gui_v2 coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-gui_v2.xml
+          flags: gui_v2
+          name: kymflow-gui_v2-py${{ matrix.python-version }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

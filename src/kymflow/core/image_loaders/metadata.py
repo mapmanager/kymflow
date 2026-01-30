@@ -364,7 +364,9 @@ class ExperimentMetadata:
         for field_def in schema:
             if field_def["editable"]:
                 field_name = field_def["name"]
-                values[field_name] = getattr(self, field_name) or ""
+                val = getattr(self, field_name)
+                # Convert to string: None -> "", otherwise str(val)
+                values[field_name] = "" if val is None else str(val)
         return values
 
 @dataclass

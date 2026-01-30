@@ -785,3 +785,102 @@ def test_roiset_create_roi_bounds_none_vs_explicit() -> None:
     
     logger.info("  - create_roi(bounds=None) and explicit full-image bounds are equivalent")
 
+
+def test_roiset_get_roi_ids() -> None:
+    """Test RoiSet.get_roi_ids() method."""
+    logger.info("Testing RoiSet.get_roi_ids()")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create multiple ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1)
+    bounds3 = RoiBounds(dim0_start=20, dim0_stop=40, dim1_start=20, dim1_stop=40)
+    roi3 = acq_image.rois.create_roi(bounds=bounds3, channel=1)
+    
+    # Get ROI IDs
+    roi_ids = acq_image.rois.get_roi_ids()
+    assert len(roi_ids) == 3
+    assert roi_ids == [1, 2, 3]  # Should be in creation order
+    
+    # Delete one ROI
+    acq_image.rois.delete(roi2.id)
+    roi_ids_after = acq_image.rois.get_roi_ids()
+    assert len(roi_ids_after) == 2
+    assert roi_ids_after == [1, 3]  # Should maintain order
+    
+    # Test empty set
+    acq_image.rois.clear()
+    assert acq_image.rois.get_roi_ids() == []
+    
+    logger.info("  - RoiSet.get_roi_ids() works correctly")
+
+
+def test_roiset_as_list() -> None:
+    """Test RoiSet.as_list() method."""
+    logger.info("Testing RoiSet.as_list()")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create multiple ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = acq_image.rois.create_roi(bounds=bounds1, channel=1, name="ROI1")
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1, name="ROI2")
+    
+    # Get as list
+    rois_list = acq_image.rois.as_list()
+    assert len(rois_list) == 2
+    assert isinstance(rois_list, list)
+    assert rois_list[0] == roi1
+    assert rois_list[1] == roi2
+    
+    # Verify order is preserved
+    assert rois_list[0].id == 1
+    assert rois_list[1].id == 2
+    
+    # Test empty set
+    acq_image.rois.clear()
+    assert acq_image.rois.as_list() == []
+    
+    logger.info("  - RoiSet.as_list() works correctly")
+
+
+def test_roiset_clear_functionality() -> None:
+    """Test RoiSet.clear() method functionality."""
+    logger.info("Testing RoiSet.clear() functionality")
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create multiple ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    acq_image.rois.create_roi(bounds=bounds2, channel=1)
+    bounds3 = RoiBounds(dim0_start=20, dim0_stop=40, dim1_start=20, dim1_stop=40)
+    acq_image.rois.create_roi(bounds=bounds3, channel=1)
+    
+    assert acq_image.rois.numRois() == 3
+    
+    # Clear all ROIs
+    deleted_count = acq_image.rois.clear()
+    assert deleted_count == 3
+    assert acq_image.rois.numRois() == 0
+    assert acq_image.rois.get_roi_ids() == []
+    assert acq_image.rois.as_list() == []
+    
+    # Verify next_id is reset
+    new_roi = acq_image.rois.create_roi(bounds=bounds1, channel=1)
+    assert new_roi.id == 1  # Should start from 1 again
+    
+    # Test clearing empty set
+    acq_image.rois.clear()
+    assert acq_image.rois.clear() == 0
+    
+    logger.info("  - RoiSet.clear() works correctly")
+

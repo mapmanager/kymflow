@@ -81,3 +81,71 @@ def test_update_header_method() -> None:
     # Should not have set unknown field
     assert not hasattr(acq_image._header, "unknown_field")
 
+
+def test_experiment_metadata_get_editable_values() -> None:
+    """Test ExperimentMetadata.get_editable_values() method."""
+    meta = ExperimentMetadata(
+        species="mouse",
+        region="cortex",
+        depth=100.5,
+        note="Test note",
+    )
+    
+    editable_values = meta.get_editable_values()
+    
+    # Should include editable fields
+    assert "species" in editable_values
+    assert editable_values["species"] == "mouse"
+    assert "region" in editable_values
+    assert editable_values["region"] == "cortex"
+    assert "note" in editable_values
+    assert editable_values["note"] == "Test note"
+    
+    # Should include depth (editable)
+    assert "depth" in editable_values
+    assert editable_values["depth"] == "100.5"  # Converted to string
+    
+    # Should NOT include non-editable fields (acquisition_date, acquisition_time)
+    assert "acquisition_date" not in editable_values
+    assert "acquisition_time" not in editable_values
+    
+    # Test with None values (should be empty strings)
+    meta2 = ExperimentMetadata()
+    editable_values2 = meta2.get_editable_values()
+    assert editable_values2["species"] == ""
+    assert editable_values2["depth"] == ""  # None -> empty string
+
+
+def test_acq_img_header_properties() -> None:
+    """Test AcqImgHeader properties and initialization."""
+    # Test default initialization
+    header = AcqImgHeader()
+    assert header.shape is None
+    assert header.ndim is None
+    assert header.voxels is None
+    assert header.voxels_units is None
+    assert header.labels is None
+    assert header.physical_size is None
+    
+    # Test setting properties
+    header.shape = (100, 200)
+    header.ndim = 2
+    header.voxels = [0.001, 0.284]
+    header.voxels_units = ["s", "um"]
+    header.labels = ["time (s)", "space (um)"]
+    header.physical_size = [0.1, 56.8]
+    
+    assert header.shape == (100, 200)
+    assert header.ndim == 2
+    assert header.voxels == [0.001, 0.284]
+    assert header.voxels_units == ["s", "um"]
+    assert header.labels == ["time (s)", "space (um)"]
+    assert header.physical_size == [0.1, 56.8]
+    
+    # Test 3D header
+    header_3d = AcqImgHeader()
+    header_3d.shape = (50, 100, 200)
+    header_3d.ndim = 3
+    assert header_3d.shape == (50, 100, 200)
+    assert header_3d.ndim == 3
+
