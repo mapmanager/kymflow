@@ -10,9 +10,11 @@ import importlib.util
 import sys
 
 import pytest
-from nicegui import ui
+from nicegui import app, ui
 
 from kymflow.gui_v2.events_folder import FolderChosen
+from kymflow.gui_v2.shutdown_handlers import _capture_native_window_rect
+from kymflow.core.user_config import UserConfig
 
 
 class DummyPage:
@@ -202,3 +204,24 @@ def test_main_registers_shutdown_handlers(monkeypatch) -> None:
     app_module.main(native=True)
 
     install_mock.assert_called_once_with(app_module.context)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_captures_native_window_rect(monkeypatch, tmp_path: Path) -> None:
+    """Ensure native window rect is captured on shutdown."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    context = SimpleNamespace(user_config=cfg)
+
+    class DummyWindow:
+        async def get_size(self):
+            return (1200, 800)
+
+        async def get_position(self):
+            return (10, 20)
+
+    monkeypatch.setattr(app.native, "main_window", DummyWindow())
+
+    await _capture_native_window_rect(context)
+
+    assert cfg.get_window_rect() == (10, 20, 1200, 800)

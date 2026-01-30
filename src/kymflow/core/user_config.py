@@ -309,7 +309,7 @@ class UserConfig:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = self.data.to_json_dict()
         logger.info('saving user_config to disk')
-        logger.info(f'payload: {payload}')
+        # logger.info(f'payload: {payload}')
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def ensure_exists(self) -> None:
