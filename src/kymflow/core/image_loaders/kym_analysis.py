@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
-from kymflow.core.analysis.utils import _medianFilter, _removeOutliers
+from kymflow.core.analysis.utils import _medianFilter, _removeOutliers_sd, _removeOutliers_analyzeflow
 from kymflow.core.utils.logging import get_logger
 
 # DEPRECATED: Stall analysis is deprecated
@@ -327,6 +327,7 @@ class KymAnalysis:
             progress_queue=progress_queue,
             is_cancelled=is_cancelled,
             use_multiprocessing=use_multiprocessing,
+            verbose=False,
         )
         
         # Record analysis metadata (geometry lives in acq_image.rois)
@@ -351,7 +352,7 @@ class KymAnalysis:
         drew_velocity = drew_velocity / 1000  # mm/s
         
         # Apply filtering
-        clean_velocity = _removeOutliers(drew_velocity)
+        clean_velocity = _removeOutliers_sd(drew_velocity)
         clean_velocity = _medianFilter(clean_velocity, window_size=5)
         
         # Create DataFrame for this ROI's analysis
@@ -623,7 +624,7 @@ class KymAnalysis:
         Args:
             roi_id: Identifier of the ROI.
             key: Column name to retrieve (e.g., "velocity", "time").
-            remove_outliers: If True, remove outliers using 2*std threshold.
+            remove_outliers: If True, remove outliers using old v0 flowanalysis with _removeOutliers_analyzeflow.
             median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
         
         Returns:
@@ -648,10 +649,15 @@ class KymAnalysis:
         # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
         # print(values)
 
+        # newer version
+        # if remove_outliers:
+        #     values = _removeOutliers_sd(values)
+        #     # set to np.nan if values[i] < 100000
+        #     values[values < -100000] = np.nan
+
+        # older version
         if remove_outliers:
-            values = _removeOutliers(values)
-            # set to np.nan if values[i] < 100000
-            values[values < -100000] = np.nan
+            values = _removeOutliers_analyzeflow(values)
 
         if median_filter > 0:
             values = _medianFilter(values, median_filter)
@@ -749,11 +755,14 @@ class KymAnalysis:
                 f"Cannot run velocity event analysis: ROI {roi_id} has no analysis values for key '{velocity_key}'."
             )
 
+        # explicitly remove outlierss like old v0 flowanalysis
+        # velocity = _removeOutliers_analyzeflow(velocity)
+        
         # Get time values (required for detect_events)
         time_s = self.get_analysis_value(
             roi_id=roi_id,
             key="time",
-            remove_outliers=False,
+            # remove_outliers=False,
         )
         if time_s is None:
             raise ValueError(
@@ -763,11 +772,62 @@ class KymAnalysis:
         # Run detection
         events, _debug = detect_events(time_s, velocity, **detect_events_kwargs)
         
-        # Store results
-        self._velocity_events[roi_id] = events
+        # Store results, if we had previous roi_id velocity events -> THIS REPLACES ALL OF THEM
+        #self._velocity_events[roi_id] = events
+        
+        # remove existing events (do not remove 'user added' or true_stall)
+        _nBefore = self.num_velocity_events(roi_id)
+        
+        self.remove_velocity_event(roi_id, "auto_detected")
+        
+        _nAfter = self.num_velocity_events(roi_id)
+        
+        logger.info(f"roi:{roi_id} _nBefore:{_nBefore} _nAfter:{_nAfter} removed:{_nBefore - _nAfter}")
+
+        # append detected event
+        self._velocity_events[roi_id] = self._velocity_events[roi_id] + events
+
         # Mark dirty so callers know there are unsaved results.
         self._dirty = True
         return events
+
+    def remove_velocity_event(self, roi_id:int, remove_these:str) -> None:
+        """Remove velocity events by 'Type' and 'User Type'
+
+        Args:
+            roi_id: Identifier of the ROI.
+            remove_these:
+                "_remove_all" to remove all events
+                "auto_detected" do not remove events with type='User Added' or user_type != 'unreviewed'
+        """
+        if remove_these == "_remove_all":
+            self._velocity_events[roi_id] = []
+        elif remove_these == "auto_detected":
+            # do not remove event_type "User Added"
+            # do not remove events with user_type != "unreviewed"
+            self._velocity_events[roi_id] = [event for event in self._velocity_events[roi_id] if event.event_type != "User Added" and event.user_type != "unreviewed"]
+        else:
+            raise ValueError(f"Invalid remove_these value: {remove_these}")
+        self._dirty = True
+
+    def num_velocity_events(self, roi_id: int) -> int:
+        """Return the number of velocity events for roi_id.
+
+        Args:
+            roi_id: Identifier of the ROI.
+
+        Returns:
+            Number of velocity events for the ROI.
+        """
+        return len(self._velocity_events.get(roi_id, []))
+
+    def total_num_velocity_events(self) -> int:
+        """Return the total number of velocity events across all ROIs.
+
+        Returns:
+            Total number of velocity events across all ROIs.
+        """
+        return sum(len(events) for events in self._velocity_events.values())
 
     def get_velocity_events(self, roi_id: int) -> Optional[list[VelocityEvent]]:
         """Return velocity event results for roi_id, or None if not present.
@@ -980,7 +1040,7 @@ class KymAnalysis:
         # Create new event with defaults
         new_event = VelocityEvent(
             # event_type="baseline_drop",  # Default event type
-            event_type="added",  # Default event type
+            event_type="User Added",  # Default event type
             i_start=i_start,
             t_start=t_start,
             i_end=i_end,
@@ -1050,6 +1110,8 @@ class KymAnalysis:
     def get_velocity_report(self, roi_id: int | None = None) -> list[VelocityReportRow]:
         """Return velocity report rows for roi_id (or all ROIs if None).
 
+        Used by gui, we are rounding values to 3 decimal places
+
         Args:
             roi_id: Identifier of the ROI, or None for all ROIs.
 
@@ -1068,7 +1130,7 @@ class KymAnalysis:
             if not events:
                 continue
             for idx, event in enumerate(events):
-                event_dict = event.to_dict()
+                event_dict = event.to_dict(round_decimals=3)
                 # Use UUID as event_id (stable, doesn't change when event is updated)
                 event_id = self._velocity_event_uuid_reverse.get((rid, idx))
                 if event_id is None:

@@ -633,6 +633,7 @@ def _add_velocity_event_overlays(
     color_map = {
         "baseline_drop": "rgba(255, 165, 0, 0.25)",  # Orange
         "nan_gap": "rgba(255, 0, 0, 0.25)",  # Red
+        "User Added": "rgba(0, 0, 255, 0.25)",  # Blue
     }
     
     for event in velocity_events:
@@ -689,7 +690,8 @@ def _add_velocity_event_overlays(
         
         # Get color based on event_type
         event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
-        # event_color = "rgba(255, 0, 0, 0.5)"
+        if event.t_end is None:
+            event_color = "rgba(255, 0, 0, 0.5)"
 
         # logger.warning(f'added velocity event for roi {roi_id}:')
         # logger.warning(f'  event_type:"{event.event_type}"')

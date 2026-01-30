@@ -65,6 +65,7 @@ def _default_columns() -> list[ColumnConfig]:
         _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center"),
         _col("Saved", "Saved", width=80, cell_class="ag-cell-center"),
         _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
+        _col("Total Num Velocity Events", "Events", width=100, cell_class="ag-cell-right"),  # abb 202601
         _col("Parent Folder", "Parent", flex=1, min_width=120),
         _col("Grandparent Folder", "Grandparent", flex=1, min_width=120),
         _col("duration (s)", "Duration (s)", width=140, cell_class="ag-cell-right"),

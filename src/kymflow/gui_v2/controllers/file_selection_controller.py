@@ -56,20 +56,19 @@ class FileSelectionController:
     def _on_file_selected(self, e: FileSelection) -> None:
         """Handle FileSelection intent event.
 
-        Updates AppState with the selected file, but only if the origin
-        is FILE_TABLE (prevents external selections from triggering state
-        changes inappropriately).
+        Updates AppState with the selected file. Handles FILE_TABLE and EXTERNAL
+        origins (prevents other origins from triggering state changes inappropriately).
 
         Args:
             e: FileSelection event (phase="intent") containing the file path and origin.
         """
-        # v2: only FileTable drives selection for now
+        # Handle FILE_TABLE and EXTERNAL origins
         # In the future, other sources (e.g., image viewer) could also emit FileSelection
-        if e.origin != SelectionOrigin.FILE_TABLE:
+        if e.origin not in (SelectionOrigin.FILE_TABLE, SelectionOrigin.EXTERNAL):
             return
 
         if e.path is None:
-            self._app_state.select_file(None, origin=SelectionOrigin.FILE_TABLE)
+            self._app_state.select_file(None, origin=e.origin)
             return
 
         # Find matching file in AppState file list
@@ -80,4 +79,4 @@ class FileSelectionController:
                 break
 
         # Update AppState with selection (origin preserved for feedback loop prevention)
-        self._app_state.select_file(match, origin=SelectionOrigin.FILE_TABLE)
+        self._app_state.select_file(match, origin=e.origin)

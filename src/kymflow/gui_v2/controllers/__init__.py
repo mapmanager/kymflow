@@ -12,6 +12,7 @@ from kymflow.gui_v2.controllers.kym_event_range_controller import (
     KymEventRangeStateController,
 )
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
+from kymflow.gui_v2.controllers.next_prev_file_controller import NextPrevFileController
 from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
 from kymflow.gui_v2.controllers.save_controller import SaveController
 from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeController
@@ -44,6 +45,7 @@ __all__ = [
     "ImageDisplayController",
     "KymEventRangeStateController",
     "MetadataController",
+    "NextPrevFileController",
     "ROISelectionController",
     "RoiEditStateController",
     "SaveController",

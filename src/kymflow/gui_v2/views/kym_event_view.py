@@ -16,6 +16,7 @@ from kymflow.gui_v2.events import (
     DeleteKymEvent,
     EventSelection,
     EventSelectionOptions,
+    NextPrevFileEvent,
     SelectionOrigin,
     SetKymEventRangeState,
     SetKymEventXRange,
@@ -28,6 +29,7 @@ OnEventUpdate = Callable[[VelocityEventUpdate], None]
 OnRangeState = Callable[[SetKymEventRangeState], None]
 OnAddEvent = Callable[[AddKymEvent], None]
 OnDeleteEvent = Callable[[DeleteKymEvent], None]
+OnNextPrevFile = Callable[[NextPrevFileEvent], None]
 
 logger = get_logger(__name__)
 
@@ -92,6 +94,7 @@ class KymEventView:
         on_range_state: OnRangeState | None = None,
         on_add_event: OnAddEvent | None = None,
         on_delete_event: OnDeleteEvent | None = None,
+        on_next_prev_file: OnNextPrevFile | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._on_selected = on_selected
@@ -99,6 +102,7 @@ class KymEventView:
         self._on_range_state = on_range_state
         self._on_add_event = on_add_event
         self._on_delete_event = on_delete_event
+        self._on_next_prev_file = on_next_prev_file
         self._selection_mode = selection_mode
         self._grid: CustomAgGrid_v2 | None = None
         self._grid_container: ui.element | None = None  # pyinstaller event table
@@ -114,6 +118,8 @@ class KymEventView:
         self._cancel_range_button: ui.button | None = None
         self._add_event_button: ui.button | None = None
         self._delete_event_button: ui.button | None = None
+        self._prev_file_button: ui.button | None = None
+        self._next_file_button: ui.button | None = None
         self._range_notification: ui.notification | None = None
         self._dismissing_programmatically: bool = False  # Flag to track programmatic dismiss
         self._selected_event_id: str | None = None
@@ -127,15 +133,34 @@ class KymEventView:
         self._grid = None
         self._grid_container = None  # pyinstaller event table
         with ui.row().classes("w-full h-full min-h-0 min-w-0 items-stretch gap-2"):
-            with ui.column().classes("w-40 shrink-0"):
-                ui.label("Event Controls").classes("text-sm text-gray-500")
+            with ui.column().classes("w-50 shrink-0"):
+                
+                
+                with ui.row().classes("w-full gap-2"):
+                    ui.label("Event Controls").classes("text-sm text-gray-500")
+                    self._prev_file_button = ui.button(
+                        "",
+                        on_click=self._on_prev_file_clicked,
+                        icon="keyboard_double_arrow_up",
+                    ).props("dense").classes('text-sm')
+                    self._prev_file_button.tooltip("Previous File")
+                    self._next_file_button = ui.button(
+                        "",
+                        on_click=self._on_next_file_clicked,
+                        icon="keyboard_double_arrow_down",
+                    ).props("dense").classes('text-sm')
+                    self._next_file_button.tooltip("Next File")
+
                 self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
-                ui.checkbox("Auto Zoom", value=self._zoom_enabled).on_value_change(
-                    lambda e: self._set_zoom_enabled(bool(e.value))
-                )
-                ui.number("+/- sec", value=self._zoom_pad_sec, step=0.1).on_value_change(
-                    lambda e: self._set_zoom_pad_sec(float(e.value))
-                )
+
+                with ui.row().classes("w-full gap-2"):
+                    ui.checkbox("Zoom (+/- s)", value=self._zoom_enabled).on_value_change(
+                        lambda e: self._set_zoom_enabled(bool(e.value))
+                    ).props("dense").classes('text-sm')
+                    ui.number("", value=self._zoom_pad_sec, step=0.1).on_value_change(
+                        lambda e: self._set_zoom_pad_sec(float(e.value))
+                    ).props("dense").classes("w-10 text-sm")
+
                 with ui.row().classes("w-full gap-2"):
                     self._set_range_button = ui.button(
                         "Set Start/Stop",
@@ -176,7 +201,7 @@ class KymEventView:
             zebra_rows=False,
             hover_highlight=False,
         )
-        logger.debug(f'pyinstaller instantiating CustomAgGrid_v2(rows={len(rows)})')
+        # logger.debug(f'pyinstaller instantiating CustomAgGrid_v2(rows={len(rows)})')
         if 1:
             self._grid = CustomAgGrid_v2(
                 data=rows,
@@ -538,7 +563,15 @@ class KymEventView:
         # Show confirmation dialog
         with ui.dialog() as dialog, ui.card():
             ui.label("Delete Event").classes("text-lg font-semibold")
-            ui.label(f"Are you sure you want to delete event {self._selected_event_id}?")
+
+            # abb TODO we do not have easy access to event
+            # get selected event
+            # selected_event = self._selected_event
+            # name_str = f"event_type:{selected_event.event_type} user_type:{selected_event.user_type} t_start:{selected_event.t_start} t_end:{selected_event.t_end}"
+
+            name_str = ''
+            ui.label(f"Are you sure you want to delete event {name_str}?")
+
             with ui.row():
                 ui.button("Cancel", on_click=dialog.close)
                 ui.button("Delete", on_click=lambda: self._confirm_delete(dialog))
@@ -557,6 +590,32 @@ class KymEventView:
                 roi_id=self._selected_event_roi_id,
                 path=self._selected_event_path,
                 origin=SelectionOrigin.EVENT_TABLE,
+                phase="intent",
+            )
+        )
+
+    def _on_prev_file_clicked(self) -> None:
+        """Handle Previous File button click."""
+        if self._on_next_prev_file is None:
+            logger.warning("Previous File: on_next_prev_file callback not set")
+            return
+        self._on_next_prev_file(
+            NextPrevFileEvent(
+                direction="Prev File",
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
+
+    def _on_next_file_clicked(self) -> None:
+        """Handle Next File button click."""
+        if self._on_next_prev_file is None:
+            logger.warning("Next File: on_next_prev_file callback not set")
+            return
+        self._on_next_prev_file(
+            NextPrevFileEvent(
+                direction="Next File",
+                origin=SelectionOrigin.EXTERNAL,
                 phase="intent",
             )
         )

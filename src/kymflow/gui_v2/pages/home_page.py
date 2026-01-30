@@ -24,13 +24,14 @@ from kymflow.gui_v2.controllers import (
     ImageDisplayController,
     KymEventRangeStateController,
     MetadataController,
+    NextPrevFileController,
     ROISelectionController,
     RoiEditStateController,
     SaveController,
     TaskStateBridgeController,
     VelocityEventUpdateController,
 )
-from kymflow.gui_v2.events import SelectionOrigin
+from kymflow.gui_v2.events import NextPrevFileEvent, SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.views import (
     AboutTabView,
@@ -134,6 +135,7 @@ class HomePage(BasePage):
             on_range_state=bus.emit,
             on_add_event=bus.emit,
             on_delete_event=bus.emit,
+            on_next_prev_file=bus.emit,
             selection_mode="single",
         )
         self._table_bindings: FileTableBindings | None = None
@@ -196,6 +198,9 @@ class HomePage(BasePage):
         self._setup_complete: bool = False
         self._full_zoom_shortcut_registered: bool = False
         self._full_zoom_shortcut_event: str = "kymflow_full_zoom_enter"
+        self._next_prev_file_shortcut_registered: bool = False
+        self._next_file_shortcut_event: str = "kymflow_next_file"
+        self._prev_file_shortcut_event: str = "kymflow_prev_file"
 
     def _ensure_setup(self) -> None:
         """Ensure controllers and bindings are set up once per client.
@@ -212,6 +217,9 @@ class HomePage(BasePage):
             self.context.app_state, self.bus, self.context.user_config
         )
         self._file_selection_controller = FileSelectionController(
+            self.context.app_state, self.bus
+        )
+        self._next_prev_file_controller = NextPrevFileController(
             self.context.app_state, self.bus
         )
         self._roi_selection_controller = ROISelectionController(
@@ -361,6 +369,60 @@ class HomePage(BasePage):
             """
         )
 
+    def _on_next_file_shortcut(self, _event) -> None:
+        """Handle Shift+Down next file shortcut when not editing."""
+        self.bus.emit(
+            NextPrevFileEvent(
+                direction="Next File",
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
+
+    def _on_prev_file_shortcut(self, _event) -> None:
+        """Handle Shift+Up previous file shortcut when not editing."""
+        self.bus.emit(
+            NextPrevFileEvent(
+                direction="Prev File",
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
+
+    def _register_next_prev_file_shortcuts(self) -> None:
+        """Register global Shift+Up/Down shortcuts for file navigation (unless editing)."""
+        if self._next_prev_file_shortcut_registered:
+            return
+        self._next_prev_file_shortcut_registered = True
+        ui.on(self._next_file_shortcut_event, self._on_next_file_shortcut)
+        ui.on(self._prev_file_shortcut_event, self._on_prev_file_shortcut)
+        ui.run_javascript(
+            """
+(function() {
+  if (window._kymflow_next_prev_file_listener) return;
+  window._kymflow_next_prev_file_listener = true;
+  window.addEventListener('keydown', (e) => {
+    if (!e.shiftKey) return;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    const active = document.activeElement;
+    const tag = active ? active.tagName : '';
+    const isEditable = !!active && (
+      active.isContentEditable ||
+      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+      (active.classList && active.classList.contains('ag-cell-edit-input')) ||
+      (active.closest && (active.closest('.ag-cell-inline-editing') || active.closest('.ag-cell-editor')))
+    );
+    if (isEditable) return;
+    if (e.key === 'ArrowDown') {
+      emitEvent('kymflow_next_file', {});
+    } else if (e.key === 'ArrowUp') {
+      emitEvent('kymflow_prev_file', {});
+    }
+  });
+})();
+            """
+        )
+
     def render(self, *, page_title: str) -> None:
         """Override render to create splitter layout at page level.
 
@@ -379,6 +441,7 @@ class HomePage(BasePage):
         # Build header without drawer toggle (no drawer needed with splitter)
         build_header(self.context, dark_mode, drawer_toggle_callback=None)
         self._register_full_zoom_shortcut()
+        self._register_next_prev_file_shortcuts()
 
         # Add CSS for splitter handle container + small split handles
         ui.add_css("""

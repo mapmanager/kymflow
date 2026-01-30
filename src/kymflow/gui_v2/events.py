@@ -550,3 +550,25 @@ class SetRoiBounds:
     y1: float
     origin: SelectionOrigin
     phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class NextPrevFileEvent:
+    """Navigate to next or previous file event (intent phase only).
+
+    Purpose:
+        Programmatically navigate to the next or previous file in the file list.
+    Triggered by:
+        - Intent: KymEventView buttons or keyboard shortcuts.
+    Consumed by:
+        - NextPrevFileController (intent → finds file → emits FileSelection).
+
+    Attributes:
+        direction: "Next File" or "Prev File".
+        origin: SelectionOrigin (EXTERNAL for programmatic navigation).
+        phase: Event phase - "intent" only.
+    """
+
+    direction: Literal["Next File", "Prev File"]
+    origin: SelectionOrigin = SelectionOrigin.EXTERNAL
+    phase: EventPhase = "intent"

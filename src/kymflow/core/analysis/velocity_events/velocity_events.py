@@ -13,21 +13,22 @@ class MachineType(str, Enum):
     """Type assigned by the detector."""
     STALL_CANDIDATE = "stall_candidate"
     NAN_GAP = "nan_gap"
-    REVERSAL_CANDIDATE = "reversal_candidate"
+    REVERSAL_CANDIDATE = "reversal_candidate"  # abb, never used
     OTHER = "other"
 
 
 class UserType(str, Enum):
     """Type assigned later by a human reviewer."""
-    UNREVIEWED = "unreviewed"
-    TRUE_STALL = "true_stall"
-    RADON_FAILURE = "radon_failure"
-    REVERSAL = "reversal"
-    REJECT = "reject"
-    OTHER = "other"
+    UNREVIEWED = "unreviewed"  # set in auto detect
+    TRUE_STALL = "true_stall"  # set by user
+    # RADON_FAILURE = "radon_failure"
+    REVERSAL = "reversal"  # set by user
+    # REJECT = "reject"
+    OTHER = "other"  # set by user
 
 
-EventType = Literal["baseline_drop", "nan_gap", "added"]  # abb added "added" for new events by user
+EventType = Literal["baseline_drop", "nan_gap", "User Added"]  # abb added "User Added" for new events by user
+
 RoundingMode = Literal["round", "floor", "ceil"]
 
 
@@ -106,27 +107,47 @@ class VelocityEvent:
     user_type: UserType = UserType.UNREVIEWED
     note: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self, round_decimals: Optional[int] = None) -> dict:
         """Serialize to a JSON-friendly dictionary.
-        
+
+        Args:
+            round_decimals: Number of decimal places to round to. If None, no rounding is done.
+            
         Returns:
             Dictionary containing all VelocityEvent fields.
         """
+
+        def _get_rounded_value(value: Optional[float], round_decimals: Optional[int] = None) -> Optional[float]:
+            if value is None:
+                return None
+            if round_decimals is not None:
+                return round(value, round_decimals)
+            return value
+
         return {
             "event_type": self.event_type,
+
             "i_start": int(self.i_start),
-            "t_start": float(self.t_start),
             "i_peak": int(self.i_peak) if self.i_peak is not None else None,
-            "t_peak": float(self.t_peak) if self.t_peak is not None else None,
             "i_end": int(self.i_end) if self.i_end is not None else None,
-            "t_end": float(self.t_end) if self.t_end is not None else None,
-            "score_peak": float(self.score_peak) if self.score_peak is not None else None,
-            "baseline_before": float(self.baseline_before) if self.baseline_before is not None else None,
-            "baseline_after": float(self.baseline_after) if self.baseline_after is not None else None,
-            "strength": float(self.strength) if self.strength is not None else None,
+            
+            "t_start": _get_rounded_value(self.t_start, round_decimals),
+            "t_peak": _get_rounded_value(self.t_peak, round_decimals),
+            "t_end": _get_rounded_value(self.t_end, round_decimals),
+            
+            "score_peak": _get_rounded_value(self.score_peak, round_decimals),
+
+            "baseline_before": _get_rounded_value(self.baseline_before, round_decimals),
+            "baseline_after": _get_rounded_value(self.baseline_after, round_decimals),
+
+            "strength": _get_rounded_value(self.strength, round_decimals),
+
             "nan_fraction_in_event": float(self.nan_fraction_in_event) if self.nan_fraction_in_event is not None else None,
             "n_valid_in_event": int(self.n_valid_in_event) if self.n_valid_in_event is not None else None,
-            "duration_sec": float(self.duration_sec) if self.duration_sec is not None else None,
+
+            "duration_sec": _get_rounded_value(self.duration_sec, round_decimals),
+            # "duration_sec": float(self.duration_sec) if self.duration_sec is not None else None,
+            
             "machine_type": self.machine_type.value,
             "user_type": self.user_type.value,
             "note": str(self.note),
@@ -661,15 +682,21 @@ def detect_events(
         min_sep_sec=min_sep_sec,
     )
 
-    nan_events = detect_nan_gaps(
-        time_s, velocity,
-        nan_win_sec=nan_win_sec,
-        enter_frac=nan_enter_frac,
-        exit_frac=nan_exit_frac,
-        min_duration_sec=nan_min_duration_sec,
-        merge_gap_sec=nan_merge_gap_sec,
-    )
+    # abb 20260130, turn off nan_gap detection
+    doNanGapDetection = False
+    if doNanGapDetection:   
+        nan_events = detect_nan_gaps(
+            time_s, velocity,
+            nan_win_sec=nan_win_sec,
+            enter_frac=nan_enter_frac,
+            exit_frac=nan_exit_frac,
+            min_duration_sec=nan_min_duration_sec,
+            merge_gap_sec=nan_merge_gap_sec,
+        )
+    else:
+        nan_events = []
 
     events = sorted(base_events + nan_events, key=lambda e: e.t_start)
+
     debug = {"score": score, "abs_med": abs_med, "threshold": thresh}
     return events, debug

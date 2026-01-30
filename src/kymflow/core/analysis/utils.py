@@ -10,8 +10,30 @@ from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-def _removeOutliers(y: np.ndarray) -> np.ndarray:
-    """Nan out values +/- 2*std."""
+def _removeOutliers_analyzeflow(y: np.ndarray) -> np.ndarray:
+    """
+    old v0 analyze flow -> analyzeflow with radon was doing this
+
+    remove inf and 0 tan()
+      np.tan(90 deg) is returning 1e16 rather than inf
+      tan90or0 = (drewVelocity > 1e6) | (drewVelocity == 0)
+      drewVelocity[tan90or0] = float('nan')
+
+    this new version removes values +/- 1e6 but does not remove 0
+    """
+    
+    # old v0 was removing 0, we do not want to do that
+    # tan90or0 = (y > 1e6) | (y == 0)
+    # tan90or0 = (y > 1e6)  # seems old v0 flowanalysis was doing this ???
+    tan90or0 = ( (y > 1e6) | (y < -1e6) )  # in the new version, i do not want to remove 0 (it can be real)
+
+    y[tan90or0] = float('nan')
+    return y
+
+def _removeOutliers_sd(y: np.ndarray) -> np.ndarray:
+    """Nan out values +/- 2*std.
+    
+    This is different from old flow analysis in that it does not remove 0 values."""
 
     # trying to fix plotly refresh bug
     # _y = y.copy()

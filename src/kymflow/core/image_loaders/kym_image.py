@@ -233,6 +233,7 @@ class KymImage(AcqImage):
             "Analyzed": "✓" if self.get_kym_analysis().has_analysis() else "",
             "Saved": "✓" if not self.get_kym_analysis().is_dirty else "",
             "Num ROIS": self.rois.numRois(),
+            "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),
             "Parent Folder": representative_path.parent.name if representative_path is not None else None,
             "Grandparent Folder": representative_path.parent.parent.name if representative_path is not None and len(representative_path.parent.parts) > 0 else None,
             "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",

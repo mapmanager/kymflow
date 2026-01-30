@@ -49,7 +49,7 @@ class FolderSelectorView:
         self._app_state = app_state
         self._user_config = user_config
         self._current_folder: Path = Path(".")
-        self._folder_display: Optional[ui.label] = None
+        # self._folder_display: Optional[ui.label] = None
         self._recent_select: Optional[ui.select] = None
         self._choose_button: Optional[ui.button] = None
         self._reload_button: Optional[ui.button] = None
@@ -151,7 +151,7 @@ class FolderSelectorView:
 
         # Always reset UI element reference - NiceGUI will clean up old elements
         # This ensures we create fresh elements in the new container context
-        self._folder_display = None
+        # self._folder_display = None
         self._recent_select = None
         self._choose_button = None
         self._reload_button = None
@@ -182,14 +182,14 @@ class FolderSelectorView:
             
             # Always enable the button - check happens dynamically when clicked
             # This avoids timing issues with pywebview window initialization
-            self._choose_button = ui.button("Choose folder", on_click=_choose_folder)
-            self._reload_button = ui.button("Reload", on_click=_emit)
+            self._choose_button = ui.button("Choose folder", on_click=_choose_folder).props("dense").classes("text-sm")
+            self._reload_button = ui.button("Reload", on_click=_emit).props("dense").classes("text-sm")
 
             ui.label("Depth:").classes("ml-2")
-            self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-20")
+            self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-10")
             self._depth_input.bind_value(self._app_state, "folder_depth")
 
-            self._folder_display = ui.label(f"Folder: {self._current_folder}")
+            # self._folder_display = ui.label(f"Folder: {self._current_folder}")
         self._update_controls_state()
         self.set_folder_from_state()
 
@@ -234,8 +234,8 @@ class FolderSelectorView:
         """Update folder display to match AppState."""
         folder = self._app_state.folder or self._current_folder
         self._current_folder = folder
-        if self._folder_display is not None:
-            self._folder_display.set_text(f"Folder: {self._current_folder}")
+        # if self._folder_display is not None:
+        #     self._folder_display.set_text(f"Folder: {self._current_folder}")
         if self._recent_select is not None:
             options = getattr(self._recent_select, "options", None)
             if options and str(self._current_folder) in options:

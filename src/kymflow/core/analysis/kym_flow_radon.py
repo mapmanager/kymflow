@@ -227,7 +227,6 @@ def mp_analyze_flow(
     the_t = np.ones(nsteps, dtype=np.float32) * np.nan
     spread_matrix_fine = np.zeros((nsteps, len(angles_fine)), dtype=np.float32)
 
-    verbose = False
     if verbose:
         print(f"=== mp_analyze_flow data shape (space, time): {data.shape}")
         print(f"  windowsize: {windowsize}, stepsize: {stepsize}")

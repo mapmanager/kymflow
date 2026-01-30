@@ -39,7 +39,7 @@ class LinePlotControlsView:
     Attributes:
         _on_filter_change: Callback function that receives filter state changes.
         _on_full_zoom: Callback function that receives full zoom requests.
-        _remove_outliers_cb: Remove outliers checkbox (created in render()).
+        _remove_outliers_cb: Remove outliers (flowanalysis) checkbox (created in render()).
         _median_filter_cb: Median filter checkbox (created in render()).
         _full_zoom_btn: Full zoom button (created in render()).
         _current_file: Currently selected file (for enabling/disabling controls).
@@ -84,11 +84,15 @@ class LinePlotControlsView:
 
         # Filter checkboxes and zoom button
         with ui.row().classes("w-full gap-2 items-center"):
-            self._remove_outliers_cb = ui.checkbox("Remove outliers")
+            self._remove_outliers_cb = ui.checkbox("Remove outliers (flowanalysis)")
             self._remove_outliers_cb.on("update:model-value", self._on_filter_change_handler)
+            
+        with ui.row().classes("w-full gap-2 items-center"):
             self._median_filter_cb = ui.checkbox("Median filter")
             self._median_filter_cb.on("update:model-value", self._on_filter_change_handler)
-            self._full_zoom_btn = ui.button("Full zoom", icon="zoom_out_map")
+            
+        with ui.row().classes("w-full gap-2 items-center"):
+            self._full_zoom_btn = ui.button("Full zoom", icon="zoom_out_map").props("dense").classes("text-sm")
             self._full_zoom_btn.on("click", self._on_full_zoom_handler)
 
         # Initialize button states
