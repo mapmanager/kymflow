@@ -1,4 +1,8 @@
-"""Bindings between StallAnalysisToolbarView and event bus (state → view updates)."""
+"""Bindings between StallAnalysisToolbarView and event bus (state → view updates).
+
+DEPRECATED: Stall analysis is deprecated. This module is kept for reference
+but should not be used. The implementation is commented out to prevent usage.
+"""
 
 from __future__ import annotations
 

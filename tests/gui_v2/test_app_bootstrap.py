@@ -203,7 +203,7 @@ def test_main_registers_shutdown_handlers(monkeypatch) -> None:
 
     app_module.main(native=True)
 
-    install_mock.assert_called_once_with(app_module.context)
+    install_mock.assert_called_once_with(app_module.context, native=True)
 
 
 @pytest.mark.asyncio

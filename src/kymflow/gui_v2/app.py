@@ -98,7 +98,7 @@ _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Sites/kymflow_outer/kymflow/tests/dat
 # _DEFAULT_DEV_FOLDER = Path("/Users/cudmore/Dropbox/data/declan/2026/data/20251204")
 
 DEV_FOLDER = Path(os.getenv("KYMFLOW_DEV_FOLDER", str(_DEFAULT_DEV_FOLDER))).expanduser()
-USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "1") == "1"
+USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "0") == "1"  # Default to "0" (disabled)
 
 # USE_DEV_FOLDER = False  # abb turn of before impleenting ~/ kymflow config json
 
@@ -265,7 +265,8 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
 
     reload = False
     native = True
-    install_shutdown_handlers(context)
+
+    install_shutdown_handlers(context, native=native)
 
     ui.run(
         port=DEFAULT_PORT,

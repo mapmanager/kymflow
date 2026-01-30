@@ -1,5 +1,8 @@
 """Stall analysis toolbar view component.
 
+DEPRECATED: Stall analysis is deprecated. This module is kept for reference
+but should not be used. The implementation is commented out to prevent usage.
+
 This module provides a view component that displays stall analysis controls
 (refactory_bins, min_stall_duration, end_stall_non_nan_bins, and Analyze stalls button).
 The view does not emit events directly, but triggers stall analysis which updates
@@ -15,7 +18,8 @@ from typing import Callable, Optional
 
 from nicegui import ui
 
-from kymflow.core.analysis.stall_analysis import StallAnalysisParams
+# DEPRECATED: Stall analysis is deprecated
+# from kymflow.core.analysis.stall_analysis import StallAnalysisParams
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.utils.logging import get_logger
@@ -160,20 +164,25 @@ class StallAnalysisToolbarView:
             ui.notify("Invalid stall parameters", color="negative")
             return
 
-        params = StallAnalysisParams(
-            velocity_key="velocity",
-            refactory_bins=refactory_bins,
-            min_stall_duration=min_stall_duration,
-            end_stall_non_nan_bins=end_stall_non_nan_bins,
-        )
-
-        try:
-            analysis = kf.get_kym_analysis().run_stall_analysis(roi_id=roi_id, params=params)
-        except Exception as e:
-            ui.notify(f"Stall analysis failed: {e}", color="negative")
-            return
-
-        ui.notify(f"Detected {len(analysis.stalls)} stalls", color="positive")
+        # DEPRECATED: Stall analysis is deprecated
+        # params = StallAnalysisParams(
+        #     velocity_key="velocity",
+        #     refactory_bins=refactory_bins,
+        #     min_stall_duration=min_stall_duration,
+        #     end_stall_non_nan_bins=end_stall_non_nan_bins,
+        # )
+        #
+        # try:
+        #     analysis = kf.get_kym_analysis().run_stall_analysis(roi_id=roi_id, params=params)
+        # except Exception as e:
+        #     ui.notify(f"Stall analysis failed: {e}", color="negative")
+        #     return
+        #
+        # ui.notify(f"Detected {len(analysis.stalls)} stalls", color="positive")
+        
+        # DEPRECATED: Stall analysis is deprecated
+        ui.notify("Stall analysis is deprecated", color="warning")
+        return
         
         # Trigger plot update if callback is set
         if self._on_stall_analysis_complete is not None:

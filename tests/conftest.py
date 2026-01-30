@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -21,6 +22,21 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "requires_data: mark test as requiring test data directory",
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_user_config_dir(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Ensure tests never write to the real platformdirs user config file."""
+    cfg_path = tmp_path_factory.mktemp("kymflow_user_config") / "user_config.json"
+    previous = os.environ.get("KYMFLOW_USER_CONFIG_PATH")
+    os.environ["KYMFLOW_USER_CONFIG_PATH"] = str(cfg_path)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("KYMFLOW_USER_CONFIG_PATH", None)
+        else:
+            os.environ["KYMFLOW_USER_CONFIG_PATH"] = previous
 
 
 def pytest_collection_modifyitems(

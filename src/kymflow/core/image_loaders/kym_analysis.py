@@ -25,7 +25,8 @@ from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers
 from kymflow.core.utils.logging import get_logger
 
-from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
+# DEPRECATED: Stall analysis is deprecated
+# from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
 from kymflow.core.analysis.velocity_events.velocity_events import (
     UserType,
     VelocityEvent,
@@ -145,7 +146,8 @@ class KymAnalysis:
         self._analysis_metadata: Dict[int, RoiAnalysisMetadata] = {}
         self._df: Optional[pd.DataFrame] = None
         self._dirty: bool = False
-        self._stall_analysis: Dict[int, StallAnalysis] = {}
+        # DEPRECATED: Stall analysis is deprecated
+        # self._stall_analysis: Dict[int, StallAnalysis] = {}
         # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
         self._velocity_events: Dict[int, List[VelocityEvent]] = {}
         # Velocity events are computed on-demand from stored analysis values (e.g., velocity).
@@ -449,9 +451,10 @@ class KymAnalysis:
                     }
                     for rid, meta in self._analysis_metadata.items()
                 },
-                "stall_analysis": {
-                    str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
-                },
+                # DEPRECATED: Stall analysis is deprecated
+                # "stall_analysis": {
+                #     str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
+                # },
                 "velocity_events": {
                     str(rid): [ev.to_dict() for ev in evs]
                     for rid, evs in self._velocity_events.items()
@@ -534,15 +537,15 @@ class KymAnalysis:
             except Exception as e:
                 logger.warning(f"Skipping invalid analysis metadata entry {key}: {e}")
 
-
-        # Load stall analysis (optional; may be absent in older analysis JSON).
-        self._stall_analysis.clear()
-        for roi_id_str, payload in json_data.get("stall_analysis", {}).items():
-            try:
-                roi_id = int(roi_id_str)
-                self._stall_analysis[roi_id] = StallAnalysis.from_dict(payload)
-            except Exception as e:
-                logger.warning(f"Skipping invalid stall_analysis entry {roi_id_str}: {e}")
+        # DEPRECATED: Stall analysis is deprecated
+        # # Load stall analysis (optional; may be absent in older analysis JSON).
+        # self._stall_analysis.clear()
+        # for roi_id_str, payload in json_data.get("stall_analysis", {}).items():
+        #     try:
+        #         roi_id = int(roi_id_str)
+        #         self._stall_analysis[roi_id] = StallAnalysis.from_dict(payload)
+        #     except Exception as e:
+        #         logger.warning(f"Skipping invalid stall_analysis entry {roi_id_str}: {e}")
 
         # Load velocity events (optional; may be absent in older analysis JSON).
         self._velocity_events.clear()
@@ -568,9 +571,10 @@ class KymAnalysis:
         self._analysis_metadata = {
             rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
         }
-        self._stall_analysis = {
-            rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
-        }
+        # DEPRECATED: Stall analysis is deprecated
+        # self._stall_analysis = {
+        #     rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
+        # }
         # Remove events for deleted ROIs and clean up UUID mappings
         removed_roi_ids = set(self._velocity_events.keys()) - current_roi_ids
         for removed_roi_id in removed_roi_ids:
@@ -655,53 +659,54 @@ class KymAnalysis:
         return values
     
 
-    def run_stall_analysis(self, roi_id: int, params: StallAnalysisParams) -> StallAnalysis:
-        """Run stall analysis for a single ROI and store results.
-
-        This method is intentionally **on-demand**: it does not run automatically
-        when flow analysis is computed. A caller (GUI/script) supplies parameters and
-        explicitly requests stall detection once the underlying analysis values exist.
-
-        The source signal is selected via `params.velocity_key` (e.g. 'velocity',
-        'cleanVelocity', 'signedVelocity').
-
-        Args:
-            roi_id: Identifier of the ROI to analyze.
-            params: Stall analysis parameters.
-
-        Returns:
-            The computed `StallAnalysis` instance.
-
-        Raises:
-            ValueError: If the requested analysis values are missing for this ROI.
-        """
-        values = self.get_analysis_value(
-            roi_id=roi_id,
-            key=params.velocity_key,
-            remove_outliers=False,
-        )
-        if values is None:
-            raise ValueError(
-                f"Cannot run stall analysis: ROI {roi_id} has no analysis values for key '{params.velocity_key}'."
-            )
-
-        analysis = StallAnalysis.run(velocity=values, params=params)
-        self._stall_analysis[roi_id] = analysis
-        # Mark dirty so callers know there are unsaved results.
-        self._dirty = True
-        return analysis
-
-    def get_stall_analysis(self, roi_id: int) -> Optional[StallAnalysis]:
-        """Return stall analysis results for roi_id, or None if not present.
-
-        Args:
-            roi_id: Identifier of the ROI.
-
-        Returns:
-            Stored `StallAnalysis` results, or None if stall analysis has not been run
-            for this ROI (or results were not loaded).
-        """
-        return self._stall_analysis.get(roi_id)
+    # DEPRECATED: Stall analysis is deprecated
+    # def run_stall_analysis(self, roi_id: int, params: StallAnalysisParams) -> StallAnalysis:
+    #     """Run stall analysis for a single ROI and store results.
+    #
+    #     This method is intentionally **on-demand**: it does not run automatically
+    #     when flow analysis is computed. A caller (GUI/script) supplies parameters and
+    #     explicitly requests stall detection once the underlying analysis values exist.
+    #
+    #     The source signal is selected via `params.velocity_key` (e.g. 'velocity',
+    #     'cleanVelocity', 'signedVelocity').
+    #
+    #     Args:
+    #         roi_id: Identifier of the ROI to analyze.
+    #         params: Stall analysis parameters.
+    #
+    #     Returns:
+    #         The computed `StallAnalysis` instance.
+    #
+    #     Raises:
+    #         ValueError: If the requested analysis values are missing for this ROI.
+    #     """
+    #     values = self.get_analysis_value(
+    #         roi_id=roi_id,
+    #         key=params.velocity_key,
+    #         remove_outliers=False,
+    #     )
+    #     if values is None:
+    #         raise ValueError(
+    #             f"Cannot run stall analysis: ROI {roi_id} has no analysis values for key '{params.velocity_key}'."
+    #         )
+    #
+    #     analysis = StallAnalysis.run(velocity=values, params=params)
+    #     self._stall_analysis[roi_id] = analysis
+    #     # Mark dirty so callers know there are unsaved results.
+    #     self._dirty = True
+    #     return analysis
+    #
+    # def get_stall_analysis(self, roi_id: int) -> Optional[StallAnalysis]:
+    #     """Return stall analysis results for roi_id, or None if not present.
+    #
+    #     Args:
+    #         roi_id: Identifier of the ROI.
+    #
+    #     Returns:
+    #         Stored `StallAnalysis` results, or None if stall analysis has not been run
+    #         for this ROI (or results were not loaded).
+    #     """
+    #     return self._stall_analysis.get(roi_id)
 
     def run_velocity_event_analysis(
         self,

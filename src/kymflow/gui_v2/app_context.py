@@ -8,6 +8,7 @@ page application), state naturally persists across navigation without page reloa
 from __future__ import annotations
 
 import multiprocessing as mp
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -78,7 +79,11 @@ class AppContext:
         
         # Shared state instances
         self.app_state = AppState()
-        self.user_config = UserConfig.load()
+        user_config_path = os.getenv("KYMFLOW_USER_CONFIG_PATH")
+        if user_config_path:
+            self.user_config = UserConfig.load(config_path=Path(user_config_path))
+        else:
+            self.user_config = UserConfig.load()
         logger.info(f"User config loaded from: {self.user_config.path}")
         self.home_task = TaskState()
         self.batch_task = TaskState()

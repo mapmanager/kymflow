@@ -372,49 +372,50 @@ def plot_image_line_plotly(
         )
 
         # ------------------------------------------------------------------
-        # Stall analysis overlays (row=2: velocity vs time)
+        # DEPRECATED: Stall analysis is deprecated
+        # # Stall analysis overlays (row=2: velocity vs time)
+        # #
+        # # Stalls are stored on the KymAnalysis object (computed on-demand).
+        # # We map stall bin indices to time using analysis_time_values and draw
+        # # vertical rectangles spanning the full subplot height.
+        # # ------------------------------------------------------------------
+        # if selected_roi_id is not None:
+        #     stall_analysis = kym_analysis.get_stall_analysis(selected_roi_id)
+        # else:
+        #     stall_analysis = None
         #
-        # Stalls are stored on the KymAnalysis object (computed on-demand).
-        # We map stall bin indices to time using analysis_time_values and draw
-        # vertical rectangles spanning the full subplot height.
-        # ------------------------------------------------------------------
-        if selected_roi_id is not None:
-            stall_analysis = kym_analysis.get_stall_analysis(selected_roi_id)
-        else:
-            stall_analysis = None
-
-        if stall_analysis is not None and stall_analysis.stalls:
-            n_time = len(analysis_time_values)
-            for stall in stall_analysis.stalls:
-                if not (0 <= stall.bin_start < n_time and 0 <= stall.bin_stop < n_time):
-                    logger.warning(
-                        "Skipping out-of-range stall for ROI %s: [%s, %s] (time_len=%s)",
-                        selected_roi_id,
-                        stall.bin_start,
-                        stall.bin_stop,
-                        n_time,
-                    )
-                    continue
-
-                x0 = float(analysis_time_values[stall.bin_start])
-                x1 = float(analysis_time_values[stall.bin_stop])
-                if x1 < x0:
-                    x0, x1 = x1, x0
-
-                # Use yref='y2 domain' so rectangles span the full height of row=2.
-                fig.add_shape(
-                    type="rect",
-                    xref="x2",
-                    yref="y2 domain",
-                    x0=x0,
-                    x1=x1,
-                    y0=0,
-                    y1=1,
-                    fillcolor="cyan",
-                    opacity=0.25,
-                    line_width=0,
-                    layer="below",
-                )
+        # if stall_analysis is not None and stall_analysis.stalls:
+        #     n_time = len(analysis_time_values)
+        #     for stall in stall_analysis.stalls:
+        #         if not (0 <= stall.bin_start < n_time and 0 <= stall.bin_stop < n_time):
+        #             logger.warning(
+        #                 "Skipping out-of-range stall for ROI %s: [%s, %s] (time_len=%s)",
+        #                 selected_roi_id,
+        #                 stall.bin_start,
+        #                 stall.bin_stop,
+        #                 n_time,
+        #             )
+        #             continue
+        #
+        #         x0 = float(analysis_time_values[stall.bin_start])
+        #         x1 = float(analysis_time_values[stall.bin_stop])
+        #         if x1 < x0:
+        #             x0, x1 = x1, x0
+        #
+        #         # Use yref='y2 domain' so rectangles span the full height of row=2.
+        #         fig.add_shape(
+        #             type="rect",
+        #             xref="x2",
+        #             yref="y2 domain",
+        #             x0=x0,
+        #             x1=x1,
+        #             y0=0,
+        #             y1=1,
+        #             fillcolor="cyan",
+        #             opacity=0.25,
+        #             line_width=0,
+        #             layer="below",
+        #         )
     else:
         # No analysis data - show message
         fig.add_annotation(
@@ -539,9 +540,10 @@ def _add_single_roi_line_plot(
             col=1,
         )
 
-        # Add stall analysis overlays
-        logger.warning('turned of stall analysis plot')
-        if 0:
+        # DEPRECATED: Stall analysis is deprecated
+        # # Add stall analysis overlays
+        # logger.warning('turned of stall analysis plot')
+        if 0:  # DEPRECATED: Stall analysis is deprecated
             stall_analysis = kym_analysis.get_stall_analysis(roi_id)
             if stall_analysis is not None and stall_analysis.stalls:
                 n_time = len(analysis_time_values)

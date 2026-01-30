@@ -310,6 +310,9 @@ class UserConfig:
         payload = self.data.to_json_dict()
         logger.info('saving user_config to disk')
         # logger.info(f'payload: {payload}')
+        from pprint import pprint
+        pprint(payload, sort_dicts=False, indent=4)
+        
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def ensure_exists(self) -> None:
