@@ -50,15 +50,16 @@ def test_folder_controller_shows_dialog_when_dirty(
     controller = FolderController(app_state, bus, user_config=None)
 
     # Mock _show_unsaved_dialog to verify it's called
-    with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
-        with patch.object(controller, "_load_folder") as mock_load:
-            # Emit folder chosen event
-            new_folder = Path("/new/folder")
-            bus.emit(FolderChosen(folder=str(new_folder), depth=None))
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
+            with patch.object(controller, "_load_folder") as mock_load:
+                # Emit folder chosen event
+                new_folder = Path("/new/folder")
+                bus.emit(FolderChosen(folder=str(new_folder), depth=None))
 
-            # Verify dialog was called (not load_folder)
-            mock_dialog.assert_called_once_with(new_folder)
-            mock_load.assert_not_called()
+                # Verify dialog was called (not load_folder)
+                mock_dialog.assert_called_once_with(new_folder)
+                mock_load.assert_not_called()
 
 
 def test_folder_controller_loads_when_not_dirty(
@@ -74,15 +75,16 @@ def test_folder_controller_loads_when_not_dirty(
     controller = FolderController(app_state, bus, user_config=None)
 
     # Mock _load_folder to verify it's called
-    with patch.object(controller, "_load_folder") as mock_load:
-        with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
-            # Emit folder chosen event
-            new_folder = Path("/new/folder")
-            bus.emit(FolderChosen(folder=str(new_folder), depth=None))
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch.object(controller, "_load_folder") as mock_load:
+            with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
+                # Emit folder chosen event
+                new_folder = Path("/new/folder")
+                bus.emit(FolderChosen(folder=str(new_folder), depth=None))
 
-            # Should call _load_folder directly (no dialog)
-            mock_load.assert_called_once_with(new_folder)
-            mock_dialog.assert_not_called()
+                # Should call _load_folder directly (no dialog)
+                mock_load.assert_called_once_with(new_folder)
+                mock_dialog.assert_not_called()
 
 
 def test_folder_controller_cancel_blocks_folder_switch(
@@ -94,19 +96,20 @@ def test_folder_controller_cancel_blocks_folder_switch(
     controller = FolderController(app_state, bus, user_config=None)
 
     # Mock _show_unsaved_dialog to simulate cancel (dialog.close() called, but _confirm_switch_folder not called)
-    with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
-        with patch.object(controller, "_load_folder") as mock_load:
-            # Emit folder chosen event
-            new_folder = Path("/new/folder")
-            bus.emit(FolderChosen(folder=str(new_folder), depth=None))
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
+            with patch.object(controller, "_load_folder") as mock_load:
+                # Emit folder chosen event
+                new_folder = Path("/new/folder")
+                bus.emit(FolderChosen(folder=str(new_folder), depth=None))
 
-            # Verify dialog was shown
-            mock_dialog.assert_called_once_with(new_folder)
+                # Verify dialog was shown
+                mock_dialog.assert_called_once_with(new_folder)
 
-            # Simulate cancel: _confirm_switch_folder is NOT called
-            # (In real UI, user clicks Cancel button which just closes dialog)
-            # So _load_folder should NOT be called
-            mock_load.assert_not_called()
+                # Simulate cancel: _confirm_switch_folder is NOT called
+                # (In real UI, user clicks Cancel button which just closes dialog)
+                # So _load_folder should NOT be called
+                mock_load.assert_not_called()
 
 
 def test_folder_controller_confirm_proceeds_with_switch(
@@ -118,17 +121,51 @@ def test_folder_controller_confirm_proceeds_with_switch(
     controller = FolderController(app_state, bus, user_config=None)
 
     # Mock _load_folder to verify it's called on confirm
-    with patch.object(controller, "_load_folder") as mock_load:
-        # Mock _show_unsaved_dialog to simulate confirm
-        def simulate_confirm(folder: Path) -> None:
-            # Simulate user clicking "Switch folder" button
-            # This calls _confirm_switch_folder which calls _load_folder
-            controller._confirm_switch_folder(MagicMock(), folder)
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch.object(controller, "_load_folder") as mock_load:
+            # Mock _show_unsaved_dialog to simulate confirm
+            def simulate_confirm(folder: Path) -> None:
+                # Simulate user clicking "Switch folder" button
+                # This calls _confirm_switch_folder which calls _load_folder
+                controller._confirm_switch_folder(MagicMock(), folder)
 
-        with patch.object(controller, "_show_unsaved_dialog", side_effect=simulate_confirm):
-            # Emit folder chosen event
-            new_folder = Path("/new/folder")
-            bus.emit(FolderChosen(folder=str(new_folder), depth=None))
+            with patch.object(controller, "_show_unsaved_dialog", side_effect=simulate_confirm):
+                # Emit folder chosen event
+                new_folder = Path("/new/folder")
+                bus.emit(FolderChosen(folder=str(new_folder), depth=None))
 
-            # Verify _load_folder was called (folder switch proceeded)
-            mock_load.assert_called_once_with(new_folder)
+                # Verify _load_folder was called (folder switch proceeded)
+                mock_load.assert_called_once_with(new_folder)
+
+
+def test_folder_controller_does_not_persist_missing_folder(
+    bus: EventBus,
+) -> None:
+    """Ensure missing paths do not update user config."""
+    app_state = AppState()
+    user_config = MagicMock()
+    controller = FolderController(app_state, bus, user_config=user_config)
+
+    with patch("pathlib.Path.exists", return_value=False):
+        with patch("kymflow.gui_v2.controllers.folder_controller.ui.notify"):
+            bus.emit(FolderChosen(folder="/missing/folder", depth=None))
+
+    user_config.push_recent_folder.assert_not_called()
+
+
+def test_folder_controller_persists_valid_folder_after_guard(
+    bus: EventBus,
+) -> None:
+    """Ensure valid paths update user config after guard."""
+    app_state = AppState()
+    user_config = MagicMock()
+    controller = FolderController(app_state, bus, user_config=user_config)
+
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch.object(app_state, "load_folder") as mock_load:
+            folder_path = "/valid/folder"
+            bus.emit(FolderChosen(folder=folder_path, depth=7))
+
+            assert app_state.folder_depth == 7
+            mock_load.assert_called_once_with(Path(folder_path), depth=7)
+            user_config.push_recent_folder.assert_called_once_with(folder_path, depth=7)

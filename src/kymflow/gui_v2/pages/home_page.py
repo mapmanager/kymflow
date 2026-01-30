@@ -414,7 +414,7 @@ class HomePage(BasePage):
 
             # RIGHT: Main page content
             with splitter.after:
-                with ui.column().classes("w-full p-4 gap-4"):
+                with ui.column().classes("w-full h-full min-h-0 p-4 gap-4 flex flex-col"):
                     # Ensure setup is called once per client before building
                     self._ensure_setup()
                     # build() creates fresh UI elements in the new container context
@@ -443,13 +443,17 @@ class HomePage(BasePage):
         Selection restoration happens after the UI is created, but only once
         per client session to avoid overwriting user selections.
         """
-        # Folder selector FIRST (renders first in DOM)
-        initial_folder = self.context.app_state.folder or Path(".")
-        self._folder_view.render(initial_folder=initial_folder)
-
         # Splitter parameters (percentages, vertical layout). Tweak these as needed.
-        file_plot_splitter = {"value": 15, "limits": (0, 60)}
-        plot_event_splitter = {"value": 50, "limits": (30, 90)}
+        file_plot_splitter = {"value": 15.0, "limits": (0, 60)}
+        plot_event_splitter = {"value": 50.0, "limits": (30, 90)}
+
+        user_config = self.context.user_config
+        if user_config is not None:
+            saved_file_plot, saved_plot_event = user_config.get_home_splitter_positions()
+            min_fp, max_fp = file_plot_splitter["limits"]
+            min_pe, max_pe = plot_event_splitter["limits"]
+            file_plot_splitter["value"] = max(min_fp, min(max_fp, saved_file_plot))
+            plot_event_splitter["value"] = max(min_pe, min(max_pe, saved_plot_event))
         # Remember last open sizes for double-click min/max toggles.
         file_plot_last = {"value": file_plot_splitter["value"]}
         plot_event_last = {"value": plot_event_splitter["value"]}
@@ -458,11 +462,24 @@ class HomePage(BasePage):
         # with ui.expansion("Files", value=True).classes("w-full"):
         if 1:
             # Splitter between file table (top) and plot/event area (bottom).
+            plot_splitter_ref: dict[str, ui.splitter | None] = {"value": None}
+
+            def _update_splitter_positions() -> None:
+                if user_config is None:
+                    return
+                file_val = float(file_plot_splitter_ui.value)
+                plot_splitter = plot_splitter_ref["value"]
+                if plot_splitter is None:
+                    plot_val = float(plot_event_splitter["value"])
+                else:
+                    plot_val = float(plot_splitter.value)
+                user_config.set_home_splitter_positions(file_val, plot_val)
+
             with ui.splitter(
                 value=file_plot_splitter["value"],
                 limits=file_plot_splitter["limits"],
                 horizontal=True,
-            ).classes("w-full flex-grow min-h-0") as file_plot_splitter_ui:
+            ).classes("w-full flex-1 min-h-0") as file_plot_splitter_ui:
                 def _toggle_file_plot_splitter() -> None:
                     """Double-click: snap file/plot splitter to min/max with memory."""
                     min_val, max_val = file_plot_splitter["limits"]
@@ -471,7 +488,8 @@ class HomePage(BasePage):
                         file_plot_splitter_ui.value = min_val
                     else:
                         file_plot_splitter_ui.value = file_plot_last["value"] or max_val
-                # TOP: File table
+                    _update_splitter_positions()
+                # TOP: Folder controls + file table
                 with file_plot_splitter_ui.before:
                     # with ui.column().classes("w-full h-full min-w-0 overflow-x-auto"):
 
@@ -480,6 +498,9 @@ class HomePage(BasePage):
 
                     # abb 20260129 trying to fix custom table so it is top aligned
                     with ui.column().classes("w-full h-full min-w-0 overflow-x-auto items-start justify-start"):
+                        # Folder selector FIRST (renders first in DOM)
+                        initial_folder = self.context.app_state.folder or Path(".")
+                        self._folder_view.render(initial_folder=initial_folder)
 
                         self._table_view.render()
                         # abb 20260129 gpt, everything inside must also respect min-h-0 if it’s a flex child
@@ -504,7 +525,8 @@ class HomePage(BasePage):
                         value=plot_event_splitter["value"],
                         limits=plot_event_splitter["limits"],
                         horizontal=True,
-                    ).classes("w-full flex-grow min-h-0") as plot_splitter:
+                    ).classes("w-full flex-1 min-h-0") as plot_splitter:
+                        plot_splitter_ref["value"] = plot_splitter
                         def _toggle_plot_event_splitter() -> None:
                             """Double-click: snap plot/event splitter to min/max with memory."""
                             min_val, max_val = plot_event_splitter["limits"]
@@ -513,6 +535,7 @@ class HomePage(BasePage):
                                 plot_splitter.value = min_val
                             else:
                                 plot_splitter.value = plot_event_last["value"] or max_val
+                            _update_splitter_positions()
                         # TOP: Image/line viewer
                         with plot_splitter.before:
                             self._image_line_viewer.render()
@@ -540,15 +563,25 @@ class HomePage(BasePage):
 
                         # Draw a small visual handle on the nested splitter separator.
                         with plot_splitter.separator:
-                            ui.element("div").classes("splitter_handle").on(
-                                "dblclick", lambda _e: _toggle_plot_event_splitter()
-                            )
+                            handle = ui.element("div").classes("splitter_handle")
+                            handle.on("dblclick", lambda _e: _toggle_plot_event_splitter())
+
+                        plot_splitter.on(
+                            "update:model-value",
+                            _update_splitter_positions,
+                            throttle=0.2,
+                        )
 
                 # Draw a small visual handle on the file/plot splitter separator.
                 with file_plot_splitter_ui.separator:
-                    ui.element("div").classes("splitter_handle").on(
-                        "dblclick", lambda _e: _toggle_file_plot_splitter()
-                    )
+                    handle = ui.element("div").classes("splitter_handle")
+                    handle.on("dblclick", lambda _e: _toggle_file_plot_splitter())
+
+                file_plot_splitter_ui.on(
+                    "update:model-value",
+                    _update_splitter_positions,
+                    throttle=0.2,
+                )
 
         # Restore selection once per client (after UI is created)
         if not self._restored_once:

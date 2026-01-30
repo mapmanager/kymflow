@@ -187,3 +187,18 @@ def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Pat
     assert isinstance(emitted, FolderChosen)
     assert emitted.folder == str(dev_folder)
     assert emitted.depth is None  # Dev folder doesn't specify depth
+
+
+def test_main_registers_shutdown_handlers(monkeypatch) -> None:
+    """main() should register shutdown handlers before ui.run()."""
+    app_module = _load_app_module(monkeypatch)
+    monkeypatch.setattr(app_module, "_warm_mpl_font_cache_once", lambda: None)
+    monkeypatch.setattr(app_module, "DEFAULT_PORT", 9999)
+
+    install_mock = MagicMock()
+    monkeypatch.setattr(app_module, "install_shutdown_handlers", install_mock)
+    monkeypatch.setattr(app_module.ui, "run", lambda **_kwargs: None)
+
+    app_module.main(native=True)
+
+    install_mock.assert_called_once_with(app_module.context)

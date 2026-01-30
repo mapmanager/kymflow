@@ -7,6 +7,10 @@ from pathlib import Path
 from kymflow.core.user_config import (
     DEFAULT_FOLDER_DEPTH,
     DEFAULT_WINDOW_RECT,
+    DEFAULT_HOME_FILE_PLOT_SPLITTER,
+    DEFAULT_HOME_PLOT_EVENT_SPLITTER,
+    HOME_FILE_PLOT_SPLITTER_RANGE,
+    HOME_PLOT_EVENT_SPLITTER_RANGE,
     SCHEMA_VERSION,
     UserConfig,
 )
@@ -20,6 +24,10 @@ def test_load_defaults_when_missing(tmp_path: Path) -> None:
     assert cfg.get_recent_folders() == []
     assert cfg.get_last_folder() == ("", DEFAULT_FOLDER_DEPTH)
     assert cfg.get_window_rect() == tuple(DEFAULT_WINDOW_RECT)
+    assert cfg.get_home_splitter_positions() == (
+        DEFAULT_HOME_FILE_PLOT_SPLITTER,
+        DEFAULT_HOME_PLOT_EVENT_SPLITTER,
+    )
     assert not cfg_path.exists()
 
 
@@ -43,6 +51,7 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     cfg.push_recent_folder("/tmp/a", depth=2)
     cfg.push_recent_folder("/tmp/b", depth=3)
     cfg.set_window_rect(1, 2, 3, 4)
+    cfg.set_home_splitter_positions(12.5, 61.0)
     cfg.save()
 
     cfg2 = UserConfig.load(config_path=cfg_path)
@@ -52,6 +61,7 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     assert recents[0][1] == 3
     assert recents[1][1] == 2
     assert cfg2.get_window_rect() == (1, 2, 3, 4)
+    assert cfg2.get_home_splitter_positions() == (12.5, 61.0)
 
 
 def test_push_recent_moves_to_front_and_updates_depth(tmp_path: Path) -> None:
@@ -69,6 +79,20 @@ def test_push_recent_moves_to_front_and_updates_depth(tmp_path: Path) -> None:
     assert recents[1][1] == 3
 
     assert cfg.get_last_folder() == (str(Path("/tmp/a").resolve(strict=False)), 5)
+
+
+def test_set_last_folder_does_not_reorder_recents(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+
+    cfg.push_recent_folder("/tmp/a", depth=2)
+    cfg.push_recent_folder("/tmp/b", depth=3)
+    cfg.set_last_folder("/tmp/a", depth=9)
+
+    recents = cfg.get_recent_folders()
+    assert recents[0][0] == str(Path("/tmp/b").resolve(strict=False))
+    assert recents[1][0] == str(Path("/tmp/a").resolve(strict=False))
+    assert cfg.get_last_folder() == (str(Path("/tmp/a").resolve(strict=False)), 9)
 
 
 def test_get_depth_for_folder_falls_back_to_default(tmp_path: Path) -> None:
@@ -117,3 +141,14 @@ def test_schema_mismatch_without_reset_keeps_data_but_updates_version(tmp_path: 
     assert cfg.data.schema_version == SCHEMA_VERSION
     assert cfg.get_recent_folders()[0][1] == 2
     assert cfg.get_window_rect() == (9, 9, 9, 9)
+
+
+def test_splitter_positions_are_clamped(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+
+    cfg.set_home_splitter_positions(-10.0, 200.0)
+    file_plot, plot_event = cfg.get_home_splitter_positions()
+
+    assert file_plot == HOME_FILE_PLOT_SPLITTER_RANGE[0]
+    assert plot_event == HOME_PLOT_EVENT_SPLITTER_RANGE[1]

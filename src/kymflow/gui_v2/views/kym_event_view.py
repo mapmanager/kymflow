@@ -72,10 +72,10 @@ def _default_columns() -> list[ColumnConfig]:
             choices=[v.value for v in UserType],
         ),
         _col("event_type", "Type", width=160),
-        _col("t_start", "t_start", width=110, cell_class="ag-cell-right"),
-        _col("t_end", "t_end", width=110, cell_class="ag-cell-right"),
-        _col("duration_sec", "duration_sec", width=110, cell_class="ag-cell-right"),
-        _col("strength", "strength", width=110, cell_class="ag-cell-right"),
+        _col("t_start", "Start (s)", width=110, cell_class="ag-cell-right"),
+        _col("t_end", "Stop (s)", width=110, cell_class="ag-cell-right"),
+        _col("duration_sec", "Dur (s)", width=110, cell_class="ag-cell-right"),
+        _col("strength", "Strength", width=110, cell_class="ag-cell-right"),
         _col("event_id", "event_id", hide=True),
         _col("path", "path", hide=True),
     ]
@@ -126,7 +126,7 @@ class KymEventView:
         """Create the grid UI inside the current container."""
         self._grid = None
         self._grid_container = None  # pyinstaller event table
-        with ui.row().classes("w-full items-center gap-2"):
+        with ui.row().classes("w-full h-full min-h-0 min-w-0 items-stretch gap-2"):
             with ui.column().classes("w-40 shrink-0"):
                 ui.label("Event Controls").classes("text-sm text-gray-500")
                 self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
@@ -157,8 +157,10 @@ class KymEventView:
                 self._update_range_button_state()
                 self._update_add_delete_button_state()
 
-            with ui.column().classes("grow"):
-                self._grid_container = ui.column().classes("w-full")  # pyinstaller event table
+            with ui.column().classes("flex-1 min-h-0 min-w-0 flex flex-col"):
+                self._grid_container = ui.column().classes(
+                    "w-full h-full min-h-0 flex flex-col overflow-hidden"
+                )  # pyinstaller event table
                 self._create_grid(self._pending_rows)
 
     def _create_grid(self, rows: Rows) -> None:
@@ -171,18 +173,20 @@ class KymEventView:
             # height="16rem",
             row_id_field="event_id",
             show_row_index=True,
+            zebra_rows=False,
+            hover_highlight=False,
         )
-        with self._grid_container:
-            logger.debug(f'pyinstaller instantiating CustomAgGrid_v2(rows={len(rows)})')
-            if 1:
-                self._grid = CustomAgGrid_v2(
-                    data=rows,
-                    columns=_default_columns(),
-                    grid_config=grid_cfg,
-                    runtimeWidgetName="KymEventTableView",
-                )
-                self._grid.on_row_selected(self._on_row_selected)
-                self._grid.on_cell_edited(self._on_cell_edited)
+        logger.debug(f'pyinstaller instantiating CustomAgGrid_v2(rows={len(rows)})')
+        if 1:
+            self._grid = CustomAgGrid_v2(
+                data=rows,
+                columns=_default_columns(),
+                grid_config=grid_cfg,
+                parent=self._grid_container,
+                runtimeWidgetName="KymEventTableView",
+            )
+            self._grid.on_row_selected(self._on_row_selected)
+            self._grid.on_cell_edited(self._on_cell_edited)
 
     def _set_zoom_enabled(self, value: bool) -> None:
         self._zoom_enabled = value

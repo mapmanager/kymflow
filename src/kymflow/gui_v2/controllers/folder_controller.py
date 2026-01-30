@@ -70,6 +70,9 @@ class FolderController:
             self._app_state.folder_depth = e.depth
 
         folder = Path(e.folder)
+        if not folder.exists():
+            ui.notify(f"Folder does not exist: {folder}", type="warning")
+            return
         if self._app_state.files and self._app_state.files.any_dirty_analysis():
             self._show_unsaved_dialog(folder)
             return
@@ -81,7 +84,6 @@ class FolderController:
         self._app_state.load_folder(folder, depth=self._app_state.folder_depth)
         if self._user_config is not None:
             self._user_config.push_recent_folder(str(folder), depth=self._app_state.folder_depth)
-            self._user_config.save()
 
     def _show_unsaved_dialog(self, folder: Path) -> None:
         """Prompt before switching folders if unsaved changes exist."""

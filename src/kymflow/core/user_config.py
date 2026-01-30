@@ -39,6 +39,10 @@ SCHEMA_VERSION: int = 1
 # Defaults
 DEFAULT_FOLDER_DEPTH: int = 1
 DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
+DEFAULT_HOME_FILE_PLOT_SPLITTER: float = 15.0
+DEFAULT_HOME_PLOT_EVENT_SPLITTER: float = 50.0
+HOME_FILE_PLOT_SPLITTER_RANGE: tuple[float, float] = (0.0, 60.0)
+HOME_PLOT_EVENT_SPLITTER_RANGE: tuple[float, float] = (30.0, 90.0)
 MAX_RECENTS: int = 15
 
 
@@ -51,6 +55,10 @@ def _normalize_folder_path(path: str | Path) -> str:
     except Exception:
         pass
     return str(p)
+
+
+def _clamp_float(value: float, min_value: float, max_value: float) -> float:
+    return max(min_value, min(max_value, value))
 
 
 @dataclass
@@ -84,6 +92,10 @@ class UserConfigData:
 
     # Fallback depth when a folder hasn't been seen before.
     default_folder_depth: int = DEFAULT_FOLDER_DEPTH
+
+    # Home page splitter positions (percentages).
+    home_file_plot_splitter: float = DEFAULT_HOME_FILE_PLOT_SPLITTER
+    home_plot_event_splitter: float = DEFAULT_HOME_PLOT_EVENT_SPLITTER
 
     def to_json_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -143,12 +155,26 @@ class UserConfigData:
         except Exception:
             default_folder_depth = DEFAULT_FOLDER_DEPTH
 
+        # home splitter positions
+        hfps = d.get("home_file_plot_splitter", DEFAULT_HOME_FILE_PLOT_SPLITTER)
+        hpse = d.get("home_plot_event_splitter", DEFAULT_HOME_PLOT_EVENT_SPLITTER)
+        try:
+            home_file_plot_splitter = float(hfps)
+        except Exception:
+            home_file_plot_splitter = DEFAULT_HOME_FILE_PLOT_SPLITTER
+        try:
+            home_plot_event_splitter = float(hpse)
+        except Exception:
+            home_plot_event_splitter = DEFAULT_HOME_PLOT_EVENT_SPLITTER
+
         return cls(
             schema_version=schema_version,
             recent_folders=recent_folders,
             last_folder=LastFolder(path=last_path, depth=last_depth),
             window_rect=window_rect,
             default_folder_depth=default_folder_depth,
+            home_file_plot_splitter=home_file_plot_splitter,
+            home_plot_event_splitter=home_plot_event_splitter,
         )
 
 
@@ -257,6 +283,27 @@ class UserConfig:
         if not (isinstance(data.window_rect, list) and len(data.window_rect) == 4):
             data.window_rect = list(DEFAULT_WINDOW_RECT)
 
+        # Normalize home splitter positions
+        try:
+            data.home_file_plot_splitter = float(data.home_file_plot_splitter)
+        except Exception:
+            data.home_file_plot_splitter = DEFAULT_HOME_FILE_PLOT_SPLITTER
+        try:
+            data.home_plot_event_splitter = float(data.home_plot_event_splitter)
+        except Exception:
+            data.home_plot_event_splitter = DEFAULT_HOME_PLOT_EVENT_SPLITTER
+
+        data.home_file_plot_splitter = _clamp_float(
+            data.home_file_plot_splitter,
+            HOME_FILE_PLOT_SPLITTER_RANGE[0],
+            HOME_FILE_PLOT_SPLITTER_RANGE[1],
+        )
+        data.home_plot_event_splitter = _clamp_float(
+            data.home_plot_event_splitter,
+            HOME_PLOT_EVENT_SPLITTER_RANGE[0],
+            HOME_PLOT_EVENT_SPLITTER_RANGE[1],
+        )
+
     def save(self) -> None:
         """Write config to disk."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -288,6 +335,34 @@ class UserConfig:
         self.data.recent_folders.insert(0, RecentFolder(path=p, depth=depth_int))
         self.data.recent_folders = self.data.recent_folders[:MAX_RECENTS]
 
+    def prune_missing_folders(self) -> int:
+        """Remove recent/last folders that no longer exist on disk."""
+        removed = 0
+        kept: List[RecentFolder] = []
+        for rf in self.data.recent_folders:
+            try:
+                exists = Path(rf.path).expanduser().exists()
+            except Exception:
+                exists = False
+            if exists:
+                kept.append(rf)
+            else:
+                removed += 1
+        if removed:
+            self.data.recent_folders = kept
+
+        last_path = self.data.last_folder.path
+        if last_path:
+            try:
+                last_exists = Path(last_path).expanduser().exists()
+            except Exception:
+                last_exists = False
+            if not last_exists:
+                self.data.last_folder = LastFolder(path="", depth=DEFAULT_FOLDER_DEPTH)
+                removed += 1
+
+        return removed
+
     def get_recent_folders(self) -> List[Tuple[str, int]]:
         """Return recent folders as list of (path, depth)."""
         return [(rf.path, int(rf.depth)) for rf in self.data.recent_folders]
@@ -307,8 +382,32 @@ class UserConfig:
                 return int(rf.depth)
         return int(self.data.default_folder_depth)
 
+    def get_home_splitter_positions(self) -> tuple[float, float]:
+        """Return (file_plot_splitter, plot_event_splitter)."""
+        return (
+            float(self.data.home_file_plot_splitter),
+            float(self.data.home_plot_event_splitter),
+        )
+
+    def set_home_splitter_positions(self, file_plot: float, plot_event: float) -> None:
+        self.data.home_file_plot_splitter = _clamp_float(
+            float(file_plot),
+            HOME_FILE_PLOT_SPLITTER_RANGE[0],
+            HOME_FILE_PLOT_SPLITTER_RANGE[1],
+        )
+        self.data.home_plot_event_splitter = _clamp_float(
+            float(plot_event),
+            HOME_PLOT_EVENT_SPLITTER_RANGE[0],
+            HOME_PLOT_EVENT_SPLITTER_RANGE[1],
+        )
+
     def set_default_folder_depth(self, depth: int) -> None:
         self.data.default_folder_depth = int(depth)
+
+    def set_last_folder(self, folder_path: str | Path, *, depth: int) -> None:
+        """Update last_folder without reordering recents."""
+        p = _normalize_folder_path(folder_path)
+        self.data.last_folder = LastFolder(path=p, depth=int(depth))
 
     # -----------------------------
     # Public API: window geometry

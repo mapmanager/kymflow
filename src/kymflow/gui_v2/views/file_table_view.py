@@ -137,6 +137,8 @@ class FileTableView:
             # height="24rem",
             row_id_field="path",
             show_row_index=True,
+            zebra_rows=False,
+            hover_highlight=False,
         )
         # if hasattr(grid_cfg, "row_id_field"):
         #     setattr(grid_cfg, "row_id_field", "path")
@@ -147,7 +149,9 @@ class FileTableView:
         # self._grid_container = ui.column().classes("w-full h-full min-w-0 overflow-x-auto")
         # self._grid_container = ui.column().classes("w-full h-full")
         # abb 20260129 trying to fix custom table so it is top aligned
-        self._grid_container = ui.column().classes("w-full h-full min-h-0 items-start justify-start")
+        self._grid_container = ui.column().classes(
+            "w-full h-full min-h-0 min-w-0 overflow-hidden flex flex-col"
+        )
         self._create_grid(self._pending_rows, grid_cfg)
         self._update_interaction_state()
 
@@ -155,15 +159,15 @@ class FileTableView:
         """Create a fresh grid instance inside the current container."""
         if self._grid_container is None:
             return
-        with self._grid_container:
-            self._grid = CustomAgGrid_v2(
-                data=rows,
-                columns=_default_columns(),
-                grid_config=grid_cfg,
-                runtimeWidgetName="FileTableView",
-            )
-            self._grid.on_row_selected(self._on_row_selected)
-            self._grid.on_cell_edited(self._on_cell_edited)
+        self._grid = CustomAgGrid_v2(
+            data=rows,
+            columns=_default_columns(),
+            grid_config=grid_cfg,
+            parent=self._grid_container,
+            runtimeWidgetName="FileTableView",
+        )
+        self._grid.on_row_selected(self._on_row_selected)
+        self._grid.on_cell_edited(self._on_cell_edited)
 
     def set_files(self, files: Iterable[KymImage]) -> None:
         """Update table contents from KymImage list."""

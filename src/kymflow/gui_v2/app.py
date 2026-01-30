@@ -67,6 +67,7 @@ from nicegui import ui
 
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.gui_v2.app_context import AppContext
+from kymflow.gui_v2.shutdown_handlers import install_shutdown_handlers
 from kymflow.gui_v2.config import DEFAULT_PORT, STORAGE_SECRET
 from kymflow.gui_v2.navigation import inject_global_styles
 
@@ -264,6 +265,8 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
 
     reload = False
     native = True
+    install_shutdown_handlers(context)
+
     ui.run(
         port=DEFAULT_PORT,
         reload=reload,
