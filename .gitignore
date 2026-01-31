@@ -31,3 +31,8 @@ build/
 dist/
 
 kym_file_v0.py
+
+# code coverage
+.coverage
+coverage-core.xml
+coverage-gui_v2.xml
