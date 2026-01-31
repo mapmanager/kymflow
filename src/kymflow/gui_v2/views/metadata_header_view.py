@@ -209,13 +209,13 @@ class MetadataHeaderView:
             widget: The widget that triggered the update.
         """
         if not self._current_file:
-            logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
+            # logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
             return
 
         # Get value from widget
         value = widget.value
 
-        logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
+        # logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
 
         # Parse value based on field type (some header fields are lists)
         # For now, we'll pass the string value and let update_header() handle parsing

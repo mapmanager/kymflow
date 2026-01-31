@@ -88,7 +88,8 @@ class FolderController:
     def _show_unsaved_dialog(self, folder: Path) -> None:
         """Prompt before switching folders if unsaved changes exist."""
         with ui.dialog() as dialog, ui.card():
-            ui.label("Unsaved changes").classes("text-lg font-semibold")
+            ui.label("Unsaved changes in folder").classes("text-lg font-semibold")
+            ui.label(f"folder: {folder}").classes("text-sm")
             ui.label(
                 "Analysis/metadata edits are not saved. "
                 "If you switch folders now, those changes will be lost."

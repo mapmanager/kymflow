@@ -27,6 +27,7 @@ class AboutTabView:
 
     def render(self) -> None:
         """Create the About tab UI inside the current container."""
+        
         # Version information card
         version_info = getVersionInfo_gui()
         # with ui.card().classes("w-full p-4 gap-2"):
@@ -34,8 +35,8 @@ class AboutTabView:
             ui.label("Version info").classes("text-lg font-semibold")
             for key, value in version_info.items():
                 with ui.row().classes("items-center gap-2"):
-                    ui.label(f"{key}:").classes("text-sm text-gray-500")
-                    ui.label(str(value)).classes("text-sm")
+                    ui.label(f"{key}:").classes("text-gray-500")
+                    ui.label(str(value))
 
         # Log file viewer
         log_path = get_log_file_path()

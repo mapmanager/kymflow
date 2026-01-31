@@ -59,6 +59,15 @@ def run_flow_analysis(
         on_result: Optional callback invoked on successful completion.
             Runs on the NiceGUI main loop.
     """
+
+    # check if we have v0 analysis and do not run new analysis
+    # never allow new analysis on old v0 velocity
+    # in gui, we should never get here, button 'analyze flow' has guard
+    ka = kym_file.get_kym_analysis()
+    if ka.has_v0_flow_analysis(roi_id):
+        logger.warning(f"ROI {roi_id} already has v0 analysis, cannot run new analysis")
+        return
+
     # Validate roi_id early, while we still have UI context.
     if roi_id is None:
         task_state.set_running(True)

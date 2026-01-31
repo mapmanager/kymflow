@@ -77,6 +77,11 @@ class AppContext:
             
         logger.info("Initializing AppContext singleton")
         
+        # configure default classes
+        logger.info('setting default_classes() to specify style of all ui elements')
+        ui.label.default_classes("text-sm select-text")
+        
+
         # Shared state instances
         self.app_state = AppState()
         user_config_path = os.getenv("KYMFLOW_USER_CONFIG_PATH")

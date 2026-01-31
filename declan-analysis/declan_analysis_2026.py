@@ -136,7 +136,12 @@ def analyze_flow(path: str, depth:int) -> None:
         # save analysis
         success = kymImage.get_kym_analysis().save_analysis()
 
-        
+
+def test_import_v0():
+    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v0-analysis/14d Saline/20251014/20251014_A98_0002.tif'
+    kymImage = KymImage(path)
+    print(kymImage)
+
 if __name__ == "__main__":
     setup_logging()
 
@@ -156,6 +161,8 @@ if __name__ == "__main__":
     # depreciated 20260130
     # analyze_stalls(path)
     
-    analyze_velocity_events(path, depth)
+    #analyze_velocity_events(path, depth)
     
     # plot_analysis(path)
+
+    test_import_v0()

@@ -190,7 +190,7 @@ class KymEventView:
 
     def _create_grid(self, rows: Rows) -> None:
         """Create a fresh grid instance inside the current container."""
-        logger.debug(f'pyinstaller num rows={len(rows)}')
+        # logger.debug(f'pyinstaller num rows={len(rows)}')
         if self._grid_container is None:
             return
         grid_cfg = GridConfig(

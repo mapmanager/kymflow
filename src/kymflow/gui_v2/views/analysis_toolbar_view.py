@@ -10,6 +10,7 @@ by AnalysisToolbarBindings).
 from __future__ import annotations
 
 from typing import Callable, Optional
+from pathlib import Path
 
 from nicegui import ui
 
@@ -336,13 +337,17 @@ class AnalysisToolbarView:
 
     def _on_start_click(self) -> None:
         """Handle Analyze Flow button click."""
+        
+        # if never taken
         if self._window_select is None:
             return
 
         window_value = self._window_select.value
+        # if never taken
         if window_value is None:
             return
 
+        # window value can always be cast int()
         try:
             window_size = int(window_value)
         except (ValueError, TypeError):
@@ -360,6 +365,7 @@ class AnalysisToolbarView:
             return
 
         # Check for existing analysis on the selected ROI
+        # this will never except
         try:
             has_analysis = self._current_file.get_kym_analysis().has_analysis(
                 self._current_roi_id
@@ -368,7 +374,6 @@ class AnalysisToolbarView:
             has_analysis = False
 
         if has_analysis:
-            from pathlib import Path
 
             file_stem = (
                 Path(self._current_file.path).stem
@@ -376,6 +381,28 @@ class AnalysisToolbarView:
                 else "unknown file"
             )
             roi_id = self._current_roi_id
+
+            # check if we have v0 flow analysis and do not allow analysis
+            ka = self._current_file.get_kym_analysis()
+            if ka.has_v0_flow_analysis(roi_id):
+                # raise ValueError(f"ROI {roi_id} already has v0 analysis, cannot run new analysis")
+                logger.warning(f"ROI {roi_id} already has v0 analysis, cannot run new analysis")
+                
+                
+                with ui.dialog() as dialog, ui.card():
+                    ui.label("Not allowed to analyze flow").classes("text-lg font-semibold")
+                    ui.label(
+                        f"{file_stem} roi {roi_id} already has v0 flow analysis"
+                    ).classes("text-sm")
+                    with ui.row():
+                        ui.button("OK", on_click=dialog.close).props("outline")
+                        # ui.button(
+                        #     "Proceed",
+                        #     on_click=lambda: self._confirm_start_analysis(dialog, window_size),
+                        # )
+
+                dialog.open()
+                return
 
             with ui.dialog() as dialog, ui.card():
                 ui.label("Analysis already exists").classes("text-lg font-semibold")
@@ -451,6 +478,23 @@ class AnalysisToolbarView:
         except Exception:
             pass
         
+        # check if we have v0 analysis and do not allow delete
+        ka = self._current_file.get_kym_analysis()
+        _roiID = self._current_roi_id
+        if ka.has_v0_flow_analysis(_roiID):
+            logger.warning(f"ROI {_roiID} already has v0 analysis, cannot run new analysis")
+            
+            with ui.dialog() as dialog, ui.card():
+                ui.label("Not allowed to delete ROI").classes("text-lg font-semibold")
+                ui.label(
+                    f"{self._current_file.path.stem} roi {_roiID} has v0 flow analysis"
+                ).classes("text-sm")
+                with ui.row():
+                    ui.button("OK", on_click=dialog.close).props("outline")
+
+                dialog.open()
+                return
+
         # Build warning message
         warnings = ["This will delete the ROI"]
         if has_analysis:

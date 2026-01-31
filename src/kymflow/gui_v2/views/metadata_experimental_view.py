@@ -194,13 +194,13 @@ class MetadataExperimentalView:
             widget: The widget that triggered the update.
         """
         if not self._current_file:
-            logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
+            # logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
             return
 
         # Get value from widget
         value = widget.value
 
-        logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
+        # logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
 
         # Emit intent event
         self._on_metadata_update(

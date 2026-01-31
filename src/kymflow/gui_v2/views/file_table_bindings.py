@@ -106,7 +106,7 @@ class FileTableBindings:
         # Always sync selection from AppState, even if origin was FILE_TABLE.
         # This prevents selection loss when the table is rebuilt during UI updates.
 
-        logger.debug(f'pyinstaller FileSelection e={e}')
+        # logger.debug(f'pyinstaller FileSelection e={e}')
 
         # Track currently selected file path for restoration after metadata updates
         if e.file is None:
@@ -130,7 +130,7 @@ class FileTableBindings:
         Simply refreshes the table data to show updated metadata (e.g., analysis status),
         while preserving the currently selected file from AppState.
         """
-        logger.debug(f'pyinstaller e={e}')
+        # logger.debug(f'pyinstaller e={e}')
         self._refresh_rows_preserve_selection()
 
     def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
@@ -154,7 +154,7 @@ class FileTableBindings:
             if hasattr(self._app_state.selected_file, "path"):
                 selected_path = str(self._app_state.selected_file.path)
         
-        logger.debug(f'pyinstaller selected_path={selected_path}')
+        # logger.debug(f'pyinstaller selected_path={selected_path}')
         # Refresh the table rows (this clears selection in the grid)
         safe_call(self._table.refresh_rows)
         

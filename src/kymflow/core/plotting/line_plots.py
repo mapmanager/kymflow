@@ -993,7 +993,7 @@ def plot_image_line_plotly_v3(
     num_line_plots = len(selected_roi_id) if selected_roi_id is not None else 0
     num_rows = 1 + num_line_plots
     
-    logger.debug(f'pyinstaller hard coding num_line_plots=1 num_rows=2')
+    # logger.debug(f'pyinstaller hard coding num_line_plots=1 num_rows=2')
     num_line_plots = 1
     num_rows = 2
 

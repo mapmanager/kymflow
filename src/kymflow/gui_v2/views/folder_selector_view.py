@@ -134,6 +134,14 @@ class FolderSelectorView:
             if not selected_path:
                 return
             
+            # Skip if this folder is already loaded (prevents double-load on app startup)
+            # When set_folder_from_state() programmatically sets the dropdown value,
+            # it triggers on_change, but we don't want to reload if it's already loaded
+            current_folder = self._app_state.folder
+            if current_folder is not None and str(current_folder) == selected_path:
+                logger.debug(f"Skipping recent folder selection - folder already loaded: {selected_path}")
+                return
+            
             # Verify path exists
             folder_path = Path(selected_path)
             if not folder_path.exists():
@@ -239,4 +247,8 @@ class FolderSelectorView:
         if self._recent_select is not None:
             options = getattr(self._recent_select, "options", None)
             if options and str(self._current_folder) in options:
-                self._recent_select.set_value(str(self._current_folder))
+                # Only set value if it's different to avoid triggering on_change callback
+                # This prevents double-loading when syncing UI after folder load
+                current_value = getattr(self._recent_select, "value", None)
+                if current_value != str(self._current_folder):
+                    self._recent_select.set_value(str(self._current_folder))

@@ -24,6 +24,7 @@ import pandas as pd
 from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers_sd, _removeOutliers_analyzeflow
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.image_loaders.roi import ROI
 
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
@@ -195,6 +196,13 @@ class KymAnalysis:
         """Return analysis metadata for roi_id, or None if not analyzed."""
         return self._analysis_metadata.get(roi_id)
 
+    def has_v0_flow_analysis(self, roi_id:int) -> bool:
+        """Return True if roi has been analyzed (and imported) with v0 analysis.
+        """
+        amd = self.get_analysis_metadata(roi_id)
+        has_v0 = amd is not None and amd.algorithm == "mpRadon_v0"
+        return has_v0
+
     def is_stale(self, roi_id: int) -> bool:
         """Return True if roi_id is missing analysis or ROI has changed since analysis."""
         roi = self.acq_image.rois.get(roi_id)
@@ -292,6 +300,7 @@ class KymAnalysis:
             ValueError: If roi_id is not found or window_size is invalid.
             FlowCancelled: If analysis is cancelled via is_cancelled callback.
         """
+
         roi = self.acq_image.rois.get(roi_id)
         if roi is None:
             raise ValueError(f"ROI {roi_id} not found")
@@ -351,35 +360,37 @@ class KymAnalysis:
         drew_velocity = (um_per_pixel / seconds_per_line) * np.tan(_rad)
         drew_velocity = drew_velocity / 1000  # mm/s
         
-        # Apply filtering
-        clean_velocity = _removeOutliers_sd(drew_velocity)
-        clean_velocity = _medianFilter(clean_velocity, window_size=5)
+        roi_df = self._make_velocity_df(drew_velocity, drew_time, roi)
+
+        # # Apply filtering
+        # clean_velocity = _removeOutliers_sd(drew_velocity)
+        # clean_velocity = _medianFilter(clean_velocity, window_size=3)
         
-        # Create DataFrame for this ROI's analysis
-        primary_path = self._get_primary_path()
-        parent_name = primary_path.parent.name if primary_path is not None else ""
-        file_name = primary_path.name if primary_path is not None else ""
+        # # Create DataFrame for this ROI's analysis
+        # primary_path = self._get_primary_path()
+        # parent_name = primary_path.parent.name if primary_path is not None else ""
+        # file_name = primary_path.name if primary_path is not None else ""
         
-        # Get shape for numLines and pntsPerLine
-        shape = self.acq_image.img_shape
-        num_lines = shape[0] if shape is not None else 0
-        pixels_per_line = shape[1] if shape is not None else 0
+        # # Get shape for numLines and pntsPerLine
+        # shape = self.acq_image.img_shape
+        # num_lines = shape[0] if shape is not None else 0
+        # pixels_per_line = shape[1] if shape is not None else 0
         
-        roi_df = pd.DataFrame({
-            "roi_id": roi_id,
-            "channel": roi.channel,
-            "time": drew_time,
-            "velocity": drew_velocity,
-            "parentFolder": parent_name,
-            "file": file_name,
-            "algorithm": "mpRadon",
-            "delx": um_per_pixel,
-            "delt": seconds_per_line,
-            "numLines": num_lines,
-            "pntsPerLine": pixels_per_line,
-            "cleanVelocity": clean_velocity,
-            "absVelocity": abs(clean_velocity),
-        })
+        # roi_df = pd.DataFrame({
+        #     "roi_id": roi_id,
+        #     "channel": roi.channel,
+        #     "time": drew_time,
+        #     "velocity": drew_velocity,
+        #     "parentFolder": parent_name,
+        #     "file": file_name,
+        #     "algorithm": "mpRadon",
+        #     "delx": um_per_pixel,
+        #     "delt": seconds_per_line,
+        #     "numLines": num_lines,
+        #     "pntsPerLine": pixels_per_line,
+        #     "cleanVelocity": clean_velocity,
+        #     "absVelocity": abs(clean_velocity),
+        # })
         
         # Append to main DataFrame (or create if first analysis)
         if self._df is None:
@@ -392,6 +403,109 @@ class KymAnalysis:
         
         self._dirty = True
     
+    def _make_velocity_df(self, velocity: np.ndarray, time_values: np.ndarray, roi: ROI) -> pd.DataFrame:
+        """Given velocity, time, and an Roi, return a DataFrame with the velocity analysis.
+        """
+        # Apply filtering
+        clean_velocity = _removeOutliers_sd(velocity)
+        clean_velocity = _medianFilter(clean_velocity, window_size=3)
+        
+        # Create DataFrame for this ROI's analysis
+        primary_path = self._get_primary_path()
+        parent_name = primary_path.parent.name if primary_path is not None else ""
+        file_name = primary_path.name if primary_path is not None else ""
+        
+        # Get shape for numLines and pntsPerLine
+        shape = self.acq_image.img_shape
+        num_lines = shape[0] if shape is not None else 0
+        pixels_per_line = shape[1] if shape is not None else 0
+
+        seconds_per_line = self.acq_image.seconds_per_line
+        um_per_pixel = self.acq_image.um_per_pixel
+
+        roi_df = pd.DataFrame({
+            "roi_id": roi.id,
+            "channel": roi.channel,
+            "time": time_values,
+            "velocity": velocity,
+            "parentFolder": parent_name,
+            "file": file_name,
+            "algorithm": "mpRadon",
+            "delx": um_per_pixel,
+            "delt": seconds_per_line,
+            "numLines": num_lines,
+            "pntsPerLine": pixels_per_line,
+            "cleanVelocity": clean_velocity,
+            "absVelocity": abs(clean_velocity),
+        })
+
+        return roi_df
+
+    def import_v0_analysis(self) -> Optional[bool]:
+        """Import v0 analysis results from CSV files.
+        
+        Only runs if num roi is 0.
+        
+        Steps
+        =====
+        - Create a new roi (always the first)
+        - set RoiAnalysisMetadata for new roi (uses algorithm='mpRadon_v0', window_size=16)
+        - Loads the analysis DataFrame from v0 CSV
+        - Create the velocity analysis df
+        
+        Returns:
+            True if analysis was loaded successfully, False if files don't exist.
+        """
+        
+        # never import if we have any rois
+        if self.num_rois > 0:
+            return
+    
+        # old velocity is in folder <parent folder>-analysis,like "20251014-analysis"
+        _v0_analysis_folder = f"{self.acq_image.path.parent.name}-analysis"
+        old_analysis_folder_path = self.acq_image.path.parent / _v0_analysis_folder
+        # check if old analysis folder exists
+        if not old_analysis_folder_path.exists():
+            # raise FileNotFoundError(f"Old analysis folder not found: {old_analysis_folder_path}")
+            return
+        # old velocity csv is like "20251014_A98_0002.csv"
+        old_vel_csv = old_analysis_folder_path / f"{self.acq_image.path.stem}.csv"
+        # check that old csv exists
+        if not old_vel_csv.exists():
+            # raise FileNotFoundError(f"Old velocity CSV not found: {old_vel_csv}")
+            logger.error(f'found v0 analysis folder "{_v0_analysis_folder}" but no v0 csv')
+            return
+        
+        # make an roi, original analysis only had one channel
+        new_roi = self.acq_image.rois.create_roi()
+
+        # Record analysis metadata (geometry lives in acq_image.rois)
+        self._analysis_metadata[new_roi.id] = RoiAnalysisMetadata(
+            roi_id=new_roi.id,
+            algorithm="mpRadon_v0",
+            window_size=16,  # intentionally hard coded from v0 analysis
+            analyzed_at=datetime.now(timezone.utc).isoformat(),  # not true but not really used
+            roi_revision_at_analysis=new_roi.revision,
+        )
+
+        # load v0 csv
+        old_vel_df = pd.read_csv(old_vel_csv)
+        # logger.info('old_vel_df:')
+        # print(old_vel_df)
+
+        old_vel = old_vel_df["velocity"].values
+        old_time = old_vel_df["time"].values
+
+        logger.warning(f'importing v0 analysis n:{len(old_vel_df)} {self.acq_image.path.stem}')
+
+        roi_df = self._make_velocity_df(old_vel, old_time, new_roi)
+        self._df = roi_df
+        
+        # dirty because we just created roi and filled in velocity analysis
+        self._dirty = True
+
+        return True
+
     def save_analysis(self) -> bool:
         """Save analysis results to CSV and JSON files.
         
@@ -485,6 +599,12 @@ class KymAnalysis:
             True if analysis was loaded successfully, False if files don't exist.
         """
         
+        # v0 flowanalysis version
+        if self.import_v0_analysis() is not None:
+            self._dirty = False
+            return True
+
+        # kymflow version
         primary_path = self._get_primary_path()
         if primary_path is None:
             # logger.warning("No path provided, analysis cannot be loaded")
@@ -596,7 +716,7 @@ class KymAnalysis:
         return True
     
     def get_analysis(self, roi_id: Optional[int] = None) -> Optional[pd.DataFrame]:
-        """Get analysis DataFrame, optionally filtered by ROI.
+        """Get flow analysis DataFrame, optionally filtered by ROI.
         
         Args:
             roi_id: If provided, return only data for this ROI. If None, return all data.

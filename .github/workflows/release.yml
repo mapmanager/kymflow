@@ -1,11 +1,23 @@
 # File: .github/workflows/release.yml
 #
-# How to trigger this workflow (tag-based release):
-# - Ensure pyproject.toml version matches the tag (e.g. version="0.1.2" => tag "v0.1.2")
-# - Create a tag:      git tag v0.1.2
-# - Push the tag:      git push origin v0.1.2
-# - List local tags:   git tag --list
-# - List remote tags:  git ls-remote --tags origin
+# -----------------------------------------------------------------------------
+# Release recipe (IMPORTANT):
+#
+# The tag MUST point to a commit where pyproject.toml already contains
+# the matching version string.
+#
+# Correct sequence:
+#   1) Edit pyproject.toml (e.g. version = "0.1.3")
+#   2) git commit -am "Release v0.1.3"
+#   3) git push origin main
+#   4) git tag v0.1.3
+#   5) git push origin v0.1.3
+#
+# If you tag BEFORE committing the version bump, this workflow will fail with:
+#   "pyproject.toml version != tag version"
+#
+# This is intentional and prevents broken releases.
+# -----------------------------------------------------------------------------
 #
 # Overview:
 # - Builds and publishes Python sdist/wheel to PyPI on version tags

@@ -560,7 +560,7 @@ class ImageLineViewerView:
         num_rois = kf.rois.numRois() if kf is not None else 0
         plot_rois = (num_rois > 1)
 
-        logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
+        # logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
         # logger.debug(f'  kf={kf}')
         # logger.debug(f'  selected_roi_id roi_id={roi_id}')
         # logger.debug(f'  plot_rois plot_rois={plot_rois}')
@@ -700,13 +700,13 @@ class ImageLineViewerView:
         if self._plot is None:
             return
         try:
-            logger.debug(f'pyinstaller calling _plot.update_figure(fig)')
+            # logger.debug(f'pyinstaller calling _plot.update_figure(fig)')
             self._plot.update_figure(fig)
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
-            else:
-                logger.debug(f'pyinstaller swallowed/skipped Client deleted RuntimeError: {e}')
+            # else:
+            #     # logger.debug(f'pyinstaller swallowed/skipped Client deleted RuntimeError: {e}')
             # Client deleted, silently ignore
 
     def apply_filters(self, remove_outliers: bool, median_filter: bool) -> None:
