@@ -905,7 +905,12 @@ class KymAnalysis:
         logger.info(f"roi:{roi_id} _nBefore:{_nBefore} _nAfter:{_nAfter} removed:{_nBefore - _nAfter}")
 
         # append detected event
-        self._velocity_events[roi_id] = self._velocity_events[roi_id] + events
+        if roi_id not in self._velocity_events:
+            self._velocity_events[roi_id] = events
+        else:
+            self._velocity_events[roi_id] = self._velocity_events[roi_id] + events
+            # sort event by t_start
+            self._velocity_events[roi_id].sort(key=lambda e: e.t_start)
 
         # Mark dirty so callers know there are unsaved results.
         self._dirty = True
@@ -933,6 +938,9 @@ class KymAnalysis:
             - All user-added events
             - All events that have been reviewed/classified by the user
         """
+        if roi_id not in self._velocity_events:
+            return
+
         if remove_these == "_remove_all":
             self._velocity_events[roi_id] = []
         elif remove_these == "auto_detected":

@@ -17,6 +17,7 @@ from kymflow.gui_v2.controllers import (
     DeleteKymEventController,
     DeleteRoiController,
     EditRoiController,
+    EventAnalysisController,
     EventSelectionController,
     FileSelectionController,
     FileTablePersistenceController,
@@ -151,6 +152,7 @@ class HomePage(BasePage):
             on_delete_roi=bus.emit,
             on_set_roi_edit_state=bus.emit,
             on_roi_selected=bus.emit,
+            on_detect_events=bus.emit,
         )
         self._drawer_task_progress_view = TaskProgressView()
         self._drawer_save_buttons_view = SaveButtonsView(
@@ -263,6 +265,9 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._roi_edit_state_controller = RoiEditStateController(self.bus)
+        self._event_analysis_controller = EventAnalysisController(
+            self.context.app_state, self.bus
+        )
 
         self._persistence = FileTablePersistenceController(
             self.context.app_state,

@@ -21,6 +21,7 @@ from kymflow.gui_v2.events import (
     AnalysisCancel,
     AnalysisStart,
     DeleteRoi,
+    DetectEvents,
     ROISelection,
     SelectionOrigin,
     SetRoiEditState,
@@ -36,6 +37,7 @@ OnAddRoi = Callable[[AddRoi], None]
 OnDeleteRoi = Callable[[DeleteRoi], None]
 OnSetRoiEditState = Callable[[SetRoiEditState], None]
 OnROISelected = Callable[[ROISelection], None]
+OnDetectEvents = Callable[[DetectEvents], None]
 
 
 class AnalysisToolbarView:
@@ -70,6 +72,7 @@ class AnalysisToolbarView:
         on_delete_roi: OnDeleteRoi,
         on_set_roi_edit_state: OnSetRoiEditState,
         on_roi_selected: OnROISelected,
+        on_detect_events: OnDetectEvents,
     ) -> None:
         """Initialize analysis toolbar view.
 
@@ -80,6 +83,7 @@ class AnalysisToolbarView:
             on_delete_roi: Callback function that receives DeleteRoi events.
             on_set_roi_edit_state: Callback function that receives SetRoiEditState events.
             on_roi_selected: Callback function that receives ROISelection events.
+            on_detect_events: Callback function that receives DetectEvents events.
         """
         self._on_analysis_start = on_analysis_start
         self._on_analysis_cancel = on_analysis_cancel
@@ -87,6 +91,7 @@ class AnalysisToolbarView:
         self._on_delete_roi = on_delete_roi
         self._on_set_roi_edit_state = on_set_roi_edit_state
         self._on_roi_selected = on_roi_selected
+        self._on_detect_events = on_detect_events
 
         # UI components (created in render())
         self._window_select: Optional[ui.select] = None
@@ -99,6 +104,10 @@ class AnalysisToolbarView:
         self._file_path_label: Optional[ui.label] = None
         self._progress_bar: Optional[ui.linear_progress] = None
         # self._progress_label: Optional[ui.label] = None
+        self._detect_events_button: Optional[ui.button] = None
+        self._int_param_input: Optional[ui.number] = None
+        self._float_param_input: Optional[ui.number] = None
+        self._text_param_input: Optional[ui.input] = None
 
         # State
         self._current_file: Optional[KymImage] = None
@@ -127,6 +136,10 @@ class AnalysisToolbarView:
         self._file_path_label = None
         self._progress_bar = None
         # self._progress_label = None
+        self._detect_events_button = None
+        self._int_param_input = None
+        self._float_param_input = None
+        self._text_param_input = None
         # Reset suppression flag to ensure clean state
         self._suppress_roi_emit = False
 
@@ -168,6 +181,9 @@ class AnalysisToolbarView:
             # Start hidden, will be shown when task starts
             self._progress_bar.visible = False
             # self._progress_label.visible = False
+        
+        # Event Analysis widget (modular, self-contained)
+        self._render_event_analysis_widget()
         
         # Initialize button states
         self._update_button_states()
@@ -304,6 +320,13 @@ class AnalysisToolbarView:
             self._cancel_button.enable()
         else:
             self._cancel_button.disable()
+        
+        # Detect Events button: enabled when file and ROI are selected (no dependency on task state)
+        if self._detect_events_button is not None:
+            if has_file and has_roi:
+                self._detect_events_button.enable()
+            else:
+                self._detect_events_button.disable()
         
         # Update progress bar and label
         # if self._progress_bar is None or self._progress_label is None:
@@ -618,3 +641,82 @@ class AnalysisToolbarView:
                 self._file_path_label.text = "No file selected"
         else:
             self._file_path_label.text = "No file selected"
+
+    def _render_event_analysis_widget(self) -> None:
+        """Render the Event Analysis widget (modular, self-contained).
+        
+        Creates UI elements for event detection: label, parameter inputs, and button.
+        This method is self-contained and creates all UI elements in a single block.
+        """
+        with ui.column().classes("w-full gap-2"):
+            ui.label("Event Analysis").classes("text-sm")
+            
+            # Parameter inputs
+            with ui.row().classes("items-end gap-2"):
+                self._int_param_input = ui.number(
+                    value=0,
+                    label="Int Param",
+                    format="%d"
+                ).classes("w-24").props("dense")
+                self._float_param_input = ui.number(
+                    value=0.0,
+                    label="Float Param",
+                    format="%.2f"
+                ).classes("w-24").props("dense")
+                self._text_param_input = ui.input(
+                    value="",
+                    label="Text Param",
+                    placeholder=""
+                ).classes("w-32").props("dense")
+            
+            # Detect Events button
+            with ui.row().classes("items-end gap-2"):
+                self._detect_events_button = ui.button(
+                    "Detect Events",
+                    on_click=self._on_detect_events_click
+                ).props("dense").classes("text-sm")
+
+    def _on_detect_events_click(self) -> None:
+        """Handle Detect Events button click."""
+        # Verify file is still valid (safety check)
+        if self._current_file is None:
+            ui.notify("Select a file first", color="warning")
+            return
+
+        # Require ROI selection before starting detection
+        if self._current_roi_id is None:
+            ui.notify("Select an ROI first", color="warning")
+            return
+
+        # Collect parameter values from inputs
+        int_param = 0
+        float_param = 0.0
+        text_param = ""
+        
+        if self._int_param_input is not None:
+            try:
+                int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
+            except (ValueError, TypeError):
+                int_param = 0
+        
+        if self._float_param_input is not None:
+            try:
+                float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
+            except (ValueError, TypeError):
+                float_param = 0.0
+        
+        if self._text_param_input is not None:
+            text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
+
+        # Emit DetectEvents intent event
+        path_str = str(self._current_file.path) if self._current_file.path else None
+        self._on_detect_events(
+            DetectEvents(
+                roi_id=self._current_roi_id,
+                path=path_str,
+                int_param=int_param,
+                float_param=float_param,
+                text_param=text_param,
+                phase="intent",
+            )
+        )

@@ -3,6 +3,7 @@
 
 from kymflow.gui_v2.controllers.analysis_controller import AnalysisController
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
+from kymflow.gui_v2.controllers.event_analysis_controller import EventAnalysisController
 from kymflow.gui_v2.controllers.event_selection_controller import EventSelectionController
 from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController
 from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
@@ -38,6 +39,7 @@ __all__ = [
     "DeleteKymEventController",
     "DeleteRoiController",
     "EditRoiController",
+    "EventAnalysisController",
     "EventSelectionController",
     "FileSelectionController",
     "FileTablePersistenceController",

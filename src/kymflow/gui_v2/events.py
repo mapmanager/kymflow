@@ -275,6 +275,36 @@ class AnalysisCancel:
 
 
 @dataclass(frozen=True, slots=True)
+class DetectEvents:
+    """Detect velocity events event (intent or state phase).
+
+    Purpose:
+        Trigger velocity event detection for a specific ROI and refresh the event table.
+    Triggered by:
+        - Intent: AnalysisToolbarView when user clicks "Detect Events" button.
+        - State: EventAnalysisController after successful event detection.
+    Consumed by:
+        - EventAnalysisController (intent → runs detection → emits state).
+        - KymEventBindings (state → refreshes event table).
+
+    Attributes:
+        roi_id: ROI ID to analyze, or None.
+        path: File path (optional, for validation).
+        int_param: Integer parameter (dummy, for future use).
+        float_param: Float parameter (dummy, for future use).
+        text_param: Text parameter (dummy, for future use).
+        phase: Event phase - "intent" or "state".
+    """
+
+    roi_id: int | None
+    path: str | None
+    int_param: int = 0
+    float_param: float = 0.0
+    text_param: str = ""
+    phase: EventPhase = "intent"
+
+
+@dataclass(frozen=True, slots=True)
 class SetKymEventRangeState:
     """Arm/disarm the next Plotly selection for setting a kym event x-range.
 
