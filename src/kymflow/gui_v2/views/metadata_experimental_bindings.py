@@ -11,7 +11,7 @@ from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 
 if TYPE_CHECKING:
-    pass
+    from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 
 
 class MetadataExperimentalBindings:
@@ -31,7 +31,7 @@ class MetadataExperimentalBindings:
         _subscribed: Whether subscriptions are active (for cleanup).
     """
 
-    def __init__(self, bus: EventBus, view: MetadataExperimentalView) -> None:
+    def __init__(self, bus: EventBus, view: MetadataExperimentalView, parent_tab_view: "MetadataTabView | None" = None) -> None:
         """Initialize experimental metadata bindings.
 
         Subscribes to state change events. Since EventBus now uses per-client
@@ -41,9 +41,11 @@ class MetadataExperimentalBindings:
         Args:
             bus: EventBus instance for this client.
             view: MetadataExperimentalView instance to update.
+            parent_tab_view: Optional parent MetadataTabView to also update.
         """
         self._bus: EventBus = bus
         self._view: MetadataExperimentalView = view
+        self._parent_tab_view: "MetadataTabView | None" = parent_tab_view
         self._subscribed: bool = False
 
         # Subscribe to state change events
@@ -77,6 +79,9 @@ class MetadataExperimentalBindings:
             e: FileSelection event (phase="state") containing the selected file.
         """
         safe_call(self._view.set_selected_file, e.file)
+        # Also update parent tab view if provided
+        if self._parent_tab_view is not None:
+            safe_call(self._parent_tab_view.set_selected_file, e.file)
 
     def _on_metadata_update(self, e: MetadataUpdate) -> None:
         """Handle metadata update event.

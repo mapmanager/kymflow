@@ -80,8 +80,9 @@ class AppContext:
         # configure default classes
         logger.info('setting default_classes() to specify style of all ui elements')
         ui.label.default_classes("text-sm select-text")
-        
-
+        # .props("dense").classes("text-sm")
+        ui.button.default_classes("text-sm")
+        ui.button.default_props("dense")
         # Shared state instances
         self.app_state = AppState()
         user_config_path = os.getenv("KYMFLOW_USER_CONFIG_PATH")

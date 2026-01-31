@@ -161,26 +161,27 @@ class AnalysisToolbarView:
             self._delete_roi_button = ui.button("Delete ROI", on_click=self._on_delete_roi_click).props("dense").classes("text-sm")
             self._edit_roi_button = ui.button("Edit ROI", on_click=self._on_edit_roi_click).props("dense").classes("text-sm")
 
-        # Analysis controls
-        with ui.row().classes("items-end gap-2"):
-            # ui.label("Analysis").classes("text-lg font-semibold")
-            ui.label("Analysis")
-            self._window_select = ui.select(
-                options=[16, 32, 64, 128, 256],
-                value=16,
-                label="Window Points",
-            ).classes("w-32")
-        with ui.row().classes("items-end gap-2"):
-            self._start_button = ui.button("Analyze Flow", on_click=self._on_start_click).props("dense").classes("text-sm")
-            self._cancel_button = ui.button("Cancel", on_click=self._on_cancel_click).props("dense").classes("text-sm")
+        # Flow Analysis section
+        with ui.expansion("Flow Analysis", value=True).classes("w-full"):
+            with ui.column().classes("w-full gap-2"):
+                # Analysis controls
+                with ui.row().classes("items-end gap-2"):
+                    self._window_select = ui.select(
+                        options=[16, 32, 64, 128, 256],
+                        value=16,
+                        label="Window Points",
+                    ).classes("w-32")
+                with ui.row().classes("items-end gap-2"):
+                    self._start_button = ui.button("Analyze Flow", on_click=self._on_start_click).props("dense").classes("text-sm")
+                    self._cancel_button = ui.button("Cancel", on_click=self._on_cancel_click).props("dense").classes("text-sm")
 
-        # Progress bar and label (hidden by default, shown when task is running)
-        with ui.column().classes("w-full gap-1"):
-            self._progress_bar = ui.linear_progress(value=0.0).props("instant-feedback").classes("w-full")
-            # self._progress_label = ui.label("").classes("text-sm text-gray-600")
-            # Start hidden, will be shown when task starts
-            self._progress_bar.visible = False
-            # self._progress_label.visible = False
+                # Progress bar and label (hidden by default, shown when task is running)
+                with ui.column().classes("w-full gap-1"):
+                    self._progress_bar = ui.linear_progress(value=0.0).props("instant-feedback").classes("w-full")
+                    # self._progress_label = ui.label("").classes("text-sm text-gray-600")
+                    # Start hidden, will be shown when task starts
+                    self._progress_bar.visible = False
+                    # self._progress_label.visible = False
         
         # Event Analysis widget (modular, self-contained)
         self._render_event_analysis_widget()
@@ -648,33 +649,33 @@ class AnalysisToolbarView:
         Creates UI elements for event detection: label, parameter inputs, and button.
         This method is self-contained and creates all UI elements in a single block.
         """
-        with ui.column().classes("w-full gap-2"):
-            ui.label("Event Analysis").classes("text-sm")
-            
-            # Parameter inputs
-            with ui.row().classes("items-end gap-2"):
-                self._int_param_input = ui.number(
-                    value=0,
-                    label="Int Param",
-                    format="%d"
-                ).classes("w-24").props("dense")
-                self._float_param_input = ui.number(
-                    value=0.0,
-                    label="Float Param",
-                    format="%.2f"
-                ).classes("w-24").props("dense")
-                self._text_param_input = ui.input(
-                    value="",
-                    label="Text Param",
-                    placeholder=""
-                ).classes("w-32").props("dense")
-            
-            # Detect Events button
-            with ui.row().classes("items-end gap-2"):
-                self._detect_events_button = ui.button(
-                    "Detect Events",
-                    on_click=self._on_detect_events_click
-                ).props("dense").classes("text-sm")
+        # Event Analysis section
+        with ui.expansion("event analysis", value=True).classes("w-full"):
+            with ui.column().classes("w-full gap-2"):
+                # Parameter inputs
+                with ui.row().classes("items-end gap-2"):
+                    self._int_param_input = ui.number(
+                        value=0,
+                        label="Int Param",
+                        format="%d"
+                    ).classes("w-24").props("dense")
+                    self._float_param_input = ui.number(
+                        value=0.0,
+                        label="Float Param",
+                        format="%.2f"
+                    ).classes("w-24").props("dense")
+                    self._text_param_input = ui.input(
+                        value="",
+                        label="Text Param",
+                        placeholder=""
+                    ).classes("w-32").props("dense")
+                
+                # Detect Events button
+                with ui.row().classes("items-end gap-2"):
+                    self._detect_events_button = ui.button(
+                        "Detect Events",
+                        on_click=self._on_detect_events_click
+                    )
 
     def _on_detect_events_click(self) -> None:
         """Handle Detect Events button click."""

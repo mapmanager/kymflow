@@ -16,6 +16,7 @@ from kymflow.gui_v2.events import (
     DeleteKymEvent,
     EventSelection,
     EventSelectionOptions,
+    FileSelection,
     NextPrevFileEvent,
     SelectionOrigin,
     SetKymEventRangeState,
@@ -25,6 +26,7 @@ from kymflow.gui_v2.events import (
 
 Rows = List[dict[str, object]]
 OnSelected = Callable[[EventSelection], None]
+OnFileSelected = Callable[[FileSelection], None]
 OnEventUpdate = Callable[[VelocityEventUpdate], None]
 OnRangeState = Callable[[SetKymEventRangeState], None]
 OnAddEvent = Callable[[AddKymEvent], None]
@@ -65,6 +67,7 @@ def _col(
 def _default_columns() -> list[ColumnConfig]:
     return [
         _col("roi_id", "ROI", width=80, cell_class="ag-cell-right"),
+        _col("file_name", "File", width=160),
         _col(
             "user_type",
             "User Type",
@@ -90,6 +93,7 @@ class KymEventView:
         self,
         *,
         on_selected: OnSelected,
+        on_file_selected: OnFileSelected | None = None,
         on_event_update: OnEventUpdate | None = None,
         on_range_state: OnRangeState | None = None,
         on_add_event: OnAddEvent | None = None,
@@ -98,6 +102,7 @@ class KymEventView:
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._on_selected = on_selected
+        self._on_file_selected = on_file_selected
         self._on_event_update = on_event_update
         self._on_range_state = on_range_state
         self._on_add_event = on_add_event
@@ -127,6 +132,11 @@ class KymEventView:
         self._selected_event_path: str | None = None
         self._current_file_path: str | None = None  # Track current file path from row data
         self._file_path_label: ui.label | None = None  # Label showing current file name
+        self._show_all_files: bool = False  # Track "All Files" mode state
+        self._all_files_checkbox: ui.checkbox | None = None  # Checkbox UI element
+        self._on_all_files_mode_changed: Callable[[], None] | None = None  # Callback for bindings
+        self._get_current_selected_file_path: Callable[[], str | None] | None = None  # Callback to get current selected file path
+        self._pending_event_selection_after_file_change: str | None = None  # Track event_id to preserve when file change clears selection
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
@@ -152,6 +162,11 @@ class KymEventView:
                     self._next_file_button.tooltip("Next File")
 
                 self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
+
+                with ui.row().classes("w-full gap-2"):
+                    self._all_files_checkbox = ui.checkbox("All Files", value=self._show_all_files).on_value_change(
+                        lambda e: self.set_all_files_mode(bool(e.value))
+                    ).props("dense").classes('text-sm')
 
                 with ui.row().classes("w-full gap-2"):
                     ui.checkbox("Zoom (+/- s)", value=self._zoom_enabled).on_value_change(
@@ -228,7 +243,19 @@ class KymEventView:
             rows: Velocity report rows to display.
             select_event_id: Optional event_id to select after updating the grid.
         """
-        self._all_rows = list(rows)
+        # Add file_name field to each row for the File column
+        rows_list = list(rows)
+        for row in rows_list:
+            path = row.get("path")
+            if path:
+                try:
+                    row["file_name"] = Path(path).stem
+                except (ValueError, TypeError):
+                    row["file_name"] = str(path) if path else ""
+            else:
+                row["file_name"] = ""
+        
+        self._all_rows = rows_list
         # Extract current file path from first row if available
         # If rows are empty, keep existing _current_file_path (don't reset to None)
         # This allows the label to show the correct file even when there are no events
@@ -332,6 +359,29 @@ class KymEventView:
         self._selected_event_path = str(path) if path else None
         self._update_range_button_state()
         self._update_add_delete_button_state()
+        
+        # In all-files mode, check if we need to switch the selected file first
+        if self._show_all_files and path and self._on_file_selected is not None:
+            # Get current selected file path
+            current_path = None
+            if self._get_current_selected_file_path is not None:
+                current_path = self._get_current_selected_file_path()
+            
+            # If event belongs to a different file, emit FileSelection first
+            event_path_str = str(path) if path else None
+            if event_path_str and event_path_str != current_path:
+                # Set flag to preserve this event selection when file change clears it
+                self._pending_event_selection_after_file_change = str(event_id)
+                self._on_file_selected(
+                    FileSelection(
+                        path=event_path_str,
+                        file=None,
+                        origin=SelectionOrigin.EXTERNAL,
+                        phase="intent",
+                    )
+                )
+        
+        # Always emit EventSelection
         self._on_selected(
             EventSelection(
                 event_id=str(event_id),
@@ -639,8 +689,10 @@ class KymEventView:
             return
 
         # Add button: enabled when roi_filter and file path are available, and not in range-selection state
+        # Disable in all-files mode since we can't add events without a specific file context
         add_enabled = (
-            self._roi_filter is not None
+            not self._show_all_files
+            and self._roi_filter is not None
             and self._current_file_path is not None
             and not self._setting_kym_event_range_state
             and not self._adding_new_event
@@ -656,3 +708,17 @@ class KymEventView:
             self._delete_event_button.enable()
         else:
             self._delete_event_button.disable()
+
+    def set_all_files_mode(self, enabled: bool) -> None:
+        """Set all-files mode and notify bindings to refresh data.
+        
+        Args:
+            enabled: True to show all files, False to show single file.
+        """
+        self._show_all_files = enabled
+        # Update checkbox state if it exists
+        if self._all_files_checkbox is not None:
+            self._all_files_checkbox.value = enabled
+        # Notify bindings to refresh if callback is set
+        if self._on_all_files_mode_changed is not None:
+            self._on_all_files_mode_changed()

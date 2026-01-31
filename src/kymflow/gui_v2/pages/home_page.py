@@ -132,6 +132,7 @@ class HomePage(BasePage):
         )
         self._event_view = KymEventView(
             on_selected=bus.emit,
+            on_file_selected=bus.emit,
             on_event_update=bus.emit,
             on_range_state=bus.emit,
             on_add_event=bus.emit,
@@ -283,7 +284,7 @@ class HomePage(BasePage):
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
         )
-        self._event_bindings = KymEventBindings(self.bus, self._event_view)
+        self._event_bindings = KymEventBindings(self.bus, self._event_view, app_state=self.context.app_state)
 
         # Splitter pane toolbar bindings
         self._drawer_analysis_toolbar_bindings = AnalysisToolbarBindings(
@@ -306,7 +307,7 @@ class HomePage(BasePage):
             self.bus, self._drawer_line_plot_controls_view
         )
         self._drawer_metadata_experimental_bindings = MetadataExperimentalBindings(
-            self.bus, self._drawer_metadata_experimental_view
+            self.bus, self._drawer_metadata_experimental_view, parent_tab_view=self._drawer_metadata_tab_view
         )
         self._drawer_metadata_header_bindings = MetadataHeaderBindings(
             self.bus, self._drawer_metadata_header_view

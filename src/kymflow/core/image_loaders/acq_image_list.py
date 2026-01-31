@@ -94,6 +94,15 @@ class AcqImageList(Generic[T]):
         if self.folder is not None:
             self._load_files()
     
+    def total_number_of_event(self) -> int:
+        """Return the total number of kym events across all loaded AcqImage instances.
+        """
+        total_events = 0
+        for image in self.images:
+            if hasattr(image, "get_kym_analysis"):
+                total_events += image.get_kym_analysis().total_num_velocity_events()
+        return total_events
+
     def _load_files(self) -> None:
         """Internal method to scan folder and create AcqImage instances.
         

@@ -164,9 +164,9 @@ class ImageLineViewerView:
 
         payload: Dict[str, Any] = e.args  # <-- dict
 
-        logger.debug("plotly_relayout received (awaiting_range=%s, awaiting_roi_edit=%s)", 
-                     self._awaiting_kym_event_range, self._awaiting_roi_edit)
-        logger.info('=== in on_relayout() payload is:')
+        logger.debug('=== in on_relayout() plotly_relayout received:')
+        logger.debug(f"  awaiting_range={self._awaiting_kym_event_range}, awaiting_roi_edit={self._awaiting_roi_edit}") 
+        logger.debug('  payload:')
         from pprint import pprint
         pprint(payload)
 

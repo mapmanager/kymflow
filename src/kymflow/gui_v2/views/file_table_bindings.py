@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events import DetectEvents, FileSelection, MetadataUpdate, SelectionOrigin
 from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged, TaskStateChanged
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.core.utils.logging import get_logger
@@ -61,6 +61,7 @@ class FileTableBindings:
         bus.subscribe_state(FileSelection, self._on_selected_file_changed)
         bus.subscribe_state(MetadataUpdate, self._on_metadata_update)
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
+        bus.subscribe_state(DetectEvents, self._on_detect_events)
         bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
         self._subscribed = True
 
@@ -78,6 +79,7 @@ class FileTableBindings:
         self._bus.unsubscribe_state(FileSelection, self._on_selected_file_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_update)
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
+        self._bus.unsubscribe_state(DetectEvents, self._on_detect_events)
         self._bus.unsubscribe_state(TaskStateChanged, self._on_task_state_changed)
         self._subscribed = False
 
@@ -138,6 +140,15 @@ class FileTableBindings:
         logger.debug("analysis_completed file=%s roi_id=%s success=%s", e.file, e.roi_id, e.success)
         if not e.success:
             return
+        self._refresh_rows_preserve_selection()
+
+    def _on_detect_events(self, e: DetectEvents) -> None:
+        """Handle event detection completion by refreshing table rows.
+        
+        When events are detected, the number of velocity events changes,
+        so we need to refresh the table to update the "Total Num Velocity Events" column.
+        """
+        logger.debug("detect_events file=%s roi_id=%s", e.path, e.roi_id)
         self._refresh_rows_preserve_selection()
 
     def _on_task_state_changed(self, e: TaskStateChanged) -> None:
