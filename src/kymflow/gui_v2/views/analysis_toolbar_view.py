@@ -105,6 +105,7 @@ class AnalysisToolbarView:
         self._progress_bar: Optional[ui.linear_progress] = None
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
+        self._detect_all_events_button: Optional[ui.button] = None
         self._int_param_input: Optional[ui.number] = None
         self._float_param_input: Optional[ui.number] = None
         self._text_param_input: Optional[ui.input] = None
@@ -137,6 +138,7 @@ class AnalysisToolbarView:
         self._progress_bar = None
         # self._progress_label = None
         self._detect_events_button = None
+        self._detect_all_events_button = None
         self._int_param_input = None
         self._float_param_input = None
         self._text_param_input = None
@@ -328,6 +330,14 @@ class AnalysisToolbarView:
                 self._detect_events_button.enable()
             else:
                 self._detect_events_button.disable()
+        
+        # Detect Events (all files) button: enabled when not running a task
+        # (Controller will validate that files exist)
+        if self._detect_all_events_button is not None:
+            if running:
+                self._detect_all_events_button.disable()
+            else:
+                self._detect_all_events_button.enable()
         
         # Update progress bar and label
         # if self._progress_bar is None or self._progress_label is None:
@@ -650,7 +660,10 @@ class AnalysisToolbarView:
         This method is self-contained and creates all UI elements in a single block.
         """
         # Event Analysis section
-        with ui.expansion("event analysis", value=True).classes("w-full"):
+
+        # with ui.expansion("event analysis", value=True).classes("w-full"):
+        from kymflow.gui_v2.styles import kym_expansion
+        with kym_expansion("Event Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
                 # Parameter inputs
                 with ui.row().classes("items-end gap-2"):
@@ -670,11 +683,15 @@ class AnalysisToolbarView:
                         placeholder=""
                     ).classes("w-32").props("dense")
                 
-                # Detect Events button
+                # Detect Events buttons
                 with ui.row().classes("items-end gap-2"):
                     self._detect_events_button = ui.button(
                         "Detect Events",
                         on_click=self._on_detect_events_click
+                    )
+                    self._detect_all_events_button = ui.button(
+                        "Detect Events (all files)",
+                        on_click=self._on_detect_all_events_click
                     )
 
     def _on_detect_events_click(self) -> None:
@@ -715,6 +732,42 @@ class AnalysisToolbarView:
             DetectEvents(
                 roi_id=self._current_roi_id,
                 path=path_str,
+                int_param=int_param,
+                float_param=float_param,
+                text_param=text_param,
+                phase="intent",
+            )
+        )
+
+    def _on_detect_all_events_click(self) -> None:
+        """Handle Detect Events (all files) button click."""
+        # Collect parameter values from inputs (same as single-file)
+        int_param = 0
+        float_param = 0.0
+        text_param = ""
+        
+        if self._int_param_input is not None:
+            try:
+                int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
+            except (ValueError, TypeError):
+                int_param = 0
+        
+        if self._float_param_input is not None:
+            try:
+                float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
+            except (ValueError, TypeError):
+                float_param = 0.0
+        
+        if self._text_param_input is not None:
+            text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
+
+        # Emit DetectEvents intent event with all_files=True
+        # Note: roi_id and path are None for all-files mode
+        self._on_detect_events(
+            DetectEvents(
+                roi_id=None,
+                path=None,
+                all_files=True,
                 int_param=int_param,
                 float_param=float_param,
                 text_param=text_param,

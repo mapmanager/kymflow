@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import MagicMock, Mock
 import shutil
 
 import numpy as np
@@ -620,4 +621,76 @@ def test_acq_image_list_any_dirty_analysis_with_analysis() -> None:
         # by checking the is_dirty property directly
         
         logger.info("  - any_dirty_analysis() detects analysis dirty state")
+
+
+def test_detect_all_events() -> None:
+    """Test detect_all_events() method calls run_velocity_event_analysis() for all ROIs in all files."""
+    logger.info("Testing AcqImageList detect_all_events()")
+    
+    # Create an AcqImageList with mock KymImage instances
+    image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif")
+    
+    # Create mock images with different ROI configurations
+    mock_image1 = MagicMock(spec=KymImage)
+    mock_image1.rois = MagicMock()
+    mock_image1.rois.get_roi_ids.return_value = [1, 2]
+    mock_kym_analysis1 = MagicMock()
+    mock_kym_analysis1.run_velocity_event_analysis = MagicMock()
+    mock_image1.get_kym_analysis.return_value = mock_kym_analysis1
+    
+    mock_image2 = MagicMock(spec=KymImage)
+    mock_image2.rois = MagicMock()
+    mock_image2.rois.get_roi_ids.return_value = [1]
+    mock_kym_analysis2 = MagicMock()
+    mock_kym_analysis2.run_velocity_event_analysis = MagicMock()
+    mock_image2.get_kym_analysis.return_value = mock_kym_analysis2
+    
+    # Image without kym_analysis (should be skipped)
+    mock_image3 = MagicMock(spec=KymImage)
+    del mock_image3.get_kym_analysis  # Remove the method to simulate no kym_analysis
+    
+    # Image without ROIs (should still call get_roi_ids but return empty list)
+    mock_image4 = MagicMock(spec=KymImage)
+    mock_image4.rois = MagicMock()
+    mock_image4.rois.get_roi_ids.return_value = []
+    mock_kym_analysis4 = MagicMock()
+    mock_kym_analysis4.run_velocity_event_analysis = MagicMock()
+    mock_image4.get_kym_analysis.return_value = mock_kym_analysis4
+    
+    # Add images to the list
+    image_list.images = [mock_image1, mock_image2, mock_image3, mock_image4]
+    
+    # Call detect_all_events()
+    image_list.detect_all_events()
+    
+    # Verify run_velocity_event_analysis was called for each ROI in each file
+    # Image 1: ROIs 1 and 2
+    assert mock_kym_analysis1.run_velocity_event_analysis.call_count == 2
+    mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(1)
+    mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(2)
+    
+    # Image 2: ROI 1
+    assert mock_kym_analysis2.run_velocity_event_analysis.call_count == 1
+    mock_kym_analysis2.run_velocity_event_analysis.assert_called_once_with(1)
+    
+    # Image 3: No kym_analysis, should be skipped (no calls)
+    # (We can't verify this directly since get_kym_analysis doesn't exist)
+    
+    # Image 4: No ROIs, should not call run_velocity_event_analysis
+    assert mock_kym_analysis4.run_velocity_event_analysis.call_count == 0
+    
+    logger.info("  - detect_all_events() calls run_velocity_event_analysis() for all ROIs in all files")
+
+
+def test_detect_all_events_empty_list() -> None:
+    """Test detect_all_events() with empty image list."""
+    logger.info("Testing AcqImageList detect_all_events() with empty list")
+    
+    image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif")
+    image_list.images = []
+    
+    # Should not raise an error
+    image_list.detect_all_events()
+    
+    logger.info("  - detect_all_events() handles empty list gracefully")
 

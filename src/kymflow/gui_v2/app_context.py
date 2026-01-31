@@ -77,12 +77,20 @@ class AppContext:
             
         logger.info("Initializing AppContext singleton")
         
+        #
         # configure default classes
         logger.info('setting default_classes() to specify style of all ui elements')
         ui.label.default_classes("text-sm select-text")
         # .props("dense").classes("text-sm")
         ui.button.default_classes("text-sm")
         ui.button.default_props("dense")
+
+        #
+        # global css styles
+        # this has to be in a page function ???
+        # from kymflow.gui_v2.styles import install_global_styles
+        # install_global_styles()
+        
         # Shared state instances
         self.app_state = AppState()
         user_config_path = os.getenv("KYMFLOW_USER_CONFIG_PATH")

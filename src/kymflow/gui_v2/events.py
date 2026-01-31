@@ -279,17 +279,18 @@ class DetectEvents:
     """Detect velocity events event (intent or state phase).
 
     Purpose:
-        Trigger velocity event detection for a specific ROI and refresh the event table.
+        Trigger velocity event detection for a specific ROI or all files/ROIs and refresh the event table.
     Triggered by:
-        - Intent: AnalysisToolbarView when user clicks "Detect Events" button.
+        - Intent: AnalysisToolbarView when user clicks "Detect Events" or "Detect Events (all files)" button.
         - State: EventAnalysisController after successful event detection.
     Consumed by:
         - EventAnalysisController (intent → runs detection → emits state).
         - KymEventBindings (state → refreshes event table).
 
     Attributes:
-        roi_id: ROI ID to analyze, or None.
-        path: File path (optional, for validation).
+        roi_id: ROI ID to analyze, or None. Ignored when all_files=True.
+        path: File path (optional, for validation). Ignored when all_files=True.
+        all_files: If True, detect events for all ROIs in all files in AcqImageList. Defaults to False.
         int_param: Integer parameter (dummy, for future use).
         float_param: Float parameter (dummy, for future use).
         text_param: Text parameter (dummy, for future use).
@@ -298,6 +299,7 @@ class DetectEvents:
 
     roi_id: int | None
     path: str | None
+    all_files: bool = False
     int_param: int = 0
     float_param: float = 0.0
     text_param: str = ""

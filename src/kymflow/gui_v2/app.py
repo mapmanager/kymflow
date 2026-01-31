@@ -122,6 +122,12 @@ def home() -> None:
     #     _native_window_persistence_installed = True
     #     ui.timer(0.2, lambda: install_native_window_persistence(context.user_config), once=True)
 
+    #
+    # global css styles
+    # this has to be in a page function ???
+    from kymflow.gui_v2.styles import install_global_styles
+    install_global_styles()
+
     ui.page_title("KymFlow")
     inject_global_styles()
 

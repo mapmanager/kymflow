@@ -103,6 +103,21 @@ class AcqImageList(Generic[T]):
                 total_events += image.get_kym_analysis().total_num_velocity_events()
         return total_events
 
+    def detect_all_events(self):
+        """Detect velocity events for all ROIs in all loaded AcqImage instances.
+        
+        Iterates through all images in the list and for each image that has kym_analysis,
+        detects velocity events for all ROIs in that image. Images without kym_analysis
+        are silently skipped.
+        
+        This method does not require image data to be loaded - it works on AcqImage
+        instances that have analysis data available.
+        """
+        for image in self.images:
+            if hasattr(image, "get_kym_analysis"):
+                for roi_id in image.rois.get_roi_ids():
+                    image.get_kym_analysis().run_velocity_event_analysis(roi_id)
+
     def _load_files(self) -> None:
         """Internal method to scan folder and create AcqImage instances.
         

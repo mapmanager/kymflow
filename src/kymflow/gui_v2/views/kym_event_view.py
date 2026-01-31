@@ -243,8 +243,20 @@ class KymEventView:
             rows: Velocity report rows to display.
             select_event_id: Optional event_id to select after updating the grid.
         """
+        # TEMPORARY LOGGING: Track when set_events() is called to debug column width/sort order reset
+        import traceback
+        rows_list_preview = list(rows) if not isinstance(rows, list) else rows
+        rows_count = len(rows_list_preview)
+        logger.debug(
+            f"[DEBUG] KymEventView.set_events() called: rows_count={rows_count}, "
+            f"_show_all_files={self._show_all_files}, select_event_id={select_event_id}"
+        )
+        # Log call stack to see where it's being called from
+        stack = ''.join(traceback.format_stack()[-4:-1])
+        logger.debug(f"[DEBUG] Call stack:\n{stack}")
+        
         # Add file_name field to each row for the File column
-        rows_list = list(rows)
+        rows_list = rows_list_preview
         for row in rows_list:
             path = row.get("path")
             if path:
