@@ -16,6 +16,7 @@ from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.client_utils import safe_call
+from kymflow.gui_v2.config import MAX_NUM_ROI, ALLOW_EDIT_ROI
 from kymflow.gui_v2.events import (
     AddRoi,
     AnalysisCancel,
@@ -279,11 +280,16 @@ class AnalysisToolbarView:
 
         # ROI button states
         if self._add_roi_button is not None:
-            # Add ROI: enabled when file is selected
+            # Add ROI: enabled when file is selected and under max ROI limit
             if running:
                 self._add_roi_button.disable()
             elif has_file:
-                self._add_roi_button.enable()
+                # Check if we're at the maximum number of ROIs
+                num_rois = self._current_file.rois.numRois() if self._current_file else 0
+                if num_rois >= MAX_NUM_ROI:
+                    self._add_roi_button.disable()
+                else:
+                    self._add_roi_button.enable()
             else:
                 self._add_roi_button.disable()
         
@@ -297,8 +303,10 @@ class AnalysisToolbarView:
                 self._delete_roi_button.disable()
         
         if self._edit_roi_button is not None:
-            # Edit ROI: enabled when file is selected AND ROI is selected
+            # Edit ROI: enabled when file is selected AND ROI is selected AND editing is allowed
             if running:
+                self._edit_roi_button.disable()
+            elif not ALLOW_EDIT_ROI:
                 self._edit_roi_button.disable()
             elif has_file and has_roi:
                 self._edit_roi_button.enable()
@@ -482,6 +490,27 @@ class AnalysisToolbarView:
     def _on_add_roi_click(self) -> None:
         """Handle Add ROI button click."""
         if self._current_file is None:
+            return
+        
+        # Defensive check: verify we haven't reached the maximum number of ROIs
+        num_rois = self._current_file.rois.numRois()
+        if num_rois >= MAX_NUM_ROI:
+            # Show dialog explaining the limit
+            file_stem = (
+                Path(self._current_file.path).stem
+                if self._current_file.path is not None
+                else "unknown file"
+            )
+            with ui.dialog() as dialog, ui.card():
+                ui.label("Maximum number of ROIs reached").classes("text-lg font-semibold")
+                ui.label(
+                    f"{file_stem} already has {num_rois} ROI(s). "
+                    f"The maximum allowed is {MAX_NUM_ROI}."
+                ).classes("text-sm")
+                with ui.row():
+                    ui.button("OK", on_click=dialog.close).props("outline")
+            
+            dialog.open()
             return
         
         path_str = str(self._current_file.path) if self._current_file.path else None

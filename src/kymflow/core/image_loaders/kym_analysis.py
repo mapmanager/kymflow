@@ -95,6 +95,7 @@ class VelocityReportRow(TypedDict):
     event_id: str
     roi_id: int
     path: Optional[str]
+    file_name: Optional[str]
     event_type: str
     i_start: int
     t_start: float
@@ -1286,6 +1287,7 @@ class KymAnalysis:
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path
+                event_dict["file_name"] = Path(path).stem if path else None
                 event_dicts.append(event_dict)
         return event_dicts
 

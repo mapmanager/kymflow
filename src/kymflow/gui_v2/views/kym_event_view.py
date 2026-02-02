@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+# from pathlib import Path  # Commented out - only used in _update_file_path_label which is also commented out
 from typing import Callable, Iterable, List, Optional
 
 from nicegui import ui
@@ -41,15 +41,25 @@ def _col(
     header: Optional[str] = None,
     *,
     width: Optional[int] = None,
+    min_width: Optional[int] = None,
     hide: bool = False,
     cell_class: Optional[str] = None,
     editable: bool = False,
     editor: str = "auto",
     choices: Optional[Iterable[object] | str] = None,
+    resizable: bool = True,
 ) -> ColumnConfig:
     extra: dict[str, object] = {}
     if width is not None:
         extra["width"] = width
+    if min_width is not None:
+        extra["minWidth"] = min_width
+    # Only lock width (set maxWidth) when column is not resizable
+    if width is not None and not resizable:
+        # Use width for both min and max to lock it, unless min_width was explicitly provided
+        if min_width is None:
+            extra["minWidth"] = width
+        extra["maxWidth"] = width
     if hide:
         extra["hide"] = True
     if cell_class is not None:
@@ -60,6 +70,7 @@ def _col(
         editable=editable,
         editor=editor,  # type: ignore[arg-type]
         choices=choices,  # type: ignore[arg-type]
+        resizable=resizable,
         extra_grid_options=extra,
     )
 
@@ -67,7 +78,7 @@ def _col(
 def _default_columns() -> list[ColumnConfig]:
     return [
         _col("roi_id", "ROI", width=80, cell_class="ag-cell-right"),
-        _col("file_name", "File", width=160),
+        _col("file_name", "File", width=220, min_width=180),
         _col(
             "user_type",
             "User Type",
@@ -131,12 +142,13 @@ class KymEventView:
         self._selected_event_roi_id: int | None = None
         self._selected_event_path: str | None = None
         self._current_file_path: str | None = None  # Track current file path from row data
-        self._file_path_label: ui.label | None = None  # Label showing current file name
+        # self._file_path_label: ui.label | None = None  # Label showing current file name (commented out - aggrid has 'file' column)
         self._show_all_files: bool = False  # Track "All Files" mode state
         self._all_files_checkbox: ui.checkbox | None = None  # Checkbox UI element
         self._on_all_files_mode_changed: Callable[[], None] | None = None  # Callback for bindings
         self._get_current_selected_file_path: Callable[[], str | None] | None = None  # Callback to get current selected file path
         self._pending_event_selection_after_file_change: str | None = None  # Track event_id to preserve when file change clears selection
+        self._file_selection_originated_from_view: str | None = None  # Track file path when we emit FileSelection to prevent unnecessary refreshes
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
@@ -161,7 +173,7 @@ class KymEventView:
                     ).props("dense").classes('text-sm')
                     self._next_file_button.tooltip("Next File")
 
-                self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
+                # self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")  # Commented out - aggrid has 'file' column
 
                 with ui.row().classes("w-full gap-2"):
                     self._all_files_checkbox = ui.checkbox("All Files", value=self._show_all_files).on_value_change(
@@ -235,37 +247,16 @@ class KymEventView:
         self._zoom_pad_sec = value
 
     def set_events(
-        self, rows: Iterable[dict[str, object]], *, select_event_id: str | None = None
+        self, rows: Iterable[dict[str, object]], *, select_event_id: str | None = None, skip_if_originated: bool = False
     ) -> None:
         """Update table contents from velocity report rows.
         
         Args:
             rows: Velocity report rows to display.
             select_event_id: Optional event_id to select after updating the grid.
+            skip_if_originated: If True and we originated a FileSelection, skip set_data to preserve column state.
         """
-        # TEMPORARY LOGGING: Track when set_events() is called to debug column width/sort order reset
-        import traceback
-        rows_list_preview = list(rows) if not isinstance(rows, list) else rows
-        rows_count = len(rows_list_preview)
-        logger.debug(
-            f"[DEBUG] KymEventView.set_events() called: rows_count={rows_count}, "
-            f"_show_all_files={self._show_all_files}, select_event_id={select_event_id}"
-        )
-        # Log call stack to see where it's being called from
-        stack = ''.join(traceback.format_stack()[-4:-1])
-        logger.debug(f"[DEBUG] Call stack:\n{stack}")
-        
-        # Add file_name field to each row for the File column
-        rows_list = rows_list_preview
-        for row in rows_list:
-            path = row.get("path")
-            if path:
-                try:
-                    row["file_name"] = Path(path).stem
-                except (ValueError, TypeError):
-                    row["file_name"] = str(path) if path else ""
-            else:
-                row["file_name"] = ""
+        rows_list = list(rows) if not isinstance(rows, list) else rows
         
         self._all_rows = rows_list
         # Extract current file path from first row if available
@@ -277,12 +268,15 @@ class KymEventView:
                 self._current_file_path = str(first_path)
             # If first row has no path, don't update _current_file_path (keep existing)
         # If rows are empty, don't update _current_file_path (keep existing)
-        self._update_file_path_label()
-        self._apply_filter()
+        # self._update_file_path_label()  # Commented out - aggrid has 'file' column
+        self._apply_filter(skip_if_originated=skip_if_originated)
         
         # Select event after grid update if requested
         if select_event_id is not None:
             self.set_selected_event_ids([select_event_id], origin=SelectionOrigin.EXTERNAL)
+        else:
+            # Update button state even if no event is selected (file path may have changed)
+            self._update_add_delete_button_state()
 
     def set_selected_event_ids(self, event_ids: list[str], *, origin: SelectionOrigin) -> None:
         """Programmatically select rows by event_id."""
@@ -342,10 +336,22 @@ class KymEventView:
 
     def set_selected_roi(self, roi_id: int | None) -> None:
         """Filter rows by ROI ID (None clears filter)."""
+        logger.debug(f'== roi_id:{roi_id}')
         self._roi_filter = roi_id
-        self._apply_filter()
+        # In all-files mode, if we originated a FileSelection, skip refresh to preserve column state
+        skip_refresh = self._show_all_files and self._file_selection_originated_from_view is not None
+        logger.warning(f'skip_refresh:{skip_refresh}')
+        self._apply_filter(skip_if_originated=skip_refresh)
 
-    def _apply_filter(self) -> None:
+    def _apply_filter(self, *, skip_if_originated: bool = False) -> None:
+        """Apply ROI filter and update grid data.
+        
+        Args:
+            skip_if_originated: If True and we originated a FileSelection, skip set_data to preserve column state.
+        """
+        if skip_if_originated and self._file_selection_originated_from_view is not None:
+            # We originated a FileSelection, don't refresh grid to preserve column sort/width
+            return
         if self._roi_filter is None:
             rows = list(self._all_rows)
         else:
@@ -354,6 +360,7 @@ class KymEventView:
             ]
         self._pending_rows = rows
         if self._grid is not None:
+            logger.debug('  === calling grid self._grid.set_data(rows)')
             self._grid.set_data(rows)
 
     def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:
@@ -384,6 +391,8 @@ class KymEventView:
             if event_path_str and event_path_str != current_path:
                 # Set flag to preserve this event selection when file change clears it
                 self._pending_event_selection_after_file_change = str(event_id)
+                # Track that we originated this FileSelection to prevent unnecessary refreshes
+                self._file_selection_originated_from_view = event_path_str
                 self._on_file_selected(
                     FileSelection(
                         path=event_path_str,
@@ -682,18 +691,19 @@ class KymEventView:
             )
         )
 
-    def _update_file_path_label(self) -> None:
-        """Update the file path label with current file name (stem) or placeholder."""
-        if self._file_path_label is None:
-            return
-        if self._current_file_path:
-            try:
-                file_name = Path(self._current_file_path).stem
-                self._file_path_label.text = file_name
-            except (ValueError, TypeError):
-                self._file_path_label.text = "No file selected"
-        else:
-            self._file_path_label.text = "No file selected"
+    # def _update_file_path_label(self) -> None:
+    #     """Update the file path label with current file name (stem) or placeholder."""
+    #     # Commented out - aggrid has 'file' column, no need for separate label
+    #     if self._file_path_label is None:
+    #         return
+    #     if self._current_file_path:
+    #         try:
+    #             file_name = Path(self._current_file_path).stem
+    #             self._file_path_label.text = file_name
+    #         except (ValueError, TypeError):
+    #             self._file_path_label.text = "No file selected"
+    #     else:
+    #         self._file_path_label.text = "No file selected"
 
     def _update_add_delete_button_state(self) -> None:
         """Update Add/Delete button enable/disable state."""

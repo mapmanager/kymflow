@@ -21,6 +21,8 @@ from kymflow.gui_v2.events_state import FileListChanged
 from kymflow.gui_v2.views.kym_event_view import KymEventView
 from kymflow.core.utils.logging import get_logger
 
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.gui_v2.state import AppState
@@ -78,6 +80,17 @@ class KymEventBindings:
         self._current_file = e.file
         # If all-files mode is enabled, don't change events (keep showing all files)
         if self._view._show_all_files:
+            # Check if we originated this FileSelection - if so, skip refresh but keep flag
+            # (we'll clear it after handling EventSelection events to prevent scroll reset)
+            if self._view._file_selection_originated_from_view is not None:
+                # Verify the path matches (safety check)
+                event_path = str(e.file.path) if e.file and hasattr(e.file, "path") and e.file.path else None
+                if event_path == self._view._file_selection_originated_from_view:
+                    # We originated this, skip any refresh but keep flag for EventSelection handling
+                    return
+                else:
+                    # Path doesn't match - clear flag (different FileSelection occurred)
+                    self._view._file_selection_originated_from_view = None
             return
         # Otherwise, use single-file behavior
         if e.file is None:
@@ -85,21 +98,43 @@ class KymEventBindings:
             safe_call(self._view.set_selected_event_ids, [], origin=SelectionOrigin.EXTERNAL)
             # Update file path label to show "No file selected"
             self._view._current_file_path = None
-            safe_call(self._view._update_file_path_label)
+            # safe_call(self._view._update_file_path_label)  # Commented out - aggrid has 'file' column
             return
         # Update file path from the selected file (even if no events exist)
         if hasattr(e.file, "path") and e.file.path:
             self._view._current_file_path = str(e.file.path)
-            safe_call(self._view._update_file_path_label)
+            # safe_call(self._view._update_file_path_label)  # Commented out - aggrid has 'file' column
         report = e.file.get_kym_analysis().get_velocity_report()
         safe_call(self._view.set_events, report)
 
     def _on_roi_selection_changed(self, e: ROISelection) -> None:
+        # Still call set_selected_roi to update filter state, but it will skip set_data
+        # if we originated a FileSelection (handled inside set_selected_roi)
+        logger.debug(f'e: {e}')
         safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_event_selection_changed(self, e: EventSelection) -> None:
         if e.origin == SelectionOrigin.EVENT_TABLE:
             return
+        # In all-files mode, if we originated a FileSelection, skip selection updates
+        # to preserve scroll position and avoid unnecessary grid operations
+        if self._view._show_all_files and self._view._file_selection_originated_from_view is not None:
+            # Check if this EventSelection matches the file we originated
+            event_path = str(e.path) if e.path else None
+            if event_path == self._view._file_selection_originated_from_view:
+                # We originated this FileSelection and this EventSelection matches it
+                # The row is already selected from user click, so skip programmatic updates
+                # Clear the flag now that we've handled the related events
+                self._view._file_selection_originated_from_view = None
+                return
+            # If event_id is None, this is likely the clearing event that happens before file change
+            # Don't clear the flag yet - wait for the actual file change to be confirmed
+            elif e.event_id is None:
+                # This is the clearing event before file change - keep flag and skip update
+                return
+            else:
+                # Different file with an event_id - clear flag and proceed normally
+                self._view._file_selection_originated_from_view = None
         if e.event_id is None:
             # In all-files mode, if we have a pending event selection from a file change,
             # preserve it instead of clearing (the file change cleared AppState, but we want to keep the selection)
@@ -251,6 +286,9 @@ class KymEventBindings:
         If disabled, refresh current file's events.
         """
         if self._view._show_all_files:
+            # Check if we originated a FileSelection - if so, skip refresh to preserve column state
+            if self._view._file_selection_originated_from_view is not None:
+                return
             # All-files mode: collect from all files
             if self._app_state is None:
                 return

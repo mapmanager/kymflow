@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import SetKymEventRangeState
-
+from kymflow.core.utils.logging import get_logger
+logger = get_logger(__name__)
 
 class KymEventRangeStateController:
     """Mirror SetKymEventRangeState intent events to state events."""
@@ -15,6 +16,7 @@ class KymEventRangeStateController:
 
     def _on_set_kym_event_range_state(self, e: SetKymEventRangeState) -> None:
         """Emit a state-phase SetKymEventRangeState event for bindings."""
+        logger.debug('== why here')
         self._bus.emit(
             SetKymEventRangeState(
                 enabled=e.enabled,
