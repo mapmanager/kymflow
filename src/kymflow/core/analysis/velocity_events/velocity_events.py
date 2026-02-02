@@ -27,7 +27,12 @@ class UserType(str, Enum):
     OTHER = "other"  # set by user
 
 
-EventType = Literal["baseline_drop", "nan_gap", "User Added"]  # abb added "User Added" for new events by user
+# abb added "User Added" for new events by user, "baseline_rise" for speedup events
+EventType = Literal["baseline_drop",
+                    "baseline_rise",
+                    "nan_gap",
+                    "zero_gap",
+                    "User Added"]
 
 RoundingMode = Literal["round", "floor", "ceil"]
 
@@ -307,6 +312,103 @@ def baseline_shift_score(
 
     return score, medL, medR, fs
 
+
+def detect_zero_gaps(
+    time_s: Sequence[float],
+    velocity: Sequence[float],
+    *,
+    eps0: float = 0.0,
+    zero_win_sec: float = 0.10,
+    enter_frac: float = 0.40,
+    exit_frac: float = 0.20,
+    min_duration_sec: float = 0.02,
+    merge_gap_sec: float = 0.05,
+) -> list[VelocityEvent]:
+    """Detect low-evidence events where (near-)zero values dominate a local time window.
+
+    This mirrors `detect_nan_gaps()`, but instead of NaNs it tracks the local fraction of
+    samples that are "zero-like" (either exactly zero, or within +/- eps0 of zero).
+
+    - If eps0 == 0.0: exact zero detector (v == 0.0)
+    - If eps0  > 0.0: near-zero detector (|v| <= eps0)
+
+    Notes:
+      - NaNs are treated as "not zero-like" here (missing evidence, not evidence of zero).
+        That prevents NaN runs from being double-counted as zero gaps.
+      - Uses hysteresis thresholds (enter_frac/exit_frac) to reduce flicker.
+    """
+    t = np.asarray(time_s, dtype=float)
+    v = np.asarray(velocity, dtype=float)
+    fs = estimate_fs(t)
+
+    finite = np.isfinite(v)
+    if eps0 == 0.0:
+        is_zero_like = finite & (v == 0.0)
+    else:
+        is_zero_like = finite & (np.abs(v) <= float(eps0))
+
+    w = int(max(3, round(zero_win_sec * fs))) | 1
+    half = w // 2
+
+    zero_frac = np.zeros_like(v, dtype=float)
+    n = v.size
+    for i in range(n):
+        a = max(0, i - half)
+        b = min(n, i + half + 1)
+        zero_frac[i] = float(np.mean(is_zero_like[a:b]))
+
+    # hysteresis state machine
+    in_gap = np.zeros(n, dtype=bool)
+    state = False
+    for i in range(n):
+        if not state and zero_frac[i] >= enter_frac:
+            state = True
+        elif state and zero_frac[i] <= exit_frac:
+            state = False
+        in_gap[i] = state
+
+    runs = _merge_runs_by_gap(
+        _group_runs(in_gap),
+        max_gap=int(max(0, round(merge_gap_sec * fs))),
+    )
+
+    events: list[VelocityEvent] = []
+    for s, e in runs:
+        t_start = float(t[s])
+        t_end = float(t[e])
+        dur = float(t_end - t_start)
+        if dur < min_duration_sec:
+            continue
+
+        seg = v[s : e + 1]
+        seg_finite = np.isfinite(seg)
+
+        # Fraction of samples in the span that are zero-like (within the same eps0 rule).
+        if eps0 == 0.0:
+            n_zero = int(np.sum(seg_finite & (seg == 0.0)))
+        else:
+            n_zero = int(np.sum(seg_finite & (np.abs(seg) <= float(eps0))))
+
+        zero_f = float(n_zero / seg.size) if seg.size else float("nan")
+        n_valid = int(np.sum(seg_finite))
+
+        events.append(
+            VelocityEvent(
+                event_type="zero_gap",
+                i_start=int(s),
+                t_start=t_start,
+                i_end=int(e),
+                t_end=t_end,
+                duration_sec=dur,
+                nan_fraction_in_event=None,  # keep field meaning: NaN fraction; not used here
+                n_valid_in_event=n_valid,
+                machine_type=MachineType.OTHER,
+                strength=float(zero_f * dur) if (np.isfinite(zero_f) and np.isfinite(dur)) else None,
+                note=f"eps0={eps0:g}, zero_frac={zero_f:.3f}",
+            )
+        )
+
+    return events
 
 def detect_nan_gaps(
     time_s: Sequence[float],
@@ -627,6 +729,7 @@ def detect_events(
     time_s: Sequence[float],
     velocity: Sequence[float],
     *,
+
     # baseline-drop params
     win_cmp_sec: float = 0.25,
     smooth_sec: float = 0.05,
@@ -635,12 +738,23 @@ def detect_events(
     merge_gap_sec: float = 0.10,
     top_k_total: int = 6,
     min_sep_sec: float = 0.75,
+
     # nan-gap params
     nan_win_sec: float = 0.10,
     nan_enter_frac: float = 0.40,
     nan_exit_frac: float = 0.20,
-    nan_min_duration_sec: float = 0.02,
+    nan_min_duration_sec: float = 0.2,  # 0.3 # 0.02,
     nan_merge_gap_sec: float = 0.05,
+
+    # zero-gap params (exact or near-zero)
+    zero_eps: float = 0.0,              # 0.0 → exact zero, >0 → near-zero |v| <= eps
+    zero_win_sec: float = 0.10,
+    zero_enter_frac: float = 0.40,
+    zero_exit_frac: float = 0.20,
+    zero_min_duration_sec: float = 0.2,  # 0.02,
+    zero_merge_gap_sec: float = 0.05,
+
+
 ) -> tuple[list[VelocityEvent], dict]:
     """
     Detect velocity “events” (candidate stalls/slowdowns + missing-evidence gaps) from a 1D velocity trace.
@@ -828,21 +942,37 @@ def detect_events(
         min_sep_sec=min_sep_sec,
     )
 
-    # abb 20260130, turn off nan_gap detection
-    doNanGapDetection = False
-    if doNanGapDetection:   
-        nan_events = detect_nan_gaps(
-            time_s, velocity,
-            nan_win_sec=nan_win_sec,
-            enter_frac=nan_enter_frac,
-            exit_frac=nan_exit_frac,
-            min_duration_sec=nan_min_duration_sec,
-            merge_gap_sec=nan_merge_gap_sec,
-        )
-    else:
-        nan_events = []
+    nan_events = detect_nan_gaps(
+        time_s, velocity,
+        nan_win_sec=nan_win_sec,
+        enter_frac=nan_enter_frac,
+        exit_frac=nan_exit_frac,
+        min_duration_sec=nan_min_duration_sec,
+        merge_gap_sec=nan_merge_gap_sec,
+    )
 
-    events = sorted(base_events + nan_events, key=lambda e: e.t_start)
+    zero_events = detect_zero_gaps(
+        time_s,
+        velocity,
+        eps0=zero_eps,
+        zero_win_sec=zero_win_sec,
+        enter_frac=zero_enter_frac,
+        exit_frac=zero_exit_frac,
+        min_duration_sec=zero_min_duration_sec,
+        merge_gap_sec=zero_merge_gap_sec,
+    )
+
+    # events = sorted(base_events + nan_events, key=lambda e: e.t_start)
+
+    events = sorted(
+        (
+            base_events
+            + nan_events
+            + zero_events
+        ),
+        key=lambda e: e.t_start,
+    )
 
     debug = {"score": score, "abs_med": abs_med, "threshold": thresh}
     return events, debug
+

@@ -388,7 +388,7 @@ class TestKymAnalysisVelocityEvents:
             assert event.i_start >= 0
             assert event.t_start >= 0
             # Note: nan_gap detection is currently disabled in detect_events()
-            assert event.event_type in ("baseline_drop", "nan_gap", "User Added")
+            assert event.event_type in ("baseline_drop", "baseline_rise", "nan_gap", "User Added")
 
         # Verify events are stored
         stored_events = kym_analysis.get_velocity_events(roi_id=1)

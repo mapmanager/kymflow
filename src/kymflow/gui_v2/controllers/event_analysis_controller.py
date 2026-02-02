@@ -68,12 +68,12 @@ class EventAnalysisController:
                 return
 
             # Log for debugging
-            logger.info(
-                "Starting event detection for all files: int_param=%s, float_param=%s, text_param=%s",
-                e.int_param,
-                e.float_param,
-                e.text_param,
-            )
+            # logger.info(
+            #     "Starting event detection for all files: int_param=%s, float_param=%s, text_param=%s",
+            #     e.int_param,
+            #     e.float_param,
+            #     e.text_param,
+            # )
 
             try:
                 # Call detect_all_events() on AcqImageList
@@ -94,9 +94,9 @@ class EventAnalysisController:
                         roi_id=None,
                         path=None,
                         all_files=True,
-                        int_param=e.int_param,
-                        float_param=e.float_param,
-                        text_param=e.text_param,
+                        # int_param=e.int_param,
+                        # float_param=e.float_param,
+                        # text_param=e.text_param,
                         phase="state",
                     )
                 )
@@ -135,14 +135,14 @@ class EventAnalysisController:
             return
 
         # Log for debugging
-        logger.info(
-            "Starting event detection: file=%s, roi_id=%s, int_param=%s, float_param=%s, text_param=%s",
-            kf.path,
-            e.roi_id,
-            e.int_param,
-            e.float_param,
-            e.text_param,
-        )
+        # logger.info(
+        #     "Starting event detection: file=%s, roi_id=%s, int_param=%s, float_param=%s, text_param=%s",
+        #     kf.path,
+        #     e.roi_id,
+        #     e.int_param,
+        #     e.float_param,
+        #     e.text_param,
+        # )
 
         try:
             # Run velocity event analysis synchronously
@@ -166,9 +166,9 @@ class EventAnalysisController:
                     roi_id=e.roi_id,
                     path=path_str,
                     all_files=False,
-                    int_param=e.int_param,
-                    float_param=e.float_param,
-                    text_param=e.text_param,
+                    # int_param=e.int_param,
+                    # float_param=e.float_param,
+                    # text_param=e.text_param,
                     phase="state",
                 )
             )

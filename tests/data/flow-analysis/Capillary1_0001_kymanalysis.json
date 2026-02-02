@@ -5,26 +5,45 @@
       "roi_id": 1,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-02-02T03:11:36.633893+00:00",
+      "analyzed_at": "2026-02-02T05:09:43.313848+00:00",
       "roi_revision_at_analysis": 0
     },
     "2": {
       "roi_id": 2,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-02-02T03:11:38.633075+00:00",
+      "analyzed_at": "2026-02-02T05:09:45.890185+00:00",
       "roi_revision_at_analysis": 0
     },
     "3": {
       "roi_id": 3,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-02-02T03:11:40.845015+00:00",
+      "analyzed_at": "2026-02-02T05:09:48.144419+00:00",
       "roi_revision_at_analysis": 0
     }
   },
   "velocity_events": {
     "1": [
+      {
+        "event_type": "baseline_rise",
+        "i_start": 40,
+        "i_peak": 40,
+        "i_end": null,
+        "t_start": 0.1965543925762176,
+        "t_peak": 0.1965543925762176,
+        "t_end": null,
+        "score_peak": 0.8400422781705859,
+        "baseline_before": 0.40875668823719025,
+        "baseline_after": 1.248798966407776,
+        "strength": 2.821463114604139,
+        "nan_fraction_in_event": null,
+        "n_valid_in_event": null,
+        "duration_sec": null,
+        "machine_type": "other",
+        "user_type": "unreviewed",
+        "note": ""
+      },
       {
         "event_type": "baseline_drop",
         "i_start": 246,
@@ -60,6 +79,25 @@
         "n_valid_in_event": null,
         "duration_sec": null,
         "machine_type": "stall_candidate",
+        "user_type": "unreviewed",
+        "note": ""
+      },
+      {
+        "event_type": "baseline_rise",
+        "i_start": 920,
+        "i_peak": 946,
+        "i_end": null,
+        "t_start": 4.3148369789123535,
+        "t_peak": 4.436513423919678,
+        "t_end": null,
+        "score_peak": 0.41786128282546997,
+        "baseline_before": 0.8606979250907898,
+        "baseline_after": 1.2785592079162598,
+        "strength": 1.4034772143620826,
+        "nan_fraction_in_event": null,
+        "n_valid_in_event": null,
+        "duration_sec": null,
+        "machine_type": "other",
         "user_type": "unreviewed",
         "note": ""
       },
@@ -136,6 +174,25 @@
         "n_valid_in_event": null,
         "duration_sec": null,
         "machine_type": "stall_candidate",
+        "user_type": "unreviewed",
+        "note": ""
+      },
+      {
+        "event_type": "baseline_rise",
+        "i_start": 4530,
+        "i_peak": 4530,
+        "i_end": null,
+        "t_start": 21.209156036376953,
+        "t_peak": 21.209156036376953,
+        "t_end": null,
+        "score_peak": 1.0953646451234818,
+        "baseline_before": 0.2470159977674484,
+        "baseline_after": 1.3423806428909302,
+        "strength": 3.6790183346340672,
+        "nan_fraction_in_event": null,
+        "n_valid_in_event": null,
+        "duration_sec": null,
+        "machine_type": "other",
         "user_type": "unreviewed",
         "note": ""
       },

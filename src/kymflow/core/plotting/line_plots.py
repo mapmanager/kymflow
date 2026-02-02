@@ -629,11 +629,15 @@ def _add_velocity_event_overlays(
     xref = f"x{row if row > 1 else ''}"
     yref = f"y{row if row > 1 else ''}"
     
+    # Event overlay brightness (alpha value, 0.0 = transparent, 1.0 = opaque)
+    event_overlay_alpha = 0.5
+    
     # Color mapping by event_type
     color_map = {
-        "baseline_drop": "rgba(255, 165, 0, 0.25)",  # Orange
-        "nan_gap": "rgba(255, 0, 0, 0.25)",  # Red
-        "User Added": "rgba(0, 0, 255, 0.25)",  # Blue
+        "baseline_drop": f"rgba(255, 0, 0, {event_overlay_alpha})",  # red
+        "baseline_rise": f"rgba(0, 255, 0, {event_overlay_alpha})",  # green
+        "nan_gap": f"rgba(0, 0, 255, {event_overlay_alpha})",  # blue
+        "User Added": f"rgba(255, 255, 0, {event_overlay_alpha})",  # yellow
     }
     
     for event in velocity_events:

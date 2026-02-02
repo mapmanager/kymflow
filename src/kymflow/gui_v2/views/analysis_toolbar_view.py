@@ -695,22 +695,22 @@ class AnalysisToolbarView:
         with kym_expansion("Event Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
                 # Parameter inputs
-                with ui.row().classes("items-end gap-2"):
-                    self._int_param_input = ui.number(
-                        value=0,
-                        label="Int Param",
-                        format="%d"
-                    ).classes("w-24").props("dense")
-                    self._float_param_input = ui.number(
-                        value=0.0,
-                        label="Float Param",
-                        format="%.2f"
-                    ).classes("w-24").props("dense")
-                    self._text_param_input = ui.input(
-                        value="",
-                        label="Text Param",
-                        placeholder=""
-                    ).classes("w-32").props("dense")
+                # with ui.row().classes("items-end gap-2"):
+                #     self._int_param_input = ui.number(
+                #         value=0,
+                #         label="Int Param",
+                #         format="%d"
+                #     ).classes("w-24").props("dense")
+                #     self._float_param_input = ui.number(
+                #         value=0.0,
+                #         label="Float Param",
+                #         format="%.2f"
+                #     ).classes("w-24").props("dense")
+                #     self._text_param_input = ui.input(
+                #         value="",
+                #         label="Text Param",
+                #         placeholder=""
+                #     ).classes("w-32").props("dense")
                 
                 # Detect Events buttons
                 with ui.row().classes("items-end gap-2"):
@@ -736,24 +736,24 @@ class AnalysisToolbarView:
             return
 
         # Collect parameter values from inputs
-        int_param = 0
-        float_param = 0.0
-        text_param = ""
-        
-        if self._int_param_input is not None:
-            try:
-                int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
-            except (ValueError, TypeError):
-                int_param = 0
-        
-        if self._float_param_input is not None:
-            try:
-                float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
-            except (ValueError, TypeError):
-                float_param = 0.0
-        
-        if self._text_param_input is not None:
-            text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
+        # int_param = 0
+        # float_param = 0.0
+        # text_param = ""
+        # 
+        # if self._int_param_input is not None:
+        #     try:
+        #         int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
+        #     except (ValueError, TypeError):
+        #         int_param = 0
+        # 
+        # if self._float_param_input is not None:
+        #     try:
+        #         float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
+        #     except (ValueError, TypeError):
+        #         float_param = 0.0
+        # 
+        # if self._text_param_input is not None:
+        #     text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
 
         # Emit DetectEvents intent event
         path_str = str(self._current_file.path) if self._current_file.path else None
@@ -761,9 +761,9 @@ class AnalysisToolbarView:
             DetectEvents(
                 roi_id=self._current_roi_id,
                 path=path_str,
-                int_param=int_param,
-                float_param=float_param,
-                text_param=text_param,
+                # int_param=int_param,
+                # float_param=float_param,
+                # text_param=text_param,
                 phase="intent",
             )
         )
@@ -771,24 +771,24 @@ class AnalysisToolbarView:
     def _on_detect_all_events_click(self) -> None:
         """Handle Detect Events (all files) button click."""
         # Collect parameter values from inputs (same as single-file)
-        int_param = 0
-        float_param = 0.0
-        text_param = ""
-        
-        if self._int_param_input is not None:
-            try:
-                int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
-            except (ValueError, TypeError):
-                int_param = 0
-        
-        if self._float_param_input is not None:
-            try:
-                float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
-            except (ValueError, TypeError):
-                float_param = 0.0
-        
-        if self._text_param_input is not None:
-            text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
+        # int_param = 0
+        # float_param = 0.0
+        # text_param = ""
+        # 
+        # if self._int_param_input is not None:
+        #     try:
+        #         int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
+        #     except (ValueError, TypeError):
+        #         int_param = 0
+        # 
+        # if self._float_param_input is not None:
+        #     try:
+        #         float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
+        #     except (ValueError, TypeError):
+        #         float_param = 0.0
+        # 
+        # if self._text_param_input is not None:
+        #     text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
 
         # Emit DetectEvents intent event with all_files=True
         # Note: roi_id and path are None for all-files mode
@@ -797,9 +797,9 @@ class AnalysisToolbarView:
                 roi_id=None,
                 path=None,
                 all_files=True,
-                int_param=int_param,
-                float_param=float_param,
-                text_param=text_param,
+                # int_param=int_param,
+                # float_param=float_param,
+                # text_param=text_param,
                 phase="intent",
             )
         )
