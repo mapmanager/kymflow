@@ -128,15 +128,32 @@ class AppState:
     
     # State mutation methods that trigger callbacks
     def load_folder(self, folder: Path, depth: Optional[int] = None) -> None:
-        """Scan folder for kymograph files and update app state."""
+        """Load folder or file and update app state."""
         if depth is None:
             depth = self.folder_depth
-        self.files = AcqImageList(
-            path=folder,
-            image_cls=KymImage,
-            file_extension=".tif",
-            depth=depth
-        )
+        
+        path = Path(folder)
+        if path.is_file():
+            # Single file mode (depth ignored by AcqImageList)
+            self.files = AcqImageList(
+                path=path,
+                image_cls=KymImage,
+                file_extension=".tif",
+                depth=0  # Ignored for files, but required parameter
+            )
+        elif path.is_dir():
+            # Existing folder mode
+            self.files = AcqImageList(
+                path=path,
+                image_cls=KymImage,
+                file_extension=".tif",
+                depth=depth
+            )
+        else:
+            logger.warning(f"Path is neither file nor directory: {path}")
+            return
+        
+        # AcqImageList sets self.folder to parent directory for files, or folder path for directories
         self.folder = self.files.folder
         
         logger.info("load_folder: calling file_list_changed handlers")

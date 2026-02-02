@@ -378,8 +378,17 @@ class UserConfig:
         """
         Return the remembered depth for a folder if present in recents,
         otherwise return default_folder_depth.
+        
+        For file paths, returns 0 (sentinel value, depth is ignored when loading files).
         """
         p = _normalize_folder_path(folder_path)
+        path_obj = Path(p)
+        
+        # If path is a file, return 0 (depth is ignored for files)
+        if path_obj.is_file():
+            return 0
+        
+        # For folders, look up depth in recents or use default
         for rf in self.data.recent_folders:
             if _normalize_folder_path(rf.path) == p:
                 return int(rf.depth)

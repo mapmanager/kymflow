@@ -107,6 +107,24 @@ def test_get_depth_for_folder_falls_back_to_default(tmp_path: Path) -> None:
     assert cfg.get_depth_for_folder("/tmp/a") == 2
 
 
+def test_get_depth_for_folder_with_file_path(tmp_path: Path) -> None:
+    """Test that get_depth_for_folder returns 0 for file paths."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Create a test file
+    test_file = tmp_path / "test.tif"
+    test_file.touch()
+    
+    # File paths should return 0 (depth is ignored for files)
+    assert cfg.get_depth_for_folder(test_file) == 0
+    assert cfg.get_depth_for_folder(str(test_file)) == 0
+    
+    # Even if the file is in recent folders, it should return 0
+    cfg.push_recent_folder(str(test_file.parent), depth=3)
+    assert cfg.get_depth_for_folder(test_file) == 0
+
+
 def test_schema_mismatch_resets(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
 

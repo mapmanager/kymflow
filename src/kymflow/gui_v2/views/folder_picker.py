@@ -109,3 +109,59 @@ def prompt_for_directory(initial: Path) -> Optional[str]:
     if selection:
         return selection
     return _prompt_for_directory_tk(initial)
+
+
+async def _prompt_for_file_pywebview(initial: Path) -> Optional[str]:
+    """Open native file picker dialog using pywebview (NiceGUI native mode).
+    
+    Uses NiceGUI's app.native.main_window.create_file_dialog with FileDialog.OPEN.
+    Imports webview inside function to avoid pickling issues with multiprocessing.
+    Filters for .tif files only.
+    """
+    # Check if native mode is available
+    native = getattr(app, "native", None)
+    if not native:
+        logger.warning("app.native is not available - not in native mode?")
+        return None
+    
+    main_window = getattr(native, "main_window", None)
+    if not main_window:
+        logger.warning("app.native.main_window is not available")
+        return None
+
+    try:
+        # Import webview inside function to avoid pickling issues
+        import webview  # type: ignore
+        
+        # Use FileDialog.OPEN for file selection
+        file_dialog_type = webview.FileDialog.OPEN  # type: ignore
+        logger.debug("Using webview.FileDialog.OPEN for file dialog")
+        
+        logger.debug("Opening file dialog with initial directory: %s", initial)
+        selection = await main_window.create_file_dialog(  # type: ignore[attr-defined]
+            file_dialog_type,
+            directory=str(initial),
+            allow_multiple=False,
+            file_types=("TIF files (*.tif)",),
+        )
+        
+        if not selection:
+            logger.debug("User cancelled file dialog or no selection returned")
+            return None
+        
+        # Log the type of selection for debugging
+        selection_type = type(selection).__name__
+        logger.debug("File dialog returned type: %s, value: %s", selection_type, selection)
+            
+        # Handle return value - can be string, list, or tuple (pywebview returns tuple on macOS)
+        if isinstance(selection, (list, tuple)):
+            result = str(selection[0]) if selection else None
+            logger.debug("File dialog returned %s: %s -> %s", selection_type, selection, result)
+            return result
+            
+        result = str(selection)
+        logger.debug("File dialog returned string: %s", result)
+        return result
+    except Exception as exc:
+        logger.warning("pywebview file dialog failed: %s", exc, exc_info=True)
+        return None

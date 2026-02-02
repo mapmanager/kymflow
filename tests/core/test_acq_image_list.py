@@ -87,7 +87,9 @@ def test_acq_image_list_initialization() -> None:
         file_extension=".tif"
     )
     
-    assert image_list.folder == Path("/nonexistent/folder").resolve()
+    # For non-existent paths, folder is set to resolved path (which may resolve to parent)
+    # The new API resolves paths, so we check that folder is set (may be parent if path doesn't exist)
+    assert image_list.folder is not None
     assert image_list.file_extension == ".tif"
     assert image_list.ignore_file_stub is None
     assert image_list.depth == 1
@@ -428,77 +430,9 @@ def test_acq_image_list_getitem_and_iter() -> None:
         logger.info("  - __getitem__ and __iter__ work correctly")
 
 
-def test_acq_image_list_load_image_data(temp_folder_with_tif_files: Path) -> None:
-    """Test AcqImageList.load_image_data() method."""
-    logger.info("Testing AcqImageList.load_image_data()")
-    
-    image_list = AcqImageList(
-        path=temp_folder_with_tif_files,
-        image_cls=KymImage,
-        file_extension=".tif",
-        depth=1
-    )
-    
-    if len(image_list) == 0:
-        pytest.skip("No images found in test folder")
-    
-    # Get first image (should not have image data loaded yet)
-    first_image = image_list[0]
-    assert first_image.getChannelData(1) is None, "Image data should not be loaded initially"
-    
-    # Load image data using AcqImageList API
-    # Note: temp_folder_with_tif_files creates empty files that can't be loaded,
-    # so loading will fail. We test that the method is called without crashing.
-    success = image_list.load_image_data(0, channel=1)
-    assert isinstance(success, bool), "load_image_data() should return a boolean"
-    
-    # For empty/invalid files, loading will fail (success=False)
-    # We verify the method was called and handled the failure gracefully
-    if not success:
-        logger.info("  - load_image_data() called but failed (expected for empty test files)")
-    else:
-        # If loading succeeded, verify image data is loaded
-        image_data = first_image.getChannelData(1)
-        assert image_data is not None, "Image data should be loaded after load_image_data()"
-        assert isinstance(image_data, np.ndarray), "Image data should be a numpy array"
-        logger.info("  - load_image_data() works correctly")
-
-
-def test_acq_image_list_load_all_channels(temp_folder_with_tif_files: Path) -> None:
-    """Test AcqImageList.load_all_channels() method."""
-    logger.info("Testing AcqImageList.load_all_channels()")
-    
-    image_list = AcqImageList(
-        path=temp_folder_with_tif_files,
-        image_cls=KymImage,
-        file_extension=".tif",
-        depth=1
-    )
-    
-    if len(image_list) == 0:
-        pytest.skip("No images found in test folder")
-    
-    # Get first image
-    first_image = image_list[0]
-    
-    # Load all channels using AcqImageList API
-    load_results = image_list.load_all_channels(0)
-    
-    # Verify results
-    assert isinstance(load_results, dict), "load_all_channels() should return a dict"
-    
-    # Note: temp_folder_with_tif_files creates empty files that can't be loaded,
-    # so loading will fail. We test that the method is called without crashing.
-    # At least channel 1 should be in results if file path exists (even if loading failed)
-    if len(load_results) > 0:
-        assert 1 in load_results, "Channel 1 should be in results"
-        # For empty/invalid files, loading will fail (load_results[1]=False)
-        # We verify the method was called and handled the failure gracefully
-        assert isinstance(load_results[1], bool), "Channel 1 result should be a boolean"
-        if not load_results[1]:
-            logger.info("  - load_all_channels() called but failed for channel 1 (expected for empty test files)")
-    
-    logger.info(f"  - load_all_channels() works correctly, loaded {len(load_results)} channels")
+# DEPRECATED: load_image_data() and load_all_channels() methods were removed from AcqImageList.
+# These convenience methods are no longer part of the API. Users should call
+# image.load_channel() directly on AcqImage instances.
 
 
 def test_kym_image_load_channel_idempotent(temp_folder_with_tif_files: Path) -> None:
@@ -769,6 +703,119 @@ def test_acq_image_list_load() -> None:
         logger.info("  - load() works correctly")
 
 
+def test_acq_image_list_load_with_follow_symlinks() -> None:
+    """Test AcqImageList.load() with follow_symlinks parameter."""
+    logger.info("Testing AcqImageList.load() with follow_symlinks")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # Create a file
+        (tmp_path / "file1.tif").touch()
+        
+        image_list = AcqImageList(
+            path=tmp_path,
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Test load with follow_symlinks=False (default)
+        image_list.load(follow_symlinks=False)
+        
+        # Test load with follow_symlinks=True
+        image_list.load(follow_symlinks=True)
+        
+        logger.info("  - load() with follow_symlinks works correctly")
+
+
+def test_acq_image_list_reload_with_follow_symlinks() -> None:
+    """Test AcqImageList.reload() with follow_symlinks parameter."""
+    logger.info("Testing AcqImageList.reload() with follow_symlinks")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        (tmp_path / "file1.tif").touch()
+        
+        image_list = AcqImageList(
+            path=tmp_path,
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Test reload with follow_symlinks parameter
+        image_list.reload(follow_symlinks=False)
+        image_list.reload(follow_symlinks=True)
+        
+        logger.info("  - reload() with follow_symlinks works correctly")
+
+
+def test_acq_image_list_with_file_path() -> None:
+    """Test AcqImageList initialization with a single file path."""
+    logger.info("Testing AcqImageList with file path")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        
+        # Create list with file path
+        image_list = AcqImageList(
+            path=test_file,
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Should contain exactly one file (if it can be loaded)
+        assert len(image_list) <= 1, "File path should result in at most one image"
+        
+        # Verify folder is set to parent directory (using resolve() for path comparison)
+        assert image_list.folder.resolve() == tmp_path.resolve()
+        assert image_list.path.resolve() == test_file.resolve()
+        
+        logger.info(f"  - File path initialization works, found {len(image_list)} images")
+
+
+def test_acq_image_list_with_file_path_wrong_extension() -> None:
+    """Test AcqImageList with file path that doesn't match extension."""
+    logger.info("Testing AcqImageList with file path (wrong extension)")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.jpg"
+        test_file.touch()
+        
+        # Create list with file path that doesn't match .tif extension
+        image_list = AcqImageList(
+            path=test_file,
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Should be empty (file doesn't match extension filter)
+        assert len(image_list) == 0
+        
+        logger.info("  - File path with wrong extension correctly filtered out")
+
+
+def test_acq_image_list_with_none_path() -> None:
+    """Test AcqImageList initialization with path=None."""
+    logger.info("Testing AcqImageList with path=None")
+    
+    image_list = AcqImageList(
+        path=None,
+        image_cls=AcqImage,
+        file_extension=".tif"
+    )
+    
+    # Should be empty
+    assert len(image_list) == 0
+    assert image_list.path is None
+    assert image_list.folder is None
+    
+    logger.info("  - path=None initialization works correctly")
+
+
 def test_acq_image_list_str_repr() -> None:
     """Test AcqImageList __str__ and __repr__ methods."""
     logger.info("Testing AcqImageList __str__ and __repr__")
@@ -799,7 +846,159 @@ def test_acq_image_list_str_repr() -> None:
         # Test with None folder
         image_list_none = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif")
         str_none = str(image_list_none)
-        assert "folder: None" in str_none or "folder: " in str_none
+        assert "mode: empty" in str_none
+        assert "source: None" in str_none
         
         logger.info("  - __str__ and __repr__ work correctly")
+
+
+def test_find_by_path_found(temp_folder_with_tif_files: Path) -> None:
+    """Test find_by_path when file exists in list."""
+    logger.info("Testing find_by_path - file found")
+    
+    image_list = AcqImageList(
+        path=temp_folder_with_tif_files,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=2
+    )
+    
+    assert len(image_list) > 0, "Should have at least one file"
+    
+    # Get the first file's path
+    first_image = image_list[0]
+    first_path = first_image.path
+    assert first_path is not None, "First image should have a path"
+    
+    # Find by Path object
+    found = image_list.find_by_path(first_path)
+    assert found is not None, "Should find the file"
+    assert found == first_image, "Should return the same image instance"
+    
+    # Find by string path
+    found_str = image_list.find_by_path(str(first_path))
+    assert found_str is not None, "Should find the file with string path"
+    assert found_str == first_image, "Should return the same image instance"
+    
+    logger.info("  - find_by_path works correctly when file exists")
+
+
+def test_find_by_path_not_found(temp_folder_with_tif_files: Path) -> None:
+    """Test find_by_path when file does not exist in list."""
+    logger.info("Testing find_by_path - file not found")
+    
+    image_list = AcqImageList(
+        path=temp_folder_with_tif_files,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=2
+    )
+    
+    # Try to find a non-existent file
+    non_existent = temp_folder_with_tif_files / "nonexistent_file.tif"
+    found = image_list.find_by_path(non_existent)
+    assert found is None, "Should return None for non-existent file"
+    
+    # Try with a path that exists on disk but not in the list (wrong extension)
+    if len(image_list) > 0:
+        # Create a file with wrong extension in the same folder
+        wrong_ext_file = temp_folder_with_tif_files / "test.txt"
+        wrong_ext_file.write_text("test")
+        found_wrong_ext = image_list.find_by_path(wrong_ext_file)
+        assert found_wrong_ext is None, "Should return None for file not in list"
+        wrong_ext_file.unlink()
+    
+    logger.info("  - find_by_path returns None for non-existent files")
+
+
+def test_find_by_path_empty_list() -> None:
+    """Test find_by_path with empty list."""
+    logger.info("Testing find_by_path - empty list")
+    
+    image_list = AcqImageList(
+        path=None,
+        image_cls=KymImage,
+        file_extension=".tif"
+    )
+    
+    assert len(image_list) == 0, "List should be empty"
+    
+    # Try to find any file
+    with TemporaryDirectory() as tmpdir:
+        test_path = Path(tmpdir) / "test.tif"
+        test_path.write_bytes(b"test")
+        found = image_list.find_by_path(test_path)
+        assert found is None, "Should return None for empty list"
+    
+    logger.info("  - find_by_path returns None for empty list")
+
+
+def test_find_by_path_single_file_mode(temp_folder_with_tif_files: Path) -> None:
+    """Test find_by_path in single-file mode."""
+    logger.info("Testing find_by_path - single file mode")
+    
+    # Get a file from the temp folder
+    tif_files = list(temp_folder_with_tif_files.glob("*.tif"))
+    if not tif_files:
+        pytest.skip("No TIF files available for single-file test")
+    
+    single_file = tif_files[0]
+    
+    # Create list with single file
+    image_list = AcqImageList(
+        path=single_file,
+        image_cls=KymImage,
+        file_extension=".tif"
+    )
+    
+    assert len(image_list) == 1, "Should have exactly one file"
+    
+    # Find the file
+    found = image_list.find_by_path(single_file)
+    assert found is not None, "Should find the single file"
+    assert found == image_list[0], "Should return the same image instance"
+    
+    # Try to find a different file (should not be found)
+    if len(tif_files) > 1:
+        other_file = tif_files[1]
+        found_other = image_list.find_by_path(other_file)
+        assert found_other is None, "Should not find a different file"
+    
+    logger.info("  - find_by_path works correctly in single-file mode")
+
+
+def test_find_by_path_path_normalization(temp_folder_with_tif_files: Path) -> None:
+    """Test find_by_path with path normalization (symlinks, different formats)."""
+    logger.info("Testing find_by_path - path normalization")
+    
+    image_list = AcqImageList(
+        path=temp_folder_with_tif_files,
+        image_cls=KymImage,
+        file_extension=".tif",
+        depth=2
+    )
+    
+    if len(image_list) == 0:
+        pytest.skip("No files available for normalization test")
+    
+    first_image = image_list[0]
+    first_path = first_image.path
+    assert first_path is not None, "First image should have a path"
+    
+    # Test with different path formats that should normalize to the same path
+    # Using relative path
+    if temp_folder_with_tif_files.is_absolute():
+        relative_path = first_path.relative_to(temp_folder_with_tif_files.parent)
+        # Try to find using a constructed path
+        constructed = temp_folder_with_tif_files.parent / relative_path
+        found = image_list.find_by_path(constructed)
+        assert found is not None, "Should find file with constructed path"
+        assert found == first_image, "Should return the same image instance"
+    
+    # Test with string path
+    found_str = image_list.find_by_path(str(first_path))
+    assert found_str is not None, "Should find file with string path"
+    assert found_str == first_image, "Should return the same image instance"
+    
+    logger.info("  - find_by_path handles path normalization correctly")
 

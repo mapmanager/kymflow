@@ -4,20 +4,18 @@ AcqImageList automatically scans a folder (and optionally subfolders up to a spe
 for files matching a given extension and creates AcqImage instances for each one.
 
 Refactor note:
-- The public constructor signature is unchanged: `path` can now be either a directory *or* a file.
+- The public constructor signature is unchanged in spirit: `path` can now be either a directory or a file.
+- NEW: `path` may be None to create an empty list (backwards-compat with your original behavior).
 - If `path` is a file and it matches `file_extension`, the list will contain exactly that one file.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
@@ -34,20 +32,12 @@ class AcqImageList(Generic[T]):
     If `path` is a file, and its extension matches `file_extension`, then the resulting
     list contains exactly that one file.
 
-    Attributes:
-        path: The resolved input path (directory or file).
-        folder: The scanned folder when `path` is a directory; for file-input, this is
-            the parent directory of the file (kept for backwards-compat).
-        depth: Recursive scanning depth used (only relevant for directory mode).
-        file_extension: File extension used for matching (e.g., ".tif").
-        ignore_file_stub: Stub string to ignore in filenames (e.g., "C002").
-        image_cls: Class used to instantiate images.
-        images: List of AcqImage instances.
+    If `path` is None, the resulting list is empty (backwards-compat).
     """
 
     def __init__(
         self,
-        path: str | Path,
+        path: str | Path | None = None,
         *,
         image_cls: Type[T] = AcqImage,
         file_extension: str = ".tif",
@@ -58,7 +48,7 @@ class AcqImageList(Generic[T]):
         """Initialize AcqImageList and automatically load files.
 
         Args:
-            path: Directory path to scan for files, or a single file path.
+            path: Directory path to scan for files, a single file path, or None for empty list.
             image_cls: Class to instantiate for each file. Defaults to AcqImage.
             file_extension: File extension to match (e.g., ".tif"). Defaults to ".tif".
             ignore_file_stub: Stub string to ignore in filenames. If a filename contains
@@ -72,18 +62,6 @@ class AcqImageList(Generic[T]):
             follow_symlinks: If True, follow symbolic links when searching.
                 Defaults to False.
         """
-        resolved = Path(path).expanduser().resolve()
-
-        # Keep the original "folder-based" public surface, but also store the
-        # true source path (which may be a file).
-        self.path: Path = resolved
-
-        # Backwards-compat:
-        # Historically `folder` was always the resolved directory passed in.
-        # For file-input, callers sometimes still expect `.folder` to be a directory-like
-        # thing (e.g. used for display). We set it to the file's parent in that case.
-        self.folder: Path = resolved if resolved.is_dir() else resolved.parent
-
         self.depth = depth
         self.file_extension = file_extension
         self.ignore_file_stub = ignore_file_stub
@@ -91,7 +69,25 @@ class AcqImageList(Generic[T]):
         self.images: List[T] = []
 
         # Internal mode: directory scan vs single-file
-        self._single_file: Optional[Path] = resolved if resolved.is_file() else None
+        self._single_file: Optional[Path] = None
+
+        # Allow initializing an empty list (backwards-compat)
+        if path is None:
+            self.path: Optional[Path] = None
+            self.folder: Optional[Path] = None
+            return
+
+        resolved = Path(path).expanduser().resolve()
+
+        # Store the true source path (may be a directory or a file).
+        self.path: Optional[Path] = resolved
+
+        # Backwards-compat: `.folder` remains "directory-like".
+        # If source is a file, `.folder` is its parent directory.
+        self.folder: Optional[Path] = resolved if resolved.is_dir() else resolved.parent
+
+        # Determine single-file mode
+        self._single_file = resolved if resolved.is_file() else None
 
         # Automatically load files during initialization
         self._load_files(follow_symlinks=follow_symlinks)
@@ -153,7 +149,7 @@ class AcqImageList(Generic[T]):
             return
 
         # --- Directory-scan mode ---
-        if not self.folder.exists() or not self.folder.is_dir():
+        if self.folder is None or (not self.folder.exists()) or (not self.folder.is_dir()):
             logger.warning(f"AcqImageList: folder does not exist or is not a directory: {self.folder}")
             return
 
@@ -199,6 +195,7 @@ class AcqImageList(Generic[T]):
         Clears existing images and reloads from the same source:
         - if constructed with a file path: reloads that one file
         - if constructed with a folder path: rescans the folder
+        - if constructed with path=None: remains empty
 
         Args:
             follow_symlinks: If True, follow symbolic links when searching.
@@ -220,6 +217,62 @@ class AcqImageList(Generic[T]):
         """Collect metadata for all loaded AcqImage instances into a list."""
         return list(self.iter_metadata())
 
+    def any_dirty_analysis(self) -> bool:
+        """Return True if any image has unsaved analysis or metadata."""
+        for image in self.images:
+            if hasattr(image, "get_kym_analysis"):
+                try:
+                    if image.get_kym_analysis().is_dirty:
+                        return True
+                except Exception:
+                    continue
+        return False
+
+    def total_number_of_event(self) -> int:
+        """Return the total number of kym events across all loaded AcqImage instances."""
+        total_events = 0
+        for image in self.images:
+            if hasattr(image, "get_kym_analysis"):
+                total_events += image.get_kym_analysis().total_num_velocity_events()
+        return total_events
+
+    def detect_all_events(self) -> None:
+        """Detect velocity events for all ROIs in all loaded AcqImage instances.
+        
+        Iterates through all images in the list and for each image that has kym_analysis,
+        detects velocity events for all ROIs in that image. Images without kym_analysis
+        are silently skipped.
+        
+        This method does not require image data to be loaded - it works on AcqImage
+        instances that have analysis data available.
+        """
+        for image in self.images:
+            if hasattr(image, "get_kym_analysis"):
+                for roi_id in image.rois.get_roi_ids():
+                    image.get_kym_analysis().run_velocity_event_analysis(roi_id)
+    
+    def find_by_path(self, path: str | Path) -> Optional[T]:
+        """Find an image in the list by its path.
+        
+        Args:
+            path: File path to search for (string or Path). Paths are normalized
+                (resolved and expanded) before comparison.
+        
+        Returns:
+            The matching AcqImage instance if found, None otherwise.
+        """
+        search_path = Path(path).expanduser().resolve()
+        
+        for image in self.images:
+            if image.path is None:
+                continue
+            # Normalize the image's path for comparison
+            image_path = Path(image.path).expanduser().resolve()
+            if image_path == search_path:
+                return image
+        
+        return None
+    
     def __len__(self) -> int:
         """Return the number of images in the list."""
         return len(self.images)
@@ -233,8 +286,8 @@ class AcqImageList(Generic[T]):
         return iter(self.images)
 
     def __str__(self) -> str:
-        mode = "file" if self._single_file is not None else "folder"
-        src = self._single_file if self._single_file is not None else self.folder
+        mode = "empty" if self.path is None else ("file" if self._single_file is not None else "folder")
+        src = self._single_file if self._single_file is not None else (self.folder or self.path)
         return (
             f"AcqImageList(mode: {mode}, source: {src}, depth: {self.depth}, "
             f"file_extension: {self.file_extension}, ignore_file_stub: {self.ignore_file_stub}, "

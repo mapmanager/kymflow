@@ -71,12 +71,12 @@ class FileSelectionController:
             self._app_state.select_file(None, origin=e.origin)
             return
 
-        # Find matching file in AppState file list
-        match = None
-        for f in self._app_state.files:
-            if str(f.path) == e.path:
-                match = f
-                break
+        match = self._app_state.files.find_by_path(e.path)  # Find matching file in AppState file list
+        # match = None
+        # for f in self._app_state.files:
+        #     if str(f.path) == e.path:
+        #         match = f
+        #         break
 
         # Update AppState with selection (origin preserved for feedback loop prevention)
         self._app_state.select_file(match, origin=e.origin)

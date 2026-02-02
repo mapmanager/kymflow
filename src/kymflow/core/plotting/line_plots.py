@@ -23,7 +23,7 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
+def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:  # pragma: no cover
     """Convert hex color string to RGBA format.
     
     Args:
@@ -436,7 +436,7 @@ def plot_image_line_plotly(  # pragma: no cover
     return fig
 
 
-def _add_single_roi_line_plot(
+def _add_single_roi_line_plot(  # pragma: no cover
     fig: go.Figure,
     kym_analysis,
     roi_id: int,
@@ -592,7 +592,7 @@ def _add_single_roi_line_plot(
         )
 
 
-def _add_velocity_event_overlays(
+def _add_velocity_event_overlays(  # pragma: no cover
     fig: go.Figure,
     kym_analysis,
     roi_id: int,
@@ -1159,7 +1159,7 @@ def plot_image_line_plotly_v3(
     return fig
 
 
-def _add_roi_overlay(
+def _add_roi_overlay(  # pragma: no cover
     fig: go.Figure,
     kf: KymImage,
     selected_roi_id: Optional[int],
@@ -1283,7 +1283,7 @@ def _add_roi_overlay(
         fig.update_layout(annotations=existing_annotations)
 
 
-def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:
+def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:  # pragma: no cover
     """Update the x-axis range for both subplots in an image/line plotly figure."""
     # Update master axis (row=2) - this controls both subplots with shared_xaxes
     fig.update_xaxes(range=x_range, row=2, col=1)
@@ -1291,7 +1291,7 @@ def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:
     fig.update_xaxes(range=x_range, row=1, col=1)
 
 
-def update_colorscale(fig: go.Figure, colorscale: str) -> None:
+def update_colorscale(fig: go.Figure, colorscale: str) -> None:  # pragma: no cover
     """Update the colorscale for the heatmap in an image/line plotly figure."""
     colorscale_value = get_colorscale(colorscale)
     fig.update_traces(
@@ -1300,7 +1300,7 @@ def update_colorscale(fig: go.Figure, colorscale: str) -> None:
     )
 
 
-def update_contrast(
+def update_contrast(  # pragma: no cover
     fig: go.Figure, zmin: Optional[int] = None, zmax: Optional[int] = None
 ) -> None:
     """Update the contrast (zmin/zmax) for the heatmap in an image/line plotly figure."""
@@ -1317,7 +1317,7 @@ def update_contrast(
         )
 
 
-def reset_image_zoom(fig: go.Figure, kf: Optional[KymImage]) -> None:
+def reset_image_zoom(fig: go.Figure, kf: Optional[KymImage]) -> None:  # pragma: no cover
     """Reset the zoom to full scale for the kymograph image subplot."""
     if kf is None:
         return

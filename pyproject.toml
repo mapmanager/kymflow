@@ -62,7 +62,11 @@ test = [
     "pytest-asyncio>=0.21.0",
     "selenium>=4.0.0",
 ]
-notebook = ["jupyterlab>=4.3.0"]
+marimo = [
+    "marimo>=0.15",
+    #"plotly>=5.18",
+    #"pandas>=2.0",
+]
 pyinstaller = [
     "pyinstaller>=6.17.0",
 ]
@@ -91,7 +95,11 @@ test = [
     "pytest-asyncio>=0.21.0",
     "selenium>=4.0.0",
 ]
-notebook = ["jupyterlab>=4.3.0"]
+marimo = [
+    "marimo>=0.15",
+    #"plotly>=5.18",
+    #"pandas>=2.0",
+]
 pyinstaller = [
     "pyinstaller>=6.17.0",
 ]
