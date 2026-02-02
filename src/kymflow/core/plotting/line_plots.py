@@ -41,7 +41,7 @@ def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
     return f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha})"
 
 
-def line_plot_plotly(
+def line_plot_plotly(  # pragma: no cover
     kf: Optional[KymImage],
     roi_id: int,
     x: str,
@@ -158,7 +158,7 @@ def line_plot_plotly(
     return fig
 
 
-def plot_image_line_plotly(
+def plot_image_line_plotly(  # pragma: no cover
     kf: Optional[KymImage],
     channel: int = 1,
     yStat: str = "velocity",
@@ -725,7 +725,7 @@ def _add_velocity_event_overlays(
 
 
 # DEPRECATED: This function is deprecated. Use plot_image_line_plotly_v3() instead.
-def plot_image_line_plotly_v2(
+def plot_image_line_plotly_v2(  # pragma: no cover
     kf: Optional[KymImage],
     channel: int = 1,
     yStat: str = "velocity",
@@ -738,7 +738,7 @@ def plot_image_line_plotly_v2(
     zmax: Optional[int] = None,
     theme: Optional[ThemeMode] = ThemeMode.LIGHT,
     transpose: bool = False,
-) -> go.Figure:
+) -> go.Figure:  # pragma: no cover
     """Create a figure with kymograph image and one or more line plots for multiple ROIs.
     
     .. deprecated:: 

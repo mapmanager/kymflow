@@ -10,7 +10,7 @@ from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.plotting.theme import get_theme_colors, get_theme_template
 
 
-def image_plot_plotly(
+def image_plot_plotly(  # pragma: no cover
     image: Optional[np.ndarray],
     theme: Optional[ThemeMode] = None,
 ) -> go.Figure:
@@ -60,6 +60,7 @@ def image_plot_plotly(
     return fig
 
 
+# used in histogram view
 def histogram_plot_plotly(
     image: Optional[np.ndarray],
     zmin: Optional[int] = None,
