@@ -148,3 +148,82 @@ def test_all_tif_files_loadable(sample_tif_files: list[Path]) -> None:
         logger.info(f"  - num_lines: {kymFile.num_lines}")
         logger.info(f"  - pixels_per_line: {kymFile.pixels_per_line}")
         # logger.info(f"  - duration_seconds: {kymFile.duration_seconds}")
+
+
+def test_kym_image_getrowdict() -> None:
+    """Test KymImage.getRowDict() method."""
+    import numpy as np
+    from pathlib import Path
+    
+    # Create synthetic kymograph image
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    
+    # Set up header with kymograph-specific values
+    kym_image.update_header(
+        shape=(100, 200),
+        ndim=2,
+        voxels=[0.001, 0.284],  # seconds_per_line, um_per_pixel
+        voxels_units=["s", "um"],
+        labels=["Time (s)", "Space (um)"],
+    )
+    kym_image._header.physical_size = [0.1, 56.8]  # duration, length
+    
+    # Set experiment metadata
+    kym_image.update_experiment_metadata(note="Test note")
+    
+    # Get row dict
+    row_dict = kym_image.getRowDict()
+    
+    # Check that it has the expected keys from KymImage.getRowDict()
+    assert "File Name" in row_dict
+    assert "Analyzed" in row_dict
+    assert "Saved" in row_dict
+    assert "Num ROIS" in row_dict
+    assert "Total Num Velocity Events" in row_dict
+    assert "Parent Folder" in row_dict
+    assert "Grandparent Folder" in row_dict
+    assert "duration (s)" in row_dict
+    assert "length (um)" in row_dict
+    assert "note" in row_dict
+    assert "path" in row_dict
+    
+    # Check values
+    assert row_dict["Num ROIS"] == 0
+    assert row_dict["Total Num Velocity Events"] == 0
+    assert row_dict["note"] == "Test note"
+    assert row_dict["duration (s)"] == pytest.approx(0.1, abs=0.001)
+    assert row_dict["length (um)"] == pytest.approx(56.8, abs=0.1)
+    
+    logger.info(f"  - getRowDict() returns correct structure: {list(row_dict.keys())}")
+
+
+def test_kym_image_image_dur() -> None:
+    """Test KymImage.image_dur property."""
+    import numpy as np
+    
+    # Create synthetic kymograph image
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    
+    # Set up header
+    kym_image.update_header(
+        shape=(100, 200),
+        ndim=2,
+        voxels=[0.001, 0.284],  # seconds_per_line, um_per_pixel
+    )
+    
+    # image_dur = num_lines * seconds_per_line
+    expected_dur = 100 * 0.001  # 0.1 seconds
+    assert kym_image.image_dur == pytest.approx(expected_dur)
+    
+    # Test with None shape
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        test_file.touch()
+        kym_image_path_only = KymImage(path=test_file, load_image=False)
+        # num_lines will be None if shape is not set
+        assert kym_image_path_only.image_dur is None
+    
+    logger.info("  - image_dur property works correctly")

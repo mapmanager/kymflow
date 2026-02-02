@@ -563,3 +563,78 @@ def test_acq_image_get_roi_physical_coords() -> None:
     
     logger.info("  - get_roi_physical_coords() works correctly")
 
+
+def test_acq_image_get_img_slice_2d() -> None:
+    """Test get_img_slice() with 2D image."""
+    logger.info("Testing AcqImage get_img_slice() with 2D image")
+    
+    # Create 2D synthetic image
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=test_image)
+    
+    # For 2D images, slice_num is ignored and returns full image
+    slice_data = acq.get_img_slice(slice_num=0, channel=1)
+    assert slice_data is not None
+    assert slice_data.shape == (100, 200)
+    assert np.array_equal(slice_data, test_image)
+    
+    logger.info("  - get_img_slice() works correctly for 2D images")
+
+
+def test_acq_image_get_img_slice_3d() -> None:
+    """Test get_img_slice() with 3D image."""
+    logger.info("Testing AcqImage get_img_slice() with 3D image")
+    
+    # Create 3D synthetic image (10 slices, 100x200 each)
+    test_image = np.random.randint(0, 255, size=(10, 100, 200), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=test_image)
+    
+    # Get first slice
+    slice_0 = acq.get_img_slice(slice_num=0, channel=1)
+    assert slice_0 is not None
+    assert slice_0.shape == (100, 200)
+    assert np.array_equal(slice_0, test_image[0, :, :])
+    
+    # Get middle slice
+    slice_5 = acq.get_img_slice(slice_num=5, channel=1)
+    assert slice_5 is not None
+    assert slice_5.shape == (100, 200)
+    assert np.array_equal(slice_5, test_image[5, :, :])
+    
+    # Get last slice
+    slice_9 = acq.get_img_slice(slice_num=9, channel=1)
+    assert slice_9 is not None
+    assert slice_9.shape == (100, 200)
+    assert np.array_equal(slice_9, test_image[9, :, :])
+    
+    # Test error cases
+    with pytest.raises(ValueError, match="Slice number must be between"):
+        acq.get_img_slice(slice_num=-1, channel=1)
+    
+    with pytest.raises(ValueError, match="Slice number must be between"):
+        acq.get_img_slice(slice_num=10, channel=1)
+    
+    # Test missing channel
+    slice_missing = acq.get_img_slice(slice_num=0, channel=999)
+    assert slice_missing is None
+    
+    logger.info("  - get_img_slice() works correctly for 3D images")
+
+
+def test_acq_image_load_channel_not_implemented() -> None:
+    """Test that load_channel() returns False for base AcqImage (not implemented)."""
+    logger.info("Testing AcqImage load_channel() - base class doesn't implement")
+    
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        test_file.touch()
+        
+        acq = AcqImage(path=test_file)
+        
+        # Base class doesn't implement _load_channel_from_path, so load_channel should fail
+        result = acq.load_channel(1)
+        assert result is False
+        
+        logger.info("  - load_channel() returns False for base class (as expected)")
+

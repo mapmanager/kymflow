@@ -336,4 +336,241 @@ def test_kymanalysis_metadata_only_dirty() -> None:
         assert data["experiment_metadata"]["region"] == "cortex"
 
 
+def test_kymanalysis_velocity_event_add() -> None:
+    """Test adding velocity events."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Add ROI
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add velocity event
+    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    assert event_id is not None
+    assert isinstance(event_id, str)  # Should be UUID
+    
+    # Verify event was added
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert events is not None
+    assert len(events) == 1
+    assert events[0].t_start == 0.5
+    assert events[0].t_end == 1.0
+    assert events[0].event_type == "User Added"
+    
+    # Add another event without end time
+    event_id2 = kym_analysis.add_velocity_event(roi.id, t_start=2.0, t_end=None)
+    assert event_id2 is not None
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert len(events) == 2
+    assert events[1].t_end is None
+
+
+def test_kymanalysis_velocity_event_delete() -> None:
+    """Test deleting velocity events."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add two events
+    event_id1 = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id2 = kym_analysis.add_velocity_event(roi.id, t_start=2.0, t_end=3.0)
+    
+    assert kym_analysis.num_velocity_events(roi.id) == 2
+    
+    # Delete first event
+    deleted = kym_analysis.delete_velocity_event(event_id1)
+    assert deleted is True
+    assert kym_analysis.num_velocity_events(roi.id) == 1
+    
+    # Try to delete non-existent event
+    deleted = kym_analysis.delete_velocity_event("non-existent-uuid")
+    assert deleted is False
+
+
+def test_kymanalysis_velocity_event_update_field() -> None:
+    """Test updating velocity event fields."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add event
+    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    
+    # Update user_type
+    from kymflow.core.analysis.velocity_events.velocity_events import UserType
+    updated_id = kym_analysis.update_velocity_event_field(event_id, "user_type", UserType.REVIEWED.value)
+    assert updated_id == event_id  # UUID doesn't change
+    
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert events[0].user_type == UserType.REVIEWED
+    
+    # Update t_start
+    updated_id = kym_analysis.update_velocity_event_field(event_id, "t_start", 0.6)
+    assert updated_id == event_id
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert events[0].t_start == 0.6
+    
+    # Update t_end
+    updated_id = kym_analysis.update_velocity_event_field(event_id, "t_end", 1.1)
+    assert updated_id == event_id
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert events[0].t_end == 1.1
+
+
+def test_kymanalysis_velocity_event_update_range() -> None:
+    """Test updating velocity event time range."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add event
+    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    
+    # Update both t_start and t_end atomically
+    updated_id = kym_analysis.update_velocity_event_range(event_id, t_start=0.6, t_end=1.1)
+    assert updated_id == event_id
+    
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert events[0].t_start == 0.6
+    assert events[0].t_end == 1.1
+
+
+def test_kymanalysis_velocity_event_get_report() -> None:
+    """Test getting velocity report."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add event
+    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    
+    # Get report for specific ROI
+    report = kym_analysis.get_velocity_report(roi_id=roi.id)
+    assert len(report) == 1
+    assert report[0]["roi_id"] == roi.id
+    assert report[0]["event_id"] is not None
+    assert report[0]["t_start"] == 0.5
+    assert report[0]["t_end"] == 1.0
+    
+    # Get report for all ROIs
+    report_all = kym_analysis.get_velocity_report(roi_id=None)
+    assert len(report_all) == 1
+
+
+def test_kymanalysis_velocity_event_remove() -> None:
+    """Test removing velocity events by type."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add user-added event
+    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    
+    # Simulate auto-detected event (would normally come from run_velocity_event_analysis)
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent, UserType
+    auto_event = VelocityEvent(
+        event_type="baseline_drop",
+        i_start=100,
+        t_start=1.0,
+        i_end=200,
+        t_end=2.0,
+        user_type=UserType.UNREVIEWED,
+    )
+    if roi.id not in kym_analysis._velocity_events:
+        kym_analysis._velocity_events[roi.id] = []
+    kym_analysis._velocity_events[roi.id].append(auto_event)
+    
+    assert kym_analysis.num_velocity_events(roi.id) == 2
+    
+    # Remove only auto-detected events (keeps user-added)
+    kym_analysis.remove_velocity_event(roi.id, "auto_detected")
+    assert kym_analysis.num_velocity_events(roi.id) == 1  # User-added event remains
+    
+    # Remove all events
+    kym_analysis.remove_velocity_event(roi.id, "_remove_all")
+    assert kym_analysis.num_velocity_events(roi.id) == 0
+
+
+def test_kymanalysis_total_num_velocity_events() -> None:
+    """Test total_num_velocity_events() across all ROIs."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Add two ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
+    roi1 = kym_image.rois.create_roi(bounds=bounds1)
+    bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
+    roi2 = kym_image.rois.create_roi(bounds=bounds2)
+    
+    # Add events to both ROIs
+    kym_analysis.add_velocity_event(roi1.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi1.id, t_start=2.0, t_end=3.0)
+    kym_analysis.add_velocity_event(roi2.id, t_start=1.0, t_end=2.0)
+    
+    assert kym_analysis.total_num_velocity_events() == 3
+    assert kym_analysis.num_velocity_events(roi1.id) == 2
+    assert kym_analysis.num_velocity_events(roi2.id) == 1
+
+
+def test_kymanalysis_has_v0_flow_analysis() -> None:
+    """Test has_v0_flow_analysis() method."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Initially should be False
+    assert kym_analysis.has_v0_flow_analysis(roi.id) is False
+    
+    # Analyze with regular algorithm
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    assert kym_analysis.has_v0_flow_analysis(roi.id) is False
+    
+    # Manually set v0 algorithm (simulating import)
+    from kymflow.core.image_loaders.kym_analysis import RoiAnalysisMetadata
+    from datetime import datetime, timezone
+    kym_analysis._analysis_metadata[roi.id] = RoiAnalysisMetadata(
+        roi_id=roi.id,
+        algorithm="mpRadon_v0",
+        window_size=16,
+        analyzed_at=datetime.now(timezone.utc).isoformat(),
+        roi_revision_at_analysis=roi.revision,
+    )
+    assert kym_analysis.has_v0_flow_analysis(roi.id) is True
 

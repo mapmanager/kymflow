@@ -210,6 +210,32 @@ def test_default_config_path() -> None:
     assert path.parent.is_dir()
 
 
+def test_default_config_path_with_app_author() -> None:
+    """Test UserConfig.default_config_path() with app_author parameter."""
+    path = UserConfig.default_config_path(
+        app_name="test_app", 
+        filename="test.json",
+        app_author="test_author"
+    )
+    
+    assert path.name == "test.json"
+    assert path.parent.exists()
+    assert path.parent.is_dir()
+
+
+def test_load_with_app_author() -> None:
+    """Test UserConfig.load() with app_author parameter."""
+    cfg = UserConfig.load(
+        app_name="test_app",
+        filename="test_config.json",
+        app_author="test_author"
+    )
+    
+    assert cfg.path.name == "test_config.json"
+    # Path should be in author-specific directory
+    assert "test_author" in str(cfg.path) or "test_app" in str(cfg.path)
+
+
 def test_set_default_folder_depth(tmp_path: Path) -> None:
     """Test UserConfig.set_default_folder_depth() method."""
     cfg_path = tmp_path / "user_config.json"
