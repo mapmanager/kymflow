@@ -466,14 +466,29 @@ def detect_baseline_drops(
     top_k_total: int = 6,
     min_sep_sec: float = 0.75,
 ) -> tuple[list[VelocityEvent], np.ndarray, np.ndarray, float]:
-    """Detect candidate slowdowns/stalls as drops in baseline |velocity|.
+    """Detect baseline shifts in |velocity| using a left-vs-right comparison score.
 
-    Sensitivity bias: after thresholding, we also ensure up to `top_k_total` candidates by
-    adding the strongest negative-score minima (time-separated by `min_sep_sec`).
+    Historically this emitted only "baseline_drop" (slowdown / stall candidates).
+    It now emits BOTH:
+      - event_type="baseline_drop" for strong negative scores (|v| decreases)
+      - event_type="baseline_rise" for strong positive scores (|v| increases)
+
+    The API is unchanged. `detect_events()` can keep calling this and will simply receive
+    additional events of type "baseline_rise".
+
+    Sensitivity bias:
+      After thresholding, we also ensure up to `top_k_total` DROP candidates by adding the
+      strongest negative-score minima (time-separated by `min_sep_sec`).
+
+      Note: We do NOT (yet) top-k “force” rises by default; rises come from thresholding only.
+      (This prevents speedups from crowding out stall candidates.)
     """
     t = np.asarray(time_s, dtype=float)
     v = np.asarray(velocity, dtype=float)
-    score, medL, medR, fs = baseline_shift_score(t, v, win_cmp_sec=win_cmp_sec, min_valid_per_side=min_valid_per_side)
+
+    score, medL, medR, fs = baseline_shift_score(
+        t, v, win_cmp_sec=win_cmp_sec, min_valid_per_side=min_valid_per_side
+    )
 
     valid = np.isfinite(score)
     if np.sum(valid) < 50:
@@ -491,21 +506,48 @@ def detect_baseline_drops(
     w_smooth = int(max(3, round(smooth_sec * fs))) | 1
     abs_med = rolling_nanmedian(abs_v, w_smooth)
 
-    drop_mask = (score <= -thresh) & valid
-    runs = _merge_runs_by_gap(_group_runs(drop_mask), max_gap=int(round(merge_gap_sec * fs)))
+    max_gap = int(round(merge_gap_sec * fs))
 
     events: list[VelocityEvent] = []
-    for r_start, r_end in runs:
-        i_peak = int(r_start + np.nanargmin(score[r_start:r_end+1]))
 
+    def _baseline_before(i_peak: int) -> float:
         w_cmp = int(max(5, round(win_cmp_sec * fs)))
         L = abs_v[max(0, i_peak - w_cmp): i_peak]
-        base_before = float(np.nanmedian(L)) if np.sum(np.isfinite(L)) >= max(10, w_cmp//5) else float(np.nanmedian(abs_v))
-        low_level = 0.5 * base_before
+        if np.sum(np.isfinite(L)) >= max(10, w_cmp // 5):
+            return float(np.nanmedian(L))
+        return float(np.nanmedian(abs_v))
 
-        i_start = i_peak
-        while i_start > 0 and np.isfinite(abs_med[i_start-1]) and abs_med[i_start-1] <= low_level:
+    def _baseline_after(i_peak: int) -> float:
+        w_cmp = int(max(5, round(win_cmp_sec * fs)))
+        R = abs_v[i_peak: min(abs_v.size, i_peak + w_cmp)]
+        if np.sum(np.isfinite(R)) >= max(10, w_cmp // 5):
+            return float(np.nanmedian(R))
+        return float(np.nanmedian(abs_v))
+
+    def _onset_for_drop(i_peak: int, base_before: float) -> int:
+        # Walk left while we are already "low" relative to baseline_before.
+        low_level = 0.5 * base_before
+        i_start = int(i_peak)
+        while i_start > 0 and np.isfinite(abs_med[i_start - 1]) and abs_med[i_start - 1] <= low_level:
             i_start -= 1
+        return i_start
+
+    def _onset_for_rise(i_peak: int, base_after: float) -> int:
+        # Walk left while we are already "high" relative to baseline_after.
+        # Using base_after makes this stable even if the pre-rise baseline is small.
+        high_level = 0.5 * base_after
+        i_start = int(i_peak)
+        while i_start > 0 and np.isfinite(abs_med[i_start - 1]) and abs_med[i_start - 1] >= high_level:
+            i_start -= 1
+        return i_start
+
+    # --- Drops: score <= -thresh ---
+    drop_mask = (score <= -thresh) & valid
+    runs_drop = _merge_runs_by_gap(_group_runs(drop_mask), max_gap=max_gap)
+    for r_start, r_end in runs_drop:
+        i_peak = int(r_start + np.nanargmin(score[r_start:r_end + 1]))
+        base_before = _baseline_before(i_peak)
+        i_start = _onset_for_drop(i_peak, base_before)
 
         events.append(
             VelocityEvent(
@@ -518,44 +560,68 @@ def detect_baseline_drops(
                 baseline_before=float(medL[i_peak]) if np.isfinite(medL[i_peak]) else None,
                 baseline_after=float(medR[i_peak]) if np.isfinite(medR[i_peak]) else None,
                 machine_type=MachineType.STALL_CANDIDATE,
-                strength=(float(-score[i_peak]) / float(thresh)) if (np.isfinite(thresh) and thresh > 0 and np.isfinite(score[i_peak])) else None,
+                strength=(float(-score[i_peak]) / float(thresh))
+                if (np.isfinite(thresh) and thresh > 0 and np.isfinite(score[i_peak]))
+                else None,
             )
         )
 
-    # Sensitivity-biased fallback
-    if top_k_total is not None and top_k_total > 0 and len(events) < top_k_total:
-        chosen_peaks = {e.i_peak for e in events if e.i_peak is not None}
-        extra_peaks = pick_topk_minima_indices(score, t, k=top_k_total, min_sep_sec=min_sep_sec)
-        for i_peak in extra_peaks:
-            if i_peak in chosen_peaks:
-                continue
-            w_cmp = int(max(5, round(win_cmp_sec * fs)))
-            L = abs_v[max(0, i_peak - w_cmp): i_peak]
-            base_before = float(np.nanmedian(L)) if np.sum(np.isfinite(L)) >= max(10, w_cmp//5) else float(np.nanmedian(abs_v))
-            low_level = 0.5 * base_before
+    # --- Rises: score >= +thresh ---
+    rise_mask = (score >= +thresh) & valid
+    runs_rise = _merge_runs_by_gap(_group_runs(rise_mask), max_gap=max_gap)
+    for r_start, r_end in runs_rise:
+        i_peak = int(r_start + np.nanargmax(score[r_start:r_end + 1]))
+        base_after = _baseline_after(i_peak)
+        i_start = _onset_for_rise(i_peak, base_after)
 
-            i_start = int(i_peak)
-            while i_start > 0 and np.isfinite(abs_med[i_start-1]) and abs_med[i_start-1] <= low_level:
-                i_start -= 1
-
-            events.append(
-                VelocityEvent(
-                    event_type="baseline_drop",
-                    i_start=int(i_start),
-                    t_start=float(t[i_start]),
-                    i_peak=int(i_peak),
-                    t_peak=float(t[i_peak]),
-                    score_peak=float(score[i_peak]),
-                    baseline_before=float(medL[i_peak]) if np.isfinite(medL[i_peak]) else None,
-                    baseline_after=float(medR[i_peak]) if np.isfinite(medR[i_peak]) else None,
-                    machine_type=MachineType.STALL_CANDIDATE,
-                    strength=(float(-score[i_peak]) / float(thresh)) if (np.isfinite(thresh) and thresh > 0 and np.isfinite(score[i_peak])) else None,
-                )
+        events.append(
+            VelocityEvent(
+                event_type="baseline_rise",
+                i_start=int(i_start),
+                t_start=float(t[i_start]),
+                i_peak=int(i_peak),
+                t_peak=float(t[i_peak]),
+                score_peak=float(score[i_peak]),
+                baseline_before=float(medL[i_peak]) if np.isfinite(medL[i_peak]) else None,
+                baseline_after=float(medR[i_peak]) if np.isfinite(medR[i_peak]) else None,
+                machine_type=MachineType.OTHER,  # keep enums stable; can add MachineType.SPEEDUP later
+                strength=(float(score[i_peak]) / float(thresh))
+                if (np.isfinite(thresh) and thresh > 0 and np.isfinite(score[i_peak]))
+                else None,
             )
+        )
+
+    # --- Sensitivity-biased fallback: ONLY for drops (to avoid crowding out stalls) ---
+    if top_k_total is not None and top_k_total > 0:
+        # Count only baseline_drop toward the fallback goal
+        n_drop = sum(1 for e in events if e.event_type == "baseline_drop")
+        if n_drop < top_k_total:
+            chosen_peaks = {e.i_peak for e in events if e.i_peak is not None}
+            extra_peaks = pick_topk_minima_indices(score, t, k=top_k_total, min_sep_sec=min_sep_sec)
+            for i_peak in extra_peaks:
+                if i_peak in chosen_peaks:
+                    continue
+                base_before = _baseline_before(int(i_peak))
+                i_start = _onset_for_drop(int(i_peak), base_before)
+                events.append(
+                    VelocityEvent(
+                        event_type="baseline_drop",
+                        i_start=int(i_start),
+                        t_start=float(t[i_start]),
+                        i_peak=int(i_peak),
+                        t_peak=float(t[i_peak]),
+                        score_peak=float(score[i_peak]),
+                        baseline_before=float(medL[i_peak]) if np.isfinite(medL[i_peak]) else None,
+                        baseline_after=float(medR[i_peak]) if np.isfinite(medR[i_peak]) else None,
+                        machine_type=MachineType.STALL_CANDIDATE,
+                        strength=(float(-score[i_peak]) / float(thresh))
+                        if (np.isfinite(thresh) and thresh > 0 and np.isfinite(score[i_peak]))
+                        else None,
+                    )
+                )
 
     events.sort(key=lambda e: (e.t_start, e.t_peak if e.t_peak is not None else e.t_start))
     return events, score, abs_med, float(thresh)
-
 
 def detect_events(
     time_s: Sequence[float],

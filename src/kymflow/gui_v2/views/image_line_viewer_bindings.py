@@ -10,6 +10,7 @@ from kymflow.gui_v2.events import (
     AddKymEvent,
     DeleteKymEvent,
     DeleteRoi,
+    DetectEvents,
     EditRoi,
     EventSelection,
     FileSelection,
@@ -75,6 +76,7 @@ class ImageLineViewerBindings:
         bus.subscribe_state(MetadataUpdate, self._on_metadata_changed)
         
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
+        bus.subscribe_state(DetectEvents, self._on_detect_events_done)
         bus.subscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
         bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         bus.subscribe_state(AddKymEvent, self._on_add_kym_event)
@@ -104,6 +106,7 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_changed)
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
+        self._bus.unsubscribe_state(DetectEvents, self._on_detect_events_done)
         self._bus.unsubscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
         self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         self._bus.unsubscribe_state(AddKymEvent, self._on_add_kym_event)
@@ -173,6 +176,34 @@ class ImageLineViewerBindings:
         """Handle analysis completion by refreshing plot for current file."""
         if e.success and e.file == self._view._current_file:  # noqa: SLF001
             safe_call(self._view._render_combined)
+
+    def _on_detect_events_done(self, e: DetectEvents) -> None:
+        """Handle DetectEvents completion by refreshing velocity event overlays.
+        
+        Similar to how FileSelection triggers a full refresh, DetectEvents
+        triggers a refresh of velocity event overlays to show newly detected events.
+        
+        Args:
+            e: DetectEvents event (phase="state") containing roi_id and path.
+        """
+        # Only refresh if this event is for the currently displayed file
+        current_file = self._view._current_file
+        if current_file is None:
+            return
+        
+        # For all-files mode, always refresh (events could be in any file)
+        if e.all_files:
+            safe_call(self._view.refresh_velocity_events)
+            return
+        
+        # For single-file mode, only refresh if path matches current file
+        if e.path is not None and current_file.path is not None:
+            if str(current_file.path) != e.path:
+                # Event is for a different file, ignore
+                return
+        
+        # Refresh velocity event overlays (preserves zoom)
+        safe_call(self._view.refresh_velocity_events)
 
     def _on_event_selected(self, e: EventSelection) -> None:
         """Handle EventSelection change event."""
