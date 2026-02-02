@@ -77,8 +77,10 @@ def _col(
 
 def _default_columns() -> list[ColumnConfig]:
     return [
-        _col("roi_id", "ROI", width=80, cell_class="ag-cell-right"),
+        # we only allow one roi
+        # _col("roi_id", "ROI", width=80, cell_class="ag-cell-right"),
         _col("file_name", "File", width=220, min_width=180),
+        _col("grandparent_folder", "GP", width=80, min_width=80),
         _col(
             "user_type",
             "User Type",
@@ -89,7 +91,7 @@ def _default_columns() -> list[ColumnConfig]:
         ),
         _col("event_type", "Type", width=160),
         _col("t_start", "Start (s)", width=110, cell_class="ag-cell-right"),
-        _col("t_end", "Stop (s)", width=110, cell_class="ag-cell-right"),
+        # _col("t_end", "Stop (s)", width=110, cell_class="ag-cell-right"),
         _col("duration_sec", "Dur (s)", width=110, cell_class="ag-cell-right"),
         _col("strength", "Strength", width=110, cell_class="ag-cell-right"),
         _col("event_id", "event_id", hide=True),

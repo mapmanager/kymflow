@@ -44,6 +44,7 @@ def test_analysis_toolbar_stores_task_state(
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     # Mock the update method

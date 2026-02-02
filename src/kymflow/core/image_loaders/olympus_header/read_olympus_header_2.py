@@ -148,7 +148,6 @@ def parse_olympus_header_file(path: str | Path, encoding: str = "utf-8") -> Pars
     """
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(f"Header file not found: {p}")
         return None
     text = p.read_text(encoding=encoding)
     return parse_olympus_header_text(text)
@@ -243,7 +242,7 @@ def pretty_print_all(parsed: ParsedHeader) -> None:
 def read_olympus_header_2(olympusTxtPath: str | Path) -> dict[str, Any]:
     """Read and parse an olympus header txtx file.
     """
-    from extractors import (
+    from .extractors import (
         extract_int,
         extract_image_size_pixels,
         extract_um_per_pixel_from_x_dimension,

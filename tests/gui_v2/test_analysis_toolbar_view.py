@@ -53,6 +53,7 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     # Render view to create UI elements
@@ -103,6 +104,7 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     # Render view
@@ -150,6 +152,7 @@ def test_analysis_toolbar_cancel_blocks_analysis_start(
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     # Render view
@@ -205,6 +208,7 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     # Render view

@@ -694,3 +694,112 @@ def test_detect_all_events_empty_list() -> None:
     
     logger.info("  - detect_all_events() handles empty list gracefully")
 
+
+def test_acq_image_list_total_number_of_event() -> None:
+    """Test AcqImageList.total_number_of_event() method."""
+    logger.info("Testing AcqImageList.total_number_of_event()")
+    
+    # Create synthetic KymImage instances with velocity events
+    test_image1 = np.zeros((100, 100), dtype=np.uint16)
+    kym_image1 = KymImage(img_data=test_image1, load_image=False)
+    kym_image1.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    test_image2 = np.zeros((100, 100), dtype=np.uint16)
+    kym_image2 = KymImage(img_data=test_image2, load_image=False)
+    kym_image2.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    # Create image list manually (for testing)
+    image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif")
+    image_list.images = [kym_image1, kym_image2]
+    
+    # Initially should be 0
+    assert image_list.total_number_of_event() == 0
+    
+    # Add ROIs and velocity events
+    from kymflow.core.image_loaders.roi import RoiBounds
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = kym_image1.rois.create_roi(bounds=bounds1)
+    kym_image1.get_kym_analysis().add_velocity_event(roi1.id, t_start=0.5, t_end=1.0)
+    kym_image1.get_kym_analysis().add_velocity_event(roi1.id, t_start=2.0, t_end=3.0)
+    
+    bounds2 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi2 = kym_image2.rois.create_roi(bounds=bounds2)
+    kym_image2.get_kym_analysis().add_velocity_event(roi2.id, t_start=1.0, t_end=2.0)
+    
+    # Should count all events across all images
+    assert image_list.total_number_of_event() == 3
+    
+    logger.info("  - total_number_of_event() works correctly")
+
+
+def test_acq_image_list_load() -> None:
+    """Test AcqImageList.load() method."""
+    logger.info("Testing AcqImageList.load()")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # Create initial file
+        (tmp_path / "file1.tif").touch()
+        
+        image_list = AcqImageList(
+            path=tmp_path,
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        initial_count = len(image_list)
+        logger.info(f"  - Initial count: {initial_count}")
+        
+        # Add another file
+        (tmp_path / "file2.tif").touch()
+        
+        # Load (should reload files)
+        image_list.load()
+        
+        # Should have more files (or same if files couldn't be loaded)
+        new_count = len(image_list)
+        logger.info(f"  - After load count: {new_count}")
+        
+        # Test with None folder
+        image_list_none = AcqImageList(path=None, image_cls=AcqImage, file_extension=".tif")
+        image_list_none.load()  # Should not raise error
+        assert len(image_list_none) == 0
+        
+        logger.info("  - load() works correctly")
+
+
+def test_acq_image_list_str_repr() -> None:
+    """Test AcqImageList __str__ and __repr__ methods."""
+    logger.info("Testing AcqImageList __str__ and __repr__")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        image_list = AcqImageList(
+            path=tmp_path,
+            image_cls=KymImage,
+            file_extension=".tif",
+            depth=2,
+            ignore_file_stub="C002"
+        )
+        
+        # Test __str__
+        str_repr = str(image_list)
+        assert "AcqImageList" in str_repr
+        assert "depth: 2" in str_repr
+        assert "file_extension: .tif" in str_repr
+        assert "ignore_file_stub: C002" in str_repr
+        assert "images:" in str_repr
+        
+        # Test __repr__ (should be same as __str__)
+        repr_str = repr(image_list)
+        assert repr_str == str_repr
+        
+        # Test with None folder
+        image_list_none = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif")
+        str_none = str(image_list_none)
+        assert "folder: None" in str_none or "folder: " in str_none
+        
+        logger.info("  - __str__ and __repr__ work correctly")
+

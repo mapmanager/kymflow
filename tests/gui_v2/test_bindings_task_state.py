@@ -31,6 +31,7 @@ def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus) -> No
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     view.set_task_state = MagicMock()
@@ -58,6 +59,7 @@ def test_analysis_toolbar_bindings_filters_task_type(bus: EventBus) -> None:
         on_delete_roi=lambda e: None,
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
+        on_detect_events=lambda e: None,
     )
 
     view.set_task_state = MagicMock()

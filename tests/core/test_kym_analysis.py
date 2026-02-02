@@ -412,11 +412,11 @@ def test_kymanalysis_velocity_event_update_field() -> None:
     
     # Update user_type
     from kymflow.core.analysis.velocity_events.velocity_events import UserType
-    updated_id = kym_analysis.update_velocity_event_field(event_id, "user_type", UserType.REVIEWED.value)
+    updated_id = kym_analysis.update_velocity_event_field(event_id, "user_type", UserType.TRUE_STALL.value)
     assert updated_id == event_id  # UUID doesn't change
     
     events = kym_analysis.get_velocity_events(roi.id)
-    assert events[0].user_type == UserType.REVIEWED
+    assert events[0].user_type == UserType.TRUE_STALL
     
     # Update t_start
     updated_id = kym_analysis.update_velocity_event_field(event_id, "t_start", 0.6)

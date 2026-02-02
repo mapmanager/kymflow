@@ -884,3 +884,163 @@ def test_roiset_clear_functionality() -> None:
     
     logger.info("  - RoiSet.clear() works correctly")
 
+
+def test_roi_bounds_float() -> None:
+    """Test RoiBoundsFloat dataclass."""
+    logger.info("Testing RoiBoundsFloat dataclass")
+    
+    from kymflow.core.image_loaders.roi import RoiBoundsFloat
+    
+    # Create RoiBoundsFloat with float coordinates
+    bounds_float = RoiBoundsFloat(
+        dim0_start=10.5,
+        dim0_stop=80.3,
+        dim1_start=20.7,
+        dim1_stop=50.9
+    )
+    
+    assert bounds_float.dim0_start == 10.5
+    assert bounds_float.dim0_stop == 80.3
+    assert bounds_float.dim1_start == 20.7
+    assert bounds_float.dim1_stop == 50.9
+    
+    logger.info("  - RoiBoundsFloat dataclass works correctly")
+
+
+def test_clamp_coordinates() -> None:
+    """Test clamp_coordinates() function."""
+    logger.info("Testing clamp_coordinates() function")
+    
+    import numpy as np
+    from kymflow.core.image_loaders.roi import clamp_coordinates, RoiBounds
+    
+    # Create bounds with out-of-range coordinates
+    bounds = RoiBounds(dim0_start=-10, dim0_stop=150, dim1_start=-5, dim1_stop=250)
+    
+    # Clamp to image size (height=100, width=200)
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    clamped = clamp_coordinates(bounds, test_image)
+    
+    assert clamped.dim0_start >= 0
+    assert clamped.dim0_stop <= 100
+    assert clamped.dim1_start >= 0
+    assert clamped.dim1_stop <= 200
+    
+    # Test with valid coordinates (should remain unchanged)
+    bounds_valid = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=20, dim1_stop=80)
+    clamped_valid = clamp_coordinates(bounds_valid, test_image)
+    assert clamped_valid.dim0_start == 10
+    assert clamped_valid.dim0_stop == 50
+    assert clamped_valid.dim1_start == 20
+    assert clamped_valid.dim1_stop == 80
+    
+    logger.info("  - clamp_coordinates() works correctly")
+
+
+def test_roi_rect_is_equal() -> None:
+    """Test roi_rect_is_equal() function."""
+    logger.info("Testing roi_rect_is_equal() function")
+    
+    from kymflow.core.image_loaders.roi import roi_rect_is_equal, RoiBounds
+    
+    # Test equal bounds
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=20, dim1_stop=80)
+    bounds2 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=20, dim1_stop=80)
+    assert roi_rect_is_equal(bounds1, bounds2) is True
+    
+    # Test different bounds
+    bounds3 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=20, dim1_stop=81)
+    assert roi_rect_is_equal(bounds1, bounds3) is False
+    
+    # Test different dim0_start
+    bounds4 = RoiBounds(dim0_start=11, dim0_stop=50, dim1_start=20, dim1_stop=80)
+    assert roi_rect_is_equal(bounds1, bounds4) is False
+    
+    logger.info("  - roi_rect_is_equal() works correctly")
+
+
+def test_point_in_roi() -> None:
+    """Test point_in_roi() function."""
+    logger.info("Testing point_in_roi() function")
+    
+    from kymflow.core.image_loaders.roi import point_in_roi, RoiBounds
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=20, dim1_stop=80)
+    
+    # Test point inside bounds
+    assert point_in_roi(bounds, 30, 50) is True
+    
+    # Test point on boundary (start)
+    assert point_in_roi(bounds, 10, 20) is True
+    
+    # Test point on boundary (stop)
+    assert point_in_roi(bounds, 50, 80) is True
+    
+    # Test point outside bounds (before start)
+    assert point_in_roi(bounds, 5, 15) is False
+    
+    # Test point outside bounds (after stop)
+    assert point_in_roi(bounds, 60, 90) is False
+    
+    # Test point outside bounds (between but outside one dimension)
+    assert point_in_roi(bounds, 30, 10) is False  # dim1_coord too small
+    assert point_in_roi(bounds, 5, 50) is False   # dim0_coord too small
+    
+    logger.info("  - point_in_roi() works correctly")
+
+
+def test_hit_test_rois() -> None:
+    """Test hit_test_rois() function."""
+    logger.info("Testing hit_test_rois() function")
+    
+    from kymflow.core.image_loaders.roi import hit_test_rois, RoiBounds
+    
+    test_image = np.zeros((100, 200), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create multiple ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi1 = acq_image.rois.create_roi(bounds=bounds1, channel=1, name="ROI1")
+    bounds2 = RoiBounds(dim0_start=60, dim0_stop=90, dim1_start=60, dim1_stop=90)
+    roi2 = acq_image.rois.create_roi(bounds=bounds2, channel=1, name="ROI2")
+    
+    # Test hit in interior of ROI2 (most recent, should be hit first)
+    hit_roi, mode = hit_test_rois(acq_image.rois, 75, 75, edge_tol=5)
+    assert hit_roi == roi2
+    assert mode == "moving"
+    
+    # Test hit on edge of ROI2
+    hit_roi, mode = hit_test_rois(acq_image.rois, 60, 75, edge_tol=5)  # On dim0_start edge (row 60)
+    assert hit_roi == roi2
+    assert mode == "resizing_dim0_start"
+    
+    # Test hit on dim1_stop edge
+    hit_roi, mode = hit_test_rois(acq_image.rois, 75, 90, edge_tol=5)
+    assert hit_roi == roi2
+    assert mode == "resizing_dim1_stop"
+    
+    # Test hit on dim0_start edge
+    hit_roi, mode = hit_test_rois(acq_image.rois, 60, 75, edge_tol=5)
+    assert hit_roi == roi2
+    # Could be either dim1_start or dim0_start depending on which edge is closer
+    assert mode in ("resizing_dim1_start", "resizing_dim0_start")
+    
+    # Test hit in ROI1 (should not be hit if ROI2 overlaps, but ROI2 is checked first)
+    # Since ROI2 is more recent, it's checked first
+    hit_roi, mode = hit_test_rois(acq_image.rois, 30, 30, edge_tol=5)
+    assert hit_roi == roi1
+    assert mode == "moving"
+    
+    # Test hit outside all ROIs
+    hit_roi, mode = hit_test_rois(acq_image.rois, 5, 5, edge_tol=5)
+    assert hit_roi is None
+    assert mode is None
+    
+    # Test with edge tolerance
+    # Point just outside edge but within tolerance
+    hit_roi, mode = hit_test_rois(acq_image.rois, 10, 5, edge_tol=5)  # 5 pixels from dim1_start
+    assert hit_roi == roi1
+    assert mode == "resizing_dim1_start"
+    
+    logger.info("  - hit_test_rois() works correctly")
+

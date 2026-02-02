@@ -149,3 +149,335 @@ def test_acq_img_header_properties() -> None:
     assert header_3d.shape == (50, 100, 200)
     assert header_3d.ndim == 3
 
+
+def test_field_metadata_class() -> None:
+    """Test FieldMetadata class."""
+    from kymflow.core.image_loaders.metadata import FieldMetadata
+    
+    # Create FieldMetadata instance
+    meta = FieldMetadata(
+        editable=True,
+        label="Test Label",
+        widget_type="number",
+        grid_span=2,
+        visible=True,
+        description="Test description"
+    )
+    
+    assert meta.editable is True
+    assert meta.label == "Test Label"
+    assert meta.widget_type == "number"
+    assert meta.grid_span == 2
+    assert meta.visible is True
+    assert meta.description == "Test description"
+    
+    # Test to_dict()
+    meta_dict = meta.to_dict()
+    assert meta_dict["editable"] is True
+    assert meta_dict["label"] == "Test Label"
+    assert meta_dict["widget_type"] == "number"
+    assert meta_dict["grid_span"] == 2
+    assert meta_dict["visible"] is True
+    assert meta_dict["description"] == "Test description"
+
+
+def test_field_metadata_function() -> None:
+    """Test field_metadata() convenience function."""
+    from kymflow.core.image_loaders.metadata import field_metadata
+    
+    # Create metadata dict
+    meta_dict = field_metadata(
+        editable=False,
+        label="Read-only Field",
+        widget_type="text",
+        grid_span=1,
+        visible=True,
+        description="This field cannot be edited"
+    )
+    
+    assert isinstance(meta_dict, dict)
+    assert meta_dict["editable"] is False
+    assert meta_dict["label"] == "Read-only Field"
+    assert meta_dict["widget_type"] == "text"
+    assert meta_dict["grid_span"] == 1
+    assert meta_dict["visible"] is True
+    assert meta_dict["description"] == "This field cannot be edited"
+
+
+def test_acq_img_header_validate_ndim() -> None:
+    """Test AcqImgHeader.validate_ndim() method."""
+    header = AcqImgHeader()
+    
+    # Test valid ndim
+    header.shape = (100, 200)
+    header.ndim = 2
+    assert header.validate_ndim(2) is True
+    
+    # Test invalid ndim
+    assert header.validate_ndim(4) is False  # Must be 2 or 3
+    
+    # Test consistency check
+    header.shape = (100, 200)
+    header.ndim = 2
+    assert header.validate_ndim(3) is False  # Doesn't match existing shape
+    
+    # Test with voxels consistency
+    header.voxels = [0.001, 0.284]
+    assert header.validate_ndim(2) is True
+    assert header.validate_ndim(3) is False  # voxels length doesn't match
+
+
+def test_acq_img_header_validate_shape() -> None:
+    """Test AcqImgHeader.validate_shape() method."""
+    header = AcqImgHeader()
+    
+    # Test valid 2D shape
+    header.ndim = 2
+    assert header.validate_shape((100, 200)) is True
+    
+    # Test valid 3D shape
+    header.ndim = 3
+    assert header.validate_shape((10, 100, 200)) is True
+    
+    # Test invalid shape (wrong dimensions)
+    assert header.validate_shape((100,)) is False  # Must be 2 or 3
+    assert header.validate_shape((10, 100, 200, 50)) is False  # Must be 2 or 3
+    
+    # Test consistency with ndim
+    header.ndim = 2
+    assert header.validate_shape((10, 100, 200)) is False  # Doesn't match ndim
+    
+    # Test consistency with voxels
+    header.voxels = [0.001, 0.284]
+    assert header.validate_shape((100, 200)) is True
+    assert header.validate_shape((10, 100, 200)) is False  # voxels length doesn't match
+
+
+def test_acq_img_header_compute_physical_size() -> None:
+    """Test AcqImgHeader.compute_physical_size() method."""
+    header = AcqImgHeader()
+    
+    # Test with shape and voxels
+    header.shape = (100, 200)
+    header.voxels = [0.001, 0.284]
+    physical_size = header.compute_physical_size()
+    assert physical_size is not None
+    assert len(physical_size) == 2
+    assert physical_size[0] == pytest.approx(100 * 0.001)
+    assert physical_size[1] == pytest.approx(200 * 0.284)
+    
+    # Test with None shape
+    header.shape = None
+    assert header.compute_physical_size() is None
+    
+    # Test with None voxels
+    header.shape = (100, 200)
+    header.voxels = None
+    assert header.compute_physical_size() is None
+    
+    # Test with mismatched lengths
+    header.shape = (100, 200)
+    header.voxels = [0.001]  # Only one element
+    assert header.compute_physical_size() is None
+
+
+def test_acq_img_header_set_shape_ndim() -> None:
+    """Test AcqImgHeader.set_shape_ndim() method."""
+    header = AcqImgHeader()
+    
+    # Set shape and ndim
+    header.set_shape_ndim((100, 200), 2)
+    assert header.shape == (100, 200)
+    assert header.ndim == 2
+    
+    # Set shape only (ndim inferred)
+    header2 = AcqImgHeader()
+    header2.set_shape_ndim((10, 100, 200), None)
+    assert header2.shape == (10, 100, 200)
+    assert header2.ndim == 3  # Inferred from shape length
+    
+    # Test validation (should raise if inconsistent)
+    header3 = AcqImgHeader()
+    header3.voxels = [0.001, 0.284]  # 2 elements
+    # Setting 3D shape with 2D voxels should fail validation
+    with pytest.raises(ValueError, match="voxels length"):
+        header3.set_shape_ndim((10, 100, 200), 3)
+
+
+def test_acq_img_header_init_defaults_from_shape() -> None:
+    """Test AcqImgHeader.init_defaults_from_shape() method."""
+    header = AcqImgHeader()
+    
+    # Set ndim and shape
+    header.ndim = 2
+    header.shape = (100, 200)
+    header.init_defaults_from_shape()
+    
+    # Should initialize defaults
+    assert header.voxels == [1.0, 1.0]
+    assert header.voxels_units == ["px", "px"]
+    assert header.labels == ["", ""]
+    assert header.physical_size is not None
+    
+    # Test with 3D
+    header2 = AcqImgHeader()
+    header2.ndim = 3
+    header2.shape = (10, 100, 200)
+    header2.init_defaults_from_shape()
+    
+    assert len(header2.voxels) == 3
+    assert len(header2.voxels_units) == 3
+    assert len(header2.labels) == 3
+    assert header2.physical_size is not None
+    assert len(header2.physical_size) == 3
+    
+    # Test with None ndim (should do nothing)
+    header3 = AcqImgHeader()
+    header3.init_defaults_from_shape()
+    assert header3.voxels is None
+    assert header3.voxels_units is None
+
+
+def test_acq_img_header_to_dict() -> None:
+    """Test AcqImgHeader.to_dict() method."""
+    header = AcqImgHeader()
+    header.shape = (100, 200)
+    header.ndim = 2
+    header.voxels = [0.001, 0.284]
+    header.voxels_units = ["s", "um"]
+    header.labels = ["time (s)", "space (um)"]
+    header.physical_size = [0.1, 56.8]
+    
+    header_dict = header.to_dict()
+    
+    assert header_dict["shape"] == [100, 200]  # Converted to list
+    assert header_dict["ndim"] == 2
+    assert header_dict["voxels"] == [0.001, 0.284]
+    assert header_dict["voxels_units"] == ["s", "um"]
+    assert header_dict["labels"] == ["time (s)", "space (um)"]
+    assert header_dict["physical_size"] == [0.1, 56.8]
+    
+    # Test with None values
+    header2 = AcqImgHeader()
+    header2_dict = header2.to_dict()
+    assert header2_dict["shape"] is None
+    assert header2_dict["ndim"] is None
+
+
+def test_acq_img_header_from_dict() -> None:
+    """Test AcqImgHeader.from_dict() method."""
+    data = {
+        "shape": [100, 200],
+        "ndim": 2,
+        "voxels": [0.001, 0.284],
+        "voxels_units": ["s", "um"],
+        "labels": ["time (s)", "space (um)"],
+        "physical_size": [0.1, 56.8],
+    }
+    
+    header = AcqImgHeader.from_dict(data)
+    
+    assert header.shape == (100, 200)  # Converted to tuple
+    assert header.ndim == 2
+    assert header.voxels == [0.001, 0.284]
+    assert header.voxels_units == ["s", "um"]
+    assert header.labels == ["time (s)", "space (um)"]
+    assert header.physical_size == [0.1, 56.8]
+    
+    # Test with empty dict
+    header2 = AcqImgHeader.from_dict({})
+    assert header2.shape is None
+    assert header2.ndim is None
+    
+    # Test with missing physical_size (should compute)
+    data3 = {
+        "shape": [100, 200],
+        "ndim": 2,
+        "voxels": [0.001, 0.284],
+    }
+    header3 = AcqImgHeader.from_dict(data3)
+    assert header3.physical_size is not None
+    assert header3.physical_size[0] == pytest.approx(0.1)
+    assert header3.physical_size[1] == pytest.approx(56.8)
+
+
+def test_acq_img_header_form_schema() -> None:
+    """Test AcqImgHeader.form_schema() method."""
+    schema = AcqImgHeader.form_schema()
+    
+    assert isinstance(schema, list)
+    assert len(schema) > 0
+    
+    # Check that schema contains expected fields
+    field_names = [field["name"] for field in schema]
+    assert "shape" in field_names
+    assert "ndim" in field_names
+    assert "voxels" in field_names
+    assert "voxels_units" in field_names
+    assert "labels" in field_names
+    assert "physical_size" in field_names
+    
+    # Check schema structure
+    for field in schema:
+        assert "name" in field
+        assert "label" in field
+        assert "editable" in field
+        assert "widget_type" in field
+        assert "grid_span" in field
+        assert "visible" in field
+        assert "field_type" in field
+
+
+def test_acq_img_header_from_data() -> None:
+    """Test AcqImgHeader.from_data() classmethod."""
+    header = AcqImgHeader.from_data((100, 200), 2)
+    
+    assert header.shape == (100, 200)
+    assert header.ndim == 2
+    assert header.voxels == [1.0, 1.0]
+    assert header.voxels_units == ["px", "px"]
+    assert header.labels == ["", ""]
+    assert header.physical_size is not None
+    assert len(header.physical_size) == 2
+    
+    # Test 3D
+    header3d = AcqImgHeader.from_data((10, 100, 200), 3)
+    assert header3d.shape == (10, 100, 200)
+    assert header3d.ndim == 3
+    assert len(header3d.voxels) == 3
+    assert len(header3d.voxels_units) == 3
+    assert len(header3d.labels) == 3
+    assert len(header3d.physical_size) == 3
+
+
+def test_experiment_metadata_form_schema() -> None:
+    """Test ExperimentMetadata.form_schema() method."""
+    schema = ExperimentMetadata.form_schema()
+    
+    assert isinstance(schema, list)
+    assert len(schema) > 0
+    
+    # Check that schema contains expected fields
+    field_names = [field["name"] for field in schema]
+    assert "species" in field_names
+    assert "region" in field_names
+    assert "note" in field_names
+    assert "acquisition_date" in field_names
+    assert "acquisition_time" in field_names
+    
+    # Check schema structure
+    for field in schema:
+        assert "name" in field
+        assert "label" in field
+        assert "editable" in field
+        assert "widget_type" in field
+        assert "grid_span" in field
+        assert "visible" in field
+        assert "field_type" in field
+    
+    # Check that acquisition_date and acquisition_time are not editable
+    acq_date_field = next(f for f in schema if f["name"] == "acquisition_date")
+    acq_time_field = next(f for f in schema if f["name"] == "acquisition_time")
+    assert acq_date_field["editable"] is False
+    assert acq_time_field["editable"] is False
+

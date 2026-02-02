@@ -461,6 +461,11 @@ class KymAnalysis:
         # never import if we have any rois
         if self.num_rois > 0:
             return
+        
+        # Check if path is available
+        if self.acq_image.path is None:
+            logger.warning(f'path is none -> happend when loaded with synth data in pytest')
+            return
     
         # old velocity is in folder <parent folder>-analysis,like "20251014-analysis"
         _v0_analysis_folder = f"{self.acq_image.path.parent.name}-analysis"
@@ -1271,6 +1276,13 @@ class KymAnalysis:
 
         event_dicts: list[VelocityReportRow] = []
         path = str(self.acq_image.path) if self.acq_image.path is not None else None
+        
+        _rowDict = self.acq_image.getRowDict()
+        grandparent_folder = _rowDict.get("Grandparent Folder")
+        if grandparent_folder is None:
+            logger.warning(f'grandparent_folder is none -> happend when loaded with synth data in pytest')
+            grandparent_folder = ""
+
         for rid in roi_ids:
             events = self.get_velocity_events(rid)
             if not events:
@@ -1288,6 +1300,7 @@ class KymAnalysis:
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path
                 event_dict["file_name"] = Path(path).stem if path else None
+                event_dict["grandparent_folder"] = grandparent_folder
                 event_dicts.append(event_dict)
         return event_dicts
 
