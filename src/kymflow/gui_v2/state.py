@@ -213,6 +213,25 @@ class AppState:
             except Exception:
                 logger.exception("Error in selection_changed handler")
     
+    def get_file_by_path_or_selected(self, path: str | Path | None) -> Optional[KymImage]:
+        """Get file by path, falling back to selected_file if path is None or not found.
+        
+        This is a common pattern used by controllers to resolve a file from an event path.
+        If the path is provided, it searches the file list. If not found or path is None,
+        it falls back to the currently selected file.
+        
+        Args:
+            path: File path to search for, or None to return selected_file.
+        
+        Returns:
+            The matching file if found, otherwise selected_file, or None if neither exists.
+        """
+        if path is None:
+            return self.selected_file
+        
+        match = self.files.find_by_path(path)
+        return match if match is not None else self.selected_file
+    
     def refresh_file_rows(self) -> None:
         """Refresh file list (reloads current folder), preserving current file/ROI selection."""
         if not self.folder:
@@ -230,22 +249,21 @@ class AppState:
         
         # Restore previous selection if it still exists
         if selected_path is not None:
-            for f in self.files:
-                if str(f.path) == selected_path:
-                    # Found the previously selected file, restore selection
-                    self.select_file(f)
-                    # Restore ROI selection if it still exists in the file
-                    if selected_roi_id is not None:
-                        roi_ids = f.rois.get_roi_ids()
-                        if selected_roi_id in roi_ids:
-                            self.select_roi(selected_roi_id)
-                        elif roi_ids:
-                            # ROI was deleted, select first available
-                            self.select_roi(roi_ids[0])
-                        else:
-                            # No ROIs, clear selection
-                            self.select_roi(None)
-                    break
+            f = self.files.find_by_path(selected_path)
+            if f is not None:
+                # Found the previously selected file, restore selection
+                self.select_file(f)
+                # Restore ROI selection if it still exists in the file
+                if selected_roi_id is not None:
+                    roi_ids = f.rois.get_roi_ids()
+                    if selected_roi_id in roi_ids:
+                        self.select_roi(selected_roi_id)
+                    elif roi_ids:
+                        # ROI was deleted, select first available
+                        self.select_roi(roi_ids[0])
+                    else:
+                        # No ROIs, clear selection
+                        self.select_roi(None)
     
     def set_theme(self, mode: ThemeMode) -> None:
         """Set theme mode and notify handlers."""

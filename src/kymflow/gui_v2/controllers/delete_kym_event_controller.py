@@ -24,14 +24,7 @@ class DeleteKymEventController:
             return
         logger.debug("DeleteKymEvent intent event_id=%s", e.event_id)
 
-        kym_file = None
-        if e.path is not None:
-            for f in self._app_state.files:
-                if str(f.path) == e.path:
-                    kym_file = f
-                    break
-        if kym_file is None:
-            kym_file = self._app_state.selected_file
+        kym_file = self._app_state.get_file_by_path_or_selected(e.path)
         if kym_file is None:
             logger.warning("DeleteKymEvent: no file available (path=%s)", e.path)
             return

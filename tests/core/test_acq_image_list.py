@@ -986,11 +986,16 @@ def test_find_by_path_path_normalization(temp_folder_with_tif_files: Path) -> No
     assert first_path is not None, "First image should have a path"
     
     # Test with different path formats that should normalize to the same path
-    # Using relative path
+    # Using relative path - resolve both paths first to handle symlinks (e.g., /var -> /private/var on macOS)
     if temp_folder_with_tif_files.is_absolute():
-        relative_path = first_path.relative_to(temp_folder_with_tif_files.parent)
-        # Try to find using a constructed path
-        constructed = temp_folder_with_tif_files.parent / relative_path
+        # Resolve both paths to handle symlink differences
+        resolved_first_path = Path(first_path).resolve()
+        resolved_parent = temp_folder_with_tif_files.parent.resolve()
+        
+        # Compute relative path from resolved paths
+        relative_path = resolved_first_path.relative_to(resolved_parent)
+        # Try to find using a constructed path (using resolved parent)
+        constructed = resolved_parent / relative_path
         found = image_list.find_by_path(constructed)
         assert found is not None, "Should find file with constructed path"
         assert found == first_image, "Should return the same image instance"
