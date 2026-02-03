@@ -14,6 +14,7 @@ from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
+from kymflow.gui_v2.views.options_tab_view import OptionsTabView
 from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
@@ -48,6 +49,7 @@ __all__ = [
     "MetadataExperimentalView",
     "MetadataHeaderView",
     "MetadataTabView",
+    "OptionsTabView",
     "SaveButtonsView",
     # DEPRECATED: Stall analysis is deprecated
     # "StallAnalysisToolbarView",

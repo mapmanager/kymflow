@@ -57,6 +57,8 @@ def install_shutdown_handlers(context: AppContext, *, native: bool) -> None:
     async def _persist_on_shutdown() -> None:
         await _capture_native_window_rect(context, log=True)
         context.user_config.save()
+        if context.app_config is not None:
+            context.app_config.save()
 
     app.on_shutdown(_persist_on_shutdown)
 

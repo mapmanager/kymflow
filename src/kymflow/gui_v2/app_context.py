@@ -19,6 +19,7 @@ from kymflow.core.state import TaskState
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.user_config import UserConfig
+from kymflow.gui_v2.app_config import AppConfig
 
 logger = get_logger(__name__)
 
@@ -27,14 +28,21 @@ logger = get_logger(__name__)
 THEME_STORAGE_KEY = "kymflow_dark_mode"
 
 
-def _setUpGuiDefaults():
-    """Set up default classes and props for all ui elements."""
+def _setUpGuiDefaults(app_config: AppConfig | None = None):
+    """Set up default classes and props for all ui elements.
+    
+    Args:
+        app_config: AppConfig instance to get text_size from. If None, uses default.
+    """
     
     logger.info('setting default_classes() and default_props()to specify style of all ui elements')
     logger.info(f'  ui.button and ui.label ui.checkbox')
     
-    # todo: get this from appconfig
-    text_size = 'text-sm'
+    # Get text_size from app_config, fallback to default
+    if app_config is not None:
+        text_size = app_config.get_attribute('text_size')
+    else:
+        text_size = 'text-sm'
     
     ui.label.default_classes("text-sm select-text")  #  select-text allows double-click selection
     ui.label.default_props("dense")
@@ -73,6 +81,7 @@ class AppContext:
     Attributes:
         app_state: Shared AppState instance for file management and selection
         user_config: UserConfig instance for persistent user preferences
+        app_config: AppConfig instance for app-wide settings
         home_task: TaskState for home page analysis tasks
         batch_task: TaskState for batch analysis tasks
         batch_overall_task: TaskState for overall batch progress
@@ -105,6 +114,7 @@ class AppContext:
             # Create minimal dummy attributes to avoid AttributeError
             self.app_state = None
             self.user_config = None
+            self.app_config = None
             self.home_task = None
             self.batch_task = None
             self.batch_overall_task = None
@@ -112,16 +122,6 @@ class AppContext:
             return
             
         logger.info("Initializing AppContext singleton (should happen once)")
-        
-        #
-        # configure default classes
-        _setUpGuiDefaults()
-
-        #
-        # global css styles
-        # this has to be in a page function ???
-        # from kymflow.gui_v2.styles import install_global_styles
-        # install_global_styles()
         
         # Shared state instances
         self.app_state = AppState()
@@ -131,6 +131,25 @@ class AppContext:
         else:
             self.user_config = UserConfig.load()
         logger.info(f"User config loaded from: {self.user_config.path}")
+        
+        # Load app config
+        app_config_path = os.getenv("KYMFLOW_APP_CONFIG_PATH")
+        if app_config_path:
+            self.app_config = AppConfig.load(config_path=Path(app_config_path))
+        else:
+            self.app_config = AppConfig.load()
+        logger.info(f"App config loaded from: {self.app_config.path}")
+        
+        #
+        # configure default classes (after app_config is loaded)
+        _setUpGuiDefaults(self.app_config)
+
+        #
+        # global css styles
+        # this has to be in a page function ???
+        # from kymflow.gui_v2.styles import install_global_styles
+        # install_global_styles()
+        
         self.home_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
@@ -192,6 +211,7 @@ class AppContext:
         logger.info("Resetting AppContext")
         self.app_state = AppState()
         self.user_config = UserConfig.load()
+        self.app_config = AppConfig.load()
         self.home_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()

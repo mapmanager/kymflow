@@ -55,6 +55,7 @@ from kymflow.gui_v2.views import (
     MetadataHeaderBindings,
     MetadataHeaderView,
     MetadataTabView,
+    OptionsTabView,
     SaveButtonsBindings,
     SaveButtonsView,
     # DEPRECATED: Stall analysis is deprecated
@@ -173,6 +174,7 @@ class HomePage(BasePage):
             self._drawer_metadata_header_view,
         )
         self._drawer_about_tab_view = AboutTabView()
+        self._drawer_options_tab_view = OptionsTabView(context.app_config)
         # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
             save_buttons_view=self._drawer_save_buttons_view,
@@ -184,6 +186,7 @@ class HomePage(BasePage):
             line_plot_controls_view=self._drawer_line_plot_controls_view,
             metadata_tab_view=self._drawer_metadata_tab_view,
             about_tab_view=self._drawer_about_tab_view,
+            options_tab_view=self._drawer_options_tab_view,
         )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None

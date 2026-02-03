@@ -19,6 +19,7 @@ from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 from kymflow.gui_v2.views.contrast_view import ContrastView
 from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
+from kymflow.gui_v2.views.options_tab_view import OptionsTabView
 from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
@@ -46,6 +47,8 @@ class DrawerView:
         _contrast_view: Contrast view instance.
         _line_plot_controls_view: Line plot controls view instance.
         _metadata_tab_view: Metadata tab view instance.
+        _options_tab_view: Options tab view instance.
+        _about_tab_view: About tab view instance.
     """
 
     def __init__(
@@ -57,6 +60,7 @@ class DrawerView:
         line_plot_controls_view: LinePlotControlsView,
         metadata_tab_view: MetadataTabView,
         about_tab_view: AboutTabView,
+        options_tab_view: OptionsTabView,
     ) -> None:
         """Initialize drawer view.
 
@@ -67,6 +71,8 @@ class DrawerView:
             contrast_view: Contrast view instance.
             line_plot_controls_view: Line plot controls view instance.
             metadata_tab_view: Metadata tab view instance.
+            about_tab_view: About tab view instance.
+            options_tab_view: Options tab view instance.
         """
         self._save_buttons_view = save_buttons_view
         self._analysis_toolbar_view = analysis_toolbar_view
@@ -76,6 +82,7 @@ class DrawerView:
         self._line_plot_controls_view = line_plot_controls_view
         self._metadata_tab_view = metadata_tab_view
         self._about_tab_view = about_tab_view
+        self._options_tab_view = options_tab_view
 
     def render(self, *, on_tab_click: Optional[Callable[[], None]] = None) -> None:
         """Create the splitter pane UI.
@@ -112,11 +119,12 @@ class DrawerView:
                 tab_analysis = ui.tab("Analysis", icon="science").tooltip("Analysis")
                 tab_plotting = ui.tab("Plotting", icon="bar_chart").tooltip("Plotting")
                 tab_metadata = ui.tab("Metadata", icon="description").tooltip("Metadata")
+                tab_options = ui.tab("Options", icon="settings").tooltip("Options")
                 tab_about = ui.tab("About", icon="info").tooltip("About")
             
             # Auto-expand left pane when user clicks a tab icon (while minimized)
             if on_tab_click is not None:
-                for t in (tab_analysis, tab_plotting, tab_metadata, tab_about):
+                for t in (tab_analysis, tab_plotting, tab_metadata, tab_options, tab_about):
                     t.on('click', lambda e: on_tab_click())
             
             # Right side: Tab panels - content for each tab
@@ -167,6 +175,11 @@ class DrawerView:
                     with ui.tab_panel(tab_metadata):
                         with ui.column().classes("w-full gap-4"):
                             self._metadata_tab_view.render()
+                    
+                    # Options tab panel - contains app configuration settings
+                    with ui.tab_panel(tab_options):
+                        with ui.column().classes("w-full gap-4"):
+                            self._options_tab_view.render()
                     
                     # About tab panel - contains version info and logs
                     with ui.tab_panel(tab_about):
