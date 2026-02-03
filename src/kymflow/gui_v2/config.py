@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+from typing import Optional
 
 from nicegui import native
 
@@ -12,5 +13,5 @@ DEFAULT_PORT = native.find_open_port()  # 8080
 STORAGE_SECRET = "kymflow-session-secret"  # Secret key for browser session storage
 
 # Developer-level runtime configuration
-MAX_NUM_ROI: int = 1  # Maximum number of ROIs allowed per file (0-based: allows 0 or 1 ROI when set to 1)
+MAX_NUM_ROI: Optional[int] = None  # Maximum number of ROIs allowed per file. None = no limit, int = enforce limit
 ALLOW_EDIT_ROI: bool = False  # Whether ROI editing is allowed

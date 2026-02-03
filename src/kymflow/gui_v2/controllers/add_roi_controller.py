@@ -28,16 +28,17 @@ class AddRoiController:
             logger.warning("AddRoi: no file available (path=%s)", e.path)
             return
 
-        # Check if maximum number of ROIs has been reached
-        num_rois = kym_file.rois.numRois()
-        if num_rois >= MAX_NUM_ROI:
-            logger.warning(
-                "AddRoi: maximum number of ROIs reached (current=%d, max=%d, path=%s)",
-                num_rois,
-                MAX_NUM_ROI,
-                e.path,
-            )
-            return
+        # Check if maximum number of ROIs has been reached (only if limit is set)
+        if MAX_NUM_ROI is not None:
+            num_rois = kym_file.rois.numRois()
+            if num_rois >= MAX_NUM_ROI:
+                logger.warning(
+                    "AddRoi: maximum number of ROIs reached (current=%d, max=%d, path=%s)",
+                    num_rois,
+                    MAX_NUM_ROI,
+                    e.path,
+                )
+                return
 
         try:
             # Create ROI with default full-image bounds (bounds=None)

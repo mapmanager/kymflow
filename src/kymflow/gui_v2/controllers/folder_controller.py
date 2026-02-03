@@ -15,6 +15,9 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import FolderChosen
 from kymflow.core.user_config import UserConfig
+from kymflow.core.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -106,20 +109,33 @@ class FolderController:
             self._user_config.push_recent_folder(str(folder), depth=self._app_state.folder_depth)
 
     def _show_unsaved_dialog(self, path: Path) -> None:
-        """Prompt before switching folders/files if unsaved changes exist."""
+        """Prompt before switching folders/files if unsaved changes exist.
+        
+        path is the new path to switch to
+        current_folder is the current folder
+        current_file is the current file selected in the file table view (don't use)
+        """
         # Get the current folder/file (the one we're switching FROM)
         current_folder = self._app_state.folder
-        current_file = self._app_state.selected_file
         
+        # incorrect, this is the file selected in the file table view
+        # current_file = self._app_state.selected_file
+        
+        # logger.debug(f'path:{path}')
+        # logger.debug(f'current_folder:{current_folder}')
+        # logger.debug(f'current_file:{current_file}')
+
         # Determine current path and type
-        if current_file is not None and current_file.path is not None:
-            current_path = Path(current_file.path)
-            current_path_type = "file" if current_path.is_file() else "folder"
-        elif current_folder is not None:
+        # if current_file is not None and current_file.path is not None:
+        #     current_path = Path(current_file.path)
+        #     current_path_type = "file" if current_path.is_file() else "folder"
+        if current_folder is not None:
             current_path = current_folder
             current_path_type = "folder"
         else:
             # Fallback if we can't determine current path
+            # will never get here
+            logger.error('should never be here')
             current_path = Path(".")
             current_path_type = "folder"
         
@@ -127,8 +143,9 @@ class FolderController:
         dest_path_type = "file" if path.is_file() else "folder"
         
         with ui.dialog() as dialog, ui.card():
-            ui.label(f"Unsaved changes in {current_path_type}").classes("text-lg font-semibold")
-            ui.label(f"{current_path_type}: {current_path}").classes("text-sm")
+            # ui.label(f"Unsaved changes in {current_path_type}").classes("text-lg font-semibold")
+            # ui.label(f"{current_path_type}: {current_path}").classes("text-sm")
+            ui.label('Unsaved changes in file/folder').classes("text-lg font-semibold")
             ui.label(
                 "Analysis/metadata edits are not saved. "
                 f"If you switch to {dest_path_type} '{path.name}' now, those changes will be lost."

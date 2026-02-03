@@ -662,10 +662,12 @@ def _add_velocity_event_overlays(  # pragma: no cover
             )
             continue
         
+        _outlineRect = False
         # Determine t_end
         if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
             # Use fixed span when t_end is missing or invalid
             t_end_plot = t_start + span_sec_if_no_end
+            _outlineRect = True  # no t_end then use outline
         else:
             t_end_plot = float(event.t_end)
             # Clamp to time range
@@ -694,8 +696,8 @@ def _add_velocity_event_overlays(  # pragma: no cover
         
         # Get color based on event_type
         event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
-        if event.t_end is None:
-            event_color = "rgba(255, 0, 0, 0.5)"
+        # if event.t_end is None:
+        #     event_color = "rgba(255, 0, 0, 0.5)"
 
         # logger.warning(f'added velocity event for roi {roi_id}:')
         # logger.warning(f'  event_type:"{event.event_type}"')
@@ -721,6 +723,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
             shape_dict["line"] = {
                 "color": "yellow",  # Match ROI_COLOR_SELECTED
                 "width": 2,  # Similar to ROI_LINE_WIDTH
+                "dash": "dot" if _outlineRect else "solid",
             }
         else:
             shape_dict["line_width"] = 0

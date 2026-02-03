@@ -239,10 +239,10 @@ class FolderSelectorView:
                 path_obj = Path(path)
                 if path_obj.is_file():
                     # Add file icon indicator (Material Design icon)
-                    display = f"insert_drive_file {path}"
+                    display = f"📄 {path}"
                 else:
                     # Add folder icon indicator (Material Design icon)
-                    display = f"folder {path}"
+                    display = f"📂 {path}"
                 recent_options[path] = display
 
         with ui.row().classes("w-full items-center gap-2"):

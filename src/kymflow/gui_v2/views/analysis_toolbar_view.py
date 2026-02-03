@@ -30,6 +30,7 @@ from kymflow.gui_v2.events import (
 )
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.core.utils.logging import get_logger
+from kymflow.gui_v2.styles import kym_expansion
 
 logger = get_logger(__name__)
 
@@ -168,15 +169,10 @@ class AnalysisToolbarView:
             self._edit_roi_button = ui.button("Edit ROI", on_click=self._on_edit_roi_click).props("dense").classes("text-sm")
 
         # Flow Analysis section
-        with ui.expansion("Flow Analysis", value=True).classes("w-full"):
+        # with ui.expansion("Flow Analysis", value=True).classes("w-full"):
+        with kym_expansion("Flow Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
-                # Analysis controls
-                with ui.row().classes("items-end gap-2"):
-                    self._window_select = ui.select(
-                        options=[16, 32, 64, 128, 256],
-                        value=16,
-                        label="Window Points",
-                    ).classes("w-32")
+                # Analyze Flow and Cancel buttons (moved to top)
                 with ui.row().classes("items-end gap-2"):
                     self._start_button = ui.button("Analyze Flow", on_click=self._on_start_click).props("dense").classes("text-sm")
                     self._cancel_button = ui.button("Cancel", on_click=self._on_cancel_click).props("dense").classes("text-sm")
@@ -188,6 +184,14 @@ class AnalysisToolbarView:
                     # Start hidden, will be shown when task starts
                     self._progress_bar.visible = False
                     # self._progress_label.visible = False
+                
+                # Analysis controls - Window Points select (moved below buttons and progress bar)
+                with ui.row().classes("items-end gap-2"):
+                    self._window_select = ui.select(
+                        options=[16, 32, 64, 128, 256],
+                        value=16,
+                        label="Window Points",
+                    ).classes("w-32")
         
         # Event Analysis widget (modular, self-contained)
         self._render_event_analysis_widget()
@@ -283,15 +287,19 @@ class AnalysisToolbarView:
 
         # ROI button states
         if self._add_roi_button is not None:
-            # Add ROI: enabled when file is selected and under max ROI limit
+            # Add ROI: enabled when file is selected and under max ROI limit (if limit is set)
             if running:
                 self._add_roi_button.disable()
             elif has_file:
-                # Check if we're at the maximum number of ROIs
-                num_rois = self._current_file.rois.numRois() if self._current_file else 0
-                if num_rois >= MAX_NUM_ROI:
-                    self._add_roi_button.disable()
+                # Check if we're at the maximum number of ROIs (only if MAX_NUM_ROI is set)
+                if MAX_NUM_ROI is not None:
+                    num_rois = self._current_file.rois.numRois() if self._current_file else 0
+                    if num_rois >= MAX_NUM_ROI:
+                        self._add_roi_button.disable()
+                    else:
+                        self._add_roi_button.enable()
                 else:
+                    # No limit, always enable when file is selected
                     self._add_roi_button.enable()
             else:
                 self._add_roi_button.disable()
@@ -495,26 +503,27 @@ class AnalysisToolbarView:
         if self._current_file is None:
             return
         
-        # Defensive check: verify we haven't reached the maximum number of ROIs
-        num_rois = self._current_file.rois.numRois()
-        if num_rois >= MAX_NUM_ROI:
-            # Show dialog explaining the limit
-            file_stem = (
-                Path(self._current_file.path).stem
-                if self._current_file.path is not None
-                else "unknown file"
-            )
-            with ui.dialog() as dialog, ui.card():
-                ui.label("Maximum number of ROIs reached").classes("text-lg font-semibold")
-                ui.label(
-                    f"{file_stem} already has {num_rois} ROI(s). "
-                    f"The maximum allowed is {MAX_NUM_ROI}."
-                ).classes("text-sm")
-                with ui.row():
-                    ui.button("OK", on_click=dialog.close).props("outline")
-            
-            dialog.open()
-            return
+        # Defensive check: verify we haven't reached the maximum number of ROIs (only if limit is set)
+        if MAX_NUM_ROI is not None:
+            num_rois = self._current_file.rois.numRois()
+            if num_rois >= MAX_NUM_ROI:
+                # Show dialog explaining the limit
+                file_stem = (
+                    Path(self._current_file.path).stem
+                    if self._current_file.path is not None
+                    else "unknown file"
+                )
+                with ui.dialog() as dialog, ui.card():
+                    ui.label("Maximum number of ROIs reached").classes("text-lg font-semibold")
+                    ui.label(
+                        f"{file_stem} already has {num_rois} ROI(s). "
+                        f"The maximum allowed is {MAX_NUM_ROI}."
+                    ).classes("text-sm")
+                    with ui.row():
+                        ui.button("OK", on_click=dialog.close).props("outline")
+                
+                dialog.open()
+                return
         
         path_str = str(self._current_file.path) if self._current_file.path else None
         self._on_add_roi(
@@ -694,9 +703,19 @@ class AnalysisToolbarView:
         # Event Analysis section
 
         # with ui.expansion("event analysis", value=True).classes("w-full"):
-        from kymflow.gui_v2.styles import kym_expansion
         with kym_expansion("Event Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
+                # Detect Events buttons (moved to top, right after expansion)
+                with ui.row().classes("items-end gap-2"):
+                    self._detect_events_button = ui.button(
+                        "Detect Events",
+                        on_click=self._on_detect_events_click
+                    )
+                    self._detect_all_events_button = ui.button(
+                        "Detect Events (all files)",
+                        on_click=self._on_detect_all_events_click
+                    )
+                
                 # Parameter inputs (each on its own row)
                 self._win_cmp_sec_input = ui.number(
                     label="win_cmp_sec",
@@ -729,17 +748,6 @@ class AnalysisToolbarView:
                     min=0.0,
                     step=0.01
                 ).classes("w-full").props("dense")
-                
-                # Detect Events buttons
-                with ui.row().classes("items-end gap-2"):
-                    self._detect_events_button = ui.button(
-                        "Detect Events",
-                        on_click=self._on_detect_events_click
-                    )
-                    self._detect_all_events_button = ui.button(
-                        "Detect Events (all files)",
-                        on_click=self._on_detect_all_events_click
-                    )
 
     def _on_detect_events_click(self) -> None:
         """Handle Detect Events button click."""

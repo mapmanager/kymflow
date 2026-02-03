@@ -27,6 +27,38 @@ logger = get_logger(__name__)
 THEME_STORAGE_KEY = "kymflow_dark_mode"
 
 
+def _setUpGuiDefaults():
+    """Set up default classes and props for all ui elements."""
+    
+    logger.info('setting default_classes() and default_props()to specify style of all ui elements')
+    logger.info(f'  ui.button and ui.label ui.checkbox')
+    ui.label.default_classes("text-sm select-text")  #  select-text allows double-click selection
+    ui.label.default_props("dense")
+    #
+    ui.button.default_classes("text-xs")
+    ui.button.default_props("dense")
+    #
+    ui.checkbox.default_classes("text-xs")
+    ui.checkbox.default_props("dense")
+    #
+    ui.select.default_classes("text-xs")
+    ui.select.default_props("dense")
+    #
+    ui.input.default_classes("text-xs")
+    ui.input.default_props("dense")
+    #
+    ui.number.default_classes("text-xs")
+    ui.number.default_props("dense")
+    #
+    ui.expansion.default_classes("text-xs")
+    ui.expansion.default_props("dense")
+    #
+    ui.slider.default_classes("text-xs")
+    ui.slider.default_props("dense")
+    #
+    ui.linear_progress.default_classes("text-xs")
+    ui.linear_progress.default_props("dense")
+
 class AppContext:
     """Singleton managing shared application state across all pages.
     
@@ -63,7 +95,7 @@ class AppContext:
         is_main_process = current_process.name == "MainProcess"
         
         if not is_main_process:
-            logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
+            # logger.debug(f"Skipping AppContext initialization in worker process: {current_process.name}")
             # Set initialized to True to prevent re-initialization attempts
             self._initialized = True
             # Create minimal dummy attributes to avoid AttributeError
@@ -75,15 +107,11 @@ class AppContext:
             self.default_folder = Path.home() / "data"
             return
             
-        logger.info("Initializing AppContext singleton")
+        logger.info("Initializing AppContext singleton (should happen once)")
         
         #
         # configure default classes
-        logger.info('setting default_classes() to specify style of all ui elements')
-        ui.label.default_classes("text-sm select-text")
-        # .props("dense").classes("text-sm")
-        ui.button.default_classes("text-sm")
-        ui.button.default_props("dense")
+        _setUpGuiDefaults()
 
         #
         # global css styles

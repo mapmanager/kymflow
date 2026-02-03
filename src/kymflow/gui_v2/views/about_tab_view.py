@@ -15,6 +15,7 @@ from nicegui import ui
 
 from kymflow.core.utils.about import getVersionInfo
 from kymflow.core.utils.logging import get_log_file_path, get_logger
+from kymflow.gui_v2.styles import kym_expansion
 
 logger = get_logger(__name__)
 
@@ -56,8 +57,9 @@ class AboutTabView:
             log_content = "[empty]"
 
         # Logs section - in disclosure triangle
-        with ui.expansion("Logs", value=False).classes("w-full"):
-            ui.label(f"Log file: {log_path or 'N/A'}").classes("text-sm text-gray-500")
+        # with ui.expansion("Logs", value=False).classes("w-full"):
+        with kym_expansion("Logs", value=False).classes("w-full"):
+            # ui.label(f"Log file: {log_path or 'N/A'}").classes("text-sm text-gray-500")
             ui.code(log_content).classes("w-full text-sm").style(
                 "white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow: auto;"
             )
