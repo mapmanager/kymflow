@@ -32,6 +32,10 @@ def _setUpGuiDefaults():
     
     logger.info('setting default_classes() and default_props()to specify style of all ui elements')
     logger.info(f'  ui.button and ui.label ui.checkbox')
+    
+    # todo: get this from appconfig
+    text_size = 'text-sm'
+    
     ui.label.default_classes("text-sm select-text")  #  select-text allows double-click selection
     ui.label.default_props("dense")
     #

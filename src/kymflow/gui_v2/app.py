@@ -72,7 +72,7 @@ from kymflow.gui_v2.config import DEFAULT_PORT, STORAGE_SECRET
 from kymflow.gui_v2.navigation import inject_global_styles
 
 from kymflow.gui_v2.bus import BusConfig, get_event_bus
-from kymflow.gui_v2.events_folder import FolderChosen
+from kymflow.gui_v2.events_folder import SelectPathEvent
 from kymflow.gui_v2.page_cache import cache_page, get_cached_page, get_stable_session_id
 from kymflow.gui_v2.pages.batch_page import BatchPage
 from kymflow.gui_v2.pages.home_page import HomePage
@@ -129,6 +129,8 @@ def home() -> None:
     install_global_styles()
 
     ui.page_title("KymFlow")
+    
+    # set style of all nicegui ui widgets
     inject_global_styles()
 
     # Get stable session ID (persists across navigations)
@@ -156,10 +158,15 @@ def home() -> None:
     # Only bootstrap if this is a new page instance (cached_page is None)
     # and no folder is already loaded
     if cached_page is None and context.app_state.folder is None:
+        
         # Precedence: dev override > last folder from config
         if USE_DEV_FOLDER and DEV_FOLDER.exists():
-            logger.info(f"DEV bootstrap: emitting FolderChosen({DEV_FOLDER}) for session {session_id[:8]}...")
-            page.bus.emit(FolderChosen(folder=str(DEV_FOLDER)))
+            logger.info(f"DEV bootstrap: emitting PathChosen({DEV_FOLDER}) for session {session_id[:8]}...")
+            page.bus.emit(SelectPathEvent(
+                new_path=str(DEV_FOLDER),
+                depth=None,
+                phase="intent",
+            ))
         else:
             # Try to load last folder from user config
             last_path, last_depth = context.user_config.get_last_folder()
@@ -170,7 +177,11 @@ def home() -> None:
                         f"Loading last folder from config: {last_path} (depth={last_depth}) "
                         f"for session {session_id[:8]}..."
                     )
-                    page.bus.emit(FolderChosen(folder=last_path, depth=last_depth))
+                    page.bus.emit(SelectPathEvent(
+                        new_path=last_path,
+                        depth=last_depth,
+                        phase="intent",
+                    ))
                 else:
                     logger.debug(f"Last folder from config does not exist: {last_path}")
 

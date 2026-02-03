@@ -12,7 +12,7 @@ import sys
 import pytest
 from nicegui import app, ui
 
-from kymflow.gui_v2.events_folder import FolderChosen
+from kymflow.gui_v2.events_folder import PathChosen
 from kymflow.gui_v2.shutdown_handlers import _capture_native_window_rect
 from kymflow.core.user_config import UserConfig
 
@@ -68,7 +68,7 @@ def test_home_reuses_cached_page(monkeypatch) -> None:
 
 
 def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None:
-    """Home route should emit FolderChosen once when dev folder exists."""
+    """Home route should emit PathChosen once when dev folder exists."""
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -92,13 +92,14 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
 
     bus.emit.assert_called_once()
     emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, FolderChosen)
-    assert emitted.folder == str(tmp_path)
+    assert isinstance(emitted, PathChosen)
+    assert emitted.new_path == str(tmp_path)
     assert emitted.depth is None  # Dev folder doesn't specify depth
+    assert emitted.phase == "intent"
 
 
 def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> None:
-    """Home route should not emit FolderChosen if folder already loaded."""
+    """Home route should not emit PathChosen if folder already loaded."""
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -147,9 +148,10 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
 
     bus.emit.assert_called_once()
     emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, FolderChosen)
-    assert emitted.folder == str(tmp_path)
+    assert isinstance(emitted, PathChosen)
+    assert emitted.new_path == str(tmp_path)
     assert emitted.depth == 2  # Depth from config
+    assert emitted.phase == "intent"
 
 
 def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Path) -> None:
@@ -186,9 +188,10 @@ def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Pat
     # Should emit dev folder, not config folder
     bus.emit.assert_called_once()
     emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, FolderChosen)
-    assert emitted.folder == str(dev_folder)
+    assert isinstance(emitted, PathChosen)
+    assert emitted.new_path == str(dev_folder)
     assert emitted.depth is None  # Dev folder doesn't specify depth
+    assert emitted.phase == "intent"
 
 
 def test_main_registers_shutdown_handlers(monkeypatch) -> None:

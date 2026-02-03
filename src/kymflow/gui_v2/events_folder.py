@@ -1,26 +1,54 @@
-"""Event definitions for folder selection.
+"""Event definitions for path selection (folder or file).
 
-This module defines events emitted when users select or change folders
-in the folder selector UI.
+This module defines events emitted when users select or change paths
+(folders or files) in the folder selector UI.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from kymflow.gui_v2.events import EventPhase
+
 
 @dataclass(frozen=True, slots=True)
-class FolderChosen:
-    """Folder selection event.
+class SelectPathEvent:
+    """Path selection event (intent or state phase).
 
-    Emitted when a user selects a folder (e.g., via folder selector widget).
-    This triggers folder scanning and file list updates in AppState.
+    Emitted when a user selects a path (folder or file) via the folder selector widget.
+    This triggers path scanning and file list updates in AppState.
+
+    For intent phase:
+        - Emitted by FolderSelectorView when user selects a path
+        - Handled by FolderController which validates and loads the path
+
+    For state phase:
+        - Emitted by FolderController after successful path load
+        - Subscribed to by FolderSelectorView to sync UI
 
     Attributes:
-        folder: Selected folder path as string.
+        new_path: Selected path (folder or file) as string.
+        # previous_path: Previous path before selection, or None. Used for revert on cancel.
         depth: Optional folder depth. If provided, sets app_state.folder_depth
-            before loading. If None, uses current app_state.folder_depth.
+            before loading (for folders only). If None, uses current app_state.folder_depth.
+        phase: Event phase - "intent" or "state".
     """
 
-    folder: str
+    new_path: str
+    # previous_path: str | None = None
     depth: int | None = None
+    phase: EventPhase = "intent"
+
+
+@dataclass(frozen=True, slots=True)
+class CancelSelectPathEvent:
+    """Path selection cancellation event.
+
+    Emitted when a PathChosen intent is cancelled (e.g., user cancels unsaved changes dialog).
+    This allows the view to revert the UI dropdown to the previous selection.
+
+    Attributes:
+        previous_path: Path to revert to (the path before the cancelled selection).
+    """
+
+    previous_path: str
