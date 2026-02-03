@@ -38,37 +38,41 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     logger.info('setting default_classes() and default_props()to specify style of all ui elements')
     logger.info(f'  ui.button and ui.label ui.checkbox')
     
+    # logger.debug(f'app_config is:{app_config}')
+
     # Get text_size from app_config, fallback to default
     if app_config is not None:
         text_size = app_config.get_attribute('text_size')
     else:
         text_size = 'text-sm'
     
-    ui.label.default_classes("text-sm select-text")  #  select-text allows double-click selection
+    logger.debug(f'=== using text_size:{text_size}')
+
+    ui.label.default_classes(f"{text_size} select-text")  #  select-text allows double-click selection
     ui.label.default_props("dense")
     #
-    ui.button.default_classes("text-xs")
+    ui.button.default_classes(text_size)
     ui.button.default_props("dense")
     #
-    ui.checkbox.default_classes("text-xs")
+    ui.checkbox.default_classes(text_size)
     ui.checkbox.default_props("dense")
     #
-    ui.select.default_classes("text-xs")
+    ui.select.default_classes(text_size)
     ui.select.default_props("dense")
     #
-    ui.input.default_classes("text-xs")
+    ui.input.default_classes(text_size)
     ui.input.default_props("dense")
     #
-    ui.number.default_classes("text-xs")
+    ui.number.default_classes(text_size)
     ui.number.default_props("dense")
     #
-    ui.expansion.default_classes("text-xs")
+    ui.expansion.default_classes(text_size)
     ui.expansion.default_props("dense")
     #
-    ui.slider.default_classes("text-xs")
+    ui.slider.default_classes(text_size)
     ui.slider.default_props("dense")
     #
-    ui.linear_progress.default_classes("text-xs")
+    ui.linear_progress.default_classes(text_size)
     ui.linear_progress.default_props("dense")
 
 class AppContext:

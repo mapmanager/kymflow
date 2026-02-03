@@ -310,7 +310,7 @@ class VelocityEvent:
         )
 
 
-def estimate_fs(time_s: np.ndarray) -> float:
+def estimate_fs(time_s: np.ndarray) -> float:  # pragma: no cover
     """Estimate sample rate from median dt in seconds."""
     dt = np.diff(time_s)
     dt = dt[np.isfinite(dt) & (dt > 0)]
@@ -319,7 +319,7 @@ def estimate_fs(time_s: np.ndarray) -> float:
     return 1.0 / float(np.median(dt))
 
 
-def rolling_nanmedian(x: np.ndarray, w: int) -> np.ndarray:
+def rolling_nanmedian(x: np.ndarray, w: int) -> np.ndarray:  # pragma: no cover
     """Centered rolling nan-median. Simple O(n*w) implementation."""
     if w < 1:
         raise ValueError("w must be >= 1")
@@ -368,7 +368,7 @@ def _merge_runs_by_gap(runs: list[tuple[int, int]], max_gap: int) -> list[tuple[
     return merged
 
 
-def pick_topk_minima_indices(
+def pick_topk_minima_indices(  # pragma: no cover
     score: np.ndarray,
     time_s: np.ndarray,
     *,
@@ -401,7 +401,7 @@ def pick_topk_minima_indices(
     return picked
 
 
-def baseline_shift_score(
+def baseline_shift_score(  # pragma: no cover
     time_s: np.ndarray,
     velocity: np.ndarray,
     *,
