@@ -28,14 +28,12 @@ class SelectPathEvent:
 
     Attributes:
         new_path: Selected path (folder or file) as string.
-        # previous_path: Previous path before selection, or None. Used for revert on cancel.
         depth: Optional folder depth. If provided, sets app_state.folder_depth
             before loading (for folders only). If None, uses current app_state.folder_depth.
         phase: Event phase - "intent" or "state".
     """
 
     new_path: str
-    # previous_path: str | None = None
     depth: int | None = None
     phase: EventPhase = "intent"
 
@@ -44,8 +42,8 @@ class SelectPathEvent:
 class CancelSelectPathEvent:
     """Path selection cancellation event.
 
-    Emitted when a PathChosen intent is cancelled (e.g., user cancels unsaved changes dialog).
-    This allows the view to revert the UI dropdown to the previous selection.
+    Emitted when a SelectPathEvent intent is cancelled (e.g., user cancels unsaved changes dialog
+    or path does not exist). This allows the view to revert the UI dropdown to the previous selection.
 
     Attributes:
         previous_path: Path to revert to (the path before the cancelled selection).

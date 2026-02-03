@@ -108,7 +108,7 @@ class AppContext:
             self.home_task = None
             self.batch_task = None
             self.batch_overall_task = None
-            self.default_folder = Path.home() / "data"
+            self.default_folder = Path.home()
             return
             
         logger.info("Initializing AppContext singleton (should happen once)")
@@ -135,8 +135,8 @@ class AppContext:
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
         
-        # Default folder
-        self.default_folder: Path = Path.home() / "data"  # Will be set by app.py
+        # Default folder (used as fallback for file dialogs)
+        self.default_folder: Path = Path.home()
         
         self._initialized = True
         logger.info("AppContext initialized successfully")

@@ -12,7 +12,7 @@ import sys
 import pytest
 from nicegui import app, ui
 
-from kymflow.gui_v2.events_folder import PathChosen
+from kymflow.gui_v2.events_folder import SelectPathEvent
 from kymflow.gui_v2.shutdown_handlers import _capture_native_window_rect
 from kymflow.core.user_config import UserConfig
 
@@ -92,7 +92,7 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
 
     bus.emit.assert_called_once()
     emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, PathChosen)
+    assert isinstance(emitted, SelectPathEvent)
     assert emitted.new_path == str(tmp_path)
     assert emitted.depth is None  # Dev folder doesn't specify depth
     assert emitted.phase == "intent"
@@ -148,7 +148,7 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
 
     bus.emit.assert_called_once()
     emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, PathChosen)
+    assert isinstance(emitted, SelectPathEvent)
     assert emitted.new_path == str(tmp_path)
     assert emitted.depth == 2  # Depth from config
     assert emitted.phase == "intent"
@@ -188,7 +188,7 @@ def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Pat
     # Should emit dev folder, not config folder
     bus.emit.assert_called_once()
     emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, PathChosen)
+    assert isinstance(emitted, SelectPathEvent)
     assert emitted.new_path == str(dev_folder)
     assert emitted.depth is None  # Dev folder doesn't specify depth
     assert emitted.phase == "intent"
@@ -228,3 +228,39 @@ async def test_shutdown_captures_native_window_rect(monkeypatch, tmp_path: Path)
     await _capture_native_window_rect(context)
 
     assert cfg.get_window_rect() == (10, 20, 1200, 800)
+
+
+def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
+    """Home route should not emit SelectPathEvent when user config has no last folder."""
+    app_module = _load_app_module(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+
+    bus = SimpleNamespace(emit=MagicMock())
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
+
+    def _homepage(_context, _bus):
+        return DummyPage(bus=_bus)
+
+    monkeypatch.setattr(app_module, "HomePage", _homepage)
+
+    # Disable dev folder override
+    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", False)
+    
+    # Set up user config with empty recent_folders and no last_folder
+    # (simulating first-time user with no config)
+    app_module.context.app_state.folder = None
+    # Explicitly reset last_folder to empty (simulating fresh config)
+    # Directly set the data to avoid normalization issues with empty string
+    from kymflow.core.user_config import LastFolder, DEFAULT_FOLDER_DEPTH
+    app_module.context.user_config.data.last_folder = LastFolder(path="", depth=DEFAULT_FOLDER_DEPTH)
+    # Verify config has no last folder
+    last_path, _ = app_module.context.user_config.get_last_folder()
+    assert last_path == ""
+
+    app_module.home()
+
+    # Should NOT emit SelectPathEvent since there's no folder to load
+    bus.emit.assert_not_called()

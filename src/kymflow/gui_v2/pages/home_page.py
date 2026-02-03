@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nicegui import ui
@@ -576,8 +575,7 @@ class HomePage(BasePage):
                     # abb 20260129 trying to fix custom table so it is top aligned
                     with ui.column().classes("w-full h-full min-w-0 overflow-x-auto items-start justify-start"):
                         # Folder selector FIRST (renders first in DOM)
-                        initial_folder = self.context.app_state.folder or Path(".")
-                        self._folder_view.render(initial_folder=initial_folder)
+                        self._folder_view.render(initial_folder=self.context.app_state.folder)
 
                         self._table_view.render()
                         # abb 20260129 gpt, everything inside must also respect min-h-0 if it’s a flex child

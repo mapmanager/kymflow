@@ -309,7 +309,7 @@ class UserConfig:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = self.data.to_json_dict()
         logger.info('saving user_config to disk')
-        # logger.info(f'payload: {payload}')
+        logger.info(f'  path: {self.path}')
         from pprint import pprint
         pprint(payload, sort_dicts=False, indent=4)
         

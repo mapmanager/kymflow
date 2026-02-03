@@ -151,8 +151,10 @@ class AppState:
             logger.warning(f"Path is neither file nor directory: {path}")
             return
         
-        # AcqImageList sets self.folder to parent directory for files, or folder path for directories
-        self.folder = self.files.folder
+        # Store the actual selected path (file or folder), not the parent directory
+        # AcqImageList.folder is for internal use (parent dir for files), but AppState.folder
+        # should always represent the actual selected path for UI consistency (e.g., cancellation revert)
+        self.folder = path
         
         logger.info("load_folder: calling file_list_changed handlers")
         for handler in list(self._file_list_changed_handlers):

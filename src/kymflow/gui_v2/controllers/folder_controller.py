@@ -1,6 +1,6 @@
 """Controller for handling path selection events.
 
-This module provides a controller that translates PathChosen events
+This module provides a controller that translates SelectPathEvent intent events
 from the UI into AppState path loading operations.
 """
 
@@ -26,15 +26,15 @@ if TYPE_CHECKING:
 class FolderController:
     """Controller that applies path selection events to AppState.
 
-    This controller handles PathChosen events (typically from FolderSelectorView)
+    This controller handles SelectPathEvent intent events (typically from FolderSelectorView)
     and triggers AppState.load_folder(), which scans the path for kymograph
     files and updates the file list.
 
     Flow:
-        1. User selects path → FolderSelectorView emits PathChosen(phase="intent")
+        1. User selects path → FolderSelectorView emits SelectPathEvent(phase="intent")
         2. This controller receives intent event → validates and loads path
-        3. On success: emits PathChosen(phase="state")
-        4. On cancel: emits PathChosenCancelled
+        3. On success: emits SelectPathEvent(phase="state")
+        4. On cancel: emits CancelSelectPathEvent
         5. AppState scans path and updates file list
         6. AppState callback → AppStateBridge emits FileListChanged
         7. FileTableBindings receives event → updates file table
@@ -48,7 +48,7 @@ class FolderController:
     def __init__(self, app_state: AppState, bus: EventBus, user_config: UserConfig | None = None) -> None:
         """Initialize folder controller.
 
-        Subscribes to PathChosen intent-phase events from the bus.
+        Subscribes to SelectPathEvent intent-phase events from the bus.
 
         Args:
             app_state: AppState instance to update.
@@ -67,11 +67,11 @@ class FolderController:
         scanning and emit FileListChanged via the bridge.
         
         If depth is provided in the event, sets app_state.folder_depth before loading (for folders only).
-        After successful load, emits PathChosen(phase="state") and persists the path to user config.
-        On cancellation, emits PathChosenCancelled.
+        After successful load, emits SelectPathEvent(phase="state") and persists the path to user config.
+        On cancellation, emits CancelSelectPathEvent.
 
         Args:
-            e: PathChosen event (phase="intent") containing the path and optional depth.
+            e: SelectPathEvent (phase="intent") containing the path and optional depth.
         """
         new_path = Path(e.new_path)
         
@@ -79,35 +79,31 @@ class FolderController:
         is_file = new_path.is_file()
         is_folder = new_path.is_dir()
         
-        # get current path from app_state
-        # bug: this will be path to folder or path to enclosing folder (for file selection)
+        # Get current path from app_state (always the actual selected path, file or folder)
         current_path = str(self._app_state.folder) if self._app_state.folder else None
 
         if not (is_file or is_folder):
-            # Updated: generic message for both files and folders
             ui.notify(f"Path does not exist: {new_path}", type="warning")
-            # Emit cancellation since path doesn't exist
             if current_path:
                 self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
             return
         
-        # allow user to cancel if there are unsaved changes
         if self._app_state.files and self._app_state.files.any_dirty_analysis():
-            self._show_unsaved_dialog(new_path, current_path)
+            original_depth = e.depth
+            self._show_unsaved_dialog(new_path, current_path, original_depth)
             return
         
-        # Simplified: load_folder() accepts both files and folders
-        # For files, depth is ignored by AcqImageList
-        # For folders, use provided depth or current app_state depth
-        depth = e.depth if e.depth is not None else self._app_state.folder_depth
-        if e.depth is not None and is_folder:
-            # Only update folder_depth for folders (not needed for files)
-            self._app_state.folder_depth = depth
+        # For files, depth is always 0 (ignored by AcqImageList)
+        # For folders, use event depth or current app_state depth
+        if is_file:
+            depth = 0
+        else:
+            depth = e.depth if e.depth is not None else self._app_state.folder_depth
+            if e.depth is not None:
+                self._app_state.folder_depth = depth
         
-        # Load path (file or folder) - depth will be ignored for files
         self._app_state.load_folder(new_path, depth=depth)
         
-        # Persist to config (depth=0 for files, actual depth for folders)
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
             self._user_config.push_recent_folder(str(new_path), depth=config_depth)
@@ -122,32 +118,39 @@ class FolderController:
     def _load_folder(self, path: Path) -> None:
         """Load path with current depth and persist to config.
         
-        Deprecated: Use _on_path_chosen() directly instead.
+        Deprecated: Use _on_select_path_event() directly instead.
+        
+        Note: This method doesn't properly handle file vs folder depth (always uses app_state.folder_depth).
+        Use _on_select_path_event() which correctly handles depth for both files and folders.
         """
-        self._app_state.load_folder(path, depth=self._app_state.folder_depth)
+        is_file = path.is_file()
+        depth = 0 if is_file else self._app_state.folder_depth
+        self._app_state.load_folder(path, depth=depth)
         if self._user_config is not None:
-            self._user_config.push_recent_folder(str(path), depth=self._app_state.folder_depth)
+            config_depth = 0 if is_file else depth
+            self._user_config.push_recent_folder(str(path), depth=config_depth)
 
-    def _show_unsaved_dialog(self, new_path: Path, previous_path_str: str | None) -> None:
+    def _show_unsaved_dialog(self, new_path: Path, previous_path_str: str | None, original_depth: int | None) -> None:
         """Prompt before switching paths if unsaved changes exist.
         
         Args:
-            path: The new path to switch to.
-            previous_path: The previous path (for revert on cancel).
+            new_path: The new path to switch to.
+            previous_path_str: The previous path (for revert on cancel).
+            original_depth: The depth from the original SelectPathEvent (for folders only).
         """
 
-        logger.warning(f'new_path:{new_path}')
-        logger.warning(f'previous_path_str:{previous_path_str}')
 
-        previous_path = Path(previous_path_str)
-
-        # Determine destination path type
-        prev_path_type = "file" if previous_path.is_file() else "folder"
         dest_path_type = "file" if new_path.is_file() else "folder"
+        
+        prev_path_type = "folder"
+        if previous_path_str:
+            previous_path = Path(previous_path_str)
+            prev_path_type = "file" if previous_path.is_file() else "folder"
         
         with ui.dialog() as dialog, ui.card():
             ui.label(f'Unsaved changes in {prev_path_type}').classes("text-lg font-semibold")
-            ui.label(previous_path_str).classes("text-sm")
+            if previous_path_str:
+                ui.label(previous_path_str).classes("text-sm")
             ui.label(f"If you switch to {dest_path_type} '{new_path.name}' now, those changes will be lost."
             ).classes("text-sm")
             with ui.row():
@@ -157,7 +160,7 @@ class FolderController:
                 ).props("outline")
                 ui.button(
                     f"Switch to {dest_path_type}",
-                    on_click=lambda: self._confirm_switch_path(dialog, new_path, previous_path_str),
+                    on_click=lambda: self._confirm_switch_path(dialog, new_path, previous_path_str, original_depth),
                 ).props("color=red")
 
         dialog.open()
@@ -168,13 +171,31 @@ class FolderController:
         if previous_path:
             self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
 
-    def _confirm_switch_path(self, dialog, path: Path, previous_path: str | None) -> None:
-        """Confirm path switch after unsaved changes warning."""
+    def _confirm_switch_path(self, dialog, path: Path, previous_path: str | None, original_depth: int | None) -> None:
+        """Confirm path switch after unsaved changes warning.
+        
+        Args:
+            dialog: The dialog to close.
+            path: The new path to switch to.
+            previous_path: The previous path (for revert on cancel).
+            original_depth: The depth from the original SelectPathEvent (for folders only).
+        """
         dialog.close()
-        # Determine depth based on path type
         is_file = path.is_file()
-        depth = 0 if is_file else self._app_state.folder_depth
+        is_folder = path.is_dir()
+        
+        if is_file:
+            depth = 0
+        elif original_depth is not None:
+            depth = original_depth
+        else:
+            depth = self._app_state.folder_depth
+        
+        if is_folder and original_depth is not None:
+            self._app_state.folder_depth = original_depth
+        
         self._app_state.load_folder(path, depth=depth)
+        
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
             self._user_config.push_recent_folder(str(path), depth=config_depth)
@@ -182,7 +203,6 @@ class FolderController:
         # Emit state event to confirm successful load
         self._bus.emit(SelectPathEvent(
             new_path=str(path),
-            previous_path=previous_path,
             depth=depth,
             phase="state",
         ))

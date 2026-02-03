@@ -161,7 +161,7 @@ def home() -> None:
         
         # Precedence: dev override > last folder from config
         if USE_DEV_FOLDER and DEV_FOLDER.exists():
-            logger.info(f"DEV bootstrap: emitting PathChosen({DEV_FOLDER}) for session {session_id[:8]}...")
+            logger.info(f"DEV bootstrap: emitting SelectPathEvent({DEV_FOLDER}) for session {session_id[:8]}...")
             page.bus.emit(SelectPathEvent(
                 new_path=str(DEV_FOLDER),
                 depth=None,
