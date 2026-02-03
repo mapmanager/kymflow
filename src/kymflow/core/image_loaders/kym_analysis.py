@@ -29,8 +29,11 @@ from kymflow.core.image_loaders.roi import ROI
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
 from kymflow.core.analysis.velocity_events.velocity_events import (
+    BaselineDropParams,
+    NanGapParams,
     UserType,
     VelocityEvent,
+    ZeroGapParams,
     detect_events,
     time_to_index,
 )
@@ -846,7 +849,9 @@ class KymAnalysis:
         *,
         velocity_key: str = "velocity",
         remove_outliers: bool = False,
-        **detect_events_kwargs: Any,
+        baseline_drop_params: Optional["BaselineDropParams"] = None,
+        nan_gap_params: Optional["NanGapParams"] = None,
+        zero_gap_params: Optional["ZeroGapParams"] = None,
     ) -> list[VelocityEvent]:
         """Run velocity event detection for a single ROI and store results.
 
@@ -861,8 +866,12 @@ class KymAnalysis:
             roi_id: Identifier of the ROI to analyze.
             velocity_key: Column name to retrieve from analysis (default: "velocity").
             remove_outliers: If True, remove outliers using 2*std threshold before detection.
-            **detect_events_kwargs: Additional keyword arguments passed to detect_events()
-                (e.g., win_cmp_sec, mad_k, top_k_total, etc.).
+            baseline_drop_params: Optional BaselineDropParams instance for baseline-drop detection.
+                If None, uses default BaselineDropParams().
+            nan_gap_params: Optional NanGapParams instance for NaN-gap detection.
+                If None, uses default NanGapParams().
+            zero_gap_params: Optional ZeroGapParams instance for zero-gap detection.
+                If None, uses default ZeroGapParams().
 
         Returns:
             List of detected VelocityEvent instances.
@@ -896,7 +905,13 @@ class KymAnalysis:
             )
 
         # Run detection
-        events, _debug = detect_events(time_s, velocity, **detect_events_kwargs)
+        events, _debug = detect_events(
+            time_s,
+            velocity,
+            baseline_drop_params=baseline_drop_params,
+            nan_gap_params=nan_gap_params,
+            zero_gap_params=zero_gap_params,
+        )
         
         # Store results, if we had previous roi_id velocity events -> THIS REPLACES ALL OF THEM
         #self._velocity_events[roi_id] = events

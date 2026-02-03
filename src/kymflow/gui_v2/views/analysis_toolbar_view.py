@@ -15,6 +15,7 @@ from pathlib import Path
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.config import MAX_NUM_ROI, ALLOW_EDIT_ROI
 from kymflow.gui_v2.events import (
@@ -107,9 +108,10 @@ class AnalysisToolbarView:
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
         self._detect_all_events_button: Optional[ui.button] = None
-        self._int_param_input: Optional[ui.number] = None
-        self._float_param_input: Optional[ui.number] = None
-        self._text_param_input: Optional[ui.input] = None
+        self._win_cmp_sec_input: Optional[ui.number] = None
+        self._smooth_sec_input: Optional[ui.number] = None
+        self._mad_k_input: Optional[ui.number] = None
+        self._abs_score_floor_input: Optional[ui.number] = None
 
         # State
         self._current_file: Optional[KymImage] = None
@@ -140,9 +142,10 @@ class AnalysisToolbarView:
         # self._progress_label = None
         self._detect_events_button = None
         self._detect_all_events_button = None
-        self._int_param_input = None
-        self._float_param_input = None
-        self._text_param_input = None
+        self._win_cmp_sec_input = None
+        self._smooth_sec_input = None
+        self._mad_k_input = None
+        self._abs_score_floor_input = None
         # Reset suppression flag to ensure clean state
         self._suppress_roi_emit = False
 
@@ -694,23 +697,38 @@ class AnalysisToolbarView:
         from kymflow.gui_v2.styles import kym_expansion
         with kym_expansion("Event Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
-                # Parameter inputs
-                # with ui.row().classes("items-end gap-2"):
-                #     self._int_param_input = ui.number(
-                #         value=0,
-                #         label="Int Param",
-                #         format="%d"
-                #     ).classes("w-24").props("dense")
-                #     self._float_param_input = ui.number(
-                #         value=0.0,
-                #         label="Float Param",
-                #         format="%.2f"
-                #     ).classes("w-24").props("dense")
-                #     self._text_param_input = ui.input(
-                #         value="",
-                #         label="Text Param",
-                #         placeholder=""
-                #     ).classes("w-32").props("dense")
+                # Parameter inputs (each on its own row)
+                self._win_cmp_sec_input = ui.number(
+                    label="win_cmp_sec",
+                    value=BaselineDropParams().win_cmp_sec,
+                    format="%.2f",
+                    min=0.01,
+                    step=0.01
+                ).classes("w-full").props("dense")
+                
+                self._smooth_sec_input = ui.number(
+                    label="smooth_sec",
+                    value=BaselineDropParams().smooth_sec,
+                    format="%.2f",
+                    min=0.01,
+                    step=0.01
+                ).classes("w-full").props("dense")
+                
+                self._mad_k_input = ui.number(
+                    label="mad_k",
+                    value=BaselineDropParams().mad_k,
+                    format="%.2f",
+                    min=0.1,
+                    step=0.1
+                ).classes("w-full").props("dense")
+                
+                self._abs_score_floor_input = ui.number(
+                    label="abs_score_floor",
+                    value=BaselineDropParams().abs_score_floor,
+                    format="%.2f",
+                    min=0.0,
+                    step=0.01
+                ).classes("w-full").props("dense")
                 
                 # Detect Events buttons
                 with ui.row().classes("items-end gap-2"):
@@ -735,25 +753,44 @@ class AnalysisToolbarView:
             ui.notify("Select an ROI first", color="warning")
             return
 
-        # Collect parameter values from inputs
-        # int_param = 0
-        # float_param = 0.0
-        # text_param = ""
-        # 
-        # if self._int_param_input is not None:
-        #     try:
-        #         int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
-        #     except (ValueError, TypeError):
-        #         int_param = 0
-        # 
-        # if self._float_param_input is not None:
-        #     try:
-        #         float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
-        #     except (ValueError, TypeError):
-        #         float_param = 0.0
-        # 
-        # if self._text_param_input is not None:
-        #     text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
+        # Collect parameter values from inputs (with error handling)
+        default_params = BaselineDropParams()
+        win_cmp_sec = default_params.win_cmp_sec
+        smooth_sec = default_params.smooth_sec
+        mad_k = default_params.mad_k
+        abs_score_floor = default_params.abs_score_floor
+        
+        if self._win_cmp_sec_input is not None:
+            try:
+                win_cmp_sec = float(self._win_cmp_sec_input.value) if self._win_cmp_sec_input.value is not None else default_params.win_cmp_sec
+            except (ValueError, TypeError):
+                win_cmp_sec = default_params.win_cmp_sec
+        
+        if self._smooth_sec_input is not None:
+            try:
+                smooth_sec = float(self._smooth_sec_input.value) if self._smooth_sec_input.value is not None else default_params.smooth_sec
+            except (ValueError, TypeError):
+                smooth_sec = default_params.smooth_sec
+        
+        if self._mad_k_input is not None:
+            try:
+                mad_k = float(self._mad_k_input.value) if self._mad_k_input.value is not None else default_params.mad_k
+            except (ValueError, TypeError):
+                mad_k = default_params.mad_k
+        
+        if self._abs_score_floor_input is not None:
+            try:
+                abs_score_floor = float(self._abs_score_floor_input.value) if self._abs_score_floor_input.value is not None else default_params.abs_score_floor
+            except (ValueError, TypeError):
+                abs_score_floor = default_params.abs_score_floor
+
+        # Create BaselineDropParams with collected values (other params use defaults)
+        baseline_drop_params = BaselineDropParams(
+            win_cmp_sec=win_cmp_sec,
+            smooth_sec=smooth_sec,
+            mad_k=mad_k,
+            abs_score_floor=abs_score_floor,
+        )
 
         # Emit DetectEvents intent event
         path_str = str(self._current_file.path) if self._current_file.path else None
@@ -761,9 +798,7 @@ class AnalysisToolbarView:
             DetectEvents(
                 roi_id=self._current_roi_id,
                 path=path_str,
-                # int_param=int_param,
-                # float_param=float_param,
-                # text_param=text_param,
+                baseline_drop_params=baseline_drop_params,
                 phase="intent",
             )
         )
@@ -771,24 +806,43 @@ class AnalysisToolbarView:
     def _on_detect_all_events_click(self) -> None:
         """Handle Detect Events (all files) button click."""
         # Collect parameter values from inputs (same as single-file)
-        # int_param = 0
-        # float_param = 0.0
-        # text_param = ""
-        # 
-        # if self._int_param_input is not None:
-        #     try:
-        #         int_param = int(self._int_param_input.value) if self._int_param_input.value is not None else 0
-        #     except (ValueError, TypeError):
-        #         int_param = 0
-        # 
-        # if self._float_param_input is not None:
-        #     try:
-        #         float_param = float(self._float_param_input.value) if self._float_param_input.value is not None else 0.0
-        #     except (ValueError, TypeError):
-        #         float_param = 0.0
-        # 
-        # if self._text_param_input is not None:
-        #     text_param = str(self._text_param_input.value) if self._text_param_input.value is not None else ""
+        default_params = BaselineDropParams()
+        win_cmp_sec = default_params.win_cmp_sec
+        smooth_sec = default_params.smooth_sec
+        mad_k = default_params.mad_k
+        abs_score_floor = default_params.abs_score_floor
+        
+        if self._win_cmp_sec_input is not None:
+            try:
+                win_cmp_sec = float(self._win_cmp_sec_input.value) if self._win_cmp_sec_input.value is not None else default_params.win_cmp_sec
+            except (ValueError, TypeError):
+                win_cmp_sec = default_params.win_cmp_sec
+        
+        if self._smooth_sec_input is not None:
+            try:
+                smooth_sec = float(self._smooth_sec_input.value) if self._smooth_sec_input.value is not None else default_params.smooth_sec
+            except (ValueError, TypeError):
+                smooth_sec = default_params.smooth_sec
+        
+        if self._mad_k_input is not None:
+            try:
+                mad_k = float(self._mad_k_input.value) if self._mad_k_input.value is not None else default_params.mad_k
+            except (ValueError, TypeError):
+                mad_k = default_params.mad_k
+        
+        if self._abs_score_floor_input is not None:
+            try:
+                abs_score_floor = float(self._abs_score_floor_input.value) if self._abs_score_floor_input.value is not None else default_params.abs_score_floor
+            except (ValueError, TypeError):
+                abs_score_floor = default_params.abs_score_floor
+
+        # Create BaselineDropParams with collected values (other params use defaults)
+        baseline_drop_params = BaselineDropParams(
+            win_cmp_sec=win_cmp_sec,
+            smooth_sec=smooth_sec,
+            mad_k=mad_k,
+            abs_score_floor=abs_score_floor,
+        )
 
         # Emit DetectEvents intent event with all_files=True
         # Note: roi_id and path are None for all-files mode
@@ -797,9 +851,7 @@ class AnalysisToolbarView:
                 roi_id=None,
                 path=None,
                 all_files=True,
-                # int_param=int_param,
-                # float_param=float_param,
-                # text_param=text_param,
+                baseline_drop_params=baseline_drop_params,
                 phase="intent",
             )
         )

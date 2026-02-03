@@ -530,41 +530,6 @@ class TestStallPlotting:
     """Tests for plotting functions."""
 
     @pytest.mark.requires_data
-    def test_plot_stalls_matplotlib_creates_figure(self, test_data_dir: Path) -> None:
-        """Test that plot_stalls_matplotlib creates a figure."""
-        from kymflow.core.plotting.stall_plots import plot_stalls_matplotlib
-
-        if not test_data_dir.exists():
-            pytest.skip("Test data directory does not exist")
-
-        tif_file = test_data_dir / "Capillary1_0001.tif"
-        if not tif_file.exists():
-            pytest.skip("Capillary1_0001.tif not found in test data")
-
-        kym_image = KymImage(tif_file, load_image=False)
-        kym_analysis = kym_image.get_kym_analysis()
-
-        if not kym_analysis.has_analysis(roi_id=1):
-            pytest.skip("No analysis data available for ROI 1")
-
-        # Get velocity and detect stalls
-        velocity = kym_analysis.get_analysis_value(roi_id=1, key="velocity")
-        if velocity is None:
-            pytest.skip("No velocity data available for ROI 1")
-
-        stalls = detect_stalls(velocity, refactory_bins=10)
-
-        # Create plot
-        fig = plot_stalls_matplotlib(
-            kym_image=kym_image,
-            roi_id=1,
-            stalls=stalls,
-            use_time_axis=False,
-        )
-
-        assert fig is not None
-
-    @pytest.mark.requires_data
     def test_plot_stalls_plotly_creates_figure(self, test_data_dir: Path) -> None:
         """Test that plot_stalls_plotly creates a figure."""
         from kymflow.core.plotting.stall_plots import plot_stalls_plotly
@@ -602,10 +567,7 @@ class TestStallPlotting:
     @pytest.mark.requires_data
     def test_plot_stalls_with_empty_stalls_list(self, test_data_dir: Path) -> None:
         """Test plotting with empty stalls list."""
-        from kymflow.core.plotting.stall_plots import (
-            plot_stalls_matplotlib,
-            plot_stalls_plotly,
-        )
+        from kymflow.core.plotting.stall_plots import plot_stalls_plotly
 
         if not test_data_dir.exists():
             pytest.skip("Test data directory does not exist")
@@ -620,24 +582,17 @@ class TestStallPlotting:
         if not kym_analysis.has_analysis(roi_id=1):
             pytest.skip("No analysis data available for ROI 1")
 
-        # Create plots with empty stalls list
-        fig_mpl = plot_stalls_matplotlib(
-            kym_image=kym_image, roi_id=1, stalls=[], use_time_axis=False
-        )
+        # Create plot with empty stalls list
         fig_plotly = plot_stalls_plotly(
             kym_image=kym_image, roi_id=1, stalls=[], use_time_axis=False
         )
 
-        assert fig_mpl is not None
         assert fig_plotly is not None
 
     @pytest.mark.requires_data
     def test_plot_stalls_with_time_axis(self, test_data_dir: Path) -> None:
         """Test plotting with time axis enabled."""
-        from kymflow.core.plotting.stall_plots import (
-            plot_stalls_matplotlib,
-            plot_stalls_plotly,
-        )
+        from kymflow.core.plotting.stall_plots import plot_stalls_plotly
 
         if not test_data_dir.exists():
             pytest.skip("Test data directory does not exist")
@@ -658,35 +613,24 @@ class TestStallPlotting:
 
         stalls = detect_stalls(velocity, refactory_bins=10)
 
-        # Create plots with time axis
-        fig_mpl = plot_stalls_matplotlib(
-            kym_image=kym_image, roi_id=1, stalls=stalls, use_time_axis=True
-        )
+        # Create plot with time axis
         fig_plotly = plot_stalls_plotly(
             kym_image=kym_image, roi_id=1, stalls=stalls, use_time_axis=True
         )
 
-        assert fig_mpl is not None
         assert fig_plotly is not None
 
     def test_plot_stalls_with_missing_analysis(self) -> None:
         """Test plotting with missing analysis data."""
-        from kymflow.core.plotting.stall_plots import (
-            plot_stalls_matplotlib,
-            plot_stalls_plotly,
-        )
+        from kymflow.core.plotting.stall_plots import plot_stalls_plotly
 
         # Create a KymImage without analysis
         test_image = np.zeros((100, 100), dtype=np.uint16)
         kym_image = KymImage(img_data=test_image, load_image=False)
 
-        # Create plots - should return None when no analysis data is available
-        fig_mpl = plot_stalls_matplotlib(
-            kym_image=kym_image, roi_id=999, stalls=[], use_time_axis=False
-        )
+        # Create plot - should return None when no analysis data is available
         fig_plotly = plot_stalls_plotly(
             kym_image=kym_image, roi_id=999, stalls=[], use_time_axis=False
         )
 
-        assert fig_mpl is None
         assert fig_plotly is None

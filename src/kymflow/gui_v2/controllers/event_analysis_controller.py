@@ -78,7 +78,11 @@ class EventAnalysisController:
             try:
                 # Call detect_all_events() on AcqImageList
                 # This method handles empty lists and images without kym_analysis gracefully
-                self._app_state.files.detect_all_events()
+                self._app_state.files.detect_all_events(
+                    baseline_drop_params=e.baseline_drop_params,
+                    nan_gap_params=e.nan_gap_params,
+                    zero_gap_params=e.zero_gap_params,
+                )
                 
                 # Get total number of events across all files
                 total_events = self._app_state.files.total_number_of_event()
@@ -150,6 +154,9 @@ class EventAnalysisController:
             events = kym_analysis.run_velocity_event_analysis(
                 roi_id=e.roi_id,
                 remove_outliers=True,
+                baseline_drop_params=e.baseline_drop_params,
+                nan_gap_params=e.nan_gap_params,
+                zero_gap_params=e.zero_gap_params,
             )
             
             logger.info(

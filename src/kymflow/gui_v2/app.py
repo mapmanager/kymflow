@@ -60,7 +60,7 @@ def _warm_mpl_font_cache_once() -> None:
         pass
 
 
-_init_mpl_cache_dir()
+# _init_mpl_cache_dir()
 # -------------------------------------------------------------------
 
 from nicegui import ui
@@ -264,7 +264,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
 
     # abb for pyinstaller
     # Warm matplotlib cache once (main process only; safe in frozen builds)
-    _warm_mpl_font_cache_once()
+    # _warm_mpl_font_cache_once()
     
     x, y, w, h = context.user_config.get_window_rect()
     # logger.info(f"user_config window_rect: {x}, {y}, {w}, {h}")

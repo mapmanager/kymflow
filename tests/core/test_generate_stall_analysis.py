@@ -72,18 +72,5 @@ def test_generate_stall_analysis() -> None:
     # Verify the code ran successfully
     assert isinstance(stalls, list)
 
-    if 0:
-        logger.info(f'plotting stalls {len(stalls)}')
-        from kymflow.core.plotting.stall_plots import plot_stalls_matplotlib
-        fig = plot_stalls_matplotlib(kym_image, roi_id, stalls)
-        # fig.show()
-
-        from kymflow.core.plotting.stall_plots import plot_stalls_plotly
-        fig = plot_stalls_plotly(kym_image, roi_id, stalls)
-        fig.show()
-
-        import matplotlib.pyplot as plt
-        plt.show()
-
 if __name__ == "__main__":
     test_generate_stall_analysis()

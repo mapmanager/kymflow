@@ -12,7 +12,7 @@ import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.roi import RoiBounds
-from kymflow.gui_v2.events import AnalysisStart
+from kymflow.gui_v2.events import AnalysisStart, DetectEvents
 from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 
 
@@ -250,6 +250,164 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
                     # Call the handler which should call _confirm_start_analysis
                     proceed_handler()
 
-                    # Verify AnalysisStart event WAS emitted (confirm proceeded)
-                    assert len(received_events) == 1
-                    assert received_events[0].roi_id == roi_id
+                # Verify AnalysisStart event WAS emitted (confirm proceeded)
+                assert len(received_events) == 1
+                assert received_events[0].roi_id == roi_id
+
+
+def test_detect_events_click_collects_ui_inputs(
+    kym_file_with_analysis: KymImage,
+) -> None:
+    """Test that _on_detect_events_click() collects UI input values and creates BaselineDropParams."""
+    received_events: list[DetectEvents] = []
+
+    def on_detect_events(event: DetectEvents) -> None:
+        received_events.append(event)
+
+    view = AnalysisToolbarView(
+        on_analysis_start=lambda e: None,
+        on_analysis_cancel=lambda e: None,
+        on_add_roi=lambda e: None,
+        on_delete_roi=lambda e: None,
+        on_set_roi_edit_state=lambda e: None,
+        on_roi_selected=lambda e: None,
+        on_detect_events=on_detect_events,
+    )
+
+    # Render view to create UI elements
+    view.render()
+
+    # Set file and ROI
+    view.set_selected_file(kym_file_with_analysis)
+    roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_roi(roi_id)
+
+    # Mock UI inputs with specific values
+    from unittest.mock import MagicMock
+    view._win_cmp_sec_input = MagicMock()
+    view._win_cmp_sec_input.value = 0.3
+    view._smooth_sec_input = MagicMock()
+    view._smooth_sec_input.value = 0.08
+    view._mad_k_input = MagicMock()
+    view._mad_k_input.value = 2.5
+    view._abs_score_floor_input = MagicMock()
+    view._abs_score_floor_input.value = 0.15
+
+    # Call the click handler
+    view._on_detect_events_click()
+
+    # Verify DetectEvents was emitted with correct BaselineDropParams
+    assert len(received_events) == 1
+    event = received_events[0]
+    assert event.roi_id == roi_id
+    assert event.baseline_drop_params is not None
+    assert event.baseline_drop_params.win_cmp_sec == 0.3
+    assert event.baseline_drop_params.smooth_sec == 0.08
+    assert event.baseline_drop_params.mad_k == 2.5
+    assert event.baseline_drop_params.abs_score_floor == 0.15
+    # Verify other params use defaults
+    from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
+    default_params = BaselineDropParams()
+    assert event.baseline_drop_params.merge_gap_sec == default_params.merge_gap_sec
+    assert event.baseline_drop_params.top_k_total == default_params.top_k_total
+    assert event.baseline_drop_params.min_sep_sec == default_params.min_sep_sec
+
+
+def test_detect_events_click_handles_none_inputs(
+    kym_file_with_analysis: KymImage,
+) -> None:
+    """Test that None/invalid UI input values fall back to dataclass defaults."""
+    received_events: list[DetectEvents] = []
+
+    def on_detect_events(event: DetectEvents) -> None:
+        received_events.append(event)
+
+    view = AnalysisToolbarView(
+        on_analysis_start=lambda e: None,
+        on_analysis_cancel=lambda e: None,
+        on_add_roi=lambda e: None,
+        on_delete_roi=lambda e: None,
+        on_set_roi_edit_state=lambda e: None,
+        on_roi_selected=lambda e: None,
+        on_detect_events=on_detect_events,
+    )
+
+    # Render view
+    view.render()
+
+    # Set file and ROI
+    view.set_selected_file(kym_file_with_analysis)
+    roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_roi(roi_id)
+
+    # Mock UI inputs with None/invalid values
+    from unittest.mock import MagicMock
+    view._win_cmp_sec_input = MagicMock()
+    view._win_cmp_sec_input.value = None
+    view._smooth_sec_input = MagicMock()
+    view._smooth_sec_input.value = "invalid"
+    view._mad_k_input = None  # Input not created
+    view._abs_score_floor_input = MagicMock()
+    view._abs_score_floor_input.value = None
+
+    # Call the click handler
+    view._on_detect_events_click()
+
+    # Verify DetectEvents was emitted with default BaselineDropParams
+    assert len(received_events) == 1
+    event = received_events[0]
+    from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
+    default_params = BaselineDropParams()
+    assert event.baseline_drop_params is not None
+    assert event.baseline_drop_params.win_cmp_sec == default_params.win_cmp_sec
+    assert event.baseline_drop_params.smooth_sec == default_params.smooth_sec
+    assert event.baseline_drop_params.mad_k == default_params.mad_k
+    assert event.baseline_drop_params.abs_score_floor == default_params.abs_score_floor
+
+
+def test_detect_all_events_click_uses_same_params(
+    kym_file_with_analysis: KymImage,
+) -> None:
+    """Test that _on_detect_all_events_click() collects and uses the same UI inputs."""
+    received_events: list[DetectEvents] = []
+
+    def on_detect_events(event: DetectEvents) -> None:
+        received_events.append(event)
+
+    view = AnalysisToolbarView(
+        on_analysis_start=lambda e: None,
+        on_analysis_cancel=lambda e: None,
+        on_add_roi=lambda e: None,
+        on_delete_roi=lambda e: None,
+        on_set_roi_edit_state=lambda e: None,
+        on_roi_selected=lambda e: None,
+        on_detect_events=on_detect_events,
+    )
+
+    # Render view
+    view.render()
+
+    # Mock UI inputs with specific values
+    from unittest.mock import MagicMock
+    view._win_cmp_sec_input = MagicMock()
+    view._win_cmp_sec_input.value = 0.4
+    view._smooth_sec_input = MagicMock()
+    view._smooth_sec_input.value = 0.06
+    view._mad_k_input = MagicMock()
+    view._mad_k_input.value = 4.0
+    view._abs_score_floor_input = MagicMock()
+    view._abs_score_floor_input.value = 0.3
+
+    # Call the all-files click handler
+    view._on_detect_all_events_click()
+
+    # Verify DetectEvents was emitted with correct BaselineDropParams and all_files=True
+    assert len(received_events) == 1
+    event = received_events[0]
+    assert event.all_files is True
+    assert event.roi_id is None
+    assert event.baseline_drop_params is not None
+    assert event.baseline_drop_params.win_cmp_sec == 0.4
+    assert event.baseline_drop_params.smooth_sec == 0.06
+    assert event.baseline_drop_params.mad_k == 4.0
+    assert event.baseline_drop_params.abs_score_floor == 0.3

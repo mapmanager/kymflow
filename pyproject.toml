@@ -11,11 +11,9 @@ requires-python = ">=3.11"
 dependencies = [
     "numpy>=2.0.2",
     "pandas>=2.3.3",
-    "psygnal>=0.14.2",
     "tifffile>=2024.5.24",
     "scikit-image>=0.24.0",
     "plotly>=6.5.0",
-    "matplotlib>=3.9.4",
     "pydantic>=2.10.0",
     "tomlkit>=0.12.0",
     "platformdirs>=4.2.0",

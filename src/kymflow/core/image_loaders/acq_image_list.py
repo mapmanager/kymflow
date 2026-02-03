@@ -12,10 +12,17 @@ Refactor note:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from kymflow.core.analysis.velocity_events.velocity_events import (
+        BaselineDropParams,
+        NanGapParams,
+        ZeroGapParams,
+    )
 
 logger = get_logger(__name__)
 
@@ -236,7 +243,13 @@ class AcqImageList(Generic[T]):
                 total_events += image.get_kym_analysis().total_num_velocity_events()
         return total_events
 
-    def detect_all_events(self) -> None:
+    def detect_all_events(
+        self,
+        *,
+        baseline_drop_params: Optional["BaselineDropParams"] = None,
+        nan_gap_params: Optional["NanGapParams"] = None,
+        zero_gap_params: Optional["ZeroGapParams"] = None,
+    ) -> None:
         """Detect velocity events for all ROIs in all loaded AcqImage instances.
         
         Iterates through all images in the list and for each image that has kym_analysis,
@@ -245,11 +258,24 @@ class AcqImageList(Generic[T]):
         
         This method does not require image data to be loaded - it works on AcqImage
         instances that have analysis data available.
+        
+        Args:
+            baseline_drop_params: Optional BaselineDropParams instance for baseline-drop detection.
+                If None, uses default BaselineDropParams().
+            nan_gap_params: Optional NanGapParams instance for NaN-gap detection.
+                If None, uses default NanGapParams().
+            zero_gap_params: Optional ZeroGapParams instance for zero-gap detection.
+                If None, uses default ZeroGapParams().
         """
         for image in self.images:
             if hasattr(image, "get_kym_analysis"):
                 for roi_id in image.rois.get_roi_ids():
-                    image.get_kym_analysis().run_velocity_event_analysis(roi_id)
+                    image.get_kym_analysis().run_velocity_event_analysis(
+                        roi_id,
+                        baseline_drop_params=baseline_drop_params,
+                        nan_gap_params=nan_gap_params,
+                        zero_gap_params=zero_gap_params,
+                    )
     
     def find_by_path(self, path: str | Path) -> Optional[T]:
         """Find an image in the list by its path.

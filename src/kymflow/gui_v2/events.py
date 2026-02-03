@@ -11,7 +11,12 @@ from enum import Enum
 from typing import TYPE_CHECKING, Literal, Any
 
 if TYPE_CHECKING:
-    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+    from kymflow.core.analysis.velocity_events.velocity_events import (
+        BaselineDropParams,
+        NanGapParams,
+        VelocityEvent,
+        ZeroGapParams,
+    )
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.image_loaders.roi import RoiBounds
     from kymflow.gui_v2.state import ImageDisplayParams
@@ -291,18 +296,21 @@ class DetectEvents:
         roi_id: ROI ID to analyze, or None. Ignored when all_files=True.
         path: File path (optional, for validation). Ignored when all_files=True.
         all_files: If True, detect events for all ROIs in all files in AcqImageList. Defaults to False.
-        int_param: Integer parameter (dummy, for future use).
-        float_param: Float parameter (dummy, for future use).
-        text_param: Text parameter (dummy, for future use).
+        baseline_drop_params: Optional BaselineDropParams instance for baseline-drop detection parameters.
+            If None, uses default BaselineDropParams().
+        nan_gap_params: Optional NanGapParams instance for NaN-gap detection parameters.
+            If None, uses default NanGapParams().
+        zero_gap_params: Optional ZeroGapParams instance for zero-gap detection parameters.
+            If None, uses default ZeroGapParams().
         phase: Event phase - "intent" or "state".
     """
 
     roi_id: int | None
     path: str | None
     all_files: bool = False
-    int_param: int = 0
-    float_param: float = 0.0
-    text_param: str = ""
+    baseline_drop_params: "BaselineDropParams | None" = None
+    nan_gap_params: "NanGapParams | None" = None
+    zero_gap_params: "ZeroGapParams | None" = None
     phase: EventPhase = "intent"
 
 

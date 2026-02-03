@@ -37,6 +37,127 @@ EventType = Literal["baseline_drop",
 RoundingMode = Literal["round", "floor", "ceil"]
 
 
+@dataclass(frozen=True)
+class BaselineDropParams:
+    """Parameters for baseline-drop detection (stall/slowdown candidates).
+    
+    This detector looks for drops in |velocity| by comparing local baselines
+    to the left and right of each timepoint. It produces events when the
+    right-window baseline is substantially LOWER than the left-window baseline.
+    
+    Attributes:
+        win_cmp_sec: Size (seconds) of the comparison windows on each side of
+            a candidate boundary. For each index i, the detector compares |v| in:
+            LEFT = [i - win_cmp_sec, i), RIGHT = [i, i + win_cmp_sec].
+            Larger values smooth out fast fluctuations (e.g. pulsation) but can
+            smear short stalls. Smaller values increase sensitivity to brief changes
+            but can increase false positives. *This is one of the most important parameters.*
+        smooth_sec: Size (seconds) of the rolling median filter applied to |velocity|
+            for onset localization. This does NOT decide whether an event exists; it mainly
+            helps decide i_start (onset) by suppressing single-sample spikes / flicker.
+            Larger -> smoother onset, fewer "one-sample pops". Smaller -> more responsive onset.
+            Moderately important (mostly affects onset placement, not detection count).
+        min_valid_per_side: Minimum number of valid (finite) samples required on each
+            side of a candidate boundary for the comparison to be valid. If None, computed
+            as max(10, w_cmp // 5) where w_cmp is the window size in samples.
+        mad_k: Threshold strength for baseline-drop detection using a robust scale estimate:
+            threshold = max(abs_score_floor, mad_k * robust_sigma), where robust_sigma
+            is derived from the MAD of the score distribution. Larger mad_k -> fewer
+            baseline-drop events (more conservative). Smaller mad_k -> more baseline-drop
+            events (more sensitive). *This is one of the most important parameters.*
+        abs_score_floor: A hard minimum threshold for baseline-drop detection, expressed
+            in the same units as velocity (because score is a difference of medians of |v|).
+            This prevents the detector from "over-firing" when the signal is very low-variance
+            and MAD is tiny. Important when you have very flat traces or low-variance recordings.
+        merge_gap_sec: After thresholding, baseline-drop detections often form short "runs"
+            of adjacent samples. This parameter merges nearby runs if their separation is
+            <= merge_gap_sec. Larger -> fewer, longer events (merged). Smaller -> more
+            fragmented events. Moderate importance (affects event fragmentation more than sensitivity).
+        top_k_total: Sensitivity-biased "backstop": if strict thresholding yields fewer than
+            top_k_total events, the detector will add additional candidate peaks by selecting
+            the most negative score minima, enforcing time separation (min_sep_sec). Setting
+            this > 0 helps reduce false negatives, at the cost of some false positives.
+            Very important if your philosophy is "prefer false positives over false negatives".
+            Set to 0 to disable the backstop.
+        min_sep_sec: Minimum time separation between "extra" peaks chosen by the top-k fallback.
+            Larger -> fewer clustered events. Smaller -> allows multiple nearby candidates.
+            Moderate importance; mostly relevant if top_k_total > 0.
+    """
+    win_cmp_sec: float = 0.25
+    smooth_sec: float = 0.05
+    min_valid_per_side: Optional[int] = None
+    mad_k: float = 3.0
+    abs_score_floor: float = 0.25
+    merge_gap_sec: float = 0.10
+    top_k_total: int = 6
+    min_sep_sec: float = 0.75
+
+
+@dataclass(frozen=True)
+class NanGapParams:
+    """Parameters for NaN-gap detection (missing-evidence events).
+    
+    This detector treats NaNs as "missing evidence" and detects transitions into/out
+    of NaN-dominated regions. These events are useful because radon failures often
+    cluster in time and correlate with stalls (or with images becoming un-analyzable).
+    
+    Attributes:
+        nan_win_sec: Window size (seconds) used to compute local NaN fraction around
+            each sample. Larger -> smoother NaN fraction estimate, fewer jittery transitions.
+            Smaller -> more responsive to brief NaN bursts. Important if NaNs appear as
+            single-sample flicker vs longer runs.
+        enter_frac: Enter threshold for NaN-gap "state machine". If local NaN fraction
+            >= enter_frac, we enter a NaN-gap state. Higher -> requires denser NaNs to
+            call a gap. Lower -> more sensitive to partial-missing regions. Important.
+        exit_frac: Exit threshold for NaN-gap state machine (hysteresis). If in gap state
+            and local NaN fraction <= exit_frac, we exit. Must be <= enter_frac (recommended).
+            Lower exit_frac makes gaps "stickier" (reduces flicker). Important.
+        min_duration_sec: Minimum duration for a NaN-gap event to be emitted. This prevents
+            tiny NaN blips from becoming events. Moderate importance.
+        merge_gap_sec: Merge nearby NaN-gap runs separated by <= merge_gap_sec. This is
+            applied after hysteresis classification. Increase this to combine fragmented gaps
+            into fewer events. Decrease this to keep gaps separate. Moderate importance.
+    """
+    nan_win_sec: float = 0.10
+    enter_frac: float = 0.40
+    exit_frac: float = 0.20
+    min_duration_sec: float = 0.2
+    merge_gap_sec: float = 0.05
+
+
+@dataclass(frozen=True)
+class ZeroGapParams:
+    """Parameters for zero-gap detection (exact or near-zero velocity events).
+    
+    This detector tracks the local fraction of samples that are "zero-like" (either
+    exactly zero, or within +/- eps0 of zero). It mirrors detect_nan_gaps() but
+    instead of NaNs it tracks zero values.
+    
+    Attributes:
+        eps0: Zero tolerance threshold. If eps0 == 0.0: exact zero detector (v == 0.0).
+            If eps0 > 0.0: near-zero detector (|v| <= eps0).
+        zero_win_sec: Window size (seconds) used to compute local zero fraction around
+            each sample. Larger -> smoother zero fraction estimate, fewer jittery transitions.
+            Smaller -> more responsive to brief zero bursts.
+        enter_frac: Enter threshold for zero-gap "state machine". If local zero fraction
+            >= enter_frac, we enter a zero-gap state. Higher -> requires denser zeros to
+            call a gap. Lower -> more sensitive to partial-zero regions.
+        exit_frac: Exit threshold for zero-gap state machine (hysteresis). If in gap state
+            and local zero fraction <= exit_frac, we exit. Must be <= enter_frac (recommended).
+            Lower exit_frac makes gaps "stickier" (reduces flicker).
+        min_duration_sec: Minimum duration for a zero-gap event to be emitted. This prevents
+            tiny zero blips from becoming events.
+        merge_gap_sec: Merge nearby zero-gap runs separated by <= merge_gap_sec. Increase this
+            to combine fragmented gaps into fewer events. Decrease this to keep gaps separate.
+    """
+    eps0: float = 0.0
+    zero_win_sec: float = 0.10
+    enter_frac: float = 0.40
+    exit_frac: float = 0.20
+    min_duration_sec: float = 0.2
+    merge_gap_sec: float = 0.05
+
+
 def time_to_index(
     t_sec: float,
     seconds_per_line: float,
@@ -729,39 +850,16 @@ def detect_events(
     time_s: Sequence[float],
     velocity: Sequence[float],
     *,
-
-    # baseline-drop params
-    win_cmp_sec: float = 0.25,
-    smooth_sec: float = 0.05,
-    mad_k: float = 3.0,
-    abs_score_floor: float = 0.25,
-    merge_gap_sec: float = 0.10,
-    top_k_total: int = 6,
-    min_sep_sec: float = 0.75,
-
-    # nan-gap params
-    nan_win_sec: float = 0.10,
-    nan_enter_frac: float = 0.40,
-    nan_exit_frac: float = 0.20,
-    nan_min_duration_sec: float = 0.2,  # 0.3 # 0.02,
-    nan_merge_gap_sec: float = 0.05,
-
-    # zero-gap params (exact or near-zero)
-    zero_eps: float = 0.0,              # 0.0 → exact zero, >0 → near-zero |v| <= eps
-    zero_win_sec: float = 0.10,
-    zero_enter_frac: float = 0.40,
-    zero_exit_frac: float = 0.20,
-    zero_min_duration_sec: float = 0.2,  # 0.02,
-    zero_merge_gap_sec: float = 0.05,
-
-
+    baseline_drop_params: Optional[BaselineDropParams] = None,
+    nan_gap_params: Optional[NanGapParams] = None,
+    zero_gap_params: Optional[ZeroGapParams] = None,
 ) -> tuple[list[VelocityEvent], dict]:
     """
-    Detect velocity “events” (candidate stalls/slowdowns + missing-evidence gaps) from a 1D velocity trace.
+    Detect velocity "events" (candidate stalls/slowdowns + missing-evidence gaps) from a 1D velocity trace.
 
     Overview
     --------
-    This function runs TWO detectors and returns a combined, time-sorted event list:
+    This function runs THREE detectors and returns a combined, time-sorted event list:
 
     (A) Baseline-drop detector (machine_type = STALL_CANDIDATE)
         Looks for a *drop in |velocity|* by comparing local baselines to the left and right of each timepoint.
@@ -772,9 +870,12 @@ def detect_events(
         A slowdown/stall candidate corresponds to a large negative score.
 
     (B) NaN-gap detector (machine_type = NAN_GAP)
-        Treats NaNs as “missing evidence,” but still detects transitions into/out of NaN-dominated regions.
+        Treats NaNs as "missing evidence," but still detects transitions into/out of NaN-dominated regions.
         These events are useful because radon failures often cluster in time and correlate with stalls
         (or with images becoming un-analyzable).
+
+    (C) Zero-gap detector
+        Detects regions where velocity is (near-)zero, which can indicate stalls or measurement issues.
 
     Inputs
     ------
@@ -784,120 +885,17 @@ def detect_events(
     velocity:
         1D velocity array. May contain positive/negative values, zeros, and NaNs.
 
-    Parameters (baseline-drop detector)
-    ----------------------------------
-    win_cmp_sec:
-        Size (seconds) of the comparison windows on each side of a candidate boundary.
-        For each index i, the detector compares |v| in:
-            LEFT  = [i - win_cmp_sec, i)
-            RIGHT = [i, i + win_cmp_sec]
-        Larger values smooth out fast fluctuations (e.g. pulsation) but can smear short stalls.
-        Smaller values increase sensitivity to brief changes but can increase false positives.
-
-        *This is one of the most important parameters.*
-
-    smooth_sec:
-        Size (seconds) of the rolling median filter applied to |velocity| for onset localization.
-        This does NOT decide whether an event exists; it mainly helps decide i_start (onset) by
-        suppressing single-sample spikes / flicker.
-        Larger -> smoother onset, fewer “one-sample pops”.
-        Smaller -> more responsive onset.
-
-        Moderately important (mostly affects onset placement, not detection count).
-
-    mad_k:
-        Threshold strength for baseline-drop detection using a robust scale estimate:
-            threshold = max(abs_score_floor, mad_k * robust_sigma)
-        where robust_sigma is derived from the MAD of the score distribution.
-        Larger mad_k -> fewer baseline-drop events (more conservative).
-        Smaller mad_k -> more baseline-drop events (more sensitive).
-
-        *This is one of the most important parameters.*
-
-    abs_score_floor:
-        A hard minimum threshold for baseline-drop detection, expressed in the same units as velocity
-        (because score is a difference of medians of |v|).
-        This prevents the detector from “over-firing” when the signal is very low-variance and MAD is tiny.
-
-        Important when you have very flat traces or low-variance recordings.
-
-    merge_gap_sec:
-        After thresholding, baseline-drop detections often form short “runs” of adjacent samples.
-        This parameter merges nearby runs if their separation is <= merge_gap_sec.
-        Larger -> fewer, longer events (merged).
-        Smaller -> more fragmented events.
-
-        Moderate importance (affects event fragmentation more than sensitivity).
-
-    top_k_total:
-        Sensitivity-biased “backstop”: if strict thresholding yields fewer than top_k_total events,
-        the detector will add additional candidate peaks by selecting the most negative score minima,
-        enforcing time separation (min_sep_sec).
-        Setting this > 0 helps reduce false negatives, at the cost of some false positives.
-
-        Very important if your philosophy is “prefer false positives over false negatives”.
-        Set to 0 to disable the backstop.
-
-    min_sep_sec:
-        Minimum time separation between “extra” peaks chosen by the top-k fallback.
-        Larger -> fewer clustered events.
-        Smaller -> allows multiple nearby candidates.
-
-        Moderate importance; mostly relevant if top_k_total > 0.
-
-    Parameters (NaN-gap detector)
-    -----------------------------
-    nan_win_sec:
-        Window size (seconds) used to compute local NaN fraction around each sample.
-        Larger -> smoother NaN fraction estimate, fewer jittery transitions.
-        Smaller -> more responsive to brief NaN bursts.
-
-        Important if NaNs appear as single-sample flicker vs longer runs.
-
-    nan_enter_frac:
-        Enter threshold for NaN-gap “state machine”.
-        If local NaN fraction >= nan_enter_frac, we enter a NaN-gap state.
-        Higher -> requires denser NaNs to call a gap.
-        Lower -> more sensitive to partial-missing regions.
-
-        Important.
-
-    nan_exit_frac:
-        Exit threshold for NaN-gap state machine (hysteresis).
-        If in gap state and local NaN fraction <= nan_exit_frac, we exit.
-        Must be <= nan_enter_frac (recommended).
-        Lower exit_frac makes gaps “stickier” (reduces flicker).
-
-        Important.
-
-    nan_min_duration_sec:
-        Minimum duration for a NaN-gap event to be emitted.
-        This prevents tiny NaN blips from becoming events.
-
-        Moderate importance.
-
-    nan_merge_gap_sec:
-        Merge nearby NaN-gap runs separated by <= nan_merge_gap_sec.
-
-        Moderate importance.
-
-    “If I’m a biologist and I just want it to work…”
-    ------------------------------------------------
-    Start by tuning ONLY these, in this order:
-
-      1) win_cmp_sec
-         Controls the time-scale of what counts as a baseline change (stall/slowdown).
-         Rough rule: pick something a bit longer than the oscillations you don’t want to trigger on
-         (e.g. cardiac pulsation), but shorter than the stall durations you care about.
-
-      2) mad_k  (and abs_score_floor if needed)
-         Controls sensitivity. Lower = more candidates.
-
-      3) top_k_total
-         If you never want to miss events, keep this nonzero (e.g. 6–10).
-         If you want “only high confidence”, set it to 0 or a small number.
-
-    Everything else is mostly about *event cleanup* (merging, onset smoothing, NaN gap flicker control).
+    Parameters
+    ----------
+    baseline_drop_params:
+        Optional BaselineDropParams instance. If None, uses BaselineDropParams() with defaults.
+        See BaselineDropParams docstring for parameter descriptions.
+    nan_gap_params:
+        Optional NanGapParams instance. If None, uses NanGapParams() with defaults.
+        See NanGapParams docstring for parameter descriptions.
+    zero_gap_params:
+        Optional ZeroGapParams instance. If None, uses ZeroGapParams() with defaults.
+        See ZeroGapParams docstring for parameter descriptions.
 
     Returns
     -------
@@ -906,6 +904,7 @@ def detect_events(
         Expect mixed machine_type values:
           - MachineType.STALL_CANDIDATE  (event_type="baseline_drop")
           - MachineType.NAN_GAP          (event_type="nan_gap")
+          - MachineType.OTHER             (event_type="zero_gap")
 
     debug:
         A dict of internal arrays and scalar thresholds useful for plotting and tuning.
@@ -918,7 +917,7 @@ def detect_events(
 
           debug["abs_med"] : np.ndarray shape (N,)
               Rolling nan-median of |velocity| with window ~smooth_sec.
-              Used mainly for onset localization and “visual sanity” plots.
+              Used mainly for onset localization and "visual sanity" plots.
 
           debug["threshold"] : float
               The baseline-drop threshold used for score (positive scalar).
@@ -931,35 +930,44 @@ def detect_events(
           - The debug dict is not required for downstream use; you can ignore it in production
             once parameters are tuned.
     """
+    # Use default instances if None provided
+    if baseline_drop_params is None:
+        baseline_drop_params = BaselineDropParams()
+    if nan_gap_params is None:
+        nan_gap_params = NanGapParams()
+    if zero_gap_params is None:
+        zero_gap_params = ZeroGapParams()
+
     base_events, score, abs_med, thresh = detect_baseline_drops(
         time_s, velocity,
-        win_cmp_sec=win_cmp_sec,
-        smooth_sec=smooth_sec,
-        mad_k=mad_k,
-        abs_score_floor=abs_score_floor,
-        merge_gap_sec=merge_gap_sec,
-        top_k_total=top_k_total,
-        min_sep_sec=min_sep_sec,
+        win_cmp_sec=baseline_drop_params.win_cmp_sec,
+        smooth_sec=baseline_drop_params.smooth_sec,
+        min_valid_per_side=baseline_drop_params.min_valid_per_side,
+        mad_k=baseline_drop_params.mad_k,
+        abs_score_floor=baseline_drop_params.abs_score_floor,
+        merge_gap_sec=baseline_drop_params.merge_gap_sec,
+        top_k_total=baseline_drop_params.top_k_total,
+        min_sep_sec=baseline_drop_params.min_sep_sec,
     )
 
     nan_events = detect_nan_gaps(
         time_s, velocity,
-        nan_win_sec=nan_win_sec,
-        enter_frac=nan_enter_frac,
-        exit_frac=nan_exit_frac,
-        min_duration_sec=nan_min_duration_sec,
-        merge_gap_sec=nan_merge_gap_sec,
+        nan_win_sec=nan_gap_params.nan_win_sec,
+        enter_frac=nan_gap_params.enter_frac,
+        exit_frac=nan_gap_params.exit_frac,
+        min_duration_sec=nan_gap_params.min_duration_sec,
+        merge_gap_sec=nan_gap_params.merge_gap_sec,
     )
 
     zero_events = detect_zero_gaps(
         time_s,
         velocity,
-        eps0=zero_eps,
-        zero_win_sec=zero_win_sec,
-        enter_frac=zero_enter_frac,
-        exit_frac=zero_exit_frac,
-        min_duration_sec=zero_min_duration_sec,
-        merge_gap_sec=zero_merge_gap_sec,
+        eps0=zero_gap_params.eps0,
+        zero_win_sec=zero_gap_params.zero_win_sec,
+        enter_frac=zero_gap_params.enter_frac,
+        exit_frac=zero_gap_params.exit_frac,
+        min_duration_sec=zero_gap_params.min_duration_sec,
+        merge_gap_sec=zero_gap_params.merge_gap_sec,
     )
 
     # events = sorted(base_events + nan_events, key=lambda e: e.t_start)

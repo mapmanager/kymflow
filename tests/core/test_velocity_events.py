@@ -8,9 +8,12 @@ import numpy as np
 import pytest
 
 from kymflow.core.analysis.velocity_events.velocity_events import (
+    BaselineDropParams,
     MachineType,
+    NanGapParams,
     UserType,
     VelocityEvent,
+    ZeroGapParams,
     detect_events,
     detect_zero_gaps,
     detect_baseline_drops,
@@ -321,11 +324,13 @@ class TestDetectEventsSimple:
         # - Ensure top_k_total works as fallback
         events, debug = detect_events(
             time_s, 
-            velocity, 
-            win_cmp_sec=0.25,  # Default window size
-            mad_k=1.5,  # Lower threshold (more sensitive)
-            abs_score_floor=0.1,  # Lower floor to catch smaller drops
-            top_k_total=5,  # Fallback to ensure we get events
+            velocity,
+            baseline_drop_params=BaselineDropParams(
+                win_cmp_sec=0.25,  # Default window size
+                mad_k=1.5,  # Lower threshold (more sensitive)
+                abs_score_floor=0.1,  # Lower floor to catch smaller drops
+                top_k_total=5,  # Fallback to ensure we get events
+            ),
         )
         
         # Should detect at least one baseline_drop event
@@ -344,7 +349,9 @@ class TestDetectEventsSimple:
         events, _debug = detect_events(
             time_s, 
             velocity,
-            nan_min_duration_sec=0.05,  # Lower threshold to catch the gap
+            nan_gap_params=NanGapParams(
+                min_duration_sec=0.05,  # Lower threshold to catch the gap
+            ),
         )
         # Should detect at least one nan_gap event
         nan_gaps = [e for e in events if e.event_type == "nan_gap"]
@@ -362,7 +369,9 @@ class TestDetectEventsSimple:
         events, _debug = detect_events(
             time_s,
             velocity,
-            zero_min_duration_sec=0.05,  # Lower threshold to catch the gap
+            zero_gap_params=ZeroGapParams(
+                min_duration_sec=0.05,  # Lower threshold to catch the gap
+            ),
         )
         # Should detect at least one zero_gap event
         zero_gaps = [e for e in events if e.event_type == "zero_gap"]
@@ -392,10 +401,12 @@ class TestDetectEventsSimple:
         events, debug = detect_events(
             time_s,
             velocity,
-            win_cmp_sec=0.25,
-            mad_k=1.0,  # Very low threshold for more sensitivity
-            abs_score_floor=0.05,  # Lower floor
-            top_k_total=10,  # More fallback
+            baseline_drop_params=BaselineDropParams(
+                win_cmp_sec=0.25,
+                mad_k=1.0,  # Very low threshold for more sensitivity
+                abs_score_floor=0.05,  # Lower floor
+                top_k_total=10,  # More fallback
+            ),
         )
         
         # Should detect baseline_rise events (or at least some events)
@@ -408,6 +419,79 @@ class TestDetectEventsSimple:
             assert baseline_rises[0].score_peak > 0  # Positive score for rise
         # If no rises detected, that's okay - the test verifies the function doesn't crash
         # and that the API supports baseline_rise events
+
+    def test_detect_events_defaults_unchanged(self) -> None:
+        """Test that calling detect_events with no params produces same results as explicit defaults."""
+        time_s = np.linspace(0, 10, 100)
+        velocity = np.ones(100) * 5.0
+        
+        # Call with no params (should use defaults)
+        events_no_params, debug_no_params = detect_events(time_s, velocity)
+        
+        # Call with explicit default dataclasses
+        events_with_defaults, debug_with_defaults = detect_events(
+            time_s,
+            velocity,
+            baseline_drop_params=BaselineDropParams(),
+            nan_gap_params=NanGapParams(),
+            zero_gap_params=ZeroGapParams(),
+        )
+        
+        # Results should be identical
+        assert len(events_no_params) == len(events_with_defaults)
+        assert len(debug_no_params) == len(debug_with_defaults)
+        assert "score" in debug_no_params
+        assert "score" in debug_with_defaults
+        assert "abs_med" in debug_no_params
+        assert "abs_med" in debug_with_defaults
+        assert "threshold" in debug_no_params
+        assert "threshold" in debug_with_defaults
+
+    def test_detect_events_with_custom_params(self) -> None:
+        """Test that custom dataclass parameters are correctly passed through to detection functions."""
+        time_s = np.linspace(0, 10, 100)
+        velocity = np.ones(100) * 5.0
+        
+        # Test with custom baseline_drop_params
+        custom_baseline = BaselineDropParams(
+            win_cmp_sec=0.5,  # Larger window
+            mad_k=5.0,  # More conservative
+            abs_score_floor=0.5,  # Higher floor
+        )
+        events_custom, _ = detect_events(
+            time_s,
+            velocity,
+            baseline_drop_params=custom_baseline,
+        )
+        
+        # Test with custom nan_gap_params
+        custom_nan = NanGapParams(
+            nan_win_sec=0.2,  # Larger window
+            enter_frac=0.6,  # Higher threshold
+            min_duration_sec=0.1,  # Longer minimum
+        )
+        events_nan, _ = detect_events(
+            time_s,
+            velocity,
+            nan_gap_params=custom_nan,
+        )
+        
+        # Test with custom zero_gap_params
+        custom_zero = ZeroGapParams(
+            eps0=0.1,  # Near-zero tolerance
+            zero_win_sec=0.2,  # Larger window
+            enter_frac=0.6,  # Higher threshold
+        )
+        events_zero, _ = detect_events(
+            time_s,
+            velocity,
+            zero_gap_params=custom_zero,
+        )
+        
+        # All should produce valid results (may be empty lists, but should not error)
+        assert isinstance(events_custom, list)
+        assert isinstance(events_nan, list)
+        assert isinstance(events_zero, list)
 
 
 class TestDetectZeroGaps:
@@ -548,7 +632,7 @@ class TestKymAnalysisVelocityEvents:
         # Run velocity event analysis
         events = kym_analysis.run_velocity_event_analysis(
             roi_id=1,
-            top_k_total=5,
+            baseline_drop_params=BaselineDropParams(top_k_total=5),
         )
 
         assert isinstance(events, list)
@@ -609,7 +693,7 @@ class TestKymAnalysisVelocityEvents:
         # Run velocity event analysis
         original_events = kym_analysis.run_velocity_event_analysis(
             roi_id=1,
-            top_k_total=5,
+            baseline_drop_params=BaselineDropParams(top_k_total=5),
         )
 
         # Save analysis
@@ -651,15 +735,19 @@ class TestKymAnalysisVelocityEvents:
         # Run with conservative parameters (fewer events)
         events_conservative = kym_analysis.run_velocity_event_analysis(
             roi_id=1,
-            mad_k=5.0,  # Higher threshold
-            top_k_total=0,  # No fallback
+            baseline_drop_params=BaselineDropParams(
+                mad_k=5.0,  # Higher threshold
+                top_k_total=0,  # No fallback
+            ),
         )
 
         # Run with sensitive parameters (more events)
         events_sensitive = kym_analysis.run_velocity_event_analysis(
             roi_id=1,
-            mad_k=2.0,  # Lower threshold
-            top_k_total=10,  # More fallback
+            baseline_drop_params=BaselineDropParams(
+                mad_k=2.0,  # Lower threshold
+                top_k_total=10,  # More fallback
+            ),
         )
 
         # Sensitive should detect >= conservative (or equal)

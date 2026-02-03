@@ -600,12 +600,18 @@ def test_detect_all_events() -> None:
     # Verify run_velocity_event_analysis was called for each ROI in each file
     # Image 1: ROIs 1 and 2
     assert mock_kym_analysis1.run_velocity_event_analysis.call_count == 2
-    mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(1)
-    mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(2)
+    mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(
+        1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
+    )
+    mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(
+        2, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
+    )
     
     # Image 2: ROI 1
     assert mock_kym_analysis2.run_velocity_event_analysis.call_count == 1
-    mock_kym_analysis2.run_velocity_event_analysis.assert_called_once_with(1)
+    mock_kym_analysis2.run_velocity_event_analysis.assert_called_once_with(
+        1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
+    )
     
     # Image 3: No kym_analysis, should be skipped (no calls)
     # (We can't verify this directly since get_kym_analysis doesn't exist)

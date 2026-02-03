@@ -1,8 +1,7 @@
-"""GUI-specific state containers with callback registries (psygnal-free).
+"""GUI-specific state containers with callback registries.
 
 This module provides AppState and ImageDisplayParams for managing GUI application
-state, using callback registries instead of psygnal signals to avoid lifecycle
-issues with NiceGUI component cleanup.
+state, using callback registries.
 """
 
 from __future__ import annotations
@@ -59,7 +58,6 @@ EventSelectionChangedHandler = Callable[
 class AppState:
     """Shared application state for the NiceGUI GUI.
     
-    Uses callback registries instead of psygnal EventedModel.
     Callbacks are registered/cleaned up with widget lifecycle.
     """
     
