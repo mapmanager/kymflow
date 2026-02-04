@@ -548,6 +548,203 @@ def test_kymanalysis_total_num_velocity_events() -> None:
     assert kym_analysis.num_velocity_events(roi2.id) == 1
 
 
+def test_kymanalysis_get_velocity_events_filtered_returns_none_when_not_run() -> None:
+    """Test that get_velocity_events_filtered returns None when events not run."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+
+    event_filter = {"baseline_drop": True, "baseline_rise": True}
+    events = kym_analysis.get_velocity_events_filtered(roi.id, event_filter)
+    assert events is None
+
+
+def test_kymanalysis_get_velocity_events_filtered_filters_by_type() -> None:
+    """Test that get_velocity_events_filtered filters events by event_type."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+
+    # Add events with different types
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+
+    event1 = VelocityEvent(
+        event_type="baseline_drop",
+        i_start=0,
+        t_start=0.0,
+    )
+    event2 = VelocityEvent(
+        event_type="baseline_rise",
+        i_start=10,
+        t_start=0.1,
+    )
+    event3 = VelocityEvent(
+        event_type="nan_gap",
+        i_start=20,
+        t_start=0.2,
+    )
+    event4 = VelocityEvent(
+        event_type="zero_gap",
+        i_start=30,
+        t_start=0.3,
+    )
+    event5 = VelocityEvent(
+        event_type="User Added",
+        i_start=40,
+        t_start=0.4,
+    )
+
+    # Store events directly
+    kym_analysis._velocity_events[roi.id] = [event1, event2, event3, event4, event5]
+
+    # Test filtering: show only baseline_drop
+    filter_drop_only = {
+        "baseline_drop": True,
+        "baseline_rise": False,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_drop_only)
+    assert filtered is not None
+    assert len(filtered) == 1
+    assert filtered[0].event_type == "baseline_drop"
+
+    # Test filtering: show multiple types
+    filter_multiple = {
+        "baseline_drop": True,
+        "baseline_rise": True,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_multiple)
+    assert filtered is not None
+    assert len(filtered) == 2
+    event_types = {e.event_type for e in filtered}
+    assert "baseline_drop" in event_types
+    assert "baseline_rise" in event_types
+
+    # Test filtering: all disabled (should return empty list)
+    filter_all_disabled = {
+        "baseline_drop": False,
+        "baseline_rise": False,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_all_disabled)
+    assert filtered is not None
+    assert len(filtered) == 0
+
+    # Test filtering: all enabled (should return all events)
+    filter_all_enabled = {
+        "baseline_drop": True,
+        "baseline_rise": True,
+        "nan_gap": True,
+        "zero_gap": True,
+        "User Added": True,
+    }
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_all_enabled)
+    assert filtered is not None
+    assert len(filtered) == 5
+
+    # Verify all event types are present
+    event_types = {e.event_type for e in filtered}
+    assert "baseline_drop" in event_types
+    assert "baseline_rise" in event_types
+    assert "nan_gap" in event_types
+    assert "zero_gap" in event_types
+    assert "User Added" in event_types
+
+
+def test_kymanalysis_get_velocity_events_filtered_with_partial_filter() -> None:
+    """Test that get_velocity_events_filtered works with partial filter dict."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+
+    # Add events with different types
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+
+    event1 = VelocityEvent(
+        event_type="baseline_drop",
+        i_start=0,
+        t_start=0.0,
+    )
+    event2 = VelocityEvent(
+        event_type="baseline_rise",
+        i_start=10,
+        t_start=0.1,
+    )
+    event3 = VelocityEvent(
+        event_type="nan_gap",
+        i_start=20,
+        t_start=0.2,
+    )
+
+    kym_analysis._velocity_events[roi.id] = [event1, event2, event3]
+
+    # Filter with only some event types specified (others default to True)
+    partial_filter = {
+        "baseline_drop": False,
+        "baseline_rise": True,
+        # nan_gap not in filter, should default to True
+    }
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, partial_filter)
+    assert filtered is not None
+    # Should include baseline_rise (True) and nan_gap (defaults to True), exclude baseline_drop (False)
+    assert len(filtered) == 2
+    event_types = {e.event_type for e in filtered}
+    assert "baseline_rise" in event_types
+    assert "nan_gap" in event_types
+    assert "baseline_drop" not in event_types
+
+
+def test_kymanalysis_get_velocity_events_filtered_preserves_order() -> None:
+    """Test that get_velocity_events_filtered preserves event order."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+
+    # Add events in specific order
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+
+    event1 = VelocityEvent(event_type="baseline_drop", i_start=0, t_start=0.0)
+    event2 = VelocityEvent(event_type="baseline_rise", i_start=10, t_start=0.1)
+    event3 = VelocityEvent(event_type="baseline_drop", i_start=20, t_start=0.2)
+    event4 = VelocityEvent(event_type="nan_gap", i_start=30, t_start=0.3)
+
+    kym_analysis._velocity_events[roi.id] = [event1, event2, event3, event4]
+
+    # Filter to show only baseline_drop (should preserve order of remaining events)
+    filter_drop_only = {
+        "baseline_drop": True,
+        "baseline_rise": False,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_drop_only)
+    assert filtered is not None
+    assert len(filtered) == 2
+    # Should preserve original order: event1 (baseline_drop), then event3 (baseline_drop)
+    assert filtered[0].t_start == 0.0
+    assert filtered[1].t_start == 0.2
+
+
 def test_kymanalysis_has_v0_flow_analysis() -> None:
     """Test has_v0_flow_analysis() method."""
     test_image = np.zeros((100, 100), dtype=np.uint16)
