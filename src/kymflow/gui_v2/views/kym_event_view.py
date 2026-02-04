@@ -154,6 +154,17 @@ class KymEventView:
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
+        # Cleanup: If we're in range-setting state when view is recreated (e.g., navigation away/back),
+        # cancel the state to prevent stale state from persisting.
+        if self._setting_kym_event_range_state or self._adding_new_event:
+            # Cancel the state without showing notification (it may have been auto-dismissed)
+            self._setting_kym_event_range_state = False
+            self._adding_new_event = False
+            self._emit_range_state(False)
+            # Clear notification reference if it exists (it may have been auto-dismissed by NiceGUI)
+            if self._range_notification is not None:
+                self._range_notification = None
+        
         self._grid = None
         self._grid_container = None  # pyinstaller event table
         with ui.row().classes("w-full h-full min-h-0 min-w-0 items-stretch gap-1"):
