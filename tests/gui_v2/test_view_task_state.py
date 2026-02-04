@@ -18,7 +18,6 @@ from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
-from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 
 
 @pytest.fixture
@@ -45,39 +44,6 @@ def test_analysis_toolbar_stores_task_state(
         on_set_roi_edit_state=lambda e: None,
         on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
-    )
-
-    # Mock the update method
-    with patch.object(view, "_update_button_states") as mock_update:
-        # Set task state to running
-        task_state = TaskStateChanged(
-            task_type="home", running=True, cancellable=True, progress=0.5, message="Running"
-        )
-        view.set_task_state(task_state)
-
-        # Verify task state is stored
-        assert view._task_state == task_state
-        assert view._task_state.running is True
-
-        # Verify update method was called
-        mock_update.assert_called()
-
-        # Set task state to not running
-        task_state_not_running = TaskStateChanged(
-            task_type="home", running=False, cancellable=False, progress=1.0, message="Done"
-        )
-        view.set_task_state(task_state_not_running)
-
-        # Verify task state is updated
-        assert view._task_state == task_state_not_running
-        assert view._task_state.running is False
-
-
-def test_save_buttons_stores_task_state(sample_kym_file: KymImage) -> None:
-    """Test that SaveButtonsView stores task state and calls update method."""
-    view = SaveButtonsView(
-        on_save_selected=lambda e: None,
-        on_save_all=lambda e: None,
     )
 
     # Mock the update method
@@ -227,3 +193,36 @@ def test_folder_selector_stores_task_state(bus: EventBus) -> None:
         # Verify task state is updated
         assert view._task_state == task_state_not_running
         assert view._task_state.running is False
+
+
+def test_folder_selector_save_buttons_update_on_task_state(bus: EventBus) -> None:
+    """Test that FolderSelectorView save buttons update when task state changes."""
+    from kymflow.gui_v2.state import AppState
+
+    app_state = AppState()
+    view = FolderSelectorView(
+        bus=bus,
+        app_state=app_state,
+        user_config=None,
+        on_save_selected=lambda e: None,
+        on_save_all=lambda e: None,
+    )
+
+    # Render to create buttons
+    view.render()
+
+    # Mock the save button update method
+    with patch.object(view, "_update_save_button_states") as mock_save_update:
+        # Emit TaskStateChanged event with "home" task type
+        task_state = TaskStateChanged(
+            task_type="home",
+            running=True,
+            cancellable=True,
+            progress=0.5,
+            message="Running",
+        )
+        view._on_task_state_changed(task_state)
+
+        # Verify task state was stored and save button update was called
+        assert view._task_state == task_state
+        mock_save_update.assert_called_once()

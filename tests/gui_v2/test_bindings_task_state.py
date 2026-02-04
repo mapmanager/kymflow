@@ -19,8 +19,6 @@ from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperime
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
-from kymflow.gui_v2.views.save_buttons_bindings import SaveButtonsBindings
-from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 
 
 def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus) -> None:
@@ -84,29 +82,6 @@ def test_analysis_toolbar_bindings_filters_task_type(bus: EventBus) -> None:
 
     # Verify set_task_state WAS called for 'home' task
     view.set_task_state.assert_called_once_with(task_state_home)
-
-    bindings.teardown()
-
-
-def test_save_buttons_bindings_subscribes_to_task_state(bus: EventBus) -> None:
-    """Test that SaveButtonsBindings subscribes to TaskStateChanged."""
-    view = SaveButtonsView(
-        on_save_selected=lambda e: None,
-        on_save_all=lambda e: None,
-    )
-
-    view.set_task_state = MagicMock()
-
-    bindings = SaveButtonsBindings(bus, view)
-
-    # Emit TaskStateChanged event
-    task_state = TaskStateChanged(
-        task_type="home", running=True, cancellable=True, progress=0.5, message="Running"
-    )
-    bus.emit(task_state)
-
-    # Verify set_task_state was called
-    view.set_task_state.assert_called_once_with(task_state)
 
     bindings.teardown()
 

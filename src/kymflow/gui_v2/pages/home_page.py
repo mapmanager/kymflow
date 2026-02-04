@@ -57,8 +57,6 @@ from kymflow.gui_v2.views import (
     MetadataHeaderView,
     MetadataTabView,
     OptionsTabView,
-    SaveButtonsBindings,
-    SaveButtonsView,
     # DEPRECATED: Stall analysis is deprecated
     # StallAnalysisToolbarBindings,
     # StallAnalysisToolbarView,
@@ -165,9 +163,6 @@ class HomePage(BasePage):
             on_detect_events=bus.emit,
         )
         self._drawer_task_progress_view = TaskProgressView()
-        self._drawer_save_buttons_view = SaveButtonsView(
-            on_save_selected=bus.emit, on_save_all=bus.emit
-        )
         # DEPRECATED: Stall analysis is deprecated
         # self._drawer_stall_analysis_toolbar_view = StallAnalysisToolbarView()
         self._drawer_contrast_view = ContrastView(on_image_display_change=bus.emit)
@@ -186,7 +181,6 @@ class HomePage(BasePage):
         self._drawer_options_tab_view = OptionsTabView(context.app_config)
         # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
-            save_buttons_view=self._drawer_save_buttons_view,
             analysis_toolbar_view=self._drawer_analysis_toolbar_view,
             # DEPRECATED: Stall analysis is deprecated
             # stall_analysis_toolbar_view=self._drawer_stall_analysis_toolbar_view,
@@ -199,7 +193,6 @@ class HomePage(BasePage):
         )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None
-        self._drawer_save_buttons_bindings: SaveButtonsBindings | None = None
         # DEPRECATED: Stall analysis is deprecated
         # self._drawer_stall_analysis_toolbar_bindings: StallAnalysisToolbarBindings | None = None
         self._drawer_contrast_bindings: ContrastBindings | None = None
@@ -308,9 +301,6 @@ class HomePage(BasePage):
         )
         self._drawer_task_progress_bindings = TaskProgressBindings(
             self.bus, self._drawer_task_progress_view
-        )
-        self._drawer_save_buttons_bindings = SaveButtonsBindings(
-            self.bus, self._drawer_save_buttons_view
         )
         # DEPRECATED: Stall analysis is deprecated
         # self._drawer_stall_analysis_toolbar_bindings = StallAnalysisToolbarBindings(

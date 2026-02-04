@@ -29,9 +29,9 @@ class SaveController:
     from the save buttons) and saves analysis results to files.
 
     Update Flow:
-        1. User clicks "Save Selected" → SaveButtonsView emits SaveSelected(phase="intent")
+        1. User clicks "Save Selected" → FolderSelectorView emits SaveSelected(phase="intent")
         2. This controller receives event → checks file has analysis → calls save_analysis()
-        3. User clicks "Save All" → SaveButtonsView emits SaveAll(phase="intent")
+        3. User clicks "Save All" → FolderSelectorView emits SaveAll(phase="intent")
         4. This controller receives event → iterates files → saves those with analysis
 
     Attributes:

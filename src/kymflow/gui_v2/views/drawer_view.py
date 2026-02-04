@@ -8,7 +8,10 @@ organization of toolbar widgets.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from typing import Any
 
 from nicegui import ui
 
@@ -20,7 +23,6 @@ from kymflow.gui_v2.views.contrast_view import ContrastView
 from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 from kymflow.gui_v2.views.options_tab_view import OptionsTabView
-from kymflow.gui_v2.views.save_buttons_view import SaveButtonsView
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
 
@@ -41,7 +43,6 @@ class DrawerView:
         - Child views handle their own event emission
 
     Attributes:
-        _save_buttons_view: Save buttons view instance.
         _analysis_toolbar_view: Analysis toolbar view instance.
         _stall_analysis_toolbar_view: Stall analysis toolbar view instance.
         _contrast_view: Contrast view instance.
@@ -53,7 +54,6 @@ class DrawerView:
 
     def __init__(
         self,
-        save_buttons_view: SaveButtonsView,
         analysis_toolbar_view: AnalysisToolbarView,
         stall_analysis_toolbar_view: Optional[Any],  # DEPRECATED: StallAnalysisToolbarView | None
         contrast_view: ContrastView,
@@ -65,7 +65,6 @@ class DrawerView:
         """Initialize drawer view.
 
         Args:
-            save_buttons_view: Save buttons view instance.
             analysis_toolbar_view: Analysis toolbar view instance.
             stall_analysis_toolbar_view: Stall analysis toolbar view instance (DEPRECATED, can be None).
             contrast_view: Contrast view instance.
@@ -74,7 +73,6 @@ class DrawerView:
             about_tab_view: About tab view instance.
             options_tab_view: Options tab view instance.
         """
-        self._save_buttons_view = save_buttons_view
         self._analysis_toolbar_view = analysis_toolbar_view
         # DEPRECATED: Stall analysis is deprecated
         self._stall_analysis_toolbar_view = stall_analysis_toolbar_view
@@ -131,12 +129,9 @@ class DrawerView:
             with ui.tab_panels(tabs, value=tab_analysis) \
                     .props('vertical animated') \
                     .classes("flex-grow min-w-0 p-4"):
-                    # Analysis tab panel - contains analysis tools and save buttons
+                    # Analysis tab panel - contains analysis tools
                     with ui.tab_panel(tab_analysis):
                         with ui.column().classes("w-full gap-4"):
-                            # Save buttons section
-                            self._save_buttons_view.render()
-
                             # Analysis toolbar section
                             self._analysis_toolbar_view.render()
                             
@@ -204,7 +199,6 @@ class DrawerView:
         """
         if current_file is not None:
             self._analysis_toolbar_view.set_selected_file(current_file)
-            self._save_buttons_view.set_selected_file(current_file)
             # DEPRECATED: Stall analysis is deprecated
             # if self._stall_analysis_toolbar_view is not None:
             #     self._stall_analysis_toolbar_view.set_selected_file(current_file)

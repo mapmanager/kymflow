@@ -413,7 +413,7 @@ class SetKymEventXRange:
 class SaveSelected:
     """Save selected file intent event.
 
-    Emitted by SaveButtonsView when user clicks "Save Selected".
+    Emitted by FolderSelectorView when user clicks "Save Selected".
     Handled by SaveController which saves the current file.
 
     Attributes:
@@ -427,7 +427,7 @@ class SaveSelected:
 class SaveAll:
     """Save all files intent event.
 
-    Emitted by SaveButtonsView when user clicks "Save All".
+    Emitted by FolderSelectorView when user clicks "Save All".
     Handled by SaveController which saves all files with analysis.
 
     Attributes:
