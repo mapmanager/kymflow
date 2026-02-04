@@ -38,7 +38,10 @@ jobs:
           python -m pip install --upgrade pip
 
           # Install nicewidgets from GitHub (not PyPI)
-          python -m pip install "nicewidgets @ git+https://github.com/mapmanager/nicewidgets.git"
+          # original with matplotlib
+          # python -m pip install "nicewidgets @ git+https://github.com/mapmanager/nicewidgets.git"
+          # no matplotlib version
+          python -m pip install "nicewidgets[no_mpl] @ git+https://github.com/mapmanager/nicewidgets.git"
 
           # Install kymflow with test + gui extras
           python -m pip install ".[test,gui]"

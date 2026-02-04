@@ -116,7 +116,7 @@ class FolderController:
         
         logger.debug(f'=== setting window title to "{title}"')
         app.native.main_window.set_title(title)
-
+        
         # import asyncio
         # _size = ui.run().io(app.native.main_window.get_size())
         # # _size = app.native.main_window.get_size()

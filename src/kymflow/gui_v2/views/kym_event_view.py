@@ -156,12 +156,12 @@ class KymEventView:
         """Create the grid UI inside the current container."""
         self._grid = None
         self._grid_container = None  # pyinstaller event table
-        with ui.row().classes("w-full h-full min-h-0 min-w-0 items-stretch gap-2"):
+        with ui.row().classes("w-full h-full min-h-0 min-w-0 items-stretch gap-1"):
             with ui.column().classes("w-50 shrink-0"):
                 
                 
-                with ui.row().classes("w-full gap-2"):
-                    ui.label("Event Controls").classes("text-sm text-gray-500")
+                with ui.row().classes("w-full gap-1"):
+                    ui.label("Kym Event").classes("text-sm text-gray-500")
                     self._prev_file_button = ui.button(
                         "",
                         on_click=self._on_prev_file_clicked,
@@ -177,12 +177,12 @@ class KymEventView:
 
                 # self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")  # Commented out - aggrid has 'file' column
 
-                with ui.row().classes("w-full gap-2"):
+                with ui.row().classes("w-full gap-1"):
                     self._all_files_checkbox = ui.checkbox("All Files", value=self._show_all_files).on_value_change(
                         lambda e: self.set_all_files_mode(bool(e.value))
                     ).props("dense").classes('text-sm')
 
-                with ui.row().classes("w-full gap-2"):
+                with ui.row().classes("w-full gap-1"):
                     ui.checkbox("Zoom (+/- s)", value=self._zoom_enabled).on_value_change(
                         lambda e: self._set_zoom_enabled(bool(e.value))
                     ).props("dense").classes('text-sm')
@@ -190,7 +190,7 @@ class KymEventView:
                         lambda e: self._set_zoom_pad_sec(float(e.value))
                     ).props("dense").classes("w-10 text-sm")
 
-                with ui.row().classes("w-full gap-2"):
+                with ui.row().classes("w-full gap-1"):
                     self._set_range_button = ui.button(
                         "Set Start/Stop",
                         on_click=self._on_set_event_range_clicked,
@@ -199,7 +199,7 @@ class KymEventView:
                         "Cancel",
                         on_click=self._on_cancel_event_range_clicked,
                     ).props("dense").classes('text-sm')
-                with ui.row().classes("w-full gap-2"):
+                with ui.row().classes("w-full gap-1"):
                     self._add_event_button = ui.button(
                         "Add Event",
                         on_click=self._on_add_event_clicked,

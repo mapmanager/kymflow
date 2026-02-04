@@ -16,7 +16,6 @@ from kymflow.gui_v2.events import FileSelection, MetadataUpdate, AnalysisUpdate,
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
-# from nicewidgets.custom_ag_grid.custom_ag_grid import CustomAgGrid
 from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
 
 Rows = List[dict[str, object]]
