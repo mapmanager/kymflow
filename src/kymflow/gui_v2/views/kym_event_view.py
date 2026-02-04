@@ -160,6 +160,10 @@ class KymEventView:
             "User Added": True,
         }
         self._on_event_filter_changed: Callable[[dict[str, bool]], None] | None = None  # Callback for plot refresh
+        self._event_filter_menu: ui.menu | None = None  # Menu for event type filters
+        self._event_filter_menu_button: ui.button | None = None  # Button to open event filter menu
+        self._event_filter_menu: ui.menu | None = None  # Menu for event type filters
+        self._event_filter_menu_button: ui.button | None = None  # Button to open event filter menu
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
@@ -202,29 +206,17 @@ class KymEventView:
                         lambda e: self.set_all_files_mode(bool(e.value))
                     ).props("dense").classes('text-sm')
 
-                # Event type filter checkboxes
+                # Event type filter dropdown menu
                 with ui.row().classes("w-full gap-1"):
-                    ui.label("Event Types").classes("text-sm text-gray-500")
-                with ui.row().classes("w-full gap-1"):
-                    self._baseline_drop_checkbox = ui.checkbox("Baseline Drop", value=self._event_filter["baseline_drop"]).on_value_change(
-                        lambda e: self._on_event_type_filter_changed("baseline_drop", bool(e.value))
-                    ).props("dense").classes('text-sm')
-                with ui.row().classes("w-full gap-1"):
-                    self._baseline_rise_checkbox = ui.checkbox("Baseline Rise", value=self._event_filter["baseline_rise"]).on_value_change(
-                        lambda e: self._on_event_type_filter_changed("baseline_rise", bool(e.value))
-                    ).props("dense").classes('text-sm')
-                with ui.row().classes("w-full gap-1"):
-                    self._nan_gap_checkbox = ui.checkbox("NaN Gap", value=self._event_filter["nan_gap"]).on_value_change(
-                        lambda e: self._on_event_type_filter_changed("nan_gap", bool(e.value))
-                    ).props("dense").classes('text-sm')
-                with ui.row().classes("w-full gap-1"):
-                    self._zero_gap_checkbox = ui.checkbox("Zero Gap", value=self._event_filter["zero_gap"]).on_value_change(
-                        lambda e: self._on_event_type_filter_changed("zero_gap", bool(e.value))
-                    ).props("dense").classes('text-sm')
-                with ui.row().classes("w-full gap-1"):
-                    self._user_added_checkbox = ui.checkbox("User Added", value=self._event_filter["User Added"]).on_value_change(
-                        lambda e: self._on_event_type_filter_changed("User Added", bool(e.value))
-                    ).props("dense").classes('text-sm')
+                    with ui.element("div").classes("inline-block"):
+                        # Create button first
+                        self._event_filter_menu_button = ui.button(
+                            "Filter Events",
+                            on_click=lambda: self._event_filter_menu.open() if self._event_filter_menu else None,
+                        ).props("dense").classes('text-sm')
+                        
+                        # Then create menu (will be positioned relative to button)
+                        self._build_event_filter_menu()
 
                 with ui.row().classes("w-full gap-1"):
                     ui.checkbox("Zoom (+/- s)", value=self._zoom_enabled).on_value_change(
@@ -291,6 +283,51 @@ class KymEventView:
 
     def _set_zoom_pad_sec(self, value: float) -> None:
         self._zoom_pad_sec = value
+
+    def _build_event_filter_menu(self) -> None:
+        """Build the event type filter menu with checkboxes."""
+        # Build menu with checkboxes inside (not as menu items)
+        with ui.menu() as menu:
+            self._event_filter_menu = menu
+            # Prevent auto-close so menu stays open when toggling checkboxes
+            menu.props("auto-close=false")
+            
+            # Wrap checkboxes in a column for vertical layout
+            with ui.column().classes("gap-1 p-2"):
+                self._baseline_drop_checkbox = ui.checkbox(
+                    "Baseline Drop",
+                    value=self._event_filter["baseline_drop"]
+                ).on_value_change(
+                    lambda e: self._on_event_type_filter_changed("baseline_drop", bool(e.value))
+                ).props("dense").classes('text-sm')
+                
+                self._baseline_rise_checkbox = ui.checkbox(
+                    "Baseline Rise",
+                    value=self._event_filter["baseline_rise"]
+                ).on_value_change(
+                    lambda e: self._on_event_type_filter_changed("baseline_rise", bool(e.value))
+                ).props("dense").classes('text-sm')
+                
+                self._nan_gap_checkbox = ui.checkbox(
+                    "NaN Gap",
+                    value=self._event_filter["nan_gap"]
+                ).on_value_change(
+                    lambda e: self._on_event_type_filter_changed("nan_gap", bool(e.value))
+                ).props("dense").classes('text-sm')
+                
+                self._zero_gap_checkbox = ui.checkbox(
+                    "Zero Gap",
+                    value=self._event_filter["zero_gap"]
+                ).on_value_change(
+                    lambda e: self._on_event_type_filter_changed("zero_gap", bool(e.value))
+                ).props("dense").classes('text-sm')
+                
+                self._user_added_checkbox = ui.checkbox(
+                    "User Added",
+                    value=self._event_filter["User Added"]
+                ).on_value_change(
+                    lambda e: self._on_event_type_filter_changed("User Added", bool(e.value))
+                ).props("dense").classes('text-sm')
 
     def _on_event_type_filter_changed(self, event_type: str, enabled: bool) -> None:
         """Handle event type filter checkbox change."""
