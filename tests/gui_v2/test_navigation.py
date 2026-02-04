@@ -29,6 +29,9 @@ class DummyButton:
         self._props.append(value)
         return self
 
+    def classes(self, *_args, **_kwargs):
+        return self
+
     def tooltip(self, *_args, **_kwargs):
         return self
 

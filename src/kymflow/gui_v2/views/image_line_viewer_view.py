@@ -407,7 +407,7 @@ class ImageLineViewerView:
     def _set_selected_roi_impl(self, roi_id: Optional[int]) -> None:
         """Internal implementation of set_selected_roi."""
         self._current_roi_id = roi_id
-        logger.info(f"set _current_roi_id to '{roi_id}' {type(roi_id)}")
+        # logger.info(f"set _current_roi_id to '{roi_id}' {type(roi_id)}")
         self._render_combined()
 
     def set_theme(self, theme: ThemeMode) -> None:

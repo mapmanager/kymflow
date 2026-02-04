@@ -12,6 +12,9 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import MetadataUpdate
 
+from kymflow.core.utils.logging import get_logger
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     pass
 
@@ -53,14 +56,15 @@ class MetadataController:
         Args:
             e: MetadataUpdate event (phase="intent") containing the file, metadata type, and fields.
         """
+        logger.info(f'e.metadata_type:{e.metadata_type}')
+        logger.info(f'e.fields:{e.fields}')
+        
         if e.metadata_type == "experimental":
             e.file.update_experiment_metadata(**e.fields)
         elif e.metadata_type == "header":
             e.file.update_header(**e.fields)
         else:
             # Unknown metadata type - log warning but don't crash
-            from kymflow.core.utils.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(f"Unknown metadata type: {e.metadata_type}")
 
         # Notify AppState that metadata was updated

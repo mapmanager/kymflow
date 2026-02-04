@@ -467,6 +467,7 @@ class AcqImage:
             **fields: Keyword arguments mapping field names to new values.
                 Only fields that exist in ExperimentMetadata are updated.
         """
+        logger.info(f'update_experiment_metadata: fields:{fields}')
         updated = False
         for key, value in fields.items():
             if hasattr(self._experiment_metadata, key):

@@ -12,7 +12,7 @@ from typing import Callable, Iterable, List, Optional
 from kymflow.core.image_loaders.kym_image import KymImage
 from nicegui import ui
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import FileSelection, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events import FileSelection, MetadataUpdate, AnalysisUpdate, SelectionOrigin
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
@@ -22,6 +22,7 @@ from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
 Rows = List[dict[str, object]]
 OnSelected = Callable[[FileSelection], None]
 OnMetadataUpdate = Callable[[MetadataUpdate], None]
+OnAnalysisUpdate = Callable[[AnalysisUpdate], None]
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,7 @@ def _col(
     cell_class: Optional[str] = None,
     editable: bool = False,
     filterable: bool = False,
+    editor: Optional[str] = None,
 ) -> ColumnConfig:
     extra: dict[str, object] = {}
 
@@ -53,13 +55,16 @@ def _col(
     if cell_class is not None:
         extra["cellClass"] = cell_class
 
-    return ColumnConfig(
+    col_config = ColumnConfig(
         field=field,
         header=header,
         editable=editable,
         filterable=filterable,
         extra_grid_options=extra,
     )
+    if editor is not None:
+        col_config.editor = editor  # type: ignore[assignment]
+    return col_config
 
 def _default_columns() -> list[ColumnConfig]:
     return [
@@ -73,6 +78,7 @@ def _default_columns() -> list[ColumnConfig]:
         _col("duration (s)", "Duration (s)", width=140, cell_class="ag-cell-right"),
         _col("length (um)", "Length (um)", width=140, cell_class="ag-cell-right"),
         _col("note", "Note", flex=1, min_width=160, editable=True),
+        _col("accepted", "Accepted", width=100, editable=True, cell_class="ag-cell-center", editor="checkbox"),
     ]
 
 class FileTableView:
@@ -101,10 +107,12 @@ class FileTableView:
         *,
         on_selected: OnSelected,
         on_metadata_update: OnMetadataUpdate | None = None,
+        on_analysis_update: OnAnalysisUpdate | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._on_selected = on_selected
         self._on_metadata_update = on_metadata_update
+        self._on_analysis_update = on_analysis_update
         self._selection_mode = selection_mode
 
         # self._grid: CustomAgGrid | None = None
@@ -252,28 +260,47 @@ class FileTableView:
         row_data: dict[str, object],
     ) -> None:
         """Handle user editing a cell."""
-        if self._on_metadata_update is None:
-            return
-        if field != "note":
-            return
         path = row_data.get("path")
         if not path:
             return
         file = self._files_by_path.get(str(path))
         if file is None:
             return
-        if new_value is None:
-            note_value = ""
-        else:
-            note_value = str(new_value)
-            if note_value.strip() == "-" and (old_value in (None, "", "-")):
+        
+        if field == "note":
+            if self._on_metadata_update is None:
+                return
+            if new_value is None:
                 note_value = ""
-        self._on_metadata_update(
-            MetadataUpdate(
-                file=file,
-                metadata_type="experimental",
-                fields={"note": note_value},
-                origin=SelectionOrigin.FILE_TABLE,
-                phase="intent",
+            else:
+                note_value = str(new_value)
+                if note_value.strip() == "-" and (old_value in (None, "", "-")):
+                    note_value = ""
+            self._on_metadata_update(
+                MetadataUpdate(
+                    file=file,
+                    metadata_type="experimental",
+                    fields={"note": note_value},
+                    origin=SelectionOrigin.FILE_TABLE,
+                    phase="intent",
+                )
             )
-        )
+        elif field == "accepted":
+            if self._on_analysis_update is None:
+                return
+            # Convert new_value to bool (handle various input types)
+            if isinstance(new_value, bool):
+                bool_value = new_value
+            elif isinstance(new_value, str):
+                bool_value = new_value.lower() in ("true", "1", "yes", "on")
+            else:
+                bool_value = bool(new_value)
+            
+            self._on_analysis_update(
+                AnalysisUpdate(
+                    file=file,
+                    fields={"accepted": bool_value},
+                    origin=SelectionOrigin.FILE_TABLE,
+                    phase="intent",
+                )
+            )

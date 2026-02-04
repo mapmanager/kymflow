@@ -211,6 +211,35 @@ class MetadataUpdate:
 
 
 @dataclass(frozen=True, slots=True)
+class AnalysisUpdate:
+    """Analysis update event (intent or state phase).
+
+    This event is used for both intent (user wants to update analysis attributes) and state
+    (analysis attributes have been updated) phases. The phase field determines which handlers
+    receive the event.
+
+    For intent phase:
+        - Emitted by views when user edits an analysis attribute (e.g., accepted checkbox)
+        - Handled by AnalysisUpdateController which updates the kymanalysis
+
+    For state phase:
+        - Emitted by AppStateBridge when AppState.update_analysis() is called
+        - Subscribed to by bindings to refresh views
+
+    Attributes:
+        file: KymImage instance whose analysis is being updated or was updated.
+        fields: Dictionary mapping field names to new values (e.g., {"accepted": True}).
+        origin: SelectionOrigin indicating where the update came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    file: "KymImage"
+    fields: dict[str, Any]
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
 class VelocityEventUpdate:
     """Velocity event update event (intent or state phase).
 

@@ -54,7 +54,7 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
         "text-lg": "lg",
     }[text_size]
 
-    # logger.debug(f'=== using text_size:"{text_size}" text_size_quasar:{text_size_quasar}')
+    logger.debug(f'=== using text_size:"{text_size}" text_size_quasar:{text_size_quasar}')
 
     ui.label.default_classes(f"{text_size} select-text")  #  select-text allows double-click selection
     ui.label.default_props("dense")
@@ -84,6 +84,12 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     #
     ui.linear_progress.default_classes(text_size)
     ui.linear_progress.default_props("dense")
+
+    ui.menu.default_classes(text_size)
+    ui.menu.default_props("dense")
+
+    ui.menu_item.default_classes(text_size)
+    ui.menu_item.default_props("dense")
 
 class AppContext:
     """Singleton managing shared application state across all pages.

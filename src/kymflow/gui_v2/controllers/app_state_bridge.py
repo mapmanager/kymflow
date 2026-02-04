@@ -20,6 +20,7 @@ from kymflow.gui_v2.events import (
     SelectionOrigin,
     ImageDisplayChange,
     MetadataUpdate,
+    AnalysisUpdate,
 )
 from kymflow.gui_v2.events_state import (
     FileListChanged,
@@ -70,6 +71,7 @@ class AppStateBridgeController:
         self._app_state.on_theme_changed(self._on_theme_changed)
         self._app_state.on_image_display_changed(self._on_image_display_changed)
         self._app_state.on_metadata_changed(self._on_metadata_changed)
+        self._app_state.on_analysis_changed(self._on_analysis_changed)
 
     def _on_file_list_changed(self) -> None:
         """Handle AppState file list change callback.
@@ -254,6 +256,32 @@ class AppStateBridgeController:
             MetadataUpdate(
                 file=kym_file,
                 metadata_type="experimental",  # Default, views will refresh both types
+                fields={},
+                origin=SelectionOrigin.EXTERNAL,
+                phase="state",
+            )
+        )
+
+    def _on_analysis_changed(self, kym_file: KymImage) -> None:
+        """Handle AppState analysis change callback.
+
+        Emits AnalysisUpdate(phase="state") event with the file whose analysis was updated.
+        Note: We don't know which analysis field was updated, so we emit with empty fields.
+        Views will refresh based on file selection.
+
+        Args:
+            kym_file: KymImage instance whose analysis was updated.
+        """
+        # Only emit if client is still alive
+        if not is_client_alive():
+            logger.debug(
+                f"[bridge] Skipping AnalysisUpdate emit - client deleted (bus={self._bus._client_id[:8]}...)"
+            )
+            return
+        # Emit with empty fields - views will refresh from file
+        self._bus.emit(
+            AnalysisUpdate(
+                file=kym_file,
                 fields={},
                 origin=SelectionOrigin.EXTERNAL,
                 phase="state",

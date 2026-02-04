@@ -35,6 +35,7 @@ class ImageDisplayParams:
 SelectionChangedHandler = Callable[[Optional[KymImage], Optional[SelectionOrigin]], None]
 FileListChangedHandler = Callable[[], None]
 MetadataChangedHandler = Callable[[KymImage], None]
+AnalysisChangedHandler = Callable[[KymImage], None]
 ThemeChangedHandler = Callable[[ThemeMode], None]
 ImageDisplayChangedHandler = Callable[[ImageDisplayParams], None]
 if TYPE_CHECKING:
@@ -90,6 +91,7 @@ class AppState:
         self._file_list_changed_handlers: List[FileListChangedHandler] = []
         self._selection_changed_handlers: List[SelectionChangedHandler] = []
         self._metadata_changed_handlers: List[MetadataChangedHandler] = []
+        self._analysis_changed_handlers: List[AnalysisChangedHandler] = []
         self._theme_changed_handlers: List[ThemeChangedHandler] = []
         self._image_display_changed_handlers: List[ImageDisplayChangedHandler] = []
         self._roi_selection_changed_handlers: List[Callable[[Optional[int]], None]] = []
@@ -107,6 +109,10 @@ class AppState:
     def on_metadata_changed(self, handler: MetadataChangedHandler) -> None:
         """Register callback for metadata updates."""
         self._metadata_changed_handlers.append(handler)
+    
+    def on_analysis_changed(self, handler: AnalysisChangedHandler) -> None:
+        """Register callback for analysis updates."""
+        self._analysis_changed_handlers.append(handler)
     
     def on_theme_changed(self, handler: ThemeChangedHandler) -> None:
         """Register callback for theme changes."""
@@ -289,6 +295,14 @@ class AppState:
                 handler(kym_file)
             except Exception:
                 logger.exception("Error in metadata_changed handler")
+    
+    def update_analysis(self, kym_file: KymImage) -> None:
+        """Notify handlers that analysis was updated."""
+        for handler in list(self._analysis_changed_handlers):
+            try:
+                handler(kym_file)
+            except Exception:
+                logger.exception("Error in analysis_changed handler")
     
     def select_roi(self, roi_id: Optional[int]) -> None:
         """Select an ROI and notify handlers."""

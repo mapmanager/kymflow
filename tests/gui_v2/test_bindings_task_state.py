@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from kymflow.gui_v2.bus import EventBus
+from kymflow.gui_v2.events import AnalysisUpdate, SelectionOrigin
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.views.analysis_toolbar_bindings import AnalysisToolbarBindings
 from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
@@ -251,4 +252,29 @@ def test_folder_selector_bindings_filters_task_type(bus: EventBus) -> None:
     # Verify set_task_state WAS called for 'home' task
     view.set_task_state.assert_called_once_with(task_state_home)
 
+    bindings.teardown()
+
+
+def test_file_table_bindings_subscribes_to_analysis_update(bus: EventBus) -> None:
+    """Test that FileTableBindings subscribes to AnalysisUpdate state events."""
+    view = FileTableView(on_selected=lambda e: None)
+    view.refresh_rows = MagicMock()
+    
+    bindings = FileTableBindings(bus, view)
+    
+    # Create a mock file
+    mock_file = MagicMock()
+    
+    # Emit AnalysisUpdate state event
+    analysis_update = AnalysisUpdate(
+        file=mock_file,
+        fields={},
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+    bus.emit(analysis_update)
+    
+    # Verify refresh_rows was called (via _refresh_rows_preserve_selection)
+    view.refresh_rows.assert_called()
+    
     bindings.teardown()

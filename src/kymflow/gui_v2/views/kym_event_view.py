@@ -362,7 +362,7 @@ class KymEventView:
             ]
         self._pending_rows = rows
         if self._grid is not None:
-            logger.debug('  === calling grid self._grid.set_data(rows)')
+            # logger.debug('  === calling grid self._grid.set_data(rows)')
             self._grid.set_data(rows)
 
     def _on_row_selected(self, row_index: int, row_data: dict[str, object]) -> None:

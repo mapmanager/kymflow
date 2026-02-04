@@ -56,22 +56,26 @@ def build_header(context: AppContext, dark_mode, drawer_toggle_callback: Optiona
             # if drawer_toggle_callback is None:
             #     drawer_button.disable()
             
-            ui.label("KymFlow").classes("text-xl font-bold text-white")
-            
+            ui.label("KymFlow").classes("!text-lg font-bold italic text-white")
+
+            # ui.button.default_classes(text_size)
+            # ui.button.default_props("dense")
+
+
             ui.button(
                 "Home",
                 on_click=lambda: _navigate("/"),
-            ).props("flat text-color=white")
+            ).classes("!text-base").props("flat text-color=white")
             
             ui.button(
                 "Batch",
                 on_click=lambda: _navigate("/batch"),
-            ).props("flat text-color=white")
+            ).classes("!text-base").props("flat text-color=white")
             
             ui.button(
                 "Pool",
                 on_click=lambda: _navigate("/pool"),
-            ).props("flat text-color=white")
+            ).classes("!text-base").props("flat text-color=white")
             
             # COMMENTED OUT: About button removed - About tab is now in drawer
             # about_button = ui.button(

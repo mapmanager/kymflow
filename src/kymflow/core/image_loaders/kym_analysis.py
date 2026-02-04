@@ -151,6 +151,7 @@ class KymAnalysis:
         self._analysis_metadata: Dict[int, RoiAnalysisMetadata] = {}
         self._df: Optional[pd.DataFrame] = None
         self._dirty: bool = False
+        self._accepted: bool = True  # Default to True for new analyses
         # DEPRECATED: Stall analysis is deprecated
         # self._stall_analysis: Dict[int, StallAnalysis] = {}
         # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
@@ -196,6 +197,19 @@ class KymAnalysis:
         """Return True if analysis or metadata/ROI changes are unsaved."""
         return self._dirty or self.acq_image.is_metadata_dirty
 
+    def get_accepted(self) -> bool:
+        """Return the accepted status of this analysis."""
+        return self._accepted
+
+    def set_accepted(self, value: bool) -> None:
+        """Set the accepted status of this analysis.
+        
+        Args:
+            value: New accepted status (True or False).
+        """
+        self._accepted = value
+        self._dirty = True
+
     def get_analysis_metadata(self, roi_id: int) -> RoiAnalysisMetadata | None:
         """Return analysis metadata for roi_id, or None if not analyzed."""
         return self._analysis_metadata.get(roi_id)
@@ -227,16 +241,18 @@ class KymAnalysis:
         """Remove all rows for a specific ROI from the analysis DataFrame.
         
         Helper method to centralize DataFrame filtering logic. If the DataFrame
-        becomes empty after removal, sets it to None.
+        becomes empty after removal, creates an empty DataFrame with correct columns
+        to preserve the schema (instead of setting to None).
         
         Args:
             roi_id: ROI ID whose data should be removed.
         """
         if self._df is not None and 'roi_id' in self._df.columns:
             self._df = self._df[self._df['roi_id'] != roi_id].copy()
-            # If DataFrame is now empty, set to None
+            # If DataFrame is now empty, create empty DataFrame with correct columns
+            # to preserve schema (instead of setting to None)
             if len(self._df) == 0:
-                self._df = None
+                self._df = self._create_empty_velocity_df()
     
     def _get_primary_path(self) -> Path | None:
         """Get the primary file path (representative path from any channel).
@@ -445,6 +461,38 @@ class KymAnalysis:
 
         return roi_df
 
+    def _create_empty_velocity_df(self) -> pd.DataFrame:
+        """Create an empty DataFrame with the same columns as `_make_velocity_df()`.
+        
+        This method creates a DataFrame with 0 rows but all the correct columns
+        and dtypes, preserving the schema for when all ROIs are deleted.
+        
+        Returns:
+            Empty DataFrame with columns: roi_id, channel, time, velocity,
+            parentFolder, file, algorithm, delx, delt, numLines, pntsPerLine,
+            cleanVelocity, absVelocity
+        """
+        # Create empty DataFrame with correct columns and dtypes
+        # Note: We don't need actual values since DataFrame is empty,
+        # just the column definitions with correct dtypes
+        empty_df = pd.DataFrame({
+            "roi_id": pd.Series(dtype="int64"),
+            "channel": pd.Series(dtype="int64"),
+            "time": pd.Series(dtype="float64"),
+            "velocity": pd.Series(dtype="float64"),
+            "parentFolder": pd.Series(dtype="string"),
+            "file": pd.Series(dtype="string"),
+            "algorithm": pd.Series(dtype="string"),
+            "delx": pd.Series(dtype="float64"),
+            "delt": pd.Series(dtype="float64"),
+            "numLines": pd.Series(dtype="int64"),
+            "pntsPerLine": pd.Series(dtype="int64"),
+            "cleanVelocity": pd.Series(dtype="float64"),
+            "absVelocity": pd.Series(dtype="float64"),
+        })
+        
+        return empty_df
+
     def import_v0_analysis(self) -> Optional[bool]:
         """Import v0 analysis results from CSV files.
         
@@ -541,9 +589,12 @@ class KymAnalysis:
         if not metadata_saved:
             logger.warning("Failed to save metadata (ROIs), but continuing with analysis save")
 
+        csv_path, json_path = self._get_save_paths()
+
         analysis_saved = False
-        if self._df is not None and len(self._df) > 0:
-            csv_path, json_path = self._get_save_paths()
+        if self._df is not None:
+            # Always save CSV if _df exists (even if 0 rows) to overwrite previous saves
+            # This ensures we can "clear" the CSV by saving an empty DataFrame
 
             # Create analysis folder if it doesn't exist
             analysis_folder = csv_path.parent
@@ -553,6 +604,11 @@ class KymAnalysis:
             self._df.to_csv(csv_path, index=False)
 
             # logger.info(f"Saved analysis CSV to {csv_path}")
+
+        if self._dirty:
+            # Create analysis folder if it doesn't exist (needed for JSON even if no CSV)
+            analysis_folder = json_path.parent
+            analysis_folder.mkdir(parents=True, exist_ok=True)
 
             # Reconcile to current ROIs (single source of truth)
             current_roi_ids = {roi.id for roi in self.acq_image.rois}
@@ -565,6 +621,7 @@ class KymAnalysis:
             # Prepare JSON data (analysis metadata only; no ROI geometry)
             json_data = {
                 "version": "2.0",
+                "accepted": self._accepted,
                 "analysis_metadata": {
                     str(rid): {
                         "roi_id": meta.roi_id,
@@ -593,8 +650,9 @@ class KymAnalysis:
 
             self._dirty = False
             analysis_saved = True
-        elif self._dirty:
-            logger.info("Analysis dirty but no analysis data to save for %s", primary_path.name)
+
+        # elif self._dirty:
+        #     logger.info("Analysis dirty but no analysis data to save for %s", primary_path.name)
 
         return metadata_saved or analysis_saved
     
@@ -621,14 +679,7 @@ class KymAnalysis:
         
         csv_path, json_path = self._get_save_paths()
         
-        if not csv_path.exists():
-            # if primary_path:
-            #     logger.info(f"No analysis CSV found for {primary_path.name}")
-            # else:
-            #     logger.info("No analysis CSV found (no path available)")
-            # logger.info(f"  csv_path:{csv_path}")
-            return False
-        
+        # JSON is required, CSV is optional (may not exist if only accepted was saved)
         if not json_path.exists():
             # if primary_path:
             #     logger.info(f"No analysis JSON found for {primary_path.name}")
@@ -637,8 +688,12 @@ class KymAnalysis:
             # logger.info(f"  json_path:{json_path}")
             return False
         
-        # Load CSV
-        self._df = pd.read_csv(csv_path)
+        # Load CSV if it exists
+        if csv_path.exists():
+            self._df = pd.read_csv(csv_path)
+        else:
+            # No CSV - this is OK if we only have JSON (e.g., only accepted was saved)
+            self._df = None
         
         # Load JSON
         with open(json_path, "r") as f:
@@ -652,6 +707,9 @@ class KymAnalysis:
                 "Expected version starting with '2.' and key 'analysis_metadata'."
             )
             return False
+
+        # Load accepted status (default to True if not present for backward compatibility)
+        self._accepted = json_data.get("accepted", True)
 
         self._analysis_metadata.clear()
         for key, meta in json_data.get("analysis_metadata", {}).items():

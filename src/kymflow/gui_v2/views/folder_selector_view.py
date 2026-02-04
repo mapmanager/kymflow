@@ -7,13 +7,15 @@ emitting SelectPathEvent intent events when paths are selected.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from nicegui import ui, app
 
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
+from kymflow.gui_v2.events import FileSelection, SaveAll, SaveSelected
 from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
 from kymflow.gui_v2.views.folder_picker import _prompt_for_directory_pywebview, _prompt_for_file_pywebview
 from kymflow.gui_v2.events_state import TaskStateChanged
@@ -38,6 +40,10 @@ def _is_native_mode_available() -> bool:
     return windows is not None and len(windows) > 0
 
 
+OnSaveSelected = Callable[[SaveSelected], None]
+OnSaveAll = Callable[[SaveAll], None]
+
+
 class FolderSelectorView:
     """Folder selector UI that emits SelectPathEvent.
 
@@ -46,12 +52,21 @@ class FolderSelectorView:
     - "Open folder" button (native file dialog)
     - "Open file" button (native file dialog)
     - Depth input (for folder scanning)
+    - Save Selected and Save All buttons
 
     The view subscribes to SelectPathEvent state events to sync the dropdown
     and CancelSelectPathEvent to revert the dropdown on cancellation.
     """
 
-    def __init__(self, bus: EventBus, app_state: AppState, user_config: UserConfig | None = None) -> None:
+    def __init__(
+        self,
+        bus: EventBus,
+        app_state: AppState,
+        user_config: UserConfig | None = None,
+        *,
+        on_save_selected: OnSaveSelected | None = None,
+        on_save_all: OnSaveAll | None = None,
+    ) -> None:
         self._bus = bus
         self._app_state = app_state
         self._user_config = user_config
@@ -65,9 +80,25 @@ class FolderSelectorView:
         self._task_state: Optional[TaskStateChanged] = None
         self._suppress_path_selection_emit: bool = False
         
+        # Save button callbacks
+        self._on_save_selected = on_save_selected
+        self._on_save_all = on_save_all
+        
+        # Save button UI elements
+        self._save_selected_button: Optional[ui.button] = None
+        self._save_all_button: Optional[ui.button] = None
+        
+        # Current file for save button state
+        self._current_file: Optional[KymImage] = None
+        
         # Subscribe to state and cancellation events
         bus.subscribe_state(SelectPathEvent, self._on_select_path_event)
         bus.subscribe(CancelSelectPathEvent, self._on_select_path_cancelled)
+        
+        # Subscribe to file selection and task state for save button states
+        if on_save_selected is not None or on_save_all is not None:
+            bus.subscribe_state(FileSelection, self._on_file_selection_changed)
+            bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
 
     def _build_recent_menu_data(self) -> tuple[list[tuple[str, int]], list[str]]:
         """Build recent folders/files data from UserConfig for menu building.
@@ -230,8 +261,11 @@ class FolderSelectorView:
         self._choose_button = None
         self._open_file_button = None
         self._depth_input = None
+        self._save_selected_button = None
+        self._save_all_button = None
 
         with ui.row().classes("w-full items-center gap-2"):
+            # Left side: existing controls
             # Button and menu container - button must be created first, then menu
             with ui.element("div").classes("inline-block") as menu_container:
                 self._menu_container = menu_container
@@ -256,7 +290,23 @@ class FolderSelectorView:
             ui.label("Depth:").classes("ml-2")
             self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-10")
             self._depth_input.bind_value(self._app_state, "folder_depth")
+            
+            # Spacer to push save buttons to the right
+            ui.element("div").classes("grow")
+            
+            # Right side: save buttons
+            if self._on_save_selected is not None or self._on_save_all is not None:
+                self._save_selected_button = ui.button(
+                    "Save Selected",
+                    on_click=self._on_save_selected_click,
+                    icon="save"
+                ).props("dense").classes("text-sm")
+                self._save_all_button = ui.button(
+                    "Save All",
+                    on_click=self._on_save_all_click
+                ).props("dense").classes("text-sm")
         self._update_controls_state()
+        self._update_save_button_states()
         self.set_folder_from_state()
     
     def _build_recent_menu(self) -> None:
@@ -268,8 +318,8 @@ class FolderSelectorView:
             self._recent_menu = menu
             
             # Folders header
-            header_folders = ui.menu_item("Folders")
-            header_folders.disable()
+            # header_folders = ui.menu_item("Folders")
+            # header_folders.disable()
             
             # Folder items
             for path, _depth in folder_paths:
@@ -282,8 +332,9 @@ class FolderSelectorView:
                 ui.separator()
             
             # Files header
-            header_files = ui.menu_item("Files")
-            header_files.disable()
+            # if file_paths:
+            #     header_files = ui.menu_item("Files")
+            #     header_files.disable()
             
             # File items
             for path in file_paths:
@@ -292,11 +343,11 @@ class FolderSelectorView:
                     lambda p=path: self._on_recent_path_selected(p),
                 )
             
-            if file_paths:
+            if folder_paths or file_paths:
                 ui.separator()
             
-            # Clear option
-            ui.menu_item("Clear Recently Opened …", self._on_clear_recent)
+                # Clear option
+                ui.menu_item("Clear Recently Opened …", self._on_clear_recent)
         
         # Button state will be updated by caller
 
@@ -337,6 +388,57 @@ class FolderSelectorView:
                 self._depth_input.disable()
             else:
                 self._depth_input.enable()
+    
+    def _update_save_button_states(self) -> None:
+        """Update save button states based on current file and task state."""
+        if self._save_selected_button is None or self._save_all_button is None:
+            return
+        
+        running = self._task_state.running if self._task_state else False
+        
+        # Disable buttons when task is running
+        if running:
+            self._save_selected_button.disable()
+            self._save_all_button.disable()
+        else:
+            # Save Selected: enabled when file is selected (and not running)
+            has_file = self._current_file is not None
+            if has_file:
+                self._save_selected_button.enable()
+            else:
+                self._save_selected_button.disable()
+            
+            # Save All: always enabled when not running (will check files in controller)
+            self._save_all_button.enable()
+    
+    def _on_file_selection_changed(self, e: FileSelection) -> None:
+        """Handle file selection change event for save button state."""
+        self._current_file = e.file
+        safe_call(self._update_save_button_states)
+    
+    def _on_task_state_changed(self, e: TaskStateChanged) -> None:
+        """Handle task state change event for save button state."""
+        if e.task_type == "home":
+            self._task_state = e
+            safe_call(self._update_save_button_states)
+    
+    def _on_save_selected_click(self) -> None:
+        """Handle Save Selected button click."""
+        if self._on_save_selected is not None:
+            self._on_save_selected(
+                SaveSelected(
+                    phase="intent",
+                )
+            )
+    
+    def _on_save_all_click(self) -> None:
+        """Handle Save All button click."""
+        if self._on_save_all is not None:
+            self._on_save_all(
+                SaveAll(
+                    phase="intent",
+                )
+            )
 
     def set_folder_from_state(self) -> None:
         """Update folder display to match AppState."""

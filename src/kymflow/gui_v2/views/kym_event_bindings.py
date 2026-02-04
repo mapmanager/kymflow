@@ -110,7 +110,7 @@ class KymEventBindings:
     def _on_roi_selection_changed(self, e: ROISelection) -> None:
         # Still call set_selected_roi to update filter state, but it will skip set_data
         # if we originated a FileSelection (handled inside set_selected_roi)
-        logger.debug(f'e: {e}')
+        # logger.debug(f'e: {e}')
         safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_event_selection_changed(self, e: EventSelection) -> None:

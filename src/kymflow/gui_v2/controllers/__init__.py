@@ -2,6 +2,7 @@
 """Controllers coordinate events <-> AppState/backend."""
 
 from kymflow.gui_v2.controllers.analysis_controller import AnalysisController
+from kymflow.gui_v2.controllers.analysis_update_controller import AnalysisUpdateController
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
 from kymflow.gui_v2.controllers.event_analysis_controller import EventAnalysisController
 from kymflow.gui_v2.controllers.event_selection_controller import EventSelectionController
@@ -33,6 +34,7 @@ from kymflow.gui_v2.controllers.roi_edit_state_controller import (
 
 __all__ = [
     "AnalysisController",
+    "AnalysisUpdateController",
     "AppStateBridgeController",
     "AddKymEventController",
     "AddRoiController",

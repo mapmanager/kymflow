@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
@@ -213,6 +214,9 @@ def test_kymanalysis_save_and_load_analysis(test_data_dir: Path) -> None:
     meta = kym_analysis2.get_analysis_metadata(roi1.id)
     assert meta is not None
     assert meta.analyzed_at is not None
+    
+    # Verify accepted field is loaded (defaults to True if not in JSON)
+    assert kym_analysis2.get_accepted() is True
 
 
 def test_kymanalysis_multi_roi_analysis() -> None:
@@ -573,4 +577,918 @@ def test_kymanalysis_has_v0_flow_analysis() -> None:
         roi_revision_at_analysis=roi.revision,
     )
     assert kym_analysis.has_v0_flow_analysis(roi.id) is True
+
+
+def test_kymanalysis_accepted_default_value() -> None:
+    """Test that accepted defaults to True for new KymAnalysis instances."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Default value should be True
+    assert kym_analysis.get_accepted() is True
+
+
+def test_kymanalysis_accepted_get_set() -> None:
+    """Test get_accepted() and set_accepted() methods."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Initially True
+    assert kym_analysis.get_accepted() is True
+    
+    # Set to False
+    kym_analysis.set_accepted(False)
+    assert kym_analysis.get_accepted() is False
+    assert kym_analysis.is_dirty is True
+    
+    # Set back to True
+    kym_analysis.set_accepted(True)
+    assert kym_analysis.get_accepted() is True
+    assert kym_analysis.is_dirty is True
+
+
+def test_kymanalysis_accepted_save_and_load() -> None:
+    """Test that accepted is saved and loaded from JSON."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Set accepted to False
+    kym_analysis.set_accepted(False)
+    assert kym_analysis.get_accepted() is False
+    
+    # Save analysis
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        saved = kym_analysis.save_analysis()
+        assert saved is True
+        
+        # Verify accepted is in JSON
+        import json
+        json_path = kym_analysis._get_save_paths()[1]
+        assert json_path.exists()
+        
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        assert data["accepted"] is False
+        
+        # Create new instance and load
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        # Should load False from JSON
+        assert kym_analysis2.get_accepted() is False
+
+
+def test_kymanalysis_accepted_load_defaults_to_true() -> None:
+    """Test that loading old JSON without accepted field defaults to True."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Need to make it dirty to save (set accepted or add some metadata change)
+    # Since we want to test default value, we'll save with accepted=True first
+    kym_analysis.set_accepted(True)  # This makes it dirty
+    
+    # Save analysis (will include accepted=True)
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        saved = kym_analysis.save_analysis()
+        assert saved is True
+        
+        # Manually remove accepted from JSON to simulate old format
+        import json
+        json_path = kym_analysis._get_save_paths()[1]
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        del data["accepted"]
+        with open(json_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        
+        # Create new instance and load
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        # Should default to True when missing from JSON
+        assert kym_analysis2.get_accepted() is True
+
+
+def test_kymanalysis_round_trip_with_accepted_edit() -> None:
+    """Test complete round-trip: analyze → save → load → edit accepted → save → load.
+    
+    This test verifies that:
+    1. CSV and JSON are saved separately (CSV when df exists, JSON when dirty)
+    2. Editing accepted after analysis only updates JSON (not CSV)
+    3. All data persists correctly through multiple save/load cycles
+    """
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Add and analyze ROI (creates CSV data)
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    
+    # Verify analysis exists
+    assert kym_analysis.has_analysis(roi.id)
+    assert kym_analysis.get_accepted() is True  # Default
+    assert kym_analysis.is_dirty is True
+    
+    # Get original analysis data
+    original_df = kym_analysis.get_analysis(roi.id)
+    assert original_df is not None
+    assert len(original_df) > 0
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # First save: should save both CSV and JSON
+        saved = kym_analysis.save_analysis()
+        assert saved is True
+        assert kym_analysis.is_dirty is False
+        
+        csv_path, json_path = kym_analysis._get_save_paths()
+        assert csv_path.exists(), "CSV should be saved when df exists"
+        assert json_path.exists(), "JSON should be saved when dirty"
+        
+        # Verify JSON contains accepted=True
+        import json
+        with open(json_path, 'r') as f:
+            json_data = json.load(f)
+        assert json_data["accepted"] is True
+        
+        # Load and verify round-trip
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()  # Load ROIs first
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        assert kym_analysis2.has_analysis(roi.id)
+        assert kym_analysis2.get_accepted() is True
+        loaded_df = kym_analysis2.get_analysis(roi.id)
+        assert loaded_df is not None
+        assert len(loaded_df) == len(original_df)
+        
+        # Now edit accepted (should only update JSON, not CSV)
+        kym_analysis2.set_accepted(False)
+        assert kym_analysis2.get_accepted() is False
+        assert kym_analysis2.is_dirty is True
+        
+        # Save again - should only update JSON (CSV already exists and hasn't changed)
+        saved2 = kym_analysis2.save_analysis()
+        assert saved2 is True
+        assert kym_analysis2.is_dirty is False
+        
+        # Verify CSV still exists and is unchanged
+        assert csv_path.exists(), "CSV should still exist after editing accepted"
+        csv_path2, json_path2 = kym_analysis2._get_save_paths()
+        assert csv_path2 == csv_path  # Same path
+        
+        # Verify JSON was updated with accepted=False
+        with open(json_path2, 'r') as f:
+            json_data2 = json.load(f)
+        assert json_data2["accepted"] is False
+        # Verify other data is still there
+        assert "analysis_metadata" in json_data2
+        assert "velocity_events" in json_data2
+        
+        # Final round-trip: load again and verify everything persisted
+        kym_image3 = KymImage(test_file, load_image=False)
+        kym_image3.load_metadata()
+        kym_analysis3 = kym_image3.get_kym_analysis()
+        
+        assert kym_analysis3.has_analysis(roi.id)
+        assert kym_analysis3.get_accepted() is False, "accepted=False should persist"
+        
+        # Verify CSV data is still intact
+        final_df = kym_analysis3.get_analysis(roi.id)
+        assert final_df is not None
+        assert len(final_df) == len(original_df), "CSV data should be unchanged"
+        
+        # Verify analysis metadata is still there
+        meta = kym_analysis3.get_analysis_metadata(roi.id)
+        assert meta is not None
+        assert meta.algorithm == "mpRadon"
+
+
+def test_kymanalysis_save_json_only_when_dirty_no_df() -> None:
+    """Test that JSON can be saved even when there's no CSV data (e.g., only accepted changed)."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # No analysis data, but we can still save accepted
+    assert kym_analysis._df is None or len(kym_analysis._df) == 0
+    kym_analysis.set_accepted(False)
+    assert kym_analysis.is_dirty is True
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Save - should save JSON even without CSV
+        saved = kym_analysis.save_analysis()
+        assert saved is True
+        
+        csv_path, json_path = kym_analysis._get_save_paths()
+        # CSV should not exist (no df data)
+        assert not csv_path.exists() or csv_path.stat().st_size == 0
+        # JSON should exist (dirty flag was set)
+        assert json_path.exists()
+        
+        # Verify JSON contains accepted
+        import json
+        with open(json_path, 'r') as f:
+            json_data = json.load(f)
+        assert json_data["accepted"] is False
+
+
+def test_kymanalysis_accepted_in_getRowDict() -> None:
+    """Test that accepted is included in KymImage.getRowDict()."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Default should be True
+    row_dict = kym_image.getRowDict()
+    assert "accepted" in row_dict
+    assert row_dict["accepted"] is True
+    
+    # Set to False and verify it's in row dict
+    kym_analysis.set_accepted(False)
+    row_dict = kym_image.getRowDict()
+    assert row_dict["accepted"] is False
+    
+    # Set back to True
+    kym_analysis.set_accepted(True)
+    row_dict = kym_image.getRowDict()
+    assert row_dict["accepted"] is True
+
+
+def test_kymanalysis_create_empty_velocity_df() -> None:
+    """Test that _create_empty_velocity_df() creates DataFrame with correct columns and dtypes."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create empty DataFrame
+    empty_df = kym_analysis._create_empty_velocity_df()
+    
+    # Verify it's a DataFrame
+    assert isinstance(empty_df, pd.DataFrame)
+    
+    # Verify it has 0 rows
+    assert len(empty_df) == 0
+    
+    # Verify all expected columns exist
+    expected_columns = [
+        "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+        "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+        "cleanVelocity", "absVelocity"
+    ]
+    assert list(empty_df.columns) == expected_columns
+    
+    # Verify dtypes
+    assert empty_df["roi_id"].dtype == "int64"
+    assert empty_df["channel"].dtype == "int64"
+    assert empty_df["time"].dtype == "float64"
+    assert empty_df["velocity"].dtype == "float64"
+    assert empty_df["parentFolder"].dtype == "string" or empty_df["parentFolder"].dtype == "object"
+    assert empty_df["file"].dtype == "string" or empty_df["file"].dtype == "object"
+    assert empty_df["algorithm"].dtype == "string" or empty_df["algorithm"].dtype == "object"
+    assert empty_df["delx"].dtype == "float64"
+    assert empty_df["delt"].dtype == "float64"
+    assert empty_df["numLines"].dtype == "int64"
+    assert empty_df["pntsPerLine"].dtype == "int64"
+    assert empty_df["cleanVelocity"].dtype == "float64"
+    assert empty_df["absVelocity"].dtype == "float64"
+
+
+def test_kymanalysis_empty_df_columns_match_schema() -> None:
+    """Test that empty DataFrame columns exactly match _make_velocity_df() output."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create a sample ROI and analyze to get actual schema
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    
+    # Get actual DataFrame from analysis
+    actual_df = kym_analysis.get_analysis(roi.id)
+    assert actual_df is not None
+    
+    # Create empty DataFrame
+    empty_df = kym_analysis._create_empty_velocity_df()
+    
+    # Verify columns match exactly (order and names)
+    assert list(empty_df.columns) == list(actual_df.columns)
+
+
+def test_kymanalysis_empty_df_has_correct_dtypes() -> None:
+    """Test that empty DataFrame has correct dtypes for all columns."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    empty_df = kym_analysis._create_empty_velocity_df()
+    
+    # Verify integer columns
+    assert empty_df["roi_id"].dtype == "int64"
+    assert empty_df["channel"].dtype == "int64"
+    assert empty_df["numLines"].dtype == "int64"
+    assert empty_df["pntsPerLine"].dtype == "int64"
+    
+    # Verify float columns
+    assert empty_df["time"].dtype == "float64"
+    assert empty_df["velocity"].dtype == "float64"
+    assert empty_df["delx"].dtype == "float64"
+    assert empty_df["delt"].dtype == "float64"
+    assert empty_df["cleanVelocity"].dtype == "float64"
+    assert empty_df["absVelocity"].dtype == "float64"
+    
+    # Verify string columns (pandas may use 'object' or 'string' dtype)
+    assert empty_df["parentFolder"].dtype in ["string", "object"]
+    assert empty_df["file"].dtype in ["string", "object"]
+    assert empty_df["algorithm"].dtype in ["string", "object"]
+
+
+def test_kymanalysis_no_analysis_df_stays_none() -> None:
+    """Test that _df remains None if no analysis ever run."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Add ROI but don't analyze
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    
+    # Verify _df is still None (should not create empty DataFrame)
+    assert kym_analysis._df is None
+
+
+def test_kymanalysis_empty_df_after_delete_all_rois() -> None:
+    """Test that deleting all ROIs creates empty DataFrame with correct columns."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Add and analyze ROI
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    
+    # Verify analysis exists
+    assert kym_analysis.has_analysis(roi.id)
+    assert kym_analysis._df is not None
+    assert len(kym_analysis._df) > 0
+    
+    # Delete the ROI (this should invalidate analysis)
+    kym_image.rois.delete(roi.id)
+    kym_analysis.invalidate(roi.id)
+    
+    # Verify _df is now empty DataFrame (not None) with correct columns
+    assert kym_analysis._df is not None
+    assert len(kym_analysis._df) == 0
+    
+    # Verify it has correct columns
+    expected_columns = [
+        "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+        "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+        "cleanVelocity", "absVelocity"
+    ]
+    assert list(kym_analysis._df.columns) == expected_columns
+
+
+def test_kymanalysis_remove_roi_data_preserves_other_rois() -> None:
+    """Test that removing one ROI doesn't affect other ROIs' data."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create and analyze two ROIs
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
+    roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
+    kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+    
+    bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
+    roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
+    kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+    
+    # Verify both ROIs have analysis
+    assert kym_analysis.has_analysis(roi1.id)
+    assert kym_analysis.has_analysis(roi2.id)
+    
+    # Get data for both ROIs
+    df1_before = kym_analysis.get_analysis(roi1.id)
+    df2_before = kym_analysis.get_analysis(roi2.id)
+    assert df1_before is not None
+    assert df2_before is not None
+    assert len(df1_before) > 0
+    assert len(df2_before) > 0
+    
+    # Remove ROI1 data
+    kym_analysis._remove_roi_data_from_df(roi1.id)
+    
+    # Verify ROI2 data is still intact
+    df2_after = kym_analysis.get_analysis(roi2.id)
+    assert df2_after is not None
+    assert len(df2_after) == len(df2_before)
+    assert list(df2_after["roi_id"].unique()) == [roi2.id]
+    
+    # Verify ROI1 data is gone
+    df1_after = kym_analysis.get_analysis(roi1.id)
+    assert df1_after is None or len(df1_after) == 0
+
+
+def test_kymanalysis_save_empty_df() -> None:
+    """Test that saving empty DataFrame (0 rows) writes CSV with correct columns."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Add and analyze ROI, then delete it to get empty DataFrame
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    
+    # Delete ROI to create empty DataFrame
+    kym_image.rois.delete(roi.id)
+    kym_analysis.invalidate(roi.id)
+    
+    # Verify we have empty DataFrame
+    assert kym_analysis._df is not None
+    assert len(kym_analysis._df) == 0
+    assert kym_analysis.is_dirty is True
+    
+    # Save analysis
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        saved = kym_analysis.save_analysis()
+        assert saved is True
+        
+        # Verify CSV file exists
+        csv_path, json_path = kym_analysis._get_save_paths()
+        assert csv_path.exists(), "CSV file should exist even when empty"
+        
+        # Verify CSV has header row
+        with open(csv_path, 'r') as f:
+            lines = f.readlines()
+            assert len(lines) > 0, "CSV should have at least header row"
+            header = lines[0].strip()
+            expected_columns = [
+                "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+                "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+                "cleanVelocity", "absVelocity"
+            ]
+            for col in expected_columns:
+                assert col in header, f"Header should contain column: {col}"
+        
+        # Verify we can read it back as empty DataFrame
+        loaded_df = pd.read_csv(csv_path)
+        assert len(loaded_df) == 0
+        assert list(loaded_df.columns) == expected_columns
+
+
+def test_kymanalysis_save_empty_csv_has_header() -> None:
+    """Test that empty CSV has header row with all column names."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create empty DataFrame by analyzing then deleting
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    kym_image.rois.delete(roi.id)
+    kym_analysis.invalidate(roi.id)
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        kym_analysis.save_analysis()
+        
+        csv_path, _ = kym_analysis._get_save_paths()
+        assert csv_path.exists()
+        
+        # Read CSV file and check header
+        with open(csv_path, 'r') as f:
+            first_line = f.readline().strip()
+            expected_columns = [
+                "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+                "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+                "cleanVelocity", "absVelocity"
+            ]
+            header_cols = first_line.split(',')
+            assert len(header_cols) == len(expected_columns)
+            for col in expected_columns:
+                assert col in header_cols, f"Header missing column: {col}"
+
+
+def test_kymanalysis_save_empty_csv_file_exists() -> None:
+    """Test that empty CSV file is created and exists on disk after save."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create empty DataFrame
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    kym_image.rois.delete(roi.id)
+    kym_analysis.invalidate(roi.id)
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        kym_analysis.save_analysis()
+        
+        csv_path, _ = kym_analysis._get_save_paths()
+        assert csv_path.exists(), "Empty CSV file should exist after save"
+        assert csv_path.is_file(), "CSV path should be a file"
+
+
+def test_kymanalysis_load_empty_csv() -> None:
+    """Test that loading an empty CSV creates empty DataFrame with correct columns."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create empty DataFrame and save it
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    kym_image.rois.delete(roi.id)
+    kym_analysis.invalidate(roi.id)
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Save empty DataFrame
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Create new instance and load
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        # Verify empty DataFrame was loaded
+        assert kym_analysis2._df is not None
+        assert len(kym_analysis2._df) == 0
+        
+        # Verify columns are correct
+        expected_columns = [
+            "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+            "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+            "cleanVelocity", "absVelocity"
+        ]
+        assert list(kym_analysis2._df.columns) == expected_columns
+
+
+def test_kymanalysis_load_empty_csv_preserves_schema() -> None:
+    """Test that loading empty CSV preserves all column names.
+    
+    Note: When pandas reads an empty CSV, it cannot infer dtypes from data
+    and may default to 'object' dtype. This is expected behavior. The important
+    thing is that all columns exist and the DataFrame structure is correct.
+    When actual data is added, dtypes will be correct.
+    """
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    # Create and save empty DataFrame
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    kym_image.rois.delete(roi.id)
+    kym_analysis.invalidate(roi.id)
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Load and verify schema
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        # Verify DataFrame exists and is empty
+        assert kym_analysis2._df is not None
+        assert len(kym_analysis2._df) == 0
+        
+        # Verify all expected columns exist (this is what matters for schema preservation)
+        expected_columns = [
+            "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+            "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+            "cleanVelocity", "absVelocity"
+        ]
+        assert list(kym_analysis2._df.columns) == expected_columns
+        
+        # Note: Dtypes may be 'object' when loading empty CSV (pandas behavior),
+        # but this is acceptable - when data is added, dtypes will be correct
+
+
+def test_kymanalysis_csv_overwrite_not_append() -> None:
+    """Test that saving empty DataFrame overwrites previous CSV (not append)."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Step 1: Analyze ROI and save (CSV has data)
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        csv_path, _ = kym_analysis._get_save_paths()
+        assert csv_path.exists()
+        
+        # Get file size with data
+        file_size_with_data = csv_path.stat().st_size
+        assert file_size_with_data > 0
+        
+        # Read and verify it has data
+        df_with_data = pd.read_csv(csv_path)
+        assert len(df_with_data) > 0
+        
+        # Step 2: Delete ROI and save empty (should overwrite)
+        kym_image.rois.delete(roi.id)
+        kym_analysis.invalidate(roi.id)
+        kym_analysis.save_analysis()
+        
+        # Verify file size is smaller (only header now)
+        file_size_empty = csv_path.stat().st_size
+        assert file_size_empty < file_size_with_data, "Empty CSV should be smaller than CSV with data"
+        
+        # Verify content doesn't contain old data
+        df_empty = pd.read_csv(csv_path)
+        assert len(df_empty) == 0, "Loaded CSV should be empty"
+        
+        # Verify no old ROI data
+        if len(df_empty) == 0:
+            # Good, it's empty
+            pass
+        else:
+            # If somehow not empty, verify no old roi_id
+            assert roi.id not in df_empty["roi_id"].values, "Old ROI data should not be present"
+
+
+def test_kymanalysis_save_empty_df_overwrites_previous() -> None:
+    """CRITICAL: Test round-trip scenario - analyze → save → delete all ROIs → save → load."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Step 1: Analyze ROI → save (CSV has data)
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        
+        kym_image.save_metadata()
+        saved1 = kym_analysis.save_analysis()
+        assert saved1 is True
+        
+        csv_path, json_path = kym_analysis._get_save_paths()
+        assert csv_path.exists()
+        file_size_with_data = csv_path.stat().st_size
+        assert file_size_with_data > 0, "CSV should have data"
+        
+        # Step 2: Delete all ROIs → save (CSV should be empty with correct columns)
+        kym_image.rois.delete(roi.id)
+        kym_analysis.invalidate(roi.id)
+        
+        assert kym_analysis._df is not None
+        assert len(kym_analysis._df) == 0
+        
+        saved2 = kym_analysis.save_analysis()
+        assert saved2 is True
+        
+        # Verify file exists but only has header
+        assert csv_path.exists()
+        file_size_empty = csv_path.stat().st_size
+        assert file_size_empty < file_size_with_data, "Empty CSV should be smaller"
+        
+        # Step 3: Load → verify empty DataFrame with correct columns (not old data)
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        # CRITICAL: Verify empty DataFrame, not old data
+        assert kym_analysis2._df is not None
+        assert len(kym_analysis2._df) == 0, "Loaded DataFrame should be empty, not contain old ROI data"
+        
+        # Verify correct columns
+        expected_columns = [
+            "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+            "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+            "cleanVelocity", "absVelocity"
+        ]
+        assert list(kym_analysis2._df.columns) == expected_columns
+        
+        # Verify no old ROI data
+        if len(kym_analysis2._df) > 0:
+            assert roi.id not in kym_analysis2._df["roi_id"].values, "Old ROI data should not be present"
+
+
+def test_kymanalysis_round_trip_delete_all_rois() -> None:
+    """Test full round-trip: create ROI → analyze → save → load → delete all ROIs → save → load."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Create ROI → analyze → save
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
+        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Load → verify data exists
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        assert kym_analysis2.has_analysis(roi.id)
+        assert kym_analysis2._df is not None
+        assert len(kym_analysis2._df) > 0
+        
+        # Delete all ROIs → save
+        kym_image2.rois.delete(roi.id)
+        kym_analysis2.invalidate(roi.id)
+        kym_analysis2.save_analysis()
+        
+        # Load again → verify empty DataFrame with correct columns
+        kym_image3 = KymImage(test_file, load_image=False)
+        kym_image3.load_metadata()
+        kym_analysis3 = kym_image3.get_kym_analysis()
+        
+        assert kym_analysis3._df is not None
+        assert len(kym_analysis3._df) == 0
+        
+        expected_columns = [
+            "roi_id", "channel", "time", "velocity", "parentFolder", "file",
+            "algorithm", "delx", "delt", "numLines", "pntsPerLine",
+            "cleanVelocity", "absVelocity"
+        ]
+        assert list(kym_analysis3._df.columns) == expected_columns
+
+
+def test_kymanalysis_round_trip_delete_then_reanalyze() -> None:
+    """Test: Delete all ROIs → save empty → add new ROI → analyze → save → load."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Create, analyze, and delete ROI
+        bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
+        kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Delete all ROIs → save empty
+        kym_image.rois.delete(roi1.id)
+        kym_analysis.invalidate(roi1.id)
+        kym_analysis.save_analysis()
+        
+        # Add new ROI → analyze
+        bounds2 = RoiBounds(dim0_start=20, dim0_stop=60, dim1_start=20, dim1_stop=60)
+        roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
+        kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Load → verify new data (not empty, has correct ROI data)
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        assert kym_analysis2._df is not None
+        assert len(kym_analysis2._df) > 0, "Should have new ROI data, not empty"
+        assert kym_analysis2.has_analysis(roi2.id)
+        
+        # Verify it's ROI2's data, not ROI1's
+        df_loaded = kym_analysis2.get_analysis(roi2.id)
+        assert df_loaded is not None
+        assert len(df_loaded) > 0
+        assert roi2.id in df_loaded["roi_id"].values
+        assert roi1.id not in df_loaded["roi_id"].values
+
+
+def test_kymanalysis_round_trip_multiple_rois_delete_one() -> None:
+    """Test: Multiple ROIs → analyze all → delete one → save → load."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Create and analyze two ROIs
+        bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
+        roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
+        kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+        
+        bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
+        roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
+        kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+        
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Delete one ROI
+        kym_image.rois.delete(roi1.id)
+        kym_analysis.invalidate(roi1.id)
+        kym_analysis.save_analysis()
+        
+        # Load → verify remaining ROI data intact
+        kym_image2 = KymImage(test_file, load_image=False)
+        kym_image2.load_metadata()
+        kym_analysis2 = kym_image2.get_kym_analysis()
+        
+        assert kym_analysis2._df is not None
+        assert kym_analysis2.has_analysis(roi2.id)
+        assert not kym_analysis2.has_analysis(roi1.id)
+        
+        # Verify ROI2 data is present
+        df2 = kym_analysis2.get_analysis(roi2.id)
+        assert df2 is not None
+        assert len(df2) > 0
+        assert roi2.id in df2["roi_id"].values
+        
+        # Verify ROI1 data is gone
+        df1 = kym_analysis2.get_analysis(roi1.id)
+        assert df1 is None or len(df1) == 0
+
+
+def test_kymanalysis_round_trip_delete_all_then_add_roi() -> None:
+    """Test: Delete all ROIs → save empty → add ROI → analyze → verify DataFrame transitions."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        kym_image._file_path_dict[1] = test_file
+        
+        # Create, analyze, delete all, save empty
+        bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
+        kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+        kym_image.rois.delete(roi1.id)
+        kym_analysis.invalidate(roi1.id)
+        kym_image.save_metadata()
+        kym_analysis.save_analysis()
+        
+        # Verify DataFrame is empty
+        assert kym_analysis._df is not None
+        assert len(kym_analysis._df) == 0
+        
+        # Add ROI → analyze → verify DataFrame transitions from empty to populated
+        bounds2 = RoiBounds(dim0_start=20, dim0_stop=60, dim1_start=20, dim1_stop=60)
+        roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
+        kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+        
+        # Verify DataFrame now has data
+        assert kym_analysis._df is not None
+        assert len(kym_analysis._df) > 0
+        assert kym_analysis.has_analysis(roi2.id)
 

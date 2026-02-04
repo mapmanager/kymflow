@@ -108,7 +108,22 @@ class FolderController:
             config_depth = 0 if is_file else depth
             self._user_config.push_recent_path(str(new_path), depth=config_depth)
         
+        from nicegui import app
+        if is_file:
+            title = f'KymFlow - {new_path.name}'
+        else:
+            title = f'KymFlow - {new_path.name}/'
+        
+        logger.debug(f'=== setting window title to "{title}"')
+        app.native.main_window.set_title(title)
+
+        # import asyncio
+        # _size = ui.run().io(app.native.main_window.get_size())
+        # # _size = app.native.main_window.get_size()
+        # logger.debug(f'=== window size: {_size}')
+
         # Emit state event to confirm successful load
+        # logger.debug('-->> emit SelectPathEvent')
         self._bus.emit(SelectPathEvent(
             new_path=str(new_path),
             depth=depth,

@@ -12,6 +12,7 @@ from kymflow.gui_v2.controllers import (
     AddKymEventController,
     AddRoiController,
     AnalysisController,
+    AnalysisUpdateController,
     AppStateBridgeController,
     DeleteKymEventController,
     DeleteRoiController,
@@ -31,7 +32,7 @@ from kymflow.gui_v2.controllers import (
     TaskStateBridgeController,
     VelocityEventUpdateController,
 )
-from kymflow.gui_v2.events import NextPrevFileEvent, SelectionOrigin
+from kymflow.gui_v2.events import NextPrevFileEvent, SaveSelected, SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.views import (
     AboutTabView,
@@ -111,6 +112,7 @@ class HomePage(BasePage):
         self._image_display_controller: ImageDisplayController | None = None
         self._kym_event_range_state_controller: KymEventRangeStateController | None = None
         self._metadata_controller: MetadataController | None = None
+        self._analysis_update_controller: AnalysisUpdateController | None = None
         self._velocity_event_update_controller: VelocityEventUpdateController | None = None
         self._add_kym_event_controller: AddKymEventController | None = None
         self._delete_kym_event_controller: DeleteKymEventController | None = None
@@ -120,10 +122,17 @@ class HomePage(BasePage):
         self._persistence: FileTablePersistenceController | None = None
 
         # View objects (created in __init__, UI elements created in build())
-        self._folder_view = FolderSelectorView(bus, context.app_state, context.user_config)
+        self._folder_view = FolderSelectorView(
+            bus,
+            context.app_state,
+            context.user_config,
+            on_save_selected=bus.emit,
+            on_save_all=bus.emit,
+        )
         self._table_view = FileTableView(
             on_selected=bus.emit,
             on_metadata_update=bus.emit,
+            on_analysis_update=bus.emit,
             selection_mode="single",
         )
         self._image_line_viewer = ImageLineViewerView(
@@ -206,6 +215,8 @@ class HomePage(BasePage):
         self._next_prev_file_shortcut_registered: bool = False
         self._next_file_shortcut_event: str = "kymflow_next_file"
         self._prev_file_shortcut_event: str = "kymflow_prev_file"
+        self._save_selected_shortcut_registered: bool = False
+        self._save_selected_shortcut_event: str = "kymflow_save_selected"
 
     def _ensure_setup(self) -> None:
         """Ensure controllers and bindings are set up once per client.
@@ -238,6 +249,9 @@ class HomePage(BasePage):
         )
         self._kym_event_range_state_controller = KymEventRangeStateController(self.bus)
         self._metadata_controller = MetadataController(
+            self.context.app_state, self.bus
+        )
+        self._analysis_update_controller = AnalysisUpdateController(
             self.context.app_state, self.bus
         )
         self._velocity_event_update_controller = VelocityEventUpdateController(
@@ -431,6 +445,47 @@ class HomePage(BasePage):
             """
         )
 
+    def _on_save_selected_shortcut(self, _event) -> None:
+        """Handle Command+S/Ctrl+S save selected shortcut when not editing."""
+        self.bus.emit(
+            SaveSelected(
+                phase="intent",
+            )
+        )
+
+    def _register_save_selected_shortcut(self) -> None:
+        """Register global Command+S/Ctrl+S shortcut for save selected (unless editing)."""
+        if self._save_selected_shortcut_registered:
+            return
+        self._save_selected_shortcut_registered = True
+        ui.on(self._save_selected_shortcut_event, self._on_save_selected_shortcut)
+        ui.run_javascript(
+            """
+(function() {
+  if (window._kymflow_save_selected_listener) return;
+  window._kymflow_save_selected_listener = true;
+  window.addEventListener('keydown', (e) => {
+    // Check for Command (macOS) or Ctrl (Windows/Linux)
+    if (!e.metaKey && !e.ctrlKey) return;
+    // Check for 's' or 'S' key
+    if (e.key !== 's' && e.key !== 'S') return;
+    const active = document.activeElement;
+    const tag = active ? active.tagName : '';
+    const isEditable = !!active && (
+      active.isContentEditable ||
+      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+      (active.classList && active.classList.contains('ag-cell-edit-input')) ||
+      (active.closest && (active.closest('.ag-cell-inline-editing') || active.closest('.ag-cell-editor')))
+    );
+    if (isEditable) return;
+    // Prevent browser's default save dialog
+    e.preventDefault();
+    emitEvent('kymflow_save_selected', {});
+  });
+})();
+            """
+        )
+
     def render(self, *, page_title: str) -> None:
         """Override render to create splitter layout at page level.
 
@@ -450,6 +505,7 @@ class HomePage(BasePage):
         build_header(self.context, dark_mode, drawer_toggle_callback=None)
         self._register_full_zoom_shortcut()
         self._register_next_prev_file_shortcuts()
+        self._register_save_selected_shortcut()
 
         # Add CSS for splitter handle container + small split handles
         ui.add_css("""
