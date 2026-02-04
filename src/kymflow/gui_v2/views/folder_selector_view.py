@@ -56,7 +56,9 @@ class FolderSelectorView:
         self._app_state = app_state
         self._user_config = user_config
         self._current_folder: Path | None = None
-        self._recent_ui_select: Optional[ui.select] = None
+        self._recent_menu: Optional[ui.menu] = None
+        self._recent_menu_button: Optional[ui.button] = None
+        self._menu_container: Optional[ui.element] = None
         self._choose_button: Optional[ui.button] = None
         self._open_file_button: Optional[ui.button] = None
         self._depth_input: Optional[ui.number] = None
@@ -67,37 +69,42 @@ class FolderSelectorView:
         bus.subscribe_state(SelectPathEvent, self._on_select_path_event)
         bus.subscribe(CancelSelectPathEvent, self._on_select_path_cancelled)
 
-    def _build_recent_options(self) -> dict[str, str]:
-        """Build recent folders/files options dict from UserConfig.
+    def _build_recent_menu_data(self) -> tuple[list[tuple[str, int]], list[str]]:
+        """Build recent folders/files data from UserConfig for menu building.
         
         Returns:
-            Dictionary mapping path strings to display strings (with icons).
+            Tuple of (folder_paths_with_depths, file_paths).
         """
-        recent_options: dict[str, str] = {}
+        folder_paths: list[tuple[str, int]] = []
+        file_paths: list[str] = []
         if self._user_config is not None:
-            recent_items = self._user_config.get_recent_folders()  # Now includes files
-            for path, _depth in recent_items:
-                path_obj = Path(path)
-                if path_obj.is_file():
-                    display_item = f"📄 {path}"
-                else:
-                    display_item = f"📂 {path}"
-                recent_options[path] = display_item
-        return recent_options
+            folder_paths = self._user_config.get_recent_folders()
+            file_paths = self._user_config.get_recent_files()
+        return (folder_paths, file_paths)
 
     def _on_recent_path_selected(self, new_path_selection: str) -> None:
-        """Handle recent folder/file selection from ui.select dropdown.
+        """Handle recent folder/file selection from menu item.
         
         Args:
-            new_path_selection: The new path selection from the ui.select dropdown.
+            new_path_selection: The path selected from the menu.
         """
-        if self._recent_ui_select is None:
-            return
-        
         if self._suppress_path_selection_emit:
             return
         
         if self._app_state.folder and str(self._app_state.folder) == new_path_selection:
+            return
+        
+        # Check if path exists
+        path_obj = Path(new_path_selection)
+        if not path_obj.exists():
+            # Show dialog and remove from config
+            self._show_missing_path_dialog(new_path_selection)
+            # Remove from UserConfig
+            if self._user_config is not None:
+                # Re-add to remove it (push_recent_path removes duplicates)
+                # Actually, we need a better way - let's just rebuild the menu
+                # For now, we'll let the next load clean it up
+                pass
             return
         
         if self._user_config is not None:
@@ -110,6 +117,24 @@ class FolderSelectorView:
             depth=depth,
             phase="intent",
         ))
+    
+    def _show_missing_path_dialog(self, path: str) -> None:
+        """Show dialog when selected path doesn't exist."""
+        with ui.dialog() as dialog, ui.card().classes("w-[520px]"):
+            ui.label("Item does not exist").classes("text-lg font-semibold")
+            ui.label(path).classes("text-sm break-all")
+            with ui.row().classes("justify-end w-full"):
+                ui.button("OK", on_click=dialog.close)
+        dialog.open()
+    
+    def _on_clear_recent(self) -> None:
+        """Clear all recent paths from UserConfig."""
+        if self._user_config is not None:
+            self._user_config.clear_recent_paths()
+            self._user_config.save()
+            # Rebuild menu to reflect cleared state
+            safe_call(self._rebuild_menu_if_needed)
+            ui.notify("Cleared recently opened items", type="info")
 
     async def _on_choose_folder(self) -> None:
         """Handle folder selection button click."""
@@ -200,32 +225,30 @@ class FolderSelectorView:
             initial_folder = self._app_state.folder if self._app_state.folder else Path.home()
         self._current_folder = initial_folder
 
-        self._recent_ui_select = None
+        self._recent_menu = None
+        self._recent_menu_button = None
         self._choose_button = None
         self._open_file_button = None
         self._depth_input = None
 
-        recent_options = self._build_recent_options()
-
-        _last_path, _lastDepth = self._user_config.get_last_folder() if self._user_config else (None, None)
-        initial_value = _last_path if (_last_path and _last_path in recent_options) else None
-
         with ui.row().classes("w-full items-center gap-2"):
-            # Recent folders dropdown
-            if recent_options:
-                self._recent_ui_select = ui.select(
-                    options=recent_options,
-                    label="Recent",
-                    value=initial_value,  # Only set if path is in options
-                    on_change=lambda e: self._on_recent_path_selected(e.value),
-                ).classes("min-w-64")
-            else:
-                self._recent_ui_select = ui.select(
-                    options={},
-                    label="Recent",
-                ).classes("min-w-64")
-                self._recent_ui_select.disable()
-                self._recent_ui_select.props("placeholder=No recent folders/files")
+            # Button and menu container - button must be created first, then menu
+            with ui.element("div").classes("inline-block") as menu_container:
+                self._menu_container = menu_container
+                # Create button first
+                self._recent_menu_button = ui.button(
+                    icon="menu",
+                    on_click=lambda: self._recent_menu.open() if self._recent_menu else None,
+                ).props("dense flat").classes("text-sm")
+                # self._recent_menu_button.tooltip("Recently opened folders and files")
+                
+                # Then create menu (will be positioned relative to button)
+                self._build_recent_menu()
+                
+                # Update button state based on available paths
+                folder_paths, file_paths = self._build_recent_menu_data()
+                if not folder_paths and not file_paths:
+                    self._recent_menu_button.disable()
             
             self._choose_button = ui.button("Open folder", on_click=self._on_choose_folder).props("dense").classes("text-sm")
             self._open_file_button = ui.button("Open file", on_click=self._on_open_file).props("dense").classes("text-sm")
@@ -235,6 +258,47 @@ class FolderSelectorView:
             self._depth_input.bind_value(self._app_state, "folder_depth")
         self._update_controls_state()
         self.set_folder_from_state()
+    
+    def _build_recent_menu(self) -> None:
+        """Build or rebuild the recent paths menu."""
+        folder_paths, file_paths = self._build_recent_menu_data()
+        
+        # Build menu first (needed for button callback)
+        with ui.menu() as menu:
+            self._recent_menu = menu
+            
+            # Folders header
+            header_folders = ui.menu_item("Folders")
+            header_folders.disable()
+            
+            # Folder items
+            for path, _depth in folder_paths:
+                ui.menu_item(
+                    path,
+                    lambda p=path: self._on_recent_path_selected(p),
+                )
+            
+            if folder_paths:
+                ui.separator()
+            
+            # Files header
+            header_files = ui.menu_item("Files")
+            header_files.disable()
+            
+            # File items
+            for path in file_paths:
+                ui.menu_item(
+                    path,
+                    lambda p=path: self._on_recent_path_selected(p),
+                )
+            
+            if file_paths:
+                ui.separator()
+            
+            # Clear option
+            ui.menu_item("Clear Recently Opened …", self._on_clear_recent)
+        
+        # Button state will be updated by caller
 
     def set_task_state(self, task_state: TaskStateChanged) -> None:
         """Update view for task state changes."""
@@ -249,15 +313,15 @@ class FolderSelectorView:
     def _update_controls_state(self) -> None:
         """Enable/disable folder controls based on task running state."""
         running = self._task_state.running if self._task_state else False
-        if self._recent_ui_select is not None:
+        if self._recent_menu_button is not None:
             if running:
-                self._recent_ui_select.disable()
+                self._recent_menu_button.disable()
             else:
-                options = getattr(self._recent_ui_select, "options", None)
-                if options:
-                    self._recent_ui_select.enable()
+                folder_paths, file_paths = self._build_recent_menu_data()
+                if folder_paths or file_paths:
+                    self._recent_menu_button.enable()
                 else:
-                    self._recent_ui_select.disable()
+                    self._recent_menu_button.disable()
         if self._choose_button is not None:
             if running:
                 self._choose_button.disable()
@@ -280,39 +344,56 @@ class FolderSelectorView:
             self._current_folder = self._app_state.folder
         elif self._current_folder is None:
             self._current_folder = Path.home()
-        if self._recent_ui_select is not None:
-            options = getattr(self._recent_ui_select, "options", None)
-            if options and str(self._current_folder) in options:
-                current_value = getattr(self._recent_ui_select, "value", None)
-                if current_value != str(self._current_folder):
-                    self._suppress_path_selection_emit = True
-                    try:
-                        self._recent_ui_select.set_value(str(self._current_folder))
-                    finally:
-                        self._suppress_path_selection_emit = False
+        # Menu doesn't have selected state, so no need to sync
     
     def _on_select_path_event(self, e: SelectPathEvent) -> None:
-        """Handle SelectPathEvent state event - sync dropdown to confirmed path."""
-        if self._recent_ui_select is not None:
-            recent_options = self._build_recent_options()
-            if recent_options:
-                self._recent_ui_select.set_options(recent_options)
-        
+        """Handle SelectPathEvent state event - rebuild menu with updated paths."""
+        safe_call(self._rebuild_menu_if_needed)
         safe_call(self.set_folder_from_state)
     
-    def _on_select_path_cancelled(self, e: CancelSelectPathEvent) -> None:
-        """Handle CancelSelectPathEvent - revert dropdown to previous path."""
-        if self._recent_ui_select is None:
+    def _rebuild_menu_if_needed(self) -> None:
+        """Rebuild the menu if it exists and paths have changed."""
+        if self._menu_container is None or self._recent_menu_button is None:
             return
         
-        previous_path = e.previous_path
-        if previous_path:
-            options = getattr(self._recent_ui_select, "options", None)
-            if options and previous_path in options:
-                current_value = getattr(self._recent_ui_select, "value", None)
-                if current_value != previous_path:
-                    self._suppress_path_selection_emit = True
-                    try:
-                        self._recent_ui_select.set_value(previous_path)
-                    finally:
-                        self._suppress_path_selection_emit = False
+        # Close menu if open to prevent auto-opening
+        try:
+            if self._recent_menu:
+                self._recent_menu.close()
+        except Exception:
+            pass
+        
+        # Rebuild menu (button stays, menu is recreated in same container)
+        try:
+            # Delete old menu element if it exists
+            if self._recent_menu is not None:
+                try:
+                    # Remove the old menu from DOM
+                    self._recent_menu.delete()
+                except Exception:
+                    pass
+            
+            # Recreate the menu in the SAME container context as the button
+            # This is critical for proper positioning
+            self._recent_menu = None
+            with self._menu_container:
+                self._build_recent_menu()
+            
+            # Update button callback to use new menu
+            if self._recent_menu:
+                self._recent_menu_button.on_click(lambda: self._recent_menu.open() if self._recent_menu else None)
+            
+            # Update button state
+            folder_paths, file_paths = self._build_recent_menu_data()
+            if not folder_paths and not file_paths:
+                self._recent_menu_button.disable()
+            else:
+                self._recent_menu_button.enable()
+            self._update_controls_state()
+        except Exception as exc:
+            logger.error(f"Failed to rebuild menu: {exc}", exc_info=True)
+    
+    def _on_select_path_cancelled(self, e: CancelSelectPathEvent) -> None:
+        """Handle CancelSelectPathEvent - menu doesn't have selected state."""
+        # Menu doesn't have selected state, so no need to revert
+        pass

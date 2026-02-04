@@ -36,7 +36,7 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     """
     
     logger.info('setting default_classes() and default_props()to specify style of all ui elements')
-    logger.info(f'  ui.button and ui.label ui.checkbox')
+    # logger.info(f'  ui.button and ui.label ui.checkbox')
     
     # logger.debug(f'app_config is:{app_config}')
 
@@ -46,7 +46,15 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     else:
         text_size = 'text-sm'
     
-    logger.debug(f'=== using text_size:{text_size}')
+    # map tailwind to quasar size
+    text_size_quasar = {
+        "text-xs": "xs",
+        "text-sm": "sm",
+        "text-base": "md",
+        "text-lg": "lg",
+    }[text_size]
+
+    # logger.debug(f'=== using text_size:"{text_size}" text_size_quasar:{text_size_quasar}')
 
     ui.label.default_classes(f"{text_size} select-text")  #  select-text allows double-click selection
     ui.label.default_props("dense")
@@ -55,7 +63,9 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     ui.button.default_props("dense")
     #
     ui.checkbox.default_classes(text_size)
-    ui.checkbox.default_props("dense")
+    ui.checkbox.default_props(f"dense size={text_size_quasar}")
+    # ui.checkbox.default_props("dense size=xs")
+    # .props('size=xs')
     #
     ui.select.default_classes(text_size)
     ui.select.default_props("dense")

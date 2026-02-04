@@ -22,7 +22,7 @@ def test_load_defaults_when_missing(tmp_path: Path) -> None:
     assert cfg.path == cfg_path
     assert cfg.data.schema_version == SCHEMA_VERSION
     assert cfg.get_recent_folders() == []
-    assert cfg.get_last_folder() == ("", DEFAULT_FOLDER_DEPTH)
+    assert cfg.get_last_path() == ("", DEFAULT_FOLDER_DEPTH)
     assert cfg.get_window_rect() == tuple(DEFAULT_WINDOW_RECT)
     assert cfg.get_home_splitter_positions() == (
         DEFAULT_HOME_FILE_PLOT_SPLITTER,
@@ -48,14 +48,20 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
     cfg = UserConfig.load(config_path=cfg_path)
 
-    cfg.push_recent_folder("/tmp/a", depth=2)
-    cfg.push_recent_folder("/tmp/b", depth=3)
+    # Create actual folders that exist
+    folder_a = tmp_path / "a"
+    folder_b = tmp_path / "b"
+    folder_a.mkdir()
+    folder_b.mkdir()
+
+    cfg.push_recent_path(folder_a, depth=2)
+    cfg.push_recent_path(folder_b, depth=3)
     cfg.set_window_rect(1, 2, 3, 4)
     cfg.set_home_splitter_positions(12.5, 61.0)
     cfg.save()
 
     cfg2 = UserConfig.load(config_path=cfg_path)
-    assert cfg2.get_last_folder() == (str(Path("/tmp/b").resolve(strict=False)), 3)
+    assert cfg2.get_last_path() == (str(folder_b.resolve(strict=False)), 3)
     recents = cfg2.get_recent_folders()
     assert len(recents) == 2
     assert recents[0][1] == 3
@@ -68,9 +74,9 @@ def test_push_recent_moves_to_front_and_updates_depth(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
     cfg = UserConfig.load(config_path=cfg_path)
 
-    cfg.push_recent_folder("/tmp/a", depth=2)
-    cfg.push_recent_folder("/tmp/b", depth=3)
-    cfg.push_recent_folder("/tmp/a", depth=5)  # move to front + update depth
+    cfg.push_recent_path("/tmp/a", depth=2)
+    cfg.push_recent_path("/tmp/b", depth=3)
+    cfg.push_recent_path("/tmp/a", depth=5)  # move to front + update depth
 
     recents = cfg.get_recent_folders()
     assert recents[0][0] == str(Path("/tmp/a").resolve(strict=False))
@@ -78,21 +84,21 @@ def test_push_recent_moves_to_front_and_updates_depth(tmp_path: Path) -> None:
     assert recents[1][0] == str(Path("/tmp/b").resolve(strict=False))
     assert recents[1][1] == 3
 
-    assert cfg.get_last_folder() == (str(Path("/tmp/a").resolve(strict=False)), 5)
+    assert cfg.get_last_path() == (str(Path("/tmp/a").resolve(strict=False)), 5)
 
 
-def test_set_last_folder_does_not_reorder_recents(tmp_path: Path) -> None:
+def test_set_last_path_does_not_reorder_recents(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
     cfg = UserConfig.load(config_path=cfg_path)
 
-    cfg.push_recent_folder("/tmp/a", depth=2)
-    cfg.push_recent_folder("/tmp/b", depth=3)
-    cfg.set_last_folder("/tmp/a", depth=9)
+    cfg.push_recent_path("/tmp/a", depth=2)
+    cfg.push_recent_path("/tmp/b", depth=3)
+    cfg.set_last_path("/tmp/a", depth=9)
 
     recents = cfg.get_recent_folders()
     assert recents[0][0] == str(Path("/tmp/b").resolve(strict=False))
     assert recents[1][0] == str(Path("/tmp/a").resolve(strict=False))
-    assert cfg.get_last_folder() == (str(Path("/tmp/a").resolve(strict=False)), 9)
+    assert cfg.get_last_path() == (str(Path("/tmp/a").resolve(strict=False)), 9)
 
 
 def test_get_depth_for_folder_falls_back_to_default(tmp_path: Path) -> None:
@@ -103,7 +109,7 @@ def test_get_depth_for_folder_falls_back_to_default(tmp_path: Path) -> None:
     cfg.set_default_folder_depth(7)
     assert cfg.get_depth_for_folder("/tmp/never_seen") == 7
 
-    cfg.push_recent_folder("/tmp/a", depth=2)
+    cfg.push_recent_path("/tmp/a", depth=2)
     assert cfg.get_depth_for_folder("/tmp/a") == 2
 
 
@@ -121,7 +127,7 @@ def test_get_depth_for_folder_with_file_path(tmp_path: Path) -> None:
     assert cfg.get_depth_for_folder(str(test_file)) == 0
     
     # Even if the file is in recent folders, it should return 0
-    cfg.push_recent_folder(str(test_file.parent), depth=3)
+    cfg.push_recent_path(str(test_file.parent), depth=3)
     assert cfg.get_depth_for_folder(test_file) == 0
 
 
@@ -139,17 +145,22 @@ def test_schema_mismatch_resets(tmp_path: Path) -> None:
 
     cfg = UserConfig.load(config_path=cfg_path, schema_version=SCHEMA_VERSION, reset_on_version_mismatch=True)
     assert cfg.get_recent_folders() == []
-    assert cfg.get_last_folder() == ("", DEFAULT_FOLDER_DEPTH)
+    assert cfg.get_last_path() == ("", DEFAULT_FOLDER_DEPTH)
     assert cfg.get_window_rect() == tuple(DEFAULT_WINDOW_RECT)
 
 
 def test_schema_mismatch_without_reset_keeps_data_but_updates_version(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
 
+    # Create actual folder that exists
+    folder_a = tmp_path / "a"
+    folder_a.mkdir()
+    folder_a_path = str(folder_a.resolve(strict=False))
+
     payload = {
         "schema_version": 999,
-        "recent_folders": [{"path": "/tmp/a", "depth": 2}],
-        "last_folder": {"path": "/tmp/a", "depth": 2},
+        "recent_folders": [{"path": folder_a_path, "depth": 2}],
+        "last_path": {"path": folder_a_path, "depth": 2},  # Use last_path (new API)
         "window_rect": [9, 9, 9, 9],
         "default_folder_depth": 4,
     }
@@ -157,7 +168,9 @@ def test_schema_mismatch_without_reset_keeps_data_but_updates_version(tmp_path: 
 
     cfg = UserConfig.load(config_path=cfg_path, schema_version=SCHEMA_VERSION, reset_on_version_mismatch=False)
     assert cfg.data.schema_version == SCHEMA_VERSION
-    assert cfg.get_recent_folders()[0][1] == 2
+    recents = cfg.get_recent_folders()
+    assert len(recents) > 0
+    assert recents[0][1] == 2
     assert cfg.get_window_rect() == (9, 9, 9, 9)
 
 
@@ -195,11 +208,11 @@ def test_prune_missing_folders(tmp_path: Path) -> None:
     # Add existing folder
     existing_folder = tmp_path / "existing"
     existing_folder.mkdir()
-    cfg.push_recent_folder(existing_folder, depth=1)
+    cfg.push_recent_path(existing_folder, depth=1)
     
     # Add non-existent folder
-    cfg.push_recent_folder("/tmp/nonexistent_folder_12345", depth=2)
-    cfg.set_last_folder("/tmp/another_nonexistent_67890", depth=3)
+    cfg.push_recent_path("/tmp/nonexistent_folder_12345", depth=2)
+    cfg.set_last_path("/tmp/another_nonexistent_67890", depth=3)
     
     assert len(cfg.get_recent_folders()) == 2
     
@@ -212,10 +225,10 @@ def test_prune_missing_folders(tmp_path: Path) -> None:
     assert len(recents) == 1
     assert str(existing_folder.resolve(strict=False)) in recents[0][0]
     
-    # Last folder should be cleared if it was missing
-    last_path, _ = cfg.get_last_folder()
+    # Last path should be cleared if it was missing
+    last_path, _ = cfg.get_last_path()
     if last_path:
-        # If last folder was missing, it should be empty now
+        # If last path was missing, it should be empty now
         assert Path(last_path).exists() or last_path == ""
 
 
@@ -321,3 +334,218 @@ def test_home_splitter_getter_setter(tmp_path: Path) -> None:
     file_plot3, plot_event3 = cfg2.get_home_splitter_positions()
     assert file_plot3 == 20.0
     assert plot_event3 == 60.0
+
+
+def test_push_recent_path_with_file(tmp_path: Path) -> None:
+    """Test push_recent_path() with file paths."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Create a test file
+    test_file = tmp_path / "test.tif"
+    test_file.touch()
+    
+    # Push file path (depth should be ignored, stored as 0)
+    cfg.push_recent_path(test_file, depth=5)
+    
+    # File should be in recent_files, not recent_folders
+    files = cfg.get_recent_files()
+    assert len(files) == 1
+    assert str(test_file.resolve(strict=False)) in files[0]
+    
+    folders = cfg.get_recent_folders()
+    assert len(folders) == 0
+    
+    # last_path should have depth=0 for files
+    last_path, last_depth = cfg.get_last_path()
+    assert last_path == str(test_file.resolve(strict=False))
+    assert last_depth == 0
+
+
+def test_push_recent_path_with_folder(tmp_path: Path) -> None:
+    """Test push_recent_path() with folder paths."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Create a test folder
+    test_folder = tmp_path / "test_folder"
+    test_folder.mkdir()
+    
+    # Push folder path with depth
+    cfg.push_recent_path(test_folder, depth=3)
+    
+    # Folder should be in recent_folders, not recent_files
+    folders = cfg.get_recent_folders()
+    assert len(folders) == 1
+    assert str(test_folder.resolve(strict=False)) in folders[0][0]
+    assert folders[0][1] == 3
+    
+    files = cfg.get_recent_files()
+    assert len(files) == 0
+    
+    # last_path should have the depth
+    last_path, last_depth = cfg.get_last_path()
+    assert last_path == str(test_folder.resolve(strict=False))
+    assert last_depth == 3
+
+
+def test_get_recent_files(tmp_path: Path) -> None:
+    """Test get_recent_files() method."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Create test files
+    file1 = tmp_path / "file1.tif"
+    file2 = tmp_path / "file2.tif"
+    file1.touch()
+    file2.touch()
+    
+    cfg.push_recent_path(file1, depth=0)
+    cfg.push_recent_path(file2, depth=0)
+    
+    files = cfg.get_recent_files()
+    assert len(files) == 2
+    # Most recent first - file2 was added last, so it should be first
+    assert files[0] == str(file2.resolve(strict=False))
+    assert files[1] == str(file1.resolve(strict=False))
+
+
+def test_path_existence_validation_on_load(tmp_path: Path) -> None:
+    """Test that missing paths are removed during load."""
+    cfg_path = tmp_path / "user_config.json"
+    
+    # Create existing folder and file
+    existing_folder = tmp_path / "existing_folder"
+    existing_folder.mkdir()
+    existing_file = tmp_path / "existing_file.tif"
+    existing_file.touch()
+    
+    # Create config with both existing and missing paths
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "recent_folders": [
+            {"path": str(existing_folder), "depth": 1},
+            {"path": "/tmp/nonexistent_folder_12345", "depth": 2},
+        ],
+        "recent_files": [
+            {"path": str(existing_file)},
+            {"path": "/tmp/nonexistent_file_67890.tif"},
+        ],
+        "last_path": {"path": str(existing_folder), "depth": 1},
+    }
+    cfg_path.write_text(json.dumps(payload), encoding="utf-8")
+    
+    # Load config - missing paths should be removed
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    folders = cfg.get_recent_folders()
+    assert len(folders) == 1
+    assert str(existing_folder.resolve(strict=False)) in folders[0][0]
+    
+    files = cfg.get_recent_files()
+    assert len(files) == 1
+    assert str(existing_file.resolve(strict=False)) in files[0]
+    
+    # last_path should still be valid
+    last_path, _ = cfg.get_last_path()
+    assert str(existing_folder.resolve(strict=False)) in last_path
+
+
+def test_push_recent_path_removes_duplicates(tmp_path: Path) -> None:
+    """Test that push_recent_path removes duplicates from both lists."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    test_folder = tmp_path / "test_folder"
+    test_folder.mkdir()
+    test_file = tmp_path / "test_file.tif"
+    test_file.touch()
+    
+    # Add folder, then add file
+    cfg.push_recent_path(test_folder, depth=2)
+    cfg.push_recent_path(test_file, depth=0)
+    
+    assert len(cfg.get_recent_folders()) == 1
+    assert len(cfg.get_recent_files()) == 1
+    
+    # Re-add folder - should move to front and remove from files if it was there
+    cfg.push_recent_path(test_folder, depth=3)
+    
+    folders = cfg.get_recent_folders()
+    assert len(folders) == 1
+    assert folders[0][1] == 3
+    
+    files = cfg.get_recent_files()
+    assert len(files) == 1  # File should still be there
+    
+    # Re-add file - should move to front
+    cfg.push_recent_path(test_file, depth=0)
+    
+    files2 = cfg.get_recent_files()
+    assert len(files2) == 1
+    assert str(test_file.resolve(strict=False)) in files2[0]
+
+
+def test_max_recents_limit_combined(tmp_path: Path) -> None:
+    """Test that MAX_RECENTS limit applies to combined folders + files."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Create test folders and files
+    for i in range(10):
+        folder = tmp_path / f"folder_{i}"
+        folder.mkdir()
+        cfg.push_recent_path(folder, depth=1)
+    
+    for i in range(10):
+        file = tmp_path / f"file_{i}.tif"
+        file.touch()
+        cfg.push_recent_path(file, depth=0)
+    
+    # Should be limited to MAX_RECENTS (15) total
+    folders = cfg.get_recent_folders()
+    files = cfg.get_recent_files()
+    assert len(folders) + len(files) <= 15
+
+
+def test_clear_recent_paths(tmp_path: Path) -> None:
+    """Test clear_recent_paths() method clears all paths and resets last_path."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Create test folders and files
+    test_folder = tmp_path / "test_folder"
+    test_folder.mkdir()
+    test_file = tmp_path / "test_file.tif"
+    test_file.touch()
+    
+    # Add paths
+    cfg.push_recent_path(test_folder, depth=2)
+    cfg.push_recent_path(test_file, depth=0)
+    cfg.set_last_path(test_folder, depth=2)
+    
+    # Verify paths exist
+    assert len(cfg.get_recent_folders()) == 1
+    assert len(cfg.get_recent_files()) == 1
+    last_path, last_depth = cfg.get_last_path()
+    assert last_path == str(test_folder.resolve(strict=False))
+    assert last_depth == 2
+    
+    # Clear all paths
+    cfg.clear_recent_paths()
+    
+    # Verify everything is cleared
+    assert len(cfg.get_recent_folders()) == 0
+    assert len(cfg.get_recent_files()) == 0
+    last_path_after, last_depth_after = cfg.get_last_path()
+    assert last_path_after == ""
+    assert last_depth_after == DEFAULT_FOLDER_DEPTH
+    
+    # Verify persistence
+    cfg.save()
+    cfg2 = UserConfig.load(config_path=cfg_path)
+    assert len(cfg2.get_recent_folders()) == 0
+    assert len(cfg2.get_recent_files()) == 0
+    last_path2, last_depth2 = cfg2.get_last_path()
+    assert last_path2 == ""
+    assert last_depth2 == DEFAULT_FOLDER_DEPTH

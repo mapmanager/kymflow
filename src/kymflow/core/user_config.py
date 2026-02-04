@@ -2,9 +2,10 @@
 """
 Per-user config persistence for kymflow (platformdirs + JSON).
 
-Persisted items (schema v1):
-- recent_folders: list[{path, depth}]  (each path has an associated folder_depth)
-- last_folder: {path, depth}
+Persisted items (schema v2):
+- recent_folders: list[{path, depth}]  (folders only, each path has an associated folder_depth)
+- recent_files: list[{path}]          (files only, no depth)
+- last_path: {path, depth}             (most recently opened path, file or folder)
 - window_rect: [x, y, w, h]            (native window geometry)
 - default_folder_depth: int            (fallback for unseen folders)
 
@@ -34,7 +35,7 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Increment when you make a breaking change to the on-disk JSON schema.
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 
 # Defaults
 DEFAULT_FOLDER_DEPTH: int = 1
@@ -68,7 +69,12 @@ class RecentFolder:
 
 
 @dataclass
-class LastFolder:
+class RecentFile:
+    path: str
+
+
+@dataclass
+class LastPath:
     path: str = ""
     depth: int = DEFAULT_FOLDER_DEPTH
 
@@ -85,7 +91,8 @@ class UserConfigData:
     schema_version: int = SCHEMA_VERSION
 
     recent_folders: List[RecentFolder] = field(default_factory=list)
-    last_folder: LastFolder = field(default_factory=LastFolder)
+    recent_files: List[RecentFile] = field(default_factory=list)
+    last_path: LastPath = field(default_factory=LastPath)
 
     # Native window geometry: [x, y, w, h]
     window_rect: List[int] = field(default_factory=lambda: list(DEFAULT_WINDOW_RECT))
@@ -125,8 +132,19 @@ class UserConfigData:
                         depth_int = DEFAULT_FOLDER_DEPTH
                     recent_folders.append(RecentFolder(path=path, depth=depth_int))
 
-        # last_folder
-        last_raw = d.get("last_folder", {})
+        # recent_files
+        recent_files_raw = d.get("recent_files", [])
+        recent_files: List[RecentFile] = []
+        if isinstance(recent_files_raw, list):
+            for item in recent_files_raw:
+                if not isinstance(item, dict):
+                    continue
+                path = item.get("path")
+                if isinstance(path, str) and path.strip():
+                    recent_files.append(RecentFile(path=path))
+
+        # last_path (backward compatible with last_folder)
+        last_raw = d.get("last_path", d.get("last_folder", {}))
         last_path = ""
         last_depth = DEFAULT_FOLDER_DEPTH
         if isinstance(last_raw, dict):
@@ -170,7 +188,8 @@ class UserConfigData:
         return cls(
             schema_version=schema_version,
             recent_folders=recent_folders,
-            last_folder=LastFolder(path=last_path, depth=last_depth),
+            recent_files=recent_files,
+            last_path=LastPath(path=last_path, depth=last_depth),
             window_rect=window_rect,
             default_folder_depth=default_folder_depth,
             home_file_plot_splitter=home_file_plot_splitter,
@@ -260,24 +279,84 @@ class UserConfig:
 
     @staticmethod
     def _normalize_loaded_paths(data: UserConfigData) -> None:
-        # Normalize recent (dedupe, limit)
-        norm_recent: List[RecentFolder] = []
-        seen: set[str] = set()
+        # Normalize recent_folders (validate existence, dedupe, limit)
+        norm_recent_folders: List[RecentFolder] = []
+        seen_folders: set[str] = set()
+        removed_folders: List[str] = []
         for rf in data.recent_folders:
             p = _normalize_folder_path(rf.path)
-            if p in seen:
+            if p in seen_folders:
                 continue
-            seen.add(p)
-            norm_recent.append(RecentFolder(path=p, depth=int(rf.depth)))
-        data.recent_folders = norm_recent[:MAX_RECENTS]
-
-        # Normalize last
-        if data.last_folder.path.strip():
-            data.last_folder.path = _normalize_folder_path(data.last_folder.path)
+            seen_folders.add(p)
+            # Check if path exists
             try:
-                data.last_folder.depth = int(data.last_folder.depth)
+                path_obj = Path(p).expanduser()
+                if not path_obj.exists() or not path_obj.is_dir():
+                    removed_folders.append(p)
+                    continue
             except Exception:
-                data.last_folder.depth = DEFAULT_FOLDER_DEPTH
+                removed_folders.append(p)
+                continue
+            norm_recent_folders.append(RecentFolder(path=p, depth=int(rf.depth)))
+        if removed_folders:
+            logger.info(f"Removed {len(removed_folders)} missing folder paths from recent_folders")
+        data.recent_folders = norm_recent_folders
+
+        # Normalize recent_files (validate existence, dedupe, limit)
+        norm_recent_files: List[RecentFile] = []
+        seen_files: set[str] = set()
+        removed_files: List[str] = []
+        for rf in data.recent_files:
+            p = _normalize_folder_path(rf.path)
+            if p in seen_files:
+                continue
+            seen_files.add(p)
+            # Check if path exists
+            try:
+                path_obj = Path(p).expanduser()
+                if not path_obj.exists() or not path_obj.is_file():
+                    removed_files.append(p)
+                    continue
+            except Exception:
+                removed_files.append(p)
+                continue
+            norm_recent_files.append(RecentFile(path=p))
+        if removed_files:
+            logger.info(f"Removed {len(removed_files)} missing file paths from recent_files")
+        data.recent_files = norm_recent_files
+
+        # Apply MAX_RECENTS limit to combined total
+        combined = len(data.recent_folders) + len(data.recent_files)
+        if combined > MAX_RECENTS:
+            # Trim from oldest (end of lists)
+            excess = combined - MAX_RECENTS
+            # Remove from folders first, then files
+            if len(data.recent_folders) > 0:
+                folders_to_remove = min(excess, len(data.recent_folders))
+                data.recent_folders = data.recent_folders[:-folders_to_remove]
+                excess -= folders_to_remove
+            if excess > 0 and len(data.recent_files) > 0:
+                files_to_remove = min(excess, len(data.recent_files))
+                data.recent_files = data.recent_files[:-files_to_remove]
+
+        # Normalize last_path
+        if data.last_path.path.strip():
+            p = _normalize_folder_path(data.last_path.path)
+            # Check if path exists
+            try:
+                path_obj = Path(p).expanduser()
+                if not path_obj.exists():
+                    logger.info(f"Removed missing last_path: {p}")
+                    data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
+                else:
+                    data.last_path.path = p
+                    try:
+                        data.last_path.depth = int(data.last_path.depth)
+                    except Exception:
+                        data.last_path.depth = DEFAULT_FOLDER_DEPTH
+            except Exception:
+                logger.info(f"Removed invalid last_path: {p}")
+                data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
 
         # Normalize window rect
         if not (isinstance(data.window_rect, list) and len(data.window_rect) == 4):
@@ -323,45 +402,92 @@ class UserConfig:
     # -----------------------------
     # Public API: folders/recents
     # -----------------------------
-    def push_recent_folder(self, folder_path: str | Path, *, depth: int) -> None:
+    def push_recent_path(self, path: str | Path, *, depth: int) -> None:
         """
-        Add/update a folder in the recents list, with associated depth.
-        Also updates last_folder.
+        Add/update a path (folder or file) in the recents list.
+        - Files go to recent_files (depth ignored, stored as 0)
+        - Folders go to recent_folders (with depth)
+        Also updates last_path.
         """
-        p = _normalize_folder_path(folder_path)
+        p = _normalize_folder_path(path)
+        path_obj = Path(p)
         depth_int = int(depth)
 
-        self.data.last_folder = LastFolder(path=p, depth=depth_int)
+        # Determine if path is file or folder
+        is_file = path_obj.is_file()
+        
+        if is_file:
+            # File: add to recent_files, remove from both lists first
+            self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
+            self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
+            self.data.recent_files.insert(0, RecentFile(path=p))
+            # Update last_path with depth=0 for files
+            self.data.last_path = LastPath(path=p, depth=0)
+        else:
+            # Folder: add to recent_folders, remove from both lists first
+            self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
+            self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
+            self.data.recent_folders.insert(0, RecentFolder(path=p, depth=depth_int))
+            # Update last_path with actual depth
+            self.data.last_path = LastPath(path=p, depth=depth_int)
 
-        # Remove existing occurrence, insert at front, trim.
-        self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
-        self.data.recent_folders.insert(0, RecentFolder(path=p, depth=depth_int))
-        self.data.recent_folders = self.data.recent_folders[:MAX_RECENTS]
+        # Apply MAX_RECENTS limit to combined total
+        combined = len(self.data.recent_folders) + len(self.data.recent_files)
+        if combined > MAX_RECENTS:
+            excess = combined - MAX_RECENTS
+            # Trim from oldest (end of lists)
+            if len(self.data.recent_folders) > 0:
+                folders_to_remove = min(excess, len(self.data.recent_folders))
+                self.data.recent_folders = self.data.recent_folders[:-folders_to_remove]
+                excess -= folders_to_remove
+            if excess > 0 and len(self.data.recent_files) > 0:
+                files_to_remove = min(excess, len(self.data.recent_files))
+                self.data.recent_files = self.data.recent_files[:-files_to_remove]
 
     def prune_missing_folders(self) -> int:
-        """Remove recent/last folders that no longer exist on disk."""
+        """Remove recent/last paths that no longer exist on disk."""
         removed = 0
-        kept: List[RecentFolder] = []
+        
+        # Prune missing folders
+        kept_folders: List[RecentFolder] = []
         for rf in self.data.recent_folders:
             try:
-                exists = Path(rf.path).expanduser().exists()
+                path_obj = Path(rf.path).expanduser()
+                exists = path_obj.exists() and path_obj.is_dir()
             except Exception:
                 exists = False
             if exists:
-                kept.append(rf)
+                kept_folders.append(rf)
             else:
                 removed += 1
         if removed:
-            self.data.recent_folders = kept
+            self.data.recent_folders = kept_folders
 
-        last_path = self.data.last_folder.path
+        # Prune missing files
+        kept_files: List[RecentFile] = []
+        for rf in self.data.recent_files:
+            try:
+                path_obj = Path(rf.path).expanduser()
+                exists = path_obj.exists() and path_obj.is_file()
+            except Exception:
+                exists = False
+            if exists:
+                kept_files.append(rf)
+            else:
+                removed += 1
+        if kept_files != self.data.recent_files:
+            self.data.recent_files = kept_files
+
+        # Check last_path
+        last_path = self.data.last_path.path
         if last_path:
             try:
-                last_exists = Path(last_path).expanduser().exists()
+                path_obj = Path(last_path).expanduser()
+                last_exists = path_obj.exists()
             except Exception:
                 last_exists = False
             if not last_exists:
-                self.data.last_folder = LastFolder(path="", depth=DEFAULT_FOLDER_DEPTH)
+                self.data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
                 removed += 1
 
         return removed
@@ -370,9 +496,13 @@ class UserConfig:
         """Return recent folders as list of (path, depth)."""
         return [(rf.path, int(rf.depth)) for rf in self.data.recent_folders]
 
-    def get_last_folder(self) -> Tuple[str, int]:
+    def get_recent_files(self) -> List[str]:
+        """Return recent files as list of paths."""
+        return [rf.path for rf in self.data.recent_files]
+
+    def get_last_path(self) -> Tuple[str, int]:
         """Return (last_path, last_depth)."""
-        return (self.data.last_folder.path, int(self.data.last_folder.depth))
+        return (self.data.last_path.path, int(self.data.last_path.depth))
 
     def get_depth_for_folder(self, folder_path: str | Path) -> int:
         """
@@ -416,10 +546,16 @@ class UserConfig:
     def set_default_folder_depth(self, depth: int) -> None:
         self.data.default_folder_depth = int(depth)
 
-    def set_last_folder(self, folder_path: str | Path, *, depth: int) -> None:
-        """Update last_folder without reordering recents."""
-        p = _normalize_folder_path(folder_path)
-        self.data.last_folder = LastFolder(path=p, depth=int(depth))
+    def set_last_path(self, path: str | Path, *, depth: int) -> None:
+        """Update last_path without reordering recents."""
+        p = _normalize_folder_path(path)
+        self.data.last_path = LastPath(path=p, depth=int(depth))
+
+    def clear_recent_paths(self) -> None:
+        """Clear all recent folders and files, and reset last_path."""
+        self.data.recent_folders = []
+        self.data.recent_files = []
+        self.data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
 
     # -----------------------------
     # Public API: window geometry

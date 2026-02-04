@@ -183,7 +183,7 @@ class FileTableView:
         rows_unchanged = rows == self._pending_rows
         self._pending_rows = rows
         if rows_unchanged and self._grid is not None:
-            logger.debug("FileTableView.set_files: rows unchanged; skip refresh")
+            # logger.debug("FileTableView.set_files: rows unchanged; skip refresh")
             return
         if self._grid is not None:
             self._grid.set_data(rows)

@@ -106,7 +106,7 @@ class FolderController:
         
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
-            self._user_config.push_recent_folder(str(new_path), depth=config_depth)
+            self._user_config.push_recent_path(str(new_path), depth=config_depth)
         
         # Emit state event to confirm successful load
         self._bus.emit(SelectPathEvent(
@@ -128,7 +128,7 @@ class FolderController:
         self._app_state.load_folder(path, depth=depth)
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
-            self._user_config.push_recent_folder(str(path), depth=config_depth)
+            self._user_config.push_recent_path(str(path), depth=config_depth)
 
     def _show_unsaved_dialog(self, new_path: Path, previous_path_str: str | None, original_depth: int | None) -> None:
         """Prompt before switching paths if unsaved changes exist.
@@ -198,7 +198,7 @@ class FolderController:
         
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
-            self._user_config.push_recent_folder(str(path), depth=config_depth)
+            self._user_config.push_recent_path(str(path), depth=config_depth)
         
         # Emit state event to confirm successful load
         self._bus.emit(SelectPathEvent(

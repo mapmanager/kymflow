@@ -133,7 +133,7 @@ class ImageLineViewerView:
 
     def _create_plot(self, fig: go.Figure) -> None:
         """Create a fresh plot element inside the current container."""
-        logger.debug(f'=== this may be overkill')
+        # logger.debug(f'=== this may be overkill')
         # Plotly element stretches to container height for splitter resize support.
         self._plot = ui.plotly(fig).classes("w-full h-full")
         # Stable DOM id for JS access (dragmode toggling).

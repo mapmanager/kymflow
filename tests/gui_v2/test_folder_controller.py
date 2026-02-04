@@ -164,7 +164,7 @@ def test_folder_controller_does_not_persist_missing_folder(
         with patch("kymflow.gui_v2.controllers.folder_controller.ui.notify"):
             bus.emit(SelectPathEvent(new_path="/missing/folder", depth=None, phase="intent"))
 
-    user_config.push_recent_folder.assert_not_called()
+    user_config.push_recent_path.assert_not_called()
     # Should emit CancelSelectPathEvent with previous_path
     assert len(emitted_events) == 1
     assert isinstance(emitted_events[0], CancelSelectPathEvent)
@@ -188,7 +188,7 @@ def test_folder_controller_persists_valid_folder_after_guard(
 
                 assert app_state.folder_depth == 7
                 mock_load.assert_called_once_with(folder_path_obj, depth=7)
-                user_config.push_recent_folder.assert_called_once_with(folder_path, depth=7)
+                user_config.push_recent_path.assert_called_once_with(folder_path, depth=7)
 
 
 def test_folder_controller_handles_file_path(
@@ -213,7 +213,7 @@ def test_folder_controller_handles_file_path(
             # Should call load_folder with depth=0 for files
             mock_load.assert_called_once_with(test_file, depth=0)
             # Should persist with depth=0
-            user_config.push_recent_folder.assert_called_once_with(str(test_file), depth=0)
+            user_config.push_recent_path.assert_called_once_with(str(test_file), depth=0)
 
 
 def test_folder_controller_uses_depth_from_event(
@@ -235,4 +235,4 @@ def test_folder_controller_uses_depth_from_event(
                 # Should update folder_depth and use it
                 assert app_state.folder_depth == 5
                 mock_load.assert_called_once_with(folder_path_obj, depth=5)
-                user_config.push_recent_folder.assert_called_once_with(folder_path, depth=5)
+                user_config.push_recent_path.assert_called_once_with(folder_path, depth=5)

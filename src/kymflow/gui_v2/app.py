@@ -169,7 +169,7 @@ def home() -> None:
             ))
         else:
             # Try to load last folder from user config
-            last_path, last_depth = context.user_config.get_last_folder()
+            last_path, last_depth = context.user_config.get_last_path()
             if last_path:
                 last_folder_path = Path(last_path)
                 if last_folder_path.exists():

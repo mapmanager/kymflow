@@ -141,7 +141,7 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
     
     # Set up user config with last folder
     app_module.context.app_state.folder = None
-    app_module.context.user_config.push_recent_folder(str(tmp_path), depth=2)
+    app_module.context.user_config.push_recent_path(str(tmp_path), depth=2)
     app_module.context.user_config.save()
 
     app_module.home()
@@ -180,7 +180,7 @@ def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Pat
     config_folder = tmp_path / "config"
     config_folder.mkdir()
     app_module.context.app_state.folder = None
-    app_module.context.user_config.push_recent_folder(str(config_folder), depth=3)
+    app_module.context.user_config.push_recent_path(str(config_folder), depth=3)
     app_module.context.user_config.save()
 
     app_module.home()
@@ -254,10 +254,10 @@ def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
     app_module.context.app_state.folder = None
     # Explicitly reset last_folder to empty (simulating fresh config)
     # Directly set the data to avoid normalization issues with empty string
-    from kymflow.core.user_config import LastFolder, DEFAULT_FOLDER_DEPTH
-    app_module.context.user_config.data.last_folder = LastFolder(path="", depth=DEFAULT_FOLDER_DEPTH)
+    from kymflow.core.user_config import LastPath, DEFAULT_FOLDER_DEPTH
+    app_module.context.user_config.data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
     # Verify config has no last folder
-    last_path, _ = app_module.context.user_config.get_last_folder()
+    last_path, _ = app_module.context.user_config.get_last_path()
     assert last_path == ""
 
     app_module.home()

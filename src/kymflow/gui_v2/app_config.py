@@ -157,8 +157,8 @@ class AppConfig:
                 logger.warning(f"App config file at {path} does not contain a dict, using defaults")
                 return cls(path=path, data=default_data)
 
-            logger.info(f"Loading app config from: {path}")
-            logger.debug(f"Loaded app config dict: {parsed}")
+            # logger.info(f"Loading app config from: {path}")
+            # logger.debug(f"Loaded app config dict: {parsed}")
 
             loaded = AppConfigData.from_json_dict(parsed)
 
@@ -174,7 +174,7 @@ class AppConfig:
                 loaded.schema_version = int(schema_version)
 
             cls._normalize_loaded_data(loaded)
-            logger.info(f"App config loaded successfully: {loaded.to_json_dict()}")
+            # logger.info(f"App config loaded successfully: {loaded.to_json_dict()}")
             return cls(path=path, data=loaded)
 
         except FileNotFoundError:
