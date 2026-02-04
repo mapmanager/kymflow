@@ -240,3 +240,163 @@ def test_notification_dismissed_programmatic_vs_user(kym_event_view: KymEventVie
     kym_event_view._on_notification_dismissed(MagicMock())
     assert cancel_call_count == 1
     assert kym_event_view._range_notification is None
+
+
+def test_event_filter_initialization(kym_event_view: KymEventView) -> None:
+    """Test that event filter is initialized with all types enabled."""
+    # Verify default filter state
+    assert kym_event_view._event_filter == {
+        "baseline_drop": True,
+        "baseline_rise": True,
+        "nan_gap": True,
+        "zero_gap": True,
+        "User Added": True,
+    }
+    assert kym_event_view._on_event_filter_changed is None
+
+
+def test_on_event_type_filter_changed_updates_filter(kym_event_view: KymEventView) -> None:
+    """Test that _on_event_type_filter_changed updates filter and calls callback."""
+    callback_calls: list[dict[str, bool]] = []
+
+    def on_filter_changed(filter: dict[str, bool]) -> None:
+        callback_calls.append(filter)
+
+    kym_event_view._on_event_filter_changed = on_filter_changed
+
+    # Set up some test rows
+    kym_event_view._all_rows = [
+        {"event_id": "1", "roi_id": 1, "event_type": "baseline_drop", "t_start": 0.0},
+        {"event_id": "2", "roi_id": 1, "event_type": "baseline_rise", "t_start": 1.0},
+        {"event_id": "3", "roi_id": 1, "event_type": "nan_gap", "t_start": 2.0},
+    ]
+
+    # Mock grid
+    mock_grid = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Toggle baseline_drop to False
+    kym_event_view._on_event_type_filter_changed("baseline_drop", False)
+
+    # Verify filter was updated
+    assert kym_event_view._event_filter["baseline_drop"] is False
+    assert kym_event_view._event_filter["baseline_rise"] is True  # Unchanged
+
+    # Verify callback was called with updated filter
+    assert len(callback_calls) == 1
+    assert callback_calls[0]["baseline_drop"] is False
+
+    # Verify grid was updated (filtered rows)
+    assert mock_grid.set_data.called
+    call_args = mock_grid.set_data.call_args[0][0]
+    # Should only include baseline_rise and nan_gap (baseline_drop filtered out)
+    assert len(call_args) == 2
+    event_types = {row["event_type"] for row in call_args}
+    assert "baseline_rise" in event_types
+    assert "nan_gap" in event_types
+    assert "baseline_drop" not in event_types
+
+
+def test_apply_filter_filters_by_event_type(kym_event_view: KymEventView) -> None:
+    """Test that _apply_filter filters rows by event_type."""
+    # Set up test rows with different event types
+    kym_event_view._all_rows = [
+        {"event_id": "1", "roi_id": 1, "event_type": "baseline_drop", "t_start": 0.0},
+        {"event_id": "2", "roi_id": 1, "event_type": "baseline_rise", "t_start": 1.0},
+        {"event_id": "3", "roi_id": 1, "event_type": "nan_gap", "t_start": 2.0},
+        {"event_id": "4", "roi_id": 1, "event_type": "zero_gap", "t_start": 3.0},
+        {"event_id": "5", "roi_id": 1, "event_type": "User Added", "t_start": 4.0},
+    ]
+
+    # Set filter to show only baseline_drop and baseline_rise
+    kym_event_view._event_filter = {
+        "baseline_drop": True,
+        "baseline_rise": True,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+
+    # Mock grid
+    mock_grid = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Apply filter
+    kym_event_view._apply_filter()
+
+    # Verify grid was updated with filtered rows
+    assert mock_grid.set_data.called
+    filtered_rows = mock_grid.set_data.call_args[0][0]
+    assert len(filtered_rows) == 2
+    event_types = {row["event_type"] for row in filtered_rows}
+    assert "baseline_drop" in event_types
+    assert "baseline_rise" in event_types
+    assert "nan_gap" not in event_types
+    assert "zero_gap" not in event_types
+    assert "User Added" not in event_types
+
+
+def test_apply_filter_combines_roi_and_event_type_filters(kym_event_view: KymEventView) -> None:
+    """Test that _apply_filter combines ROI filter and event type filter."""
+    # Set up test rows with different ROIs and event types
+    kym_event_view._all_rows = [
+        {"event_id": "1", "roi_id": 1, "event_type": "baseline_drop", "t_start": 0.0},
+        {"event_id": "2", "roi_id": 1, "event_type": "baseline_rise", "t_start": 1.0},
+        {"event_id": "3", "roi_id": 2, "event_type": "baseline_drop", "t_start": 2.0},
+        {"event_id": "4", "roi_id": 2, "event_type": "baseline_rise", "t_start": 3.0},
+    ]
+
+    # Set ROI filter to ROI 1
+    kym_event_view._roi_filter = 1
+
+    # Set event type filter to show only baseline_drop
+    kym_event_view._event_filter = {
+        "baseline_drop": True,
+        "baseline_rise": False,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+
+    # Mock grid
+    mock_grid = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Apply filter
+    kym_event_view._apply_filter()
+
+    # Verify grid was updated with filtered rows (ROI 1 AND baseline_drop)
+    assert mock_grid.set_data.called
+    filtered_rows = mock_grid.set_data.call_args[0][0]
+    assert len(filtered_rows) == 1
+    assert filtered_rows[0]["roi_id"] == 1
+    assert filtered_rows[0]["event_type"] == "baseline_drop"
+
+
+def test_apply_filter_with_all_event_types_disabled(kym_event_view: KymEventView) -> None:
+    """Test that _apply_filter returns empty list when all event types are disabled."""
+    kym_event_view._all_rows = [
+        {"event_id": "1", "roi_id": 1, "event_type": "baseline_drop", "t_start": 0.0},
+        {"event_id": "2", "roi_id": 1, "event_type": "baseline_rise", "t_start": 1.0},
+    ]
+
+    # Disable all event types
+    kym_event_view._event_filter = {
+        "baseline_drop": False,
+        "baseline_rise": False,
+        "nan_gap": False,
+        "zero_gap": False,
+        "User Added": False,
+    }
+
+    # Mock grid
+    mock_grid = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Apply filter
+    kym_event_view._apply_filter()
+
+    # Verify grid was updated with empty list
+    assert mock_grid.set_data.called
+    filtered_rows = mock_grid.set_data.call_args[0][0]
+    assert len(filtered_rows) == 0

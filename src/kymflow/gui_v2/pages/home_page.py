@@ -694,6 +694,8 @@ class HomePage(BasePage):
                             current_roi = self.context.app_state.selected_roi_id
                             if current_roi is not None:
                                 self._event_view.set_selected_roi(current_roi)
+                            # Wire up event filter callback to refresh plot
+                            self._event_view._on_event_filter_changed = lambda filter: self._image_line_viewer.set_event_filter(filter)
 
                         # Draw a small visual handle on the nested splitter separator.
                         with plot_splitter.separator:

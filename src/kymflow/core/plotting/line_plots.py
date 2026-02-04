@@ -600,6 +600,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
     row: int,
     span_sec_if_no_end: float = 0.20,
     selected_event_id: Optional[str] = None,
+    event_filter: Optional[dict[str, bool]] = None,
 ) -> None:
     """Add velocity event overlays as rectangles on a line plot subplot.
     
@@ -611,8 +612,12 @@ def _add_velocity_event_overlays(  # pragma: no cover
         row: Subplot row number (1-based).
         span_sec_if_no_end: Fixed width in seconds when t_end is None (default: 0.20).
         selected_event_id: Optional event_id to highlight with a border (default: None).
+        event_filter: Optional dict mapping event_type (str) to bool (True = include, False = exclude).
     """
-    velocity_events = kym_analysis.get_velocity_events(roi_id)
+    if event_filter is None:
+        velocity_events = kym_analysis.get_velocity_events(roi_id)
+    else:
+        velocity_events = kym_analysis.get_velocity_events_filtered(roi_id, event_filter)
     # logger.warning(f'adding velocity events for roi {roi_id}: {len(velocity_events)}')
     if velocity_events is None or len(velocity_events) == 0:
         logger.warning(f'no velocity events for roi {roi_id}')
@@ -952,6 +957,7 @@ def plot_image_line_plotly_v3(
     transpose: bool = False,
     span_sec_if_no_end: float = 0.20,
     selected_event_id: Optional[str] = None,
+    event_filter: Optional[dict[str, bool]] = None,
     # x_axis_callback: Optional[Callable[[XAxisCallback], None]] = None,
 ) -> go.Figure:
     """Create a figure with kymograph image and one or more line plots for multiple ROIs.
@@ -976,6 +982,7 @@ def plot_image_line_plotly_v3(
         transpose: If True, transpose the image display
         span_sec_if_no_end: Fixed width in seconds for velocity events when t_end is None
                            (default: 0.20)
+        event_filter: Optional dict mapping event_type (str) to bool (True = include, False = exclude).
 
     Returns:
         Plotly Figure with image subplot and one or more line plot subplots with
@@ -1140,6 +1147,7 @@ def plot_image_line_plotly_v3(
                         row_num,
                         span_sec_if_no_end,
                         selected_event_id=selected_event_id,
+                        event_filter=event_filter,
                     )
 
     # Build complete layout configuration once

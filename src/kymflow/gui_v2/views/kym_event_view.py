@@ -151,6 +151,15 @@ class KymEventView:
         self._get_current_selected_file_path: Callable[[], str | None] | None = None  # Callback to get current selected file path
         self._pending_event_selection_after_file_change: str | None = None  # Track event_id to preserve when file change clears selection
         self._file_selection_originated_from_view: str | None = None  # Track file path when we emit FileSelection to prevent unnecessary refreshes
+        # Event type filter state: dict mapping event_type (str) to bool (True = show, False = hide)
+        self._event_filter: dict[str, bool] = {
+            "baseline_drop": True,
+            "baseline_rise": True,
+            "nan_gap": True,
+            "zero_gap": True,
+            "User Added": True,
+        }
+        self._on_event_filter_changed: Callable[[dict[str, bool]], None] | None = None  # Callback for plot refresh
 
     def render(self) -> None:
         """Create the grid UI inside the current container."""
@@ -191,6 +200,30 @@ class KymEventView:
                 with ui.row().classes("w-full gap-1"):
                     self._all_files_checkbox = ui.checkbox("All Files", value=self._show_all_files).on_value_change(
                         lambda e: self.set_all_files_mode(bool(e.value))
+                    ).props("dense").classes('text-sm')
+
+                # Event type filter checkboxes
+                with ui.row().classes("w-full gap-1"):
+                    ui.label("Event Types").classes("text-sm text-gray-500")
+                with ui.row().classes("w-full gap-1"):
+                    self._baseline_drop_checkbox = ui.checkbox("Baseline Drop", value=self._event_filter["baseline_drop"]).on_value_change(
+                        lambda e: self._on_event_type_filter_changed("baseline_drop", bool(e.value))
+                    ).props("dense").classes('text-sm')
+                with ui.row().classes("w-full gap-1"):
+                    self._baseline_rise_checkbox = ui.checkbox("Baseline Rise", value=self._event_filter["baseline_rise"]).on_value_change(
+                        lambda e: self._on_event_type_filter_changed("baseline_rise", bool(e.value))
+                    ).props("dense").classes('text-sm')
+                with ui.row().classes("w-full gap-1"):
+                    self._nan_gap_checkbox = ui.checkbox("NaN Gap", value=self._event_filter["nan_gap"]).on_value_change(
+                        lambda e: self._on_event_type_filter_changed("nan_gap", bool(e.value))
+                    ).props("dense").classes('text-sm')
+                with ui.row().classes("w-full gap-1"):
+                    self._zero_gap_checkbox = ui.checkbox("Zero Gap", value=self._event_filter["zero_gap"]).on_value_change(
+                        lambda e: self._on_event_type_filter_changed("zero_gap", bool(e.value))
+                    ).props("dense").classes('text-sm')
+                with ui.row().classes("w-full gap-1"):
+                    self._user_added_checkbox = ui.checkbox("User Added", value=self._event_filter["User Added"]).on_value_change(
+                        lambda e: self._on_event_type_filter_changed("User Added", bool(e.value))
                     ).props("dense").classes('text-sm')
 
                 with ui.row().classes("w-full gap-1"):
@@ -258,6 +291,15 @@ class KymEventView:
 
     def _set_zoom_pad_sec(self, value: float) -> None:
         self._zoom_pad_sec = value
+
+    def _on_event_type_filter_changed(self, event_type: str, enabled: bool) -> None:
+        """Handle event type filter checkbox change."""
+        self._event_filter[event_type] = enabled
+        # Refresh ag grid with new filter
+        self._apply_filter()
+        # Notify plot to refresh if callback is set
+        if self._on_event_filter_changed is not None:
+            self._on_event_filter_changed(self._event_filter)
 
     def set_events(
         self, rows: Iterable[dict[str, object]], *, select_event_id: str | None = None, skip_if_originated: bool = False
@@ -357,7 +399,7 @@ class KymEventView:
         self._apply_filter(skip_if_originated=skip_refresh)
 
     def _apply_filter(self, *, skip_if_originated: bool = False) -> None:
-        """Apply ROI filter and update grid data.
+        """Apply ROI filter and event type filter, then update grid data.
         
         Args:
             skip_if_originated: If True and we originated a FileSelection, skip set_data to preserve column state.
@@ -365,12 +407,18 @@ class KymEventView:
         if skip_if_originated and self._file_selection_originated_from_view is not None:
             # We originated a FileSelection, don't refresh grid to preserve column sort/width
             return
+        # First filter by ROI
         if self._roi_filter is None:
             rows = list(self._all_rows)
         else:
             rows = [
                 row for row in self._all_rows if row.get("roi_id") == self._roi_filter
             ]
+        # Then filter by event_type
+        rows = [
+            row for row in rows
+            if self._event_filter.get(row.get("event_type"), True) is True
+        ]
         self._pending_rows = rows
         if self._grid is not None:
             # logger.debug('  === calling grid self._grid.set_data(rows)')

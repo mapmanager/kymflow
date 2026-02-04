@@ -104,6 +104,7 @@ class ImageLineViewerView:
         self._range_path: Optional[str] = None
         self._pending_range_zoom: Optional[tuple[float, float]] = None
         self._selected_event_id: str | None = None  # Track selected event for visual highlighting
+        self._event_filter: Optional[dict[str, bool]] = None  # Event type filter state
         
         # ROI edit selection state
         self._awaiting_roi_edit: bool = False
@@ -534,6 +535,15 @@ class ImageLineViewerView:
         if file == self._current_file:
             self._render_combined()
 
+    def set_event_filter(self, event_filter: dict[str, bool] | None) -> None:
+        """Set event type filter and refresh plot.
+        
+        Args:
+            event_filter: Dict mapping event_type (str) to bool (True = include, False = exclude),
+                         or None to clear filter.
+        """
+        self._event_filter = event_filter
+        self._render_combined()
 
     def _render_combined(self) -> None:
         """Render the combined image and line plot."""
@@ -579,6 +589,7 @@ class ImageLineViewerView:
             transpose=True,
             plot_rois=plot_rois,
             selected_event_id=self._selected_event_id,
+            event_filter=self._event_filter,
         )
         # Store original unfiltered y-values for partial updates
         if kf is not None and roi_id is not None:

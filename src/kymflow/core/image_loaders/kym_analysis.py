@@ -1065,6 +1065,29 @@ class KymAnalysis:
         """
         return self._velocity_events.get(roi_id)
 
+    def get_velocity_events_filtered(
+        self, roi_id: int, event_filter: dict[str, bool]
+    ) -> Optional[list[VelocityEvent]]:
+        """Return filtered velocity event results for roi_id.
+
+        Args:
+            roi_id: Identifier of the ROI.
+            event_filter: Dict mapping event_type (str) to bool (True = include, False = exclude).
+
+        Returns:
+            Filtered list of VelocityEvent instances, or None if velocity event analysis
+            has not been run for this ROI (or results were not loaded).
+        """
+        events = self._velocity_events.get(roi_id)
+        if events is None:
+            return None
+        # Filter events where event_filter.get(event.event_type, True) is True
+        # Default to True if event_type not in filter (show by default)
+        return [
+            event for event in events
+            if event_filter.get(event.event_type, True) is True
+        ]
+
     def _velocity_event_id(self, roi_id: int, event: VelocityEvent) -> str:
         """Generate a stable event_id for a velocity event.
         

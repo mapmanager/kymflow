@@ -716,6 +716,150 @@ class TestKymAnalysisVelocityEvents:
             assert orig.t_start == loaded.t_start
             assert orig.machine_type == loaded.machine_type
 
+    def test_get_velocity_events_filtered_returns_none_when_not_run(self) -> None:
+        """Test that get_velocity_events_filtered returns None when analysis not run."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=False)
+        kym_analysis = kym_image.get_kym_analysis()
+
+        event_filter = {"baseline_drop": True, "baseline_rise": True}
+        events = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=event_filter)
+        assert events is None
+
+    @pytest.mark.requires_data
+    def test_get_velocity_events_filtered_filters_by_event_type(self, test_data_dir: Path) -> None:
+        """Test that get_velocity_events_filtered filters events by event_type."""
+        if not test_data_dir.exists():
+            pytest.skip("Test data directory does not exist")
+
+        tif_file = test_data_dir / "Capillary1_0001.tif"
+        if not tif_file.exists():
+            pytest.skip("Capillary1_0001.tif not found in test data")
+
+        kym_image = KymImage(tif_file, load_image=False)
+        kym_analysis = kym_image.get_kym_analysis()
+
+        if not kym_analysis.has_analysis(roi_id=1):
+            pytest.skip("No analysis data available for ROI 1")
+
+        # Run velocity event analysis to generate events
+        all_events = kym_analysis.run_velocity_event_analysis(
+            roi_id=1,
+            baseline_drop_params=BaselineDropParams(top_k_total=5),
+        )
+
+        if len(all_events) == 0:
+            pytest.skip("No events detected for testing")
+
+        # Get all events (unfiltered)
+        stored_events = kym_analysis.get_velocity_events(roi_id=1)
+        assert stored_events is not None
+
+        # Count events by type
+        event_types = [e.event_type for e in stored_events]
+        unique_types = set(event_types)
+
+        # Test filtering: show only baseline_drop
+        filter_drop_only = {
+            "baseline_drop": True,
+            "baseline_rise": False,
+            "nan_gap": False,
+            "zero_gap": False,
+            "User Added": False,
+        }
+        filtered_drop = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=filter_drop_only)
+        assert filtered_drop is not None
+        assert all(e.event_type == "baseline_drop" for e in filtered_drop)
+        assert len(filtered_drop) <= len(stored_events)
+
+        # Test filtering: show only baseline_rise (if any exist)
+        if "baseline_rise" in unique_types:
+            filter_rise_only = {
+                "baseline_drop": False,
+                "baseline_rise": True,
+                "nan_gap": False,
+                "zero_gap": False,
+                "User Added": False,
+            }
+            filtered_rise = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=filter_rise_only)
+            assert filtered_rise is not None
+            assert all(e.event_type == "baseline_rise" for e in filtered_rise)
+
+        # Test filtering: show multiple types
+        filter_multiple = {
+            "baseline_drop": True,
+            "baseline_rise": True,
+            "nan_gap": False,
+            "zero_gap": False,
+            "User Added": False,
+        }
+        filtered_multiple = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=filter_multiple)
+        assert filtered_multiple is not None
+        assert all(e.event_type in ("baseline_drop", "baseline_rise") for e in filtered_multiple)
+
+        # Test filtering: all disabled (should return empty list)
+        filter_all_disabled = {
+            "baseline_drop": False,
+            "baseline_rise": False,
+            "nan_gap": False,
+            "zero_gap": False,
+            "User Added": False,
+        }
+        filtered_none = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=filter_all_disabled)
+        assert filtered_none is not None
+        assert len(filtered_none) == 0
+
+        # Test filtering: all enabled (should return all events)
+        filter_all_enabled = {
+            "baseline_drop": True,
+            "baseline_rise": True,
+            "nan_gap": True,
+            "zero_gap": True,
+            "User Added": True,
+        }
+        filtered_all = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=filter_all_enabled)
+        assert filtered_all is not None
+        assert len(filtered_all) == len(stored_events)
+
+    def test_get_velocity_events_filtered_with_partial_filter(self) -> None:
+        """Test that get_velocity_events_filtered works with partial filter dict."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=False)
+        kym_analysis = kym_image.get_kym_analysis()
+
+        # Create test events with different types
+        event1 = VelocityEvent(
+            event_type="baseline_drop",
+            i_start=0,
+            t_start=0.0,
+        )
+        event2 = VelocityEvent(
+            event_type="baseline_rise",
+            i_start=10,
+            t_start=0.1,
+        )
+        event3 = VelocityEvent(
+            event_type="nan_gap",
+            i_start=20,
+            t_start=0.2,
+        )
+        kym_analysis._velocity_events[1] = [event1, event2, event3]
+
+        # Filter with only some event types specified (others default to True)
+        partial_filter = {
+            "baseline_drop": False,
+            "baseline_rise": True,
+            # nan_gap not in filter, should default to True
+        }
+        filtered = kym_analysis.get_velocity_events_filtered(roi_id=1, event_filter=partial_filter)
+        assert filtered is not None
+        # Should include baseline_rise (True) and nan_gap (defaults to True), exclude baseline_drop (False)
+        assert len(filtered) == 2
+        event_types = {e.event_type for e in filtered}
+        assert "baseline_rise" in event_types
+        assert "nan_gap" in event_types
+        assert "baseline_drop" not in event_types
+
     @pytest.mark.requires_data
     def test_velocity_events_with_different_parameters(self, test_data_dir: Path) -> None:
         """Test that different detect_events parameters produce different results."""
