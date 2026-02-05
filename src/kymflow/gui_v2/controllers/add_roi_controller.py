@@ -42,8 +42,9 @@ class AddRoiController:
 
         try:
             # Create ROI with default full-image bounds (bounds=None)
+            logger.debug(f'adding roi to {kym_file.path}')
             roi = kym_file.rois.create_roi()
-            logger.debug("AddRoi: created roi_id=%s", roi.id)
+            logger.debug("  created roi_id=%s", roi.id)
 
             # Select the newly created ROI
             self._app_state.select_roi(roi.id)

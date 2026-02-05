@@ -27,7 +27,7 @@ def _expand_path(path: Union[str, Path]) -> Path:
 
 
 def setup_logging(
-    level: Union[str, int] = "INFO",
+    level: Union[str, int] = "DEBUG",
     log_file: Optional[Union[str, Path]] = "~/.kymflow/logs/kymflow.log",
     max_bytes: int = 5_000_000,
     backup_count: int = 5,

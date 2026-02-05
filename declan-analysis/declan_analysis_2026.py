@@ -113,8 +113,8 @@ def analyze_flow(path: str, depth:int) -> None:
         logger.info(f'=== {_idx+1}/{len(kymList)}: {kymImage.path}')
 
         # Delete any existing ROIs (start fresh)
-        deleted_count = kymImage.rois.clear()
-        logger.info(f"Deleted {deleted_count} existing ROI(s)")
+        # deleted_count = kymImage.rois.clear()
+        # logger.info(f"Deleted {deleted_count} existing ROI(s)")
 
         # ensure img data is loaded
         kymImage.load_channel(channel=1)
@@ -154,9 +154,10 @@ if __name__ == "__main__":
     path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download'
     
     # just one condition
-    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download/14d Saline'
+    # path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/box-download/14d Saline'
 
-    # analyze_flow(path, depth)
+    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v1-analysis'
+    analyze_flow(path, depth)
 
     # depreciated 20260130
     # analyze_stalls(path)
@@ -165,4 +166,4 @@ if __name__ == "__main__":
     
     # plot_analysis(path)
 
-    test_import_v0()
+    # test_import_v0()
