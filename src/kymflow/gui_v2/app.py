@@ -144,7 +144,7 @@ def home() -> None:
     # abb 20260205
     # Install once per session, delayed slightly so native window exists.
     from kymflow.gui_v2.poll_window_rect import install_native_rect_polling
-    ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
+    # ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
 
     #
     # global css styles
@@ -305,12 +305,18 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
 
     if native:
         x, y, w, h = context.user_config.get_window_rect()
-        window_size = (w, h)
+        logger.info(f'20260205 window_rect: {x}, {y}, {w}, {h}')
+        if w<100 or h<100:
+            logger.error(f'20260205 window_rect is too small: {w}, {h}')
+            window_size = None
+        else:
+            window_size = (w, h)
     else:
         window_size = None
 
     # Register minimal shutdown handlers to persist configs (window_rect is updated by poller).
-    install_shutdown_handlers(context, native=native)
+    # declan
+    # install_shutdown_handlers(context, native=native)
 
     ui.run(
         port=DEFAULT_PORT,

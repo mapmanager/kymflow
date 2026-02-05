@@ -515,7 +515,7 @@ class KymAnalysis:
         
         # Check if path is available
         if self.acq_image.path is None:
-            logger.warning(f'path is none -> happend when loaded with synth data in pytest')
+            logger.warning(f'path is none -> happens when loaded with synth data in pytest')
             return
     
         # old velocity is in folder <parent folder>-analysis,like "20251014-analysis"

@@ -17,10 +17,10 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection, SaveAll, SaveSelected
 from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
-from kymflow.gui_v2.views.folder_picker import _prompt_for_directory_pywebview, _prompt_for_file_pywebview
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.user_config import UserConfig
+from kymflow.gui_v2.folder_picker import _prompt_for_directory_pywebview, _prompt_for_file_pywebview
 
 logger = get_logger(__name__)
 
@@ -122,7 +122,9 @@ class FolderSelectorView:
         if self._suppress_path_selection_emit:
             return
         
+        logger.info(f'new_path_selection:{new_path_selection}')
         if self._app_state.folder and str(self._app_state.folder) == new_path_selection:
+            logger.info(f'  -->> reject ... is the same as the current folder: {new_path_selection}')
             return
         
         # Check if path exists
@@ -266,6 +268,7 @@ class FolderSelectorView:
 
         with ui.row().classes("w-full items-center gap-2"):
             # Left side: existing controls
+            
             # Button and menu container - button must be created first, then menu
             with ui.element("div").classes("inline-block") as menu_container:
                 self._menu_container = menu_container
@@ -313,6 +316,12 @@ class FolderSelectorView:
         """Build or rebuild the recent paths menu."""
         folder_paths, file_paths = self._build_recent_menu_data()
         
+        # Get current paths from app state for comparison
+        current_folder_path = str(self._app_state.folder) if self._app_state.folder else None
+        current_file_path = None
+        if self._app_state.selected_file and hasattr(self._app_state.selected_file, "path"):
+            current_file_path = str(self._app_state.selected_file.path)
+
         # Build menu first (needed for button callback)
         with ui.menu() as menu:
             self._recent_menu = menu
@@ -323,8 +332,10 @@ class FolderSelectorView:
             
             # Folder items
             for path, _depth in folder_paths:
+                is_current = (current_folder_path == path)
+                prefix = "✓ " if is_current else "  "
                 ui.menu_item(
-                    path,
+                    f"{prefix} {path}",
                     lambda p=path: self._on_recent_path_selected(p),
                 )
             
@@ -338,8 +349,10 @@ class FolderSelectorView:
             
             # File items
             for path in file_paths:
+                is_current = (current_file_path == path)
+                prefix = "✓ " if is_current else "  "
                 ui.menu_item(
-                    path,
+                    f"{prefix} {path}",
                     lambda p=path: self._on_recent_path_selected(p),
                 )
             

@@ -83,8 +83,10 @@ class FolderController:
         current_path = str(self._app_state.folder) if self._app_state.folder else None
 
         if not (is_file or is_folder):
+            logger.error(f'Path does not exist: "{new_path}"')
             ui.notify(f"Path does not exist: {new_path}", type="warning")
             if current_path:
+                logger.debug(f'emitting CancelSelectPathEvent for previous path: "{current_path}"')
                 self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
             return
         
@@ -121,6 +123,8 @@ class FolderController:
             if main_window is not None:
                 logger.debug(f'=== setting window title to "{title}"')
                 main_window.set_title(title)
+            else:
+                logger.error(f'=== main_window is None for title:{title}')
         
         # import asyncio
         # _size = ui.run().io(app.native.main_window.get_size())

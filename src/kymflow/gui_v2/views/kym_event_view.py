@@ -263,6 +263,7 @@ class KymEventView:
             # height="16rem",
             row_id_field="event_id",
             show_row_index=True,
+            # row_index_width=60,  # Wider to fit index >= 100
             zebra_rows=False,
             hover_highlight=False,
         )

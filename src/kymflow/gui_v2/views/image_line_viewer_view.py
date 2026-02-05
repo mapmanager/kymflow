@@ -165,11 +165,11 @@ class ImageLineViewerView:
 
         payload: Dict[str, Any] = e.args  # <-- dict
 
-        logger.debug('=== in on_relayout() plotly_relayout received:')
-        logger.debug(f"  awaiting_range={self._awaiting_kym_event_range}, awaiting_roi_edit={self._awaiting_roi_edit}") 
-        logger.debug('  payload:')
-        from pprint import pprint
-        pprint(payload)
+        # logger.debug('=== in on_relayout() plotly_relayout received:')
+        # logger.debug(f"  awaiting_range={self._awaiting_kym_event_range}, awaiting_roi_edit={self._awaiting_roi_edit}") 
+        # logger.debug('  payload:')
+        # from pprint import pprint
+        # pprint(payload)
 
         x0, x1, y0, y1 = None, None, None, None  # default to no selection
         if 'selections[0].x0' in payload.keys():
