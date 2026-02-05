@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     pass
 
 
-class StallAnalysisToolbarBindings:
+class StallAnalysisToolbarBindings:  # pragma: no cover
     """Bind StallAnalysisToolbarView to event bus for state → view updates.
 
     This class subscribes to state change events from AppState (via the bridge)

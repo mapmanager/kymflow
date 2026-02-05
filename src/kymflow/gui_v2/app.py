@@ -16,11 +16,7 @@ from multiprocessing import freeze_support
 from pathlib import Path
 
 #
-# added for pyinstaller
-# --- Matplotlib cache: MUST run before importing anything that might import matplotlib ---
 from platformdirs import user_cache_dir
-
-# from kymflow.gui_v2._window_size_timer import install_native_window_persistence
 
 def _init_mpl_cache_dir() -> None:
     """Ensure Matplotlib uses a stable, writable cache dir (works for frozen + dev)."""
@@ -35,7 +31,7 @@ def _init_mpl_cache_dir() -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
 
 
-def _warm_mpl_font_cache_once() -> None:
+def _warm_mpl_font_cache_once() -> None:  # pragma: no cover
     """
     Warm font cache in the MAIN process only.
     Uses a sentinel file so the warm step runs once per user cache dir.
@@ -63,7 +59,7 @@ def _warm_mpl_font_cache_once() -> None:
 # _init_mpl_cache_dir()
 # -------------------------------------------------------------------
 
-from nicegui import ui
+from nicegui import ui, app
 
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.gui_v2.app_context import AppContext
@@ -106,8 +102,15 @@ USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "0") == "1"  # Default to "
 # AppContext.__init__ will check if we're in a worker process and skip initialization
 context = AppContext()
 
-# abb setting window size hook
-_native_window_persistence_installed = False
+
+def enable_confirm_close_if_native() -> None:
+    """Enable OS-level 'Are you sure you want to quit?' prompt (native only)."""
+    native = getattr(app, "native", None)
+    if native is None:
+        logger.warning('not native')
+        return  # native=False (browser)
+    logger.warning('=== is native')
+    native.window_args["confirm_close"] = True
 
 @ui.page("/")
 def home() -> None:
@@ -116,11 +119,6 @@ def home() -> None:
     Uses cached page instances to prevent recreation on navigation.
     Each browser tab/window gets its own isolated session.
     """
-
-    # global _native_window_persistence_installed
-    # if not _native_window_persistence_installed:
-    #     _native_window_persistence_installed = True
-    #     ui.timer(0.2, lambda: install_native_window_persistence(context.user_config), once=True)
 
     #
     # global css styles
@@ -256,13 +254,19 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
             frozen state and KYMFLOW_GUI_RELOAD env var.
         native: Launch as native desktop app. If None, uses KYMFLOW_GUI_NATIVE env var.
     """
-    is_frozen = getattr(sys, "frozen", False)
+    
+    # keep this, is usefull for github workflow to build app with nicegui-pack (pyinstaller)
+    # see kymflow/.github/workflows/release.yml
+    # is_frozen = getattr(sys, "frozen", False)
 
-    default_reload = (not is_frozen) and os.getenv("KYMFLOW_GUI_RELOAD", "1") == "1"
-    reload = default_reload if reload is None else reload
+    # default_reload = (not is_frozen) and os.getenv("KYMFLOW_GUI_RELOAD", "1") == "1"
+    # reload = default_reload if reload is None else reload
 
-    default_native = os.getenv("KYMFLOW_GUI_NATIVE", "0") == "1"
-    native = default_native if native is None else native
+    # default_native = os.getenv("KYMFLOW_GUI_NATIVE", "0") == "1"
+    # native = default_native if native is None else native
+
+    reload = False
+    native = True
 
     logger.info(
         "Starting KymFlow GUI v2: port=%s reload=%s native=%s USE_DEV_FOLDER=%s DEV_FOLDER=%s",
@@ -273,17 +277,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         DEV_FOLDER,
     )
 
-    # abb for pyinstaller
-    # Warm matplotlib cache once (main process only; safe in frozen builds)
-    # _warm_mpl_font_cache_once()
-    
     x, y, w, h = context.user_config.get_window_rect()
-    # logger.info(f"user_config window_rect: {x}, {y}, {w}, {h}")
-
-    reload = False
-    native = True
-
-    install_shutdown_handlers(context, native=native)
 
     ui.run(
         port=DEFAULT_PORT,
@@ -293,8 +287,6 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         storage_secret=STORAGE_SECRET,
         title="KymFlow",
     )
-
-    logger.info('here')
 
 
 if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:

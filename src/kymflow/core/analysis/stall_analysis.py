@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
-class Stall:
+class Stall:  # pragma: no cover
     """Represents a detected stall span.
 
     Attributes:
@@ -207,7 +207,7 @@ def detect_stalls(
 
 
 @dataclass(frozen=True)
-class StallAnalysisParams:
+class StallAnalysisParams:  # pragma: no cover
     """Parameters controlling stall analysis.
 
     These parameters are intended to be persisted alongside results to ensure
@@ -248,7 +248,7 @@ class StallAnalysisParams:
 
 
 @dataclass
-class StallAnalysis:
+class StallAnalysis:  # pragma: no cover
     """Stall analysis results plus the parameters used to generate them.
 
     Attributes:

@@ -73,44 +73,6 @@ async def _prompt_for_directory_pywebview(initial: Path) -> Optional[str]:
         return None
 
 
-def _prompt_for_directory_tk(initial: Path) -> Optional[str]:
-    """Fallback tkinter folder dialog."""
-    try:
-        import tkinter as tk  # type: ignore
-        from tkinter import filedialog
-    except Exception:
-        return None
-
-    root = None
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        selection = filedialog.askdirectory(initialdir=str(initial))
-    except Exception:
-        return None
-    finally:
-        if root is not None:
-            try:
-                root.destroy()
-            except Exception:
-                pass
-    return selection or None
-
-
-def prompt_for_directory(initial: Path) -> Optional[str]:
-    """Pick a folder path.
-
-    Order:
-        1) pywebview dialog if available (native mode)
-        2) tkinter fallback (browser/server mode)
-    """
-    selection = _prompt_for_directory_pywebview(initial)
-    if selection:
-        return selection
-    return _prompt_for_directory_tk(initial)
-
-
 async def _prompt_for_file_pywebview(initial: Path) -> Optional[str]:
     """Open native file picker dialog using pywebview (NiceGUI native mode).
     
