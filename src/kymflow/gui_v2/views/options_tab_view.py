@@ -12,6 +12,8 @@ from nicegui import ui
 
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.app_config import AppConfig
+from kymflow.gui_v2.app_context import AppContext
+from kymflow.gui_v2.shutdown_handlers import save_all_configs
 
 logger = get_logger(__name__)
 
@@ -19,18 +21,29 @@ logger = get_logger(__name__)
 class OptionsTabView:
     """Options tab view component (app configuration editor)."""
 
-    def __init__(self, app_config: AppConfig) -> None:
+    def __init__(self, app_config: AppConfig, context: AppContext) -> None:
         """Initialize options tab view.
 
         Args:
             app_config: AppConfig instance to read/write settings.
+            context: AppContext instance for saving configs.
         """
         self._app_config = app_config
+        self._context = context
 
     def render(self) -> None:
         """Create the Options tab UI inside the current container."""
         ui.label("App Settings").classes("text-lg font-semibold")
-        ui.label("Changes require app restart to take effect.").classes("text-sm text-gray-500 mb-4")
+        ui.label("Changes require app restart to take effect.").classes("text-sm text-gray-500 mb-2")
+        
+        # Save Settings button at top
+        ui.button(
+            "Save Settings",
+            on_click=self._on_save_settings,
+            icon="save"
+        ).classes("mb-4")
+        
+        ui.separator().classes("mb-4")
 
         # Get all fields with metadata
         fields_info = self._app_config.get_all_fields_with_metadata()
@@ -148,3 +161,15 @@ class OptionsTabView:
         except (AttributeError, ValueError) as e:
             logger.error(f"Failed to update app config '{field_name}': {e}")
             ui.notify(f"Invalid value for {field_name}: {e}", type="negative")
+
+    def _on_save_settings(self) -> None:
+        """Handle Save Settings button click - saves both user_config and app_config."""
+        try:
+            success = save_all_configs(self._context)
+            if success:
+                ui.notify("Settings saved successfully", type="positive")
+            else:
+                ui.notify("Some settings failed to save. Check logs for details.", type="warning")
+        except Exception as e:
+            logger.exception("Failed to save settings")
+            ui.notify(f"Failed to save settings: {e}", type="negative")

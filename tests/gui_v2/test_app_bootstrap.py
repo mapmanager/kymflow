@@ -13,7 +13,6 @@ import pytest
 from nicegui import app, ui
 
 from kymflow.gui_v2.events_folder import SelectPathEvent
-from kymflow.gui_v2.shutdown_handlers import _capture_native_window_rect
 from kymflow.core.user_config import UserConfig
 
 
@@ -194,11 +193,9 @@ def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Pat
     assert emitted.phase == "intent"
 
 
-@pytest.mark.skip(reason="removed _warm_mpl_font_cache_once")
 def test_main_registers_shutdown_handlers(monkeypatch) -> None:
     """main() should register shutdown handlers before ui.run()."""
     app_module = _load_app_module(monkeypatch)
-    monkeypatch.setattr(app_module, "_warm_mpl_font_cache_once", lambda: None)
     monkeypatch.setattr(app_module, "DEFAULT_PORT", 9999)
 
     install_mock = MagicMock()
@@ -208,27 +205,6 @@ def test_main_registers_shutdown_handlers(monkeypatch) -> None:
     app_module.main(native=True)
 
     install_mock.assert_called_once_with(app_module.context, native=True)
-
-
-@pytest.mark.asyncio
-async def test_shutdown_captures_native_window_rect(monkeypatch, tmp_path: Path) -> None:
-    """Ensure native window rect is captured on shutdown."""
-    cfg_path = tmp_path / "user_config.json"
-    cfg = UserConfig.load(config_path=cfg_path)
-    context = SimpleNamespace(user_config=cfg)
-
-    class DummyWindow:
-        async def get_size(self):
-            return (1200, 800)
-
-        async def get_position(self):
-            return (10, 20)
-
-    monkeypatch.setattr(app.native, "main_window", DummyWindow())
-
-    await _capture_native_window_rect(context)
-
-    assert cfg.get_window_rect() == (10, 20, 1200, 800)
 
 
 def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:

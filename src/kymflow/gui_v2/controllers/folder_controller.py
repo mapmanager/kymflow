@@ -114,8 +114,13 @@ class FolderController:
         else:
             title = f'KymFlow - {new_path.name}/'
         
-        logger.debug(f'=== setting window title to "{title}"')
-        app.native.main_window.set_title(title)
+        # Only set window title in native mode
+        native = getattr(app, "native", None)
+        if native is not None:
+            main_window = getattr(native, "main_window", None)
+            if main_window is not None:
+                logger.debug(f'=== setting window title to "{title}"')
+                main_window.set_title(title)
         
         # import asyncio
         # _size = ui.run().io(app.native.main_window.get_size())

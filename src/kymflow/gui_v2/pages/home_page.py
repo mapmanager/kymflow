@@ -178,7 +178,7 @@ class HomePage(BasePage):
             self._drawer_metadata_header_view,
         )
         self._drawer_about_tab_view = AboutTabView()
-        self._drawer_options_tab_view = OptionsTabView(context.app_config)
+        self._drawer_options_tab_view = OptionsTabView(context.app_config, context)
         # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
             analysis_toolbar_view=self._drawer_analysis_toolbar_view,

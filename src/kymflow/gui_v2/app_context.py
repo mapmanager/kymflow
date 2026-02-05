@@ -43,7 +43,9 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     # Get text_size from app_config, fallback to default
     if app_config is not None:
         text_size = app_config.get_attribute('text_size')
+        logger.debug(f'  app_config.get_attribute("text_size") is: {text_size}')
     else:
+        logger.debug('  no app_config, default text_size is "text-sm"')
         text_size = 'text-sm'
     
     # map tailwind to quasar size

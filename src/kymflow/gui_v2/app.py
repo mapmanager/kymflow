@@ -291,8 +291,8 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
     # default_native = os.getenv("KYMFLOW_GUI_NATIVE", "0") == "1"
     # native = default_native if native is None else native
 
-    reload = False
     native = True
+    reload = False
 
     logger.info(
         "Starting KymFlow GUI v2: port=%s reload=%s native=%s USE_DEV_FOLDER=%s DEV_FOLDER=%s",
@@ -303,13 +303,20 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         DEV_FOLDER,
     )
 
-    x, y, w, h = context.user_config.get_window_rect()
+    if native:
+        x, y, w, h = context.user_config.get_window_rect()
+        window_size = (w, h)
+    else:
+        window_size = None
+
+    # Register minimal shutdown handlers to persist configs (window_rect is updated by poller).
+    install_shutdown_handlers(context, native=native)
 
     ui.run(
         port=DEFAULT_PORT,
         reload=reload,
         native=native,
-        window_size=(w, h),
+        window_size=window_size,
         storage_secret=STORAGE_SECRET,
         title="KymFlow",
     )
