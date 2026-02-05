@@ -1044,3 +1044,369 @@ def test_hit_test_rois() -> None:
     
     logger.info("  - hit_test_rois() works correctly")
 
+
+def test_roi_calculate_image_stats() -> None:
+    """Test ROI.calculate_image_stats() method."""
+    logger.info("Testing ROI.calculate_image_stats()")
+    
+    # Create test image with known values
+    test_image = np.array([
+        [10, 20, 30, 40],
+        [50, 60, 70, 80],
+        [90, 100, 110, 120],
+        [130, 140, 150, 160]
+    ], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI covering region [1:3, 1:3] = [[60, 70], [100, 110]]
+    bounds = RoiBounds(dim0_start=1, dim0_stop=3, dim1_start=1, dim1_stop=3)
+    roi = ROI(id=1, channel=1, z=0, bounds=bounds)
+    
+    # Calculate stats
+    roi.calculate_image_stats(acq_image)
+    
+    # Verify stats
+    # ROI region [1:3, 1:3] = [[60, 70], [100, 110]]
+    # Values: 60, 70, 100, 110
+    assert roi.img_min == 60
+    assert roi.img_max == 110
+    assert roi.img_mean == pytest.approx(85.0, abs=0.01)  # (60+70+100+110)/4 = 85.0
+    # Std: sqrt(((60-85)^2 + (70-85)^2 + (100-85)^2 + (110-85)^2)/4) ≈ 20.6155
+    assert roi.img_std == pytest.approx(20.6155, abs=0.1)
+    
+    logger.info("  - ROI.calculate_image_stats() works correctly")
+
+
+def test_roi_calculate_image_stats_full_image() -> None:
+    """Test ROI.calculate_image_stats() with full-image ROI."""
+    logger.info("Testing ROI.calculate_image_stats() with full-image ROI")
+    
+    # Create test image
+    test_image = np.array([
+        [0, 50, 100],
+        [150, 200, 255]
+    ], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create full-image ROI
+    bounds = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=3)
+    roi = ROI(id=1, channel=1, z=0, bounds=bounds)
+    
+    # Calculate stats
+    roi.calculate_image_stats(acq_image)
+    
+    # Verify stats for full image
+    # Image: [[0, 50, 100], [150, 200, 255]]
+    # All values: 0, 50, 100, 150, 200, 255
+    assert roi.img_min == 0
+    assert roi.img_max == 255
+    # Mean: (0+50+100+150+200+255)/6 = 755/6 ≈ 125.833
+    assert roi.img_mean == pytest.approx(125.833, abs=0.1)
+    
+    logger.info("  - ROI.calculate_image_stats() works correctly for full-image ROI")
+
+
+def test_roi_calculate_image_stats_single_pixel() -> None:
+    """Test ROI.calculate_image_stats() with single-pixel ROI."""
+    logger.info("Testing ROI.calculate_image_stats() with single-pixel ROI")
+    
+    test_image = np.array([[10, 20, 30], [40, 50, 60]], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Single pixel ROI
+    bounds = RoiBounds(dim0_start=1, dim0_stop=2, dim1_start=1, dim1_stop=2)
+    roi = ROI(id=1, channel=1, z=0, bounds=bounds)
+    
+    roi.calculate_image_stats(acq_image)
+    
+    # For single pixel, min=max=mean, std=0
+    assert roi.img_min == 50
+    assert roi.img_max == 50
+    assert roi.img_mean == 50.0
+    assert roi.img_std == 0.0
+    
+    logger.info("  - ROI.calculate_image_stats() works correctly for single-pixel ROI")
+
+
+def test_roi_calculate_image_stats_3d() -> None:
+    """Test ROI.calculate_image_stats() with 3D image."""
+    logger.info("Testing ROI.calculate_image_stats() with 3D image")
+    
+    # Create 3D test image (3 slices, 4 rows, 5 cols)
+    test_image = np.zeros((3, 4, 5), dtype=np.uint8)
+    # Set slice 1 to have specific values
+    test_image[1, :, :] = np.arange(20).reshape(4, 5)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI on slice 1
+    bounds = RoiBounds(dim0_start=1, dim0_stop=3, dim1_start=1, dim1_stop=4)
+    roi = ROI(id=1, channel=1, z=1, bounds=bounds)
+    
+    roi.calculate_image_stats(acq_image)
+    
+    # Verify stats are calculated from slice 1, not slice 0
+    assert roi.img_min >= 5  # Should be from slice 1 region
+    assert roi.img_max <= 19
+    
+    logger.info("  - ROI.calculate_image_stats() works correctly for 3D image")
+
+
+def test_roi_calculate_image_stats_missing_data() -> None:
+    """Test ROI.calculate_image_stats() raises error when image data missing."""
+    logger.info("Testing ROI.calculate_image_stats() with missing image data")
+    
+    # Create AcqImage without image data
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        test_file.touch()
+        acq_image = AcqImage(path=test_file)  # No img_data, not loaded
+    
+    bounds = RoiBounds(dim0_start=0, dim0_stop=10, dim1_start=0, dim1_stop=10)
+    roi = ROI(id=1, channel=1, z=0, bounds=bounds)
+    
+    # Should raise ValueError
+    with pytest.raises(ValueError, match="Image data not available"):
+        roi.calculate_image_stats(acq_image)
+    
+    logger.info("  - ROI.calculate_image_stats() correctly raises error for missing data")
+
+
+def test_roi_calculate_image_stats_invalid_channel() -> None:
+    """Test ROI.calculate_image_stats() with invalid channel."""
+    logger.info("Testing ROI.calculate_image_stats() with invalid channel")
+    
+    test_image = np.zeros((10, 10), dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    bounds = RoiBounds(dim0_start=0, dim0_stop=10, dim1_start=0, dim1_stop=10)
+    roi = ROI(id=1, channel=99, z=0, bounds=bounds)  # Invalid channel
+    
+    # Should raise ValueError
+    with pytest.raises(ValueError, match="Image data not available"):
+        roi.calculate_image_stats(acq_image)
+    
+    logger.info("  - ROI.calculate_image_stats() correctly raises error for invalid channel")
+
+
+def test_roiset_create_roi_calculates_stats() -> None:
+    """Test that RoiSet.create_roi() calculates image stats."""
+    logger.info("Testing RoiSet.create_roi() calculates image stats")
+    
+    # Create test image with known values
+    test_image = np.array([
+        [10, 20, 30],
+        [40, 50, 60],
+        [70, 80, 90]
+    ], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI
+    bounds = RoiBounds(dim0_start=1, dim0_stop=3, dim1_start=1, dim1_stop=3)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
+    
+    # Verify stats were calculated
+    assert roi.img_min is not None
+    assert roi.img_max is not None
+    assert roi.img_mean is not None
+    assert roi.img_std is not None
+    
+    # Verify correct values for region [1:3, 1:3] = [[50, 60], [80, 90]]
+    assert roi.img_min == 50
+    assert roi.img_max == 90
+    
+    logger.info("  - RoiSet.create_roi() calculates image stats correctly")
+
+
+def test_roiset_create_roi_stats_when_data_unavailable() -> None:
+    """Test that RoiSet.create_roi() handles missing image data gracefully."""
+    logger.info("Testing RoiSet.create_roi() with missing image data")
+    
+    # Create AcqImage without loaded image data
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        test_file.touch()
+        acq_image = AcqImage(path=test_file)  # No img_data
+    
+    # Set header so bounds validation works
+    acq_image.header.shape = (100, 200)
+    acq_image.header.ndim = 2
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
+    
+    # Stats should be None (calculation failed but didn't crash)
+    assert roi.img_min is None
+    assert roi.img_max is None
+    assert roi.img_mean is None
+    assert roi.img_std is None
+    
+    logger.info("  - RoiSet.create_roi() handles missing image data gracefully")
+
+
+def test_roiset_edit_roi_recalculates_stats() -> None:
+    """Test that RoiSet.edit_roi() recalculates stats when geometry changes."""
+    logger.info("Testing RoiSet.edit_roi() recalculates stats")
+    
+    # Create test image
+    test_image = np.array([
+        [10, 20, 30, 40],
+        [50, 60, 70, 80],
+        [90, 100, 110, 120],
+        [130, 140, 150, 160]
+    ], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI
+    bounds1 = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=2)
+    roi = acq_image.rois.create_roi(bounds=bounds1, channel=1, z=0)
+    original_min = roi.img_min
+    original_max = roi.img_max
+    
+    # Edit bounds (should recalculate stats)
+    bounds2 = RoiBounds(dim0_start=2, dim0_stop=4, dim1_start=2, dim1_stop=4)
+    acq_image.rois.edit_roi(roi.id, bounds=bounds2)
+    
+    # Stats should be different (new region)
+    assert roi.img_min != original_min
+    assert roi.img_max != original_max
+    assert roi.img_min == 110  # New region min
+    assert roi.img_max == 160  # New region max
+    
+    logger.info("  - RoiSet.edit_roi() recalculates stats when bounds change")
+
+
+def test_roiset_edit_roi_recalculates_stats_on_channel_change() -> None:
+    """Test that RoiSet.edit_roi() recalculates stats when channel changes."""
+    logger.info("Testing RoiSet.edit_roi() recalculates stats on channel change")
+    
+    # Create multi-channel image
+    # Use uint16 for channel 2 to allow larger values, or use smaller values for uint8
+    test_image_ch1 = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+    test_image_ch2 = np.array([[100, 200], [250, 255]], dtype=np.uint8)  # Changed to fit uint8 range
+    acq_image = AcqImage(path=None, img_data=test_image_ch1)
+    acq_image.addColorChannel(2, test_image_ch2)
+    
+    # Create ROI on channel 1
+    bounds = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=2)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
+    assert roi.img_max == 40  # Channel 1 max
+    
+    # Change to channel 2 (should recalculate)
+    acq_image.rois.edit_roi(roi.id, channel=2)
+    assert roi.img_max == 255  # Channel 2 max (updated from 400 to 255)
+    
+    logger.info("  - RoiSet.edit_roi() recalculates stats when channel changes")
+
+
+def test_roiset_edit_roi_no_recalc_when_name_changes() -> None:
+    """Test that RoiSet.edit_roi() doesn't recalculate stats when only name changes."""
+    logger.info("Testing RoiSet.edit_roi() doesn't recalc stats for name change")
+    
+    test_image = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    bounds = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=2)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
+    original_min = roi.img_min
+    original_max = roi.img_max
+    
+    # Edit only name (not geometry)
+    acq_image.rois.edit_roi(roi.id, name="New Name")
+    
+    # Stats should be unchanged
+    assert roi.img_min == original_min
+    assert roi.img_max == original_max
+    
+    logger.info("  - RoiSet.edit_roi() doesn't recalculate stats for non-geometry changes")
+
+
+def test_roi_image_stats_serialization() -> None:
+    """Test that ROI image stats are serialized to/from JSON."""
+    logger.info("Testing ROI image stats serialization")
+    
+    test_image = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+    acq_image = AcqImage(path=None, img_data=test_image)
+    
+    # Create ROI and calculate stats
+    bounds = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=2)
+    roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
+    
+    # Serialize
+    roi_dict = roi.to_dict()
+    assert "img_min" in roi_dict
+    assert "img_max" in roi_dict
+    assert "img_mean" in roi_dict
+    assert "img_std" in roi_dict
+    assert roi_dict["img_min"] == 10
+    assert roi_dict["img_max"] == 40
+    
+    # Deserialize
+    roi2 = ROI.from_dict(roi_dict)
+    assert roi2.img_min == 10
+    assert roi2.img_max == 40
+    assert roi2.img_mean == pytest.approx(25.0, abs=0.1)
+    
+    logger.info("  - ROI image stats serialize correctly")
+
+
+def test_roi_image_stats_backward_compatibility() -> None:
+    """Test that old JSON files without image stats load correctly."""
+    logger.info("Testing ROI image stats backward compatibility")
+    
+    # Simulate old JSON format (no image stats fields)
+    old_roi_dict = {
+        "id": 1,
+        "channel": 1,
+        "z": 0,
+        "name": "",
+        "note": "",
+        "revision": 0,
+        "dim0_start": 0,
+        "dim0_stop": 10,
+        "dim1_start": 0,
+        "dim1_stop": 10
+    }
+    
+    # Should load successfully with None stats
+    roi = ROI.from_dict(old_roi_dict)
+    assert roi.id == 1
+    assert roi.img_min is None
+    assert roi.img_max is None
+    assert roi.img_mean is None
+    assert roi.img_std is None
+    
+    logger.info("  - ROI backward compatibility works correctly")
+
+
+def test_roi_image_stats_round_trip() -> None:
+    """Test round-trip save/load of ROI with image stats."""
+    logger.info("Testing ROI image stats round-trip")
+    
+    with TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.tif"
+        test_image = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+        acq_image = AcqImage(path=test_file, img_data=test_image)
+        
+        # Create ROI (stats calculated on creation)
+        bounds = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=2)
+        roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
+        original_min = roi.img_min
+        original_max = roi.img_max
+        
+        # Save metadata
+        acq_image.save_metadata()
+        
+        # Load into new AcqImage
+        acq_image2 = AcqImage(path=test_file, img_data=test_image)
+        acq_image2.load_metadata()
+        
+        # Verify stats were preserved
+        loaded_roi = acq_image2.rois.get(1)
+        assert loaded_roi is not None
+        assert loaded_roi.img_min == original_min
+        assert loaded_roi.img_max == original_max
+        assert loaded_roi.img_mean == pytest.approx(roi.img_mean, abs=0.01)
+        assert loaded_roi.img_std == pytest.approx(roi.img_std, abs=0.01)
+        
+        logger.info("  - ROI image stats round-trip works correctly")
+

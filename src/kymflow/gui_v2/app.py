@@ -103,7 +103,7 @@ USE_DEV_FOLDER = os.getenv("KYMFLOW_USE_DEV_FOLDER", "0") == "1"  # Default to "
 context = AppContext()
 
 
-def enable_confirm_close_if_native() -> None:
+def _old_enable_confirm_close_if_native() -> None:
     """Enable OS-level 'Are you sure you want to quit?' prompt (native only)."""
     native = getattr(app, "native", None)
     if native is None:
@@ -112,6 +112,27 @@ def enable_confirm_close_if_native() -> None:
     logger.warning('=== is native')
     native.window_args["confirm_close"] = True
 
+def configure_native_window_args() -> None:
+    """Configure native window args (safe to call in __main__ and __mp_main__).
+
+    No-op when not running native or when native context is unavailable.
+    """
+    native = getattr(app, "native", None)
+    if native is None:
+        return  # native=False (browser) or native context not initialized
+
+    # Enable OS-level quit confirmation
+    native.window_args["confirm_close"] = True
+
+    # Restore initial window position (x, y)
+    try:
+        x, y, w, h = context.user_config.get_window_rect()
+        native.window_args["x"] = int(x)
+        native.window_args["y"] = int(y)
+    except Exception:
+        # Be conservative: window args must never raise during startup
+        pass
+
 @ui.page("/")
 def home() -> None:
     """Home route for v2 GUI.
@@ -119,6 +140,11 @@ def home() -> None:
     Uses cached page instances to prevent recreation on navigation.
     Each browser tab/window gets its own isolated session.
     """
+
+    # abb 20260205
+    # Install once per session, delayed slightly so native window exists.
+    from kymflow.gui_v2.poll_window_rect import install_native_rect_polling
+    ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
 
     #
     # global css styles
@@ -298,6 +324,9 @@ if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
     
     logger.info(f"__name__: {__name__}, process: {current_process.name}, is_main: {is_main_process}")
     
+    # abb 20260205
+    configure_native_window_args()
+
     if is_main_process:
         main()
     else:

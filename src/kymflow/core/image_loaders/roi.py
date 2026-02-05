@@ -139,6 +139,12 @@ class ROI:
     bounds: RoiBounds = field(default_factory=lambda: RoiBounds(dim0_start=0, dim0_stop=0, dim1_start=0, dim1_stop=0))
     # Increments when ROI geometry (or channel/z) changes. Used to mark analysis as stale.
     revision: int = 0
+    # Image statistics (calculated from ROI region in image data)
+    # None if not calculated yet (e.g., for old ROIs loaded from JSON)
+    img_min: int | None = None
+    img_max: int | None = None
+    img_mean: float | None = None
+    img_std: float | None = None
 
     def clamp_to_image(self, img: np.ndarray) -> None:
         """Clamp ROI to be fully inside the given image.
@@ -159,6 +165,41 @@ class ROI:
             size: ImageSize with width and height dimensions.
         """
         self.bounds = clamp_coordinates_to_size(self.bounds, size)
+
+    def calculate_image_stats(self, acq_image: "AcqImage") -> None:
+        """Calculate image statistics for this ROI from AcqImage.
+        
+        Extracts the image region defined by this ROI's bounds, channel, and z,
+        then calculates min, max, mean, and std. Updates the ROI's image stats
+        attributes in place.
+        
+        Args:
+            acq_image: AcqImage instance containing the image data.
+            
+        Raises:
+            ValueError: If channel doesn't exist or image data isn't loaded.
+        """
+        # Get 2D image slice for this ROI's channel and z
+        img_slice = acq_image.get_img_slice(slice_num=self.z, channel=self.channel)
+        if img_slice is None:
+            raise ValueError(
+                f"Image data not available for channel {self.channel}, z={self.z}"
+            )
+        
+        # Extract ROI region from the image
+        # ROI bounds: dim0 = rows (height), dim1 = cols (width)
+        roi_region = img_slice[
+            self.bounds.dim0_start : self.bounds.dim0_stop,
+            self.bounds.dim1_start : self.bounds.dim1_stop
+        ]
+        
+        # Calculate statistics
+        # Note: We recalculate each time (no caching). Alternative: cache image slice
+        # if performance becomes an issue, but for now KISS.
+        self.img_min = int(np.min(roi_region))
+        self.img_max = int(np.max(roi_region))
+        self.img_mean = float(np.mean(roi_region))
+        self.img_std = float(np.std(roi_region))
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dictionary representation of this ROI."""
@@ -317,6 +358,13 @@ class RoiSet:
             note=note,
             bounds=clamped_bounds,
         )
+
+        # Calculate image stats if image data is available
+        try:
+            roi.calculate_image_stats(self.acq_image)
+        except ValueError as e:
+            logger.warning(f"Could not calculate image stats for ROI {roi.id}: {e}")
+        
         self._rois[roi.id] = roi
         self._next_id += 1
         self.acq_image.mark_metadata_dirty()
@@ -396,9 +444,18 @@ class RoiSet:
             changed = True
 
         new_geom = (roi.bounds.dim0_start, roi.bounds.dim0_stop, roi.bounds.dim1_start, roi.bounds.dim1_stop, roi.channel, roi.z)
-        if new_geom != old_geom:
+        geometry_changed = new_geom != old_geom
+        if geometry_changed:
             roi.revision += 1
             changed = True
+        
+        # Recalculate image stats if geometry changed (bounds/channel/z)
+        if geometry_changed and (bounds is not None or channel is not None or z is not None):
+            try:
+                roi.calculate_image_stats(self.acq_image)
+            except ValueError as e:
+                logger.warning(f"Could not recalculate image stats for ROI {roi_id}: {e}")
+        
         if changed:
             self.acq_image.mark_metadata_dirty()
     
