@@ -104,7 +104,7 @@ class KymEventBindings:
         if hasattr(e.file, "path") and e.file.path:
             self._view._current_file_path = str(e.file.path)
             # safe_call(self._view._update_file_path_label)  # Commented out - aggrid has 'file' column
-        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
         report = e.file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
 
@@ -183,7 +183,7 @@ class KymEventBindings:
         if self._current_file is None:
             return
         self._logger.debug("velocity_event_update(state) event_id=%s", e.event_id)
-        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
         report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
         if e.event_id:
@@ -209,7 +209,7 @@ class KymEventBindings:
         if self._current_file is None:
             return
         self._logger.debug("add_kym_event(state) event_id=%s", e.event_id)
-        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
         report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         # Select the newly created event during set_events to ensure proper timing
         safe_call(
@@ -234,7 +234,7 @@ class KymEventBindings:
         if self._current_file is None:
             return
         self._logger.debug("delete_kym_event(state) event_id=%s", e.event_id)
-        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
         report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
         # Clear selection since the event was deleted
@@ -265,7 +265,7 @@ class KymEventBindings:
                 # Event is for a different file, ignore
                 return
         self._logger.debug("detect_events_done(state) roi_id=%s", e.roi_id)
-        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
         report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
         # Clear selection when new events are detected
@@ -297,7 +297,7 @@ class KymEventBindings:
             # All-files mode: collect from all files
             if self._app_state is None:
                 return
-            blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+            blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
             all_events = []
             for kym_image in self._app_state.files:
                 try:
@@ -312,6 +312,6 @@ class KymEventBindings:
             if self._current_file is None:
                 safe_call(self._view.set_events, [])
                 return
-            blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+            blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
             report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
             safe_call(self._view.set_events, report)

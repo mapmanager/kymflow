@@ -686,7 +686,7 @@ class HomePage(BasePage):
                             self._event_view.render()
                             current_file = self.context.app_state.selected_file
                             if current_file is not None:
-                                blinded = self.context.user_config.get_blinded() if self.context.user_config else False
+                                blinded = self.context.app_config.get_blinded() if self.context.app_config else False
                                 report = current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
                                 self._event_view.set_events(report)
                             current_roi = self.context.app_state.selected_roi_id

@@ -6,7 +6,6 @@ Persisted items (schema v3):
 - recent_folders: list[{path, depth}]  (folders only, each path has an associated folder_depth)
 - recent_files: list[{path}]          (files only, no depth)
 - last_path: {path, depth}             (most recently opened path, file or folder)
-- window_rect: [x, y, w, h]            (native window geometry)
 - default_folder_depth: int            (fallback for unseen folders)
 
 Behavior:
@@ -39,7 +38,6 @@ SCHEMA_VERSION: int = 3
 
 # Defaults
 DEFAULT_FOLDER_DEPTH: int = 1
-DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
 DEFAULT_HOME_FILE_PLOT_SPLITTER: float = 15.0
 DEFAULT_HOME_PLOT_EVENT_SPLITTER: float = 50.0
 HOME_FILE_PLOT_SPLITTER_RANGE: tuple[float, float] = (0.0, 60.0)
@@ -100,18 +98,12 @@ class UserConfigData:
     recent_csvs: List[RecentCsv] = field(default_factory=list)
     last_path: LastPath = field(default_factory=LastPath)
 
-    # Native window geometry: [x, y, w, h]
-    window_rect: List[int] = field(default_factory=lambda: list(DEFAULT_WINDOW_RECT))
-
     # Fallback depth when a folder hasn't been seen before.
     default_folder_depth: int = DEFAULT_FOLDER_DEPTH
 
     # Home page splitter positions (percentages).
     home_file_plot_splitter: float = DEFAULT_HOME_FILE_PLOT_SPLITTER
     home_plot_event_splitter: float = DEFAULT_HOME_PLOT_EVENT_SPLITTER
-
-    # Blinded analysis mode (hides file names and folder paths)
-    blinded: bool = False
 
     def to_json_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -177,15 +169,6 @@ class UserConfigData:
             except Exception:
                 last_depth = DEFAULT_FOLDER_DEPTH
 
-        # window_rect
-        rect = d.get("window_rect", list(DEFAULT_WINDOW_RECT))
-        window_rect: List[int] = list(DEFAULT_WINDOW_RECT)
-        if isinstance(rect, list) and len(rect) == 4:
-            try:
-                window_rect = [int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])]
-            except Exception:
-                window_rect = list(DEFAULT_WINDOW_RECT)
-
         # default_folder_depth
         dfd = d.get("default_folder_depth", DEFAULT_FOLDER_DEPTH)
         try:
@@ -205,27 +188,15 @@ class UserConfigData:
         except Exception:
             home_plot_event_splitter = DEFAULT_HOME_PLOT_EVENT_SPLITTER
 
-        # blinded
-        blinded_raw = d.get("blinded", False)
-        blinded = False
-        if isinstance(blinded_raw, bool):
-            blinded = blinded_raw
-        elif isinstance(blinded_raw, str):
-            blinded = blinded_raw.lower() in ("true", "1", "yes", "on")
-        elif isinstance(blinded_raw, (int, float)):
-            blinded = bool(blinded_raw)
-
         return cls(
             schema_version=schema_version,
             recent_folders=recent_folders,
             recent_files=recent_files,
             recent_csvs=recent_csvs,
             last_path=LastPath(path=last_path, depth=last_depth),
-            window_rect=window_rect,
             default_folder_depth=default_folder_depth,
             home_file_plot_splitter=home_file_plot_splitter,
             home_plot_event_splitter=home_plot_event_splitter,
-            blinded=blinded,
         )
 
 
@@ -389,10 +360,6 @@ class UserConfig:
             except Exception:
                 logger.info(f"Removed invalid last_path: {p}")
                 data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
-
-        # Normalize window rect
-        if not (isinstance(data.window_rect, list) and len(data.window_rect) == 4):
-            data.window_rect = list(DEFAULT_WINDOW_RECT)
 
         # Normalize home splitter positions
         try:
@@ -658,32 +625,3 @@ class UserConfig:
         self.data.recent_folders = []
         self.data.recent_files = []
         self.data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
-
-    # -----------------------------
-    # Public API: window geometry
-    # -----------------------------
-    def set_window_rect(self, x: int, y: int, w: int, h: int) -> None:
-        # logger.debug(f'\n\nx:{x} y:{y} w:{w} h:{h}\n\n')
-        self.data.window_rect = [int(x), int(y), int(w), int(h)]
-
-    def get_window_rect(self) -> Tuple[int, int, int, int]:
-        r = self.data.window_rect
-        if not (isinstance(r, list) and len(r) == 4):
-            _ret = (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
-        try:
-            _ret = (int(r[0]), int(r[1]), int(r[2]), int(r[3]))
-        except Exception:
-            _ret = (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
-        # logger.debug(f'\n\n_ret:{_ret}\n\n')
-        return _ret
-
-    # -----------------------------
-    # Public API: blinded analysis
-    # -----------------------------
-    def get_blinded(self) -> bool:
-        """Return blinded analysis mode setting."""
-        return bool(self.data.blinded)
-
-    def set_blinded(self, blinded: bool) -> None:
-        """Set blinded analysis mode."""
-        self.data.blinded = bool(blinded)

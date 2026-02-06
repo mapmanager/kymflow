@@ -140,6 +140,15 @@ class OptionsTabView:
             )
             return widget
 
+        elif widget_type == "display":
+            # Display-only widget (read-only)
+            if isinstance(current_value, list):
+                display_value = str(current_value)
+            else:
+                display_value = str(current_value) if current_value is not None else ""
+            widget = ui.label(display_value)
+            return widget
+
         else:
             logger.warning(f"Unknown widget_type '{widget_type}' for field '{field_name}', using input")
             widget = ui.input(
@@ -156,7 +165,11 @@ class OptionsTabView:
             new_value: New value from the widget
         """
         try:
-            self._app_config.set_attribute(field_name, new_value)
+            # Use specialized methods if available, otherwise use generic set_attribute
+            if field_name == "blinded":
+                self._app_config.set_blinded(new_value)
+            else:
+                self._app_config.set_attribute(field_name, new_value)
             logger.info(f"App config updated: {field_name} = {new_value}")
         except (AttributeError, ValueError) as e:
             logger.error(f"Failed to update app config '{field_name}': {e}")

@@ -2,8 +2,10 @@
 """
 App-wide config persistence for kymflow (platformdirs + JSON).
 
-Persisted items (schema v1):
+Persisted items (schema v2):
 - text_size: str                    (font size for UI controls)
+- blinded: bool                     (blinded analysis mode)
+- window_rect: List[int]            (native window geometry: [x, y, w, h])
 
 Behavior:
 - If config file missing or unreadable -> defaults are used
@@ -23,7 +25,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from platformdirs import user_config_dir
 
@@ -32,10 +34,12 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Increment when you make a breaking change to the on-disk JSON schema.
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 
 # Defaults
 DEFAULT_TEXT_SIZE: str = "text-sm"
+DEFAULT_BLINDED: bool = False
+DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
 
 
 @dataclass
@@ -56,6 +60,24 @@ class AppConfigData:
             "label": "Text Size",
             "options": ["text-xs", "text-sm", "text-base", "text-lg"],
             "requires_restart": True,
+        },
+    )
+
+    blinded: bool = field(
+        default=DEFAULT_BLINDED,
+        metadata={
+            "widget_type": "checkbox",
+            "label": "Blinded Analysis",
+            "requires_restart": False,
+        },
+    )
+
+    window_rect: List[int] = field(
+        default_factory=lambda: list(DEFAULT_WINDOW_RECT),
+        metadata={
+            "widget_type": "display",
+            "label": "Window Rect",
+            "requires_restart": False,
         },
     )
 
@@ -90,9 +112,30 @@ class AppConfigData:
             else:
                 logger.warning(f"Invalid text_size '{text_size_raw}', using default '{DEFAULT_TEXT_SIZE}'")
 
+        # blinded
+        blinded_raw = d.get("blinded", DEFAULT_BLINDED)
+        blinded = DEFAULT_BLINDED
+        if isinstance(blinded_raw, bool):
+            blinded = blinded_raw
+        elif isinstance(blinded_raw, str):
+            blinded = blinded_raw.lower() in ("true", "1", "yes", "on")
+        elif isinstance(blinded_raw, (int, float)):
+            blinded = bool(blinded_raw)
+
+        # window_rect
+        rect = d.get("window_rect", list(DEFAULT_WINDOW_RECT))
+        window_rect: List[int] = list(DEFAULT_WINDOW_RECT)
+        if isinstance(rect, list) and len(rect) == 4:
+            try:
+                window_rect = [int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])]
+            except Exception:
+                window_rect = list(DEFAULT_WINDOW_RECT)
+
         return cls(
             schema_version=schema_version,
             text_size=text_size,
+            blinded=blinded,
+            window_rect=window_rect,
         )
 
 
@@ -196,6 +239,14 @@ class AppConfig:
         if not isinstance(data.text_size, str) or data.text_size not in valid_options:
             logger.warning(f"Invalid text_size '{data.text_size}', using default '{DEFAULT_TEXT_SIZE}'")
             data.text_size = DEFAULT_TEXT_SIZE
+
+        # Validate blinded
+        if not isinstance(data.blinded, bool):
+            data.blinded = DEFAULT_BLINDED
+
+        # Validate window_rect
+        if not (isinstance(data.window_rect, list) and len(data.window_rect) == 4):
+            data.window_rect = list(DEFAULT_WINDOW_RECT)
 
     def save(self) -> None:
         """Write config to disk."""
@@ -332,3 +383,32 @@ class AppConfig:
                     "type": type(getattr(self.data, f.name)).__name__,
                 }
         return result
+
+    # -----------------------------
+    # Public API: blinded analysis
+    # -----------------------------
+    def get_blinded(self) -> bool:
+        """Return blinded analysis mode setting."""
+        return bool(self.data.blinded)
+
+    def set_blinded(self, blinded: bool) -> None:
+        """Set blinded analysis mode."""
+        self.data.blinded = bool(blinded)
+        logger.debug(f"Set app_config.blinded = {blinded}")
+
+    # -----------------------------
+    # Public API: window geometry
+    # -----------------------------
+    def set_window_rect(self, x: int, y: int, w: int, h: int) -> None:
+        """Set window rectangle [x, y, w, h]."""
+        self.data.window_rect = [int(x), int(y), int(w), int(h)]
+
+    def get_window_rect(self) -> Tuple[int, int, int, int]:
+        """Return window rectangle as (x, y, w, h)."""
+        r = self.data.window_rect
+        if not (isinstance(r, list) and len(r) == 4):
+            return (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
+        try:
+            return (int(r[0]), int(r[1]), int(r[2]), int(r[3]))
+        except Exception:
+            return (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])

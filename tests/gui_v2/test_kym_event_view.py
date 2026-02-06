@@ -14,9 +14,9 @@ from kymflow.gui_v2.views.kym_event_view import KymEventView
 def mock_app_context():
     """Create a mock AppContext for testing."""
     mock_context = MagicMock()
-    mock_user_config = MagicMock()
-    mock_user_config.get_blinded.return_value = False
-    mock_context.user_config = mock_user_config
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
     return mock_context
 
 
@@ -393,9 +393,9 @@ def test_kym_event_view_blinded_displays_blinded_data() -> None:
     
     # Create mock app context with blinded=True
     mock_context = MagicMock()
-    mock_user_config = MagicMock()
-    mock_user_config.get_blinded.return_value = True
-    mock_context.user_config = mock_user_config
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = True
+    mock_context.app_config = mock_app_config
     
     # Create a KymImage with path
     test_path = Path("/a/b/c/test_file.tif")

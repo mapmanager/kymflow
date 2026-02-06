@@ -128,11 +128,11 @@ def configure_native_window_args() -> None:
     # Restore initial window position (x, y)
     try:
 
-        if context.user_config is None:
-            logger.debug("Skipping window rect restore: user_config not initialized (likely worker process)")
+        if context.app_config is None:
+            logger.debug("Skipping window rect restore: app_config not initialized (likely worker process)")
             return
         
-        x, y, w, h = context.user_config.get_window_rect()
+        x, y, w, h = context.app_config.get_window_rect()
         
         # logger.debug(f'\n\n x:{x} y:{y} w:{w} h:{h} \n\n')
 
@@ -320,7 +320,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
     )
 
     if native:
-        x, y, w, h = context.user_config.get_window_rect()
+        x, y, w, h = context.app_config.get_window_rect()
         logger.info(f'20260205 window_rect: {x}, {y}, {w}, {h}')
         if w<100 or h<100:
             logger.error(f'20260205 window_rect is too small: {w}, {h}')
@@ -330,7 +330,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
     else:
         window_size = None
 
-    # Register minimal shutdown handlers to persist configs (window_rect is updated by poller).
+    # Register minimal shutdown handlers to persist configs (window_rect is updated by poller in app_config).
     install_shutdown_handlers(context, native=native)
 
     ui.run(

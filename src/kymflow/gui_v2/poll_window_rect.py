@@ -82,19 +82,19 @@ def install_native_rect_polling(*, poll_sec: float = 0.5, debounce_sec: float = 
             return
         last_emit["t"] = now
 
-        # Update in-memory user_config window rect; do not save to disk here.
+        # Update in-memory app_config window rect; do not save to disk here.
         context = AppContext()
-        user_config = getattr(context, "user_config", None)
-        if user_config is None:
+        app_config = getattr(context, "app_config", None)
+        if app_config is None:
             return
 
         try:
             x, y, w, h = rect
             # logger.warning(f'20260205 setting window_rect: {x}, {y}, {w}, {h}')
-            user_config.set_window_rect(x, y, w, h)
-            # logger.debug(f"[rect] updated in user_config: {rect}")
+            app_config.set_window_rect(x, y, w, h)
+            # logger.debug(f"[rect] updated in app_config: {rect}")
         except Exception:
-            logger.exception("Failed to update user_config window_rect from native window rect")
+            logger.exception("Failed to update app_config window_rect from native window rect")
 
     def _tick() -> None:
         # native-only: if user runs in browser mode, do nothing

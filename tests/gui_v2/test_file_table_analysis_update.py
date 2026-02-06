@@ -16,9 +16,9 @@ from kymflow.gui_v2.views.file_table_view import FileTableView
 def mock_app_context():
     """Create a mock AppContext for testing."""
     mock_context = MagicMock()
-    mock_user_config = MagicMock()
-    mock_user_config.get_blinded.return_value = False
-    mock_context.user_config = mock_user_config
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
     return mock_context
 
 
@@ -156,9 +156,9 @@ def test_file_table_view_blinded_displays_blinded_data(sample_kym_file: KymImage
     
     # Create mock app context with blinded=True
     mock_context = MagicMock()
-    mock_user_config = MagicMock()
-    mock_user_config.get_blinded.return_value = True
-    mock_context.user_config = mock_user_config
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = True
+    mock_context.app_config = mock_app_config
     
     view = FileTableView(
         mock_context,
@@ -192,9 +192,9 @@ def test_file_table_view_blinded_false_displays_real_data(sample_kym_file: KymIm
     
     # Create mock app context with blinded=False
     mock_context = MagicMock()
-    mock_user_config = MagicMock()
-    mock_user_config.get_blinded.return_value = False
-    mock_context.user_config = mock_user_config
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
     
     view = FileTableView(
         mock_context,

@@ -201,8 +201,8 @@ class FileTableView:
         self._files_by_path = {
             str(f.path): f for f in files_list if getattr(f, "path", None) is not None
         }
-        # Get blinded setting from UserConfig
-        blinded = self._app_context.user_config.get_blinded() if self._app_context.user_config else False
+        # Get blinded setting from AppConfig
+        blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
         rows: Rows = [
             f.getRowDict(blinded=blinded, file_index=index)
             for index, f in enumerate(files_list)

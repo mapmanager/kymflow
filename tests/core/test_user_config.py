@@ -6,7 +6,6 @@ from pathlib import Path
 
 from kymflow.core.user_config import (
     DEFAULT_FOLDER_DEPTH,
-    DEFAULT_WINDOW_RECT,
     DEFAULT_HOME_FILE_PLOT_SPLITTER,
     DEFAULT_HOME_PLOT_EVENT_SPLITTER,
     HOME_FILE_PLOT_SPLITTER_RANGE,
@@ -23,7 +22,6 @@ def test_load_defaults_when_missing(tmp_path: Path) -> None:
     assert cfg.data.schema_version == SCHEMA_VERSION
     assert cfg.get_recent_folders() == []
     assert cfg.get_last_path() == ("", DEFAULT_FOLDER_DEPTH)
-    assert cfg.get_window_rect() == tuple(DEFAULT_WINDOW_RECT)
     assert cfg.get_home_splitter_positions() == (
         DEFAULT_HOME_FILE_PLOT_SPLITTER,
         DEFAULT_HOME_PLOT_EVENT_SPLITTER,
@@ -35,7 +33,7 @@ def test_create_if_missing_writes_defaults(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
     assert not cfg_path.exists()
 
-    cfg = UserConfig.load(config_path=cfg_path, create_if_missing=True)
+    UserConfig.load(config_path=cfg_path, create_if_missing=True)
     assert cfg_path.exists()
 
     # File should be valid JSON with schema_version
@@ -56,7 +54,6 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
 
     cfg.push_recent_path(folder_a, depth=2)
     cfg.push_recent_path(folder_b, depth=3)
-    cfg.set_window_rect(1, 2, 3, 4)
     cfg.set_home_splitter_positions(12.5, 61.0)
     cfg.save()
 
@@ -66,7 +63,6 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     assert len(recents) == 2
     assert recents[0][1] == 3
     assert recents[1][1] == 2
-    assert cfg2.get_window_rect() == (1, 2, 3, 4)
     assert cfg2.get_home_splitter_positions() == (12.5, 61.0)
 
 
@@ -138,7 +134,6 @@ def test_schema_mismatch_resets(tmp_path: Path) -> None:
         "schema_version": 999,
         "recent_folders": [{"path": "/tmp/a", "depth": 2}],
         "last_folder": {"path": "/tmp/a", "depth": 2},
-        "window_rect": [9, 9, 9, 9],
         "default_folder_depth": 4,
     }
     cfg_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -146,7 +141,6 @@ def test_schema_mismatch_resets(tmp_path: Path) -> None:
     cfg = UserConfig.load(config_path=cfg_path, schema_version=SCHEMA_VERSION, reset_on_version_mismatch=True)
     assert cfg.get_recent_folders() == []
     assert cfg.get_last_path() == ("", DEFAULT_FOLDER_DEPTH)
-    assert cfg.get_window_rect() == tuple(DEFAULT_WINDOW_RECT)
 
 
 def test_schema_mismatch_without_reset_keeps_data_but_updates_version(tmp_path: Path) -> None:
@@ -161,7 +155,6 @@ def test_schema_mismatch_without_reset_keeps_data_but_updates_version(tmp_path: 
         "schema_version": 999,
         "recent_folders": [{"path": folder_a_path, "depth": 2}],
         "last_path": {"path": folder_a_path, "depth": 2},  # Use last_path (new API)
-        "window_rect": [9, 9, 9, 9],
         "default_folder_depth": 4,
     }
     cfg_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -171,7 +164,6 @@ def test_schema_mismatch_without_reset_keeps_data_but_updates_version(tmp_path: 
     recents = cfg.get_recent_folders()
     assert len(recents) > 0
     assert recents[0][1] == 2
-    assert cfg.get_window_rect() == (9, 9, 9, 9)
 
 
 def test_splitter_positions_are_clamped(tmp_path: Path) -> None:
@@ -191,13 +183,13 @@ def test_ensure_exists(tmp_path: Path) -> None:
     assert not cfg_path.exists()
     
     cfg = UserConfig.load(config_path=cfg_path)
-    cfg.set_window_rect(10, 20, 30, 40)
+    cfg.set_default_folder_depth(5)
     cfg.ensure_exists()
     
     assert cfg_path.exists()
     # Verify file was written with current data
     cfg2 = UserConfig.load(config_path=cfg_path)
-    assert cfg2.get_window_rect() == (10, 20, 30, 40)
+    assert cfg2.get_depth_for_folder("/tmp/unknown") == 5
 
 
 def test_prune_missing_folders(tmp_path: Path) -> None:
@@ -285,31 +277,6 @@ def test_set_default_folder_depth(tmp_path: Path) -> None:
     assert cfg2.get_depth_for_folder("/tmp/unknown") == 5
 
 
-def test_window_rect_edge_cases(tmp_path: Path) -> None:
-    """Test UserConfig window_rect getter with edge cases."""
-    cfg_path = tmp_path / "user_config.json"
-    
-    # Test with invalid window_rect in file
-    payload = {
-        "schema_version": SCHEMA_VERSION,
-        "window_rect": [1, 2],  # Invalid: not 4 elements
-    }
-    cfg_path.write_text(json.dumps(payload), encoding="utf-8")
-    
-    cfg = UserConfig.load(config_path=cfg_path)
-    rect = cfg.get_window_rect()
-    assert rect == tuple(DEFAULT_WINDOW_RECT)  # Should fall back to defaults
-    
-    # Test with non-integer values
-    payload2 = {
-        "schema_version": SCHEMA_VERSION,
-        "window_rect": ["a", "b", "c", "d"],  # Invalid: not integers
-    }
-    cfg_path.write_text(json.dumps(payload2), encoding="utf-8")
-    
-    cfg2 = UserConfig.load(config_path=cfg_path)
-    rect2 = cfg2.get_window_rect()
-    assert rect2 == tuple(DEFAULT_WINDOW_RECT)  # Should fall back to defaults
 
 
 def test_home_splitter_getter_setter(tmp_path: Path) -> None:
@@ -721,73 +688,3 @@ def test_recent_csvs_max_limit(tmp_path: Path) -> None:
     assert len(folders) + len(files) + len(csvs) <= 15
 
 
-def test_user_config_blinded_defaults_to_false(tmp_path: Path) -> None:
-    """Test that blinded defaults to False when not set."""
-    cfg_path = tmp_path / "user_config.json"
-    cfg = UserConfig.load(config_path=cfg_path)
-    
-    assert cfg.get_blinded() is False
-    assert cfg.data.blinded is False
-
-
-def test_user_config_blinded_getter_setter(tmp_path: Path) -> None:
-    """Test blinded getter and setter methods."""
-    cfg_path = tmp_path / "user_config.json"
-    cfg = UserConfig.load(config_path=cfg_path)
-    
-    # Default should be False
-    assert cfg.get_blinded() is False
-    
-    # Set to True
-    cfg.set_blinded(True)
-    assert cfg.get_blinded() is True
-    assert cfg.data.blinded is True
-    
-    # Set back to False
-    cfg.set_blinded(False)
-    assert cfg.get_blinded() is False
-    assert cfg.data.blinded is False
-
-
-def test_user_config_blinded_persists(tmp_path: Path) -> None:
-    """Test that blinded setting persists across save/load."""
-    cfg_path = tmp_path / "user_config.json"
-    cfg = UserConfig.load(config_path=cfg_path)
-    
-    # Set blinded to True
-    cfg.set_blinded(True)
-    cfg.save()
-    
-    # Reload and verify
-    cfg2 = UserConfig.load(config_path=cfg_path)
-    assert cfg2.get_blinded() is True
-    
-    # Set to False and verify
-    cfg2.set_blinded(False)
-    cfg2.save()
-    
-    cfg3 = UserConfig.load(config_path=cfg_path)
-    assert cfg3.get_blinded() is False
-
-
-def test_user_config_blinded_backward_compatible(tmp_path: Path) -> None:
-    """Test that old config files without blinded field default to False."""
-    cfg_path = tmp_path / "user_config.json"
-    
-    # Create a config file with schema v2 (no blinded field)
-    old_config = {
-        "schema_version": 2,
-        "recent_folders": [],
-        "recent_files": [],
-        "recent_csvs": [],
-        "last_path": {"path": "", "depth": 1},
-        "window_rect": [100, 100, 1200, 800],
-        "default_folder_depth": 1,
-        "home_file_plot_splitter": 15.0,
-        "home_plot_event_splitter": 50.0,
-    }
-    cfg_path.write_text(json.dumps(old_config), encoding="utf-8")
-    
-    # Load should default blinded to False
-    cfg = UserConfig.load(config_path=cfg_path, schema_version=3, reset_on_version_mismatch=False)
-    assert cfg.get_blinded() is False

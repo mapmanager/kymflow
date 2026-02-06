@@ -25,9 +25,9 @@ from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 def mock_app_context():
     """Create a mock AppContext for testing."""
     mock_context = MagicMock()
-    mock_user_config = MagicMock()
-    mock_user_config.get_blinded.return_value = False
-    mock_context.user_config = mock_user_config
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
     return mock_context
 
 

@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 
 from kymflow.gui_v2.app_config import (
+    DEFAULT_BLINDED,
     DEFAULT_TEXT_SIZE,
+    DEFAULT_WINDOW_RECT,
     SCHEMA_VERSION,
     AppConfig,
     AppConfigData,
@@ -261,3 +263,297 @@ def test_all_text_size_options_are_valid(tmp_path: Path) -> None:
         cfg.save()
         cfg2 = AppConfig.load(config_path=cfg_path)
         assert cfg2.get_attribute("text_size") == option
+
+
+# ============================================================================
+# Tests for blinded field
+# ============================================================================
+
+def test_blinded_defaults_to_false(tmp_path: Path) -> None:
+    """Test that blinded defaults to False when not set."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    assert cfg.get_blinded() is False
+    assert cfg.data.blinded is False
+    assert cfg.get_attribute("blinded") is False
+
+
+def test_blinded_getter_setter(tmp_path: Path) -> None:
+    """Test blinded getter and setter methods."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Default should be False
+    assert cfg.get_blinded() is False
+    
+    # Set to True
+    cfg.set_blinded(True)
+    assert cfg.get_blinded() is True
+    assert cfg.data.blinded is True
+    assert cfg.get_attribute("blinded") is True
+    
+    # Set back to False
+    cfg.set_blinded(False)
+    assert cfg.get_blinded() is False
+    assert cfg.data.blinded is False
+    assert cfg.get_attribute("blinded") is False
+
+
+def test_blinded_persists(tmp_path: Path) -> None:
+    """Test that blinded setting persists across save/load."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Set blinded to True
+    cfg.set_blinded(True)
+    cfg.save()
+    
+    # Reload and verify
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    assert cfg2.get_blinded() is True
+    assert cfg2.get_attribute("blinded") is True
+    
+    # Set to False and verify
+    cfg2.set_blinded(False)
+    cfg2.save()
+    
+    cfg3 = AppConfig.load(config_path=cfg_path)
+    assert cfg3.get_blinded() is False
+    assert cfg3.get_attribute("blinded") is False
+
+
+def test_blinded_backward_compatible(tmp_path: Path) -> None:
+    """Test that old config files without blinded field default to False."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Create a config file with schema v1 (no blinded field)
+    old_config = {
+        "schema_version": 1,
+        "text_size": "text-sm",
+    }
+    cfg_path.write_text(json.dumps(old_config), encoding="utf-8")
+    
+    # Load should default blinded to False
+    cfg = AppConfig.load(config_path=cfg_path, schema_version=SCHEMA_VERSION, reset_on_version_mismatch=False)
+    assert cfg.get_blinded() is False
+
+
+def test_blinded_from_json_dict_tolerates_various_types(tmp_path: Path) -> None:
+    """Test that from_json_dict handles various blinded value types."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Test with string "true"
+    payload1 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "blinded": "true",
+    }
+    cfg_path.write_text(json.dumps(payload1), encoding="utf-8")
+    cfg1 = AppConfig.load(config_path=cfg_path)
+    assert cfg1.get_blinded() is True
+    
+    # Test with string "1"
+    payload2 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "blinded": "1",
+    }
+    cfg_path.write_text(json.dumps(payload2), encoding="utf-8")
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    assert cfg2.get_blinded() is True
+    
+    # Test with integer 1
+    payload3 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "blinded": 1,
+    }
+    cfg_path.write_text(json.dumps(payload3), encoding="utf-8")
+    cfg3 = AppConfig.load(config_path=cfg_path)
+    assert cfg3.get_blinded() is True
+    
+    # Test with integer 0
+    payload4 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "blinded": 0,
+    }
+    cfg_path.write_text(json.dumps(payload4), encoding="utf-8")
+    cfg4 = AppConfig.load(config_path=cfg_path)
+    assert cfg4.get_blinded() is False
+
+
+def test_blinded_metadata(tmp_path: Path) -> None:
+    """Test that blinded field has correct metadata for GUI."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    metadata = cfg.get_field_metadata("blinded")
+    assert metadata["widget_type"] == "checkbox"
+    assert metadata["label"] == "Blinded Analysis"
+    assert metadata["requires_restart"] is False
+
+
+# ============================================================================
+# Tests for window_rect field
+# ============================================================================
+
+def test_window_rect_defaults(tmp_path: Path) -> None:
+    """Test that window_rect defaults correctly."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    rect = cfg.get_window_rect()
+    assert rect == tuple(DEFAULT_WINDOW_RECT)
+    assert len(rect) == 4
+    assert all(isinstance(x, int) for x in rect)
+    
+    # Verify data attribute
+    assert cfg.data.window_rect == list(DEFAULT_WINDOW_RECT)
+
+
+def test_window_rect_getter_setter(tmp_path: Path) -> None:
+    """Test window_rect getter and setter methods."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Set window rect
+    cfg.set_window_rect(10, 20, 800, 600)
+    rect = cfg.get_window_rect()
+    assert rect == (10, 20, 800, 600)
+    assert cfg.data.window_rect == [10, 20, 800, 600]
+    
+    # Set different values
+    cfg.set_window_rect(100, 200, 1200, 900)
+    rect2 = cfg.get_window_rect()
+    assert rect2 == (100, 200, 1200, 900)
+    assert cfg.data.window_rect == [100, 200, 1200, 900]
+
+
+def test_window_rect_persists(tmp_path: Path) -> None:
+    """Test that window_rect persists across save/load."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Set window rect
+    cfg.set_window_rect(50, 60, 1000, 700)
+    cfg.save()
+    
+    # Reload and verify
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    assert cfg2.get_window_rect() == (50, 60, 1000, 700)
+    assert cfg2.data.window_rect == [50, 60, 1000, 700]
+
+
+def test_window_rect_edge_cases(tmp_path: Path) -> None:
+    """Test window_rect getter with edge cases."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Test with invalid window_rect in file (not 4 elements)
+    payload1 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "window_rect": [1, 2],  # Invalid: not 4 elements
+    }
+    cfg_path.write_text(json.dumps(payload1), encoding="utf-8")
+    
+    cfg1 = AppConfig.load(config_path=cfg_path)
+    rect1 = cfg1.get_window_rect()
+    assert rect1 == tuple(DEFAULT_WINDOW_RECT)  # Should fall back to defaults
+    
+    # Test with non-integer values
+    payload2 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "window_rect": ["a", "b", "c", "d"],  # Invalid: not integers
+    }
+    cfg_path.write_text(json.dumps(payload2), encoding="utf-8")
+    
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    rect2 = cfg2.get_window_rect()
+    assert rect2 == tuple(DEFAULT_WINDOW_RECT)  # Should fall back to defaults
+    
+    # Test with None
+    payload3 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "window_rect": None,
+    }
+    cfg_path.write_text(json.dumps(payload3), encoding="utf-8")
+    
+    cfg3 = AppConfig.load(config_path=cfg_path)
+    rect3 = cfg3.get_window_rect()
+    assert rect3 == tuple(DEFAULT_WINDOW_RECT)  # Should fall back to defaults
+
+
+def test_window_rect_normalization(tmp_path: Path) -> None:
+    """Test that _normalize_loaded_data validates window_rect."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Create config with invalid window_rect
+    cfg = AppConfig.load(config_path=cfg_path)
+    cfg.data.window_rect = [1, 2]  # Invalid: not 4 elements
+    
+    # Normalize should fix it
+    AppConfig._normalize_loaded_data(cfg.data)
+    assert cfg.data.window_rect == list(DEFAULT_WINDOW_RECT)
+    
+    # Test with None
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    cfg2.data.window_rect = None
+    AppConfig._normalize_loaded_data(cfg2.data)
+    assert cfg2.data.window_rect == list(DEFAULT_WINDOW_RECT)
+
+
+def test_window_rect_metadata(tmp_path: Path) -> None:
+    """Test that window_rect field has correct metadata for GUI."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    metadata = cfg.get_field_metadata("window_rect")
+    assert metadata["widget_type"] == "display"
+    assert metadata["label"] == "Window Rect"
+    assert metadata["requires_restart"] is False
+
+
+def test_window_rect_in_get_all_fields_with_metadata(tmp_path: Path) -> None:
+    """Test that window_rect appears in get_all_fields_with_metadata."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    fields_info = cfg.get_all_fields_with_metadata()
+    assert "window_rect" in fields_info
+    assert fields_info["window_rect"]["value"] == list(DEFAULT_WINDOW_RECT)
+    assert fields_info["window_rect"]["metadata"]["widget_type"] == "display"
+    assert fields_info["window_rect"]["type"] == "list"
+
+
+def test_blinded_in_get_all_fields_with_metadata(tmp_path: Path) -> None:
+    """Test that blinded appears in get_all_fields_with_metadata."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    fields_info = cfg.get_all_fields_with_metadata()
+    assert "blinded" in fields_info
+    assert fields_info["blinded"]["value"] is False
+    assert fields_info["blinded"]["metadata"]["widget_type"] == "checkbox"
+    assert fields_info["blinded"]["type"] == "bool"
+
+
+def test_save_and_load_roundtrip_with_all_fields(tmp_path: Path) -> None:
+    """Test that save/load roundtrip preserves all fields including blinded and window_rect."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Set all fields
+    cfg.set_attribute("text_size", "text-lg")
+    cfg.set_blinded(True)
+    cfg.set_window_rect(100, 200, 1200, 900)
+    cfg.save()
+    
+    # Reload and verify all fields
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    assert cfg2.get_attribute("text_size") == "text-lg"
+    assert cfg2.get_blinded() is True
+    assert cfg2.get_window_rect() == (100, 200, 1200, 900)
