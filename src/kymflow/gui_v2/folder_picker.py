@@ -76,12 +76,18 @@ async def _prompt_for_directory_pywebview(initial: Path) -> Optional[str]:
         return None
 
 
-async def _prompt_for_file_pywebview(initial: Path) -> Optional[str]:
+async def _prompt_for_file_pywebview(initial: Path, file_extension: str = ".tif") -> Optional[str]:
     """Open native file picker dialog using pywebview (NiceGUI native mode).
     
     Uses NiceGUI's app.native.main_window.create_file_dialog with FileDialog.OPEN.
     Imports webview inside function to avoid pickling issues with multiprocessing.
-    Filters for .tif files only.
+    
+    Args:
+        initial: Initial directory for the file dialog.
+        file_extension: File extension to filter for (e.g., ".tif", ".csv"). Defaults to ".tif".
+    
+    Returns:
+        Selected file path as string, or None if cancelled or error.
     """
     # Check if native mode is available
     native = getattr(app, "native", None)
@@ -98,35 +104,52 @@ async def _prompt_for_file_pywebview(initial: Path) -> Optional[str]:
         # Import webview inside function to avoid pickling issues
         import webview  # type: ignore
         
+        # Normalize extension (ensure it starts with dot for pattern)
+        ext = file_extension.strip()
+        if not ext.startswith("."):
+            ext = f".{ext}"
+        # For display name, use extension without dot, uppercase
+        ext_display = ext[1:].upper()  # Remove leading dot and uppercase
+        
         # Use FileDialog.OPEN for file selection
         file_dialog_type = webview.FileDialog.OPEN  # type: ignore
-        logger.debug("Using webview.FileDialog.OPEN for file dialog")
+        logger.debug(f"Using webview.FileDialog.OPEN for {ext_display} file dialog")
         
-        logger.debug("Opening file dialog with initial directory: %s", initial)
+        logger.debug(f"Opening {ext_display} file dialog with initial directory: {initial}")
         selection = await main_window.create_file_dialog(  # type: ignore[attr-defined]
             file_dialog_type,
             directory=str(initial),
             allow_multiple=False,
-            file_types=("TIF files (*.tif)",),
+            file_types=(f"{ext_display} files (*{ext})",),
         )
         
         if not selection:
-            logger.debug("User cancelled file dialog or no selection returned")
+            logger.debug(f"User cancelled {ext_display} file dialog or no selection returned")
             return None
         
         # Log the type of selection for debugging
+        # selection will always be a tuple but their value must be str (not int)
         selection_type = type(selection).__name__
-        logger.debug("1 File dialog returned type: %s, value: %s", selection_type, selection)
+        logger.debug(f"1 {ext_display} file dialog returned type: {selection_type}, value: {selection}")
             
         # Handle return value - can be string, list, or tuple (pywebview returns tuple on macOS)
         if isinstance(selection, (list, tuple)):
+            # we are returning selection[0], check it is str and return if not
+            if not isinstance(selection[0], str):
+                logger.debug(f"2 {ext_display} file dialog returned {selection_type}: {selection} -> {selection[0]} is not str")
+                return None
             result = str(selection[0]) if selection else None
-            logger.debug("2 File dialog returned %s: %s -> %s", selection_type, selection, result)
+            logger.debug(f"2 {ext_display} file dialog returned {selection_type}: {selection} -> {result}")
             return result
             
+        # abb, we may never get here
         result = str(selection)
-        logger.debug("3File dialog returned string: %s", result)
+        logger.debug(f"3 {ext_display} file dialog returned string: {result}")
         return result
     except Exception as exc:
-        logger.warning("pywebview file dialog failed: %s", exc, exc_info=True)
+        ext_display = file_extension.strip()
+        if ext_display.startswith("."):
+            ext_display = ext_display[1:]
+        ext_display = ext_display.upper()
+        logger.warning(f"pywebview {ext_display} file dialog failed: {exc}", exc_info=True)
         return None

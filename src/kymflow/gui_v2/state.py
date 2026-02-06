@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
+import pandas as pd
+
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin, SelectionOrigin
@@ -132,11 +134,18 @@ class AppState:
     
     # State mutation methods that trigger callbacks
     def load_folder(self, folder: Path, depth: Optional[int] = None) -> None:
-        """Load folder or file and update app state."""
+        """Load folder, file, or CSV and update app state."""
         if depth is None:
             depth = self.folder_depth
         
         path = Path(folder)
+        
+        # CSV mode detection
+        if path.is_file() and path.suffix.lower() == '.csv':
+            # CSV mode - validate and load
+            self._load_from_csv(path)
+            return
+        
         if path.is_file():
             # Single file mode (depth ignored by AcqImageList)
             self.files = AcqImageList(
@@ -172,6 +181,54 @@ class AppState:
         if len(self.files) > 0:
             _selectFile = self.files[0]
             logger.info(f"selected file: {_selectFile}")
+            self.select_file(_selectFile)
+        else:
+            self.select_file(None)
+    
+    def _load_from_csv(self, csv_path: Path) -> None:
+        """Load file list from CSV file.
+        
+        Args:
+            csv_path: Path to CSV file that must have a 'path' column.
+        
+        Raises:
+            ValueError: If CSV doesn't have a 'path' column or is invalid.
+        """
+        
+        try:
+            # Load CSV
+            df = pd.read_csv(csv_path)
+        except Exception as e:
+            raise ValueError(f"Failed to read CSV file: {e}")
+        
+        # Validate 'path' column exists
+        if 'path' not in df.columns:
+            raise ValueError("CSV must have a 'path' column")
+        
+        # Extract paths
+        path_list = df['path'].tolist()
+        
+        # Create AcqImageList with file_path_list
+        self.files = AcqImageList(
+            file_path_list=path_list,
+            image_cls=KymImage,
+            file_extension=".tif",
+        )
+        
+        # Store the CSV path for consistency with folder/file mode
+        self.folder = csv_path
+        
+        logger.info(f"Loaded {len(self.files)} files from CSV: {csv_path}")
+        logger.info("  load_folder: calling file_list_changed handlers")
+        for handler in list(self._file_list_changed_handlers):
+            try:
+                handler()
+            except Exception:
+                logger.exception("Error in file_list_changed handler")
+        
+        if len(self.files) > 0:
+            _selectFile = self.files[0]
+            logger.info(f"  selected file: {_selectFile}")
             self.select_file(_selectFile)
         else:
             self.select_file(None)

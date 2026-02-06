@@ -201,14 +201,14 @@ class FileTableView:
         
         # logger.info(f'=== rows: {len(rows)}')
         
-        for _row in rows:
-            logger.info(f'  {_row}')
+        # for _row in rows:
+        #     logger.info(f'  {_row}')
         
         # logger.info(f'rows_unchanged:{rows_unchanged}')
 
         self._pending_rows = rows
         if rows_unchanged and self._grid is not None:
-            logger.debug("rows unchanged -->> skip refresh")
+            # logger.debug("rows unchanged -->> skip refresh")
             return
         
         # logger.error(f'self._grid_container:{self._grid_container}')

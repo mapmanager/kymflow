@@ -15,8 +15,11 @@ from kymflow.gui_v2.events import EventPhase
 class SelectPathEvent:
     """Path selection event (intent or state phase).
 
-    Emitted when a user selects a path (folder or file) via the folder selector widget.
+    Emitted when a user selects a path (folder, file, or CSV) via the folder selector widget.
     This triggers path scanning and file list updates in AppState.
+
+    The event automatically detects the path type (folder, file, or CSV) based on the path itself.
+    CSV files are detected by checking if the path exists, is a file, and has a .csv extension.
 
     For intent phase:
         - Emitted by FolderSelectorView when user selects a path
@@ -27,9 +30,10 @@ class SelectPathEvent:
         - Subscribed to by FolderSelectorView to sync UI
 
     Attributes:
-        new_path: Selected path (folder or file) as string.
+        new_path: Selected path (folder, file, or CSV) as string.
         depth: Optional folder depth. If provided, sets app_state.folder_depth
             before loading (for folders only). If None, uses current app_state.folder_depth.
+            Ignored for files and CSVs.
         phase: Event phase - "intent" or "state".
     """
 

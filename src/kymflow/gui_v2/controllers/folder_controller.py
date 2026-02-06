@@ -64,9 +64,10 @@ class FolderController:
     def _on_select_path_event(self, e: SelectPathEvent) -> None:
         """Handle SelectPathEvent intent event.
 
-        Loads the specified path (folder or file) in AppState, which will trigger file
+        Loads the specified path (folder, file, or CSV) in AppState, which will trigger file
         scanning and emit FileListChanged via the bridge.
         
+        Automatically detects CSV files by checking if the path exists, is a file, and has .csv extension.
         If depth is provided in the event, sets app_state.folder_depth before loading (for folders only).
         After successful load, emits SelectPathEvent(phase="state") and persists the path to user config.
         On cancellation, emits CancelSelectPathEvent.
@@ -75,13 +76,18 @@ class FolderController:
             e: SelectPathEvent (phase="intent") containing the path and optional depth.
         """
         new_path = Path(e.new_path)
+        current_path = str(self._app_state.folder) if self._app_state.folder else None
+        
+        # Auto-detect CSV: must exist, be a file, and have .csv extension
+        is_csv = new_path.exists() and new_path.is_file() and new_path.suffix.lower() == '.csv'
+        
+        if is_csv:
+            self._handle_csv_event_from_path(new_path, current_path)
+            return
         
         # Determine if file or folder
         is_file = new_path.is_file()
         is_folder = new_path.is_dir()
-        
-        # Get current path from app_state (always the actual selected path, file or folder)
-        current_path = str(self._app_state.folder) if self._app_state.folder else None
 
         if not (is_file or is_folder):
             logger.error(f'Path does not exist: "{new_path}"')
@@ -108,6 +114,54 @@ class FolderController:
         
         # Not dirty - proceed directly
         self._finally_set_path(new_path, depth, is_file)
+    
+    def _handle_csv_event_from_path(self, csv_path: Path, current_path: str | None) -> None:
+        """Handle CSV file loading from path.
+        
+        Args:
+            csv_path: Path to CSV file (already validated to exist and be .csv).
+            current_path: Current path from app_state (for cancellation).
+        """
+        # Check for unsaved changes
+        if self._app_state.files and self._app_state.files.any_dirty_analysis():
+            self._show_unsaved_dialog(csv_path, current_path, 0)
+            return
+        
+        # Not dirty - proceed with CSV load
+        try:
+            # Load CSV (will validate 'path' column inside)
+            self._app_state.load_folder(csv_path, depth=0)
+            
+            # Persist to user config
+            if self._user_config is not None:
+                self._user_config.push_recent_csv(str(csv_path))
+            
+            # Set window title
+            set_window_title_for_path(csv_path, is_file=True)
+            
+            # Emit state event
+            self._bus.emit(SelectPathEvent(
+                new_path=str(csv_path),
+                depth=0,
+                phase="state",
+            ))
+            
+            ui.notify(f"Loaded CSV: {csv_path.name}", type="positive")
+            
+        except ValueError as ve:
+            # CSV validation error (missing 'path' column, etc.)
+            error_msg = str(ve)
+            logger.error(f"CSV validation error: {error_msg}")
+            ui.notify(f"CSV error: {error_msg}", type="negative")
+            if current_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+        except Exception as exc:
+            # Other errors (pandas read error, etc.)
+            error_msg = str(exc)
+            logger.error(f"Failed to load CSV: {error_msg}", exc_info=True)
+            ui.notify(f"Failed to load CSV: {error_msg}", type="negative")
+            if current_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
 
     def _finally_set_path(self, path: Path, depth: int, is_file: bool) -> None:
         """Finalize path switch: load folder, save config, set title, emit event.
@@ -160,7 +214,13 @@ class FolderController:
             previous_path_str: The previous path (for revert on cancel).
             depth: The calculated depth to use (already computed from event).
         """
-        dest_path_type = "file" if new_path.is_file() else "folder"
+        # Determine destination type (CSV, file, or folder)
+        if new_path.is_file() and new_path.suffix.lower() == '.csv':
+            dest_path_type = "CSV"
+        elif new_path.is_file():
+            dest_path_type = "file"
+        else:
+            dest_path_type = "folder"
         
         prev_path_type = "folder"
         if previous_path_str:
@@ -201,6 +261,32 @@ class FolderController:
             depth: The depth to use (already calculated, passed from dialog).
         """
         dialog.close()
+        
+        # Check if CSV
+        is_csv = path.is_file() and path.suffix.lower() == '.csv'
+        
+        if is_csv:
+            # Handle CSV loading
+            try:
+                self._app_state.load_folder(path, depth=0)
+                
+                if self._user_config is not None:
+                    self._user_config.push_recent_csv(str(path))
+                
+                set_window_title_for_path(path, is_file=True)
+                
+                self._bus.emit(SelectPathEvent(
+                    new_path=str(path),
+                    depth=0,
+                    phase="state",
+                ))
+            except Exception as exc:
+                error_msg = str(exc)
+                logger.error(f"Failed to load CSV: {error_msg}", exc_info=True)
+                ui.notify(f"Failed to load CSV: {error_msg}", type="negative")
+                if previous_path:
+                    self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+            return
         
         is_file = path.is_file()
         

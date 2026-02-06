@@ -119,6 +119,7 @@ def configure_native_window_args() -> None:
     """
     native = getattr(app, "native", None)
     if native is None:
+        logger.debug('\nnot native\n')
         return  # native=False (browser) or native context not initialized
 
     # Enable OS-level quit confirmation
@@ -126,12 +127,25 @@ def configure_native_window_args() -> None:
 
     # Restore initial window position (x, y)
     try:
+
+        if context.user_config is None:
+            logger.debug("Skipping window rect restore: user_config not initialized (likely worker process)")
+            return
+        
         x, y, w, h = context.user_config.get_window_rect()
+        
+        # logger.debug(f'\n\n x:{x} y:{y} w:{w} h:{h} \n\n')
+
+        
+        # see: https://pywebview.flowrl.com/api/
+        # x - Window x coordinate. Default is centered.
+        # y - Window y coordinate. Default is centered.
         native.window_args["x"] = int(x)
         native.window_args["y"] = int(y)
-    except Exception:
+    except (Exception) as e:
         # Be conservative: window args must never raise during startup
-        pass
+        logger.error(f'error setting window rect: {e}')
+        return
 
 @ui.page("/")
 def home() -> None:
@@ -144,7 +158,8 @@ def home() -> None:
     # abb 20260205
     # Install once per session, delayed slightly so native window exists.
     from kymflow.gui_v2.poll_window_rect import install_native_rect_polling
-    ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
+    logger.warning(f'turned off window rect polling, it interferes with path selection in pywebview')
+    # ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
 
     #
     # global css styles
@@ -192,13 +207,14 @@ def home() -> None:
                 phase="intent",
             ))
         else:
-            # Try to load last folder from user config
+            # Try to load last path from user config
             last_path, last_depth = context.user_config.get_last_path()
             if last_path:
-                last_folder_path = Path(last_path)
-                if last_folder_path.exists():
+                last_path_obj = Path(last_path)
+                if last_path_obj.exists():
+                    # Emit event - FolderController will auto-detect CSV from path
                     logger.info(
-                        f"Loading last folder from config: {last_path} (depth={last_depth}) "
+                        f"Loading last path from config: {last_path} (depth={last_depth}) "
                         f"for session {session_id[:8]}..."
                     )
                     page.bus.emit(SelectPathEvent(
@@ -207,7 +223,7 @@ def home() -> None:
                         phase="intent",
                     ))
                 else:
-                    logger.debug(f"Last folder from config does not exist: {last_path}")
+                    logger.debug(f"Last path from config does not exist: {last_path}")
 
 
 @ui.page("/batch")
@@ -317,8 +333,6 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
     # Register minimal shutdown handlers to persist configs (window_rect is updated by poller).
     install_shutdown_handlers(context, native=native)
 
-    window_size = (1200, 1000)
-
     ui.run(
         port=DEFAULT_PORT,
         reload=reload,
@@ -338,10 +352,10 @@ if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
     
     logger.info(f"__name__: {__name__}, process: {current_process.name}, is_main: {is_main_process}")
     
-    # abb 20260205
-    # configure_native_window_args()
 
     if is_main_process:
+        # abb 20260205
+        configure_native_window_args()
         main()
     else:
         # This is a worker process - do NOT start the GUI

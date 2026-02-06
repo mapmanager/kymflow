@@ -236,3 +236,139 @@ def test_folder_controller_uses_depth_from_event(
                 assert app_state.folder_depth == 5
                 mock_load.assert_called_once_with(folder_path_obj, depth=5)
                 user_config.push_recent_path.assert_called_once_with(folder_path, depth=5)
+
+
+# ============================================================================
+# CSV-related tests
+# ============================================================================
+
+def test_folder_controller_handles_csv_auto_detection(
+    bus: EventBus,
+) -> None:
+    """Test that FolderController auto-detects CSV from path."""
+    app_state = AppState()
+    user_config = MagicMock()
+    controller = FolderController(app_state, bus, user_config=user_config)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_file = Path(tmpdir) / "test.csv"
+        csv_file.write_text("path\n/file1.tif\n/file2.tif")
+        
+        # Mock pandas to avoid actual file reading
+        with patch("kymflow.gui_v2.state.pd") as mock_pd:
+            mock_df = MagicMock()
+            mock_df.__getitem__.return_value = MagicMock()
+            mock_df.__getitem__.return_value.tolist.return_value = []
+            mock_pd.read_csv.return_value = mock_df
+            
+            with patch.object(app_state, "load_folder") as mock_load:
+                # Emit event without csv_path - should auto-detect CSV
+                bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+                
+                # Should call load_folder (which will detect CSV internally)
+                mock_load.assert_called_once_with(csv_file, depth=0)
+                # Should persist to recent_csvs, not recent_paths
+                user_config.push_recent_csv.assert_called_once_with(str(csv_file))
+                user_config.push_recent_path.assert_not_called()
+
+
+def test_folder_controller_csv_missing_path_column(
+    bus: EventBus,
+) -> None:
+    """Test FolderController handles CSV with missing 'path' column."""
+    app_state = AppState()
+    app_state.folder = Path("/current/folder")  # Set current path for CancelSelectPathEvent
+    user_config = MagicMock()
+    controller = FolderController(app_state, bus, user_config=user_config)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_file = Path(tmpdir) / "test.csv"
+        csv_file.write_text("name,value\nfile1,1")
+        
+        emitted_events = []
+        def capture_event(e):
+            emitted_events.append(e)
+        bus.subscribe(CancelSelectPathEvent, capture_event)
+        
+        with patch("kymflow.gui_v2.controllers.folder_controller.ui.notify"):
+            bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+        
+        # Should emit CancelSelectPathEvent
+        assert len(emitted_events) == 1
+        assert isinstance(emitted_events[0], CancelSelectPathEvent)
+        # Should not persist to config
+        user_config.push_recent_csv.assert_not_called()
+
+
+def test_folder_controller_csv_file_not_found(
+    bus: EventBus,
+) -> None:
+    """Test FolderController handles non-existent CSV file."""
+    app_state = AppState()
+    app_state.folder = Path("/current/folder")
+    user_config = MagicMock()
+    controller = FolderController(app_state, bus, user_config=user_config)
+
+    csv_file = Path("/nonexistent.csv")
+    
+    emitted_events = []
+    def capture_event(e):
+        emitted_events.append(e)
+    bus.subscribe(CancelSelectPathEvent, capture_event)
+    
+    with patch("kymflow.gui_v2.controllers.folder_controller.ui.notify"):
+        bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+    
+    # Should emit CancelSelectPathEvent
+    assert len(emitted_events) == 1
+    assert isinstance(emitted_events[0], CancelSelectPathEvent)
+    # Should not persist to config
+    user_config.push_recent_csv.assert_not_called()
+
+
+def test_folder_controller_csv_unsaved_dialog(
+    bus: EventBus, app_state_with_dirty_file: tuple[AppState, KymImage]
+) -> None:
+    """Test FolderController shows unsaved dialog when switching to CSV with dirty files."""
+    app_state, kym_file = app_state_with_dirty_file
+    
+    controller = FolderController(app_state, bus, user_config=None)
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_file = Path(tmpdir) / "test.csv"
+        csv_file.write_text("path\n/file1.tif")
+        
+        with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
+            with patch.object(app_state, "load_folder") as mock_load:
+                bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+                
+                # Should show dialog (not load directly)
+                mock_dialog.assert_called_once()
+                assert mock_dialog.call_args[0][0] == csv_file
+                mock_load.assert_not_called()
+
+
+def test_folder_controller_csv_persists_to_config(
+    bus: EventBus,
+) -> None:
+    """Test FolderController persists CSV path to user config."""
+    app_state = AppState()
+    user_config = MagicMock()
+    controller = FolderController(app_state, bus, user_config=user_config)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_file = Path(tmpdir) / "test.csv"
+        csv_file.write_text("path\n/file1.tif")
+        
+        # Mock pandas
+        with patch("kymflow.gui_v2.state.pd") as mock_pd:
+            mock_df = MagicMock()
+            mock_df.__getitem__.return_value = MagicMock()
+            mock_df.__getitem__.return_value.tolist.return_value = []
+            mock_pd.read_csv.return_value = mock_df
+            
+            with patch.object(app_state, "load_folder"):
+                bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+                
+                # Should persist to recent_csvs
+                user_config.push_recent_csv.assert_called_once_with(str(csv_file))

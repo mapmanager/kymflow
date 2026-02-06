@@ -76,6 +76,7 @@ class FolderSelectorView:
         self._menu_container: Optional[ui.element] = None
         self._choose_button: Optional[ui.button] = None
         self._open_file_button: Optional[ui.button] = None
+        self._open_csv_button: Optional[ui.button] = None
         self._depth_input: Optional[ui.number] = None
         self._task_state: Optional[TaskStateChanged] = None
         self._suppress_path_selection_emit: bool = False
@@ -100,24 +101,27 @@ class FolderSelectorView:
             bus.subscribe_state(FileSelection, self._on_file_selection_changed)
             bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
 
-    def _build_recent_menu_data(self) -> tuple[list[tuple[str, int]], list[str]]:
-        """Build recent folders/files data from UserConfig for menu building.
+    def _build_recent_menu_data(self) -> tuple[list[tuple[str, int]], list[str], list[str]]:
+        """Build recent folders/files/CSVs data from UserConfig for menu building.
         
         Returns:
-            Tuple of (folder_paths_with_depths, file_paths).
+            Tuple of (folder_paths_with_depths, file_paths, csv_paths).
         """
         folder_paths: list[tuple[str, int]] = []
         file_paths: list[str] = []
+        csv_paths: list[str] = []
         if self._user_config is not None:
             folder_paths = self._user_config.get_recent_folders()
             file_paths = self._user_config.get_recent_files()
-        return (folder_paths, file_paths)
+            csv_paths = self._user_config.get_recent_csvs()
+        return (folder_paths, file_paths, csv_paths)
 
-    def _on_recent_path_selected(self, new_path_selection: str) -> None:
-        """Handle recent folder/file selection from menu item.
+    def _on_recent_path_selected(self, new_path_selection: str, is_csv: bool = False) -> None:
+        """Handle recent folder/file/CSV selection from menu item.
         
         Args:
             new_path_selection: The path selected from the menu.
+            is_csv: True if this is a CSV file path.
         """
         if self._suppress_path_selection_emit:
             return
@@ -140,11 +144,13 @@ class FolderSelectorView:
                 pass
             return
         
+        # Get depth for folder/file (CSV will be auto-detected by FolderController)
         if self._user_config is not None:
             depth = self._user_config.get_depth_for_folder(new_path_selection)
         else:
             depth = self._app_state.folder_depth
 
+        # Emit event - FolderController will auto-detect CSV from path
         self._bus.emit(SelectPathEvent(
             new_path=new_path_selection,
             depth=depth,
@@ -239,6 +245,40 @@ class FolderSelectorView:
             logger.error("File selection failed: %s", exc, exc_info=True)
             ui.notify(f"Failed to select file: {exc}", type="negative")
 
+    async def _on_open_csv(self) -> None:
+        """Handle CSV file selection button click."""
+        # Check if pywebview module is available at all
+        try:
+            import webview  # type: ignore
+        except ImportError:
+            msg = "CSV selection requires native mode with pywebview. Please restart with KYMFLOW_GUI_NATIVE=1"
+            ui.notify(msg, type="warning")
+            return
+
+        native = getattr(app, "native", None)
+        main_window = getattr(native, "main_window", None) if native else None
+        
+        windows = getattr(webview, "windows", None)
+        num_windows = len(windows) if windows else 0
+        
+        if main_window is None and (not windows or num_windows == 0):
+            msg = "Native window not available. Please ensure you're running with KYMFLOW_GUI_NATIVE=1"
+            ui.notify(msg, type="warning")
+            return
+
+        try:
+            initial = self._current_folder if self._current_folder is not None else Path.home()
+            selected = await _prompt_for_file_pywebview(initial, file_extension=".csv")
+            if selected:
+                self._bus.emit(SelectPathEvent(
+                    new_path=str(selected),
+                    phase="intent",
+                ))
+                ui.notify(f"CSV selected: {selected}", type="positive")
+        except Exception as exc:
+            logger.error("CSV selection failed: %s", exc, exc_info=True)
+            ui.notify(f"Failed to select CSV: {exc}", type="negative")
+
     def render(self, *, initial_folder: Path | None = None) -> None:
         """Create the folder selector UI inside the current container.
 
@@ -262,6 +302,7 @@ class FolderSelectorView:
         self._recent_menu_button = None
         self._choose_button = None
         self._open_file_button = None
+        self._open_csv_button = None
         self._depth_input = None
         self._save_selected_button = None
         self._save_all_button = None
@@ -283,12 +324,13 @@ class FolderSelectorView:
                 self._build_recent_menu()
                 
                 # Update button state based on available paths
-                folder_paths, file_paths = self._build_recent_menu_data()
-                if not folder_paths and not file_paths:
+                folder_paths, file_paths, csv_paths = self._build_recent_menu_data()
+                if not folder_paths and not file_paths and not csv_paths:
                     self._recent_menu_button.disable()
             
             self._choose_button = ui.button("Open folder", on_click=self._on_choose_folder).props("dense").classes("text-sm")
             self._open_file_button = ui.button("Open file", on_click=self._on_open_file).props("dense").classes("text-sm")
+            self._open_csv_button = ui.button("Open CSV", on_click=self._on_open_csv).props("dense").classes("text-sm")
 
             ui.label("Depth:").classes("ml-2")
             self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-10")
@@ -314,14 +356,10 @@ class FolderSelectorView:
     
     def _build_recent_menu(self) -> None:
         """Build or rebuild the recent paths menu."""
-        folder_paths, file_paths = self._build_recent_menu_data()
+        folder_paths, file_paths, csv_paths = self._build_recent_menu_data()
         
         # Get current paths from app state for comparison
         current_folder_path = str(self._app_state.folder) if self._app_state.folder else None
-        
-        current_file_path = None
-        if self._app_state.selected_file and hasattr(self._app_state.selected_file, "path"):
-            current_file_path = str(self._app_state.selected_file.path)
 
         # Build menu first (needed for button callback)
         with ui.menu() as menu:
@@ -357,7 +395,19 @@ class FolderSelectorView:
                     lambda p=path: self._on_recent_path_selected(p),
                 )
             
-            if folder_paths or file_paths:
+            if file_paths:
+                ui.separator()
+            
+            # CSV items
+            for path in csv_paths:
+                is_current = (current_folder_path == path)
+                prefix = "✓ " if is_current else "  "
+                ui.menu_item(
+                    f"{prefix} {path}",
+                    lambda p=path: self._on_recent_path_selected(p, is_csv=True),
+                )
+            
+            if folder_paths or file_paths or csv_paths:
                 ui.separator()
             
                 # Clear option
@@ -382,8 +432,8 @@ class FolderSelectorView:
             if running:
                 self._recent_menu_button.disable()
             else:
-                folder_paths, file_paths = self._build_recent_menu_data()
-                if folder_paths or file_paths:
+                folder_paths, file_paths, csv_paths = self._build_recent_menu_data()
+                if folder_paths or file_paths or csv_paths:
                     self._recent_menu_button.enable()
                 else:
                     self._recent_menu_button.disable()
@@ -397,6 +447,11 @@ class FolderSelectorView:
                 self._open_file_button.disable()
             else:
                 self._open_file_button.enable()
+        if self._open_csv_button is not None:
+            if running:
+                self._open_csv_button.disable()
+            else:
+                self._open_csv_button.enable()
         if self._depth_input is not None:
             if running:
                 self._depth_input.disable()
@@ -500,8 +555,8 @@ class FolderSelectorView:
                 self._recent_menu_button.on_click(lambda: self._recent_menu.open() if self._recent_menu else None)
             
             # Update button state
-            folder_paths, file_paths = self._build_recent_menu_data()
-            if not folder_paths and not file_paths:
+            folder_paths, file_paths, csv_paths = self._build_recent_menu_data()
+            if not folder_paths and not file_paths and not csv_paths:
                 self._recent_menu_button.disable()
             else:
                 self._recent_menu_button.enable()

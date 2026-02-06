@@ -74,6 +74,11 @@ class RecentFile:
 
 
 @dataclass
+class RecentCsv:
+    path: str
+
+
+@dataclass
 class LastPath:
     path: str = ""
     depth: int = DEFAULT_FOLDER_DEPTH
@@ -92,6 +97,7 @@ class UserConfigData:
 
     recent_folders: List[RecentFolder] = field(default_factory=list)
     recent_files: List[RecentFile] = field(default_factory=list)
+    recent_csvs: List[RecentCsv] = field(default_factory=list)
     last_path: LastPath = field(default_factory=LastPath)
 
     # Native window geometry: [x, y, w, h]
@@ -143,6 +149,17 @@ class UserConfigData:
                 if isinstance(path, str) and path.strip():
                     recent_files.append(RecentFile(path=path))
 
+        # recent_csvs
+        recent_csvs_raw = d.get("recent_csvs", [])
+        recent_csvs: List[RecentCsv] = []
+        if isinstance(recent_csvs_raw, list):
+            for item in recent_csvs_raw:
+                if not isinstance(item, dict):
+                    continue
+                path = item.get("path")
+                if isinstance(path, str) and path.strip():
+                    recent_csvs.append(RecentCsv(path=path))
+
         # last_path (backward compatible with last_folder)
         last_raw = d.get("last_path", d.get("last_folder", {}))
         last_path = ""
@@ -189,6 +206,7 @@ class UserConfigData:
             schema_version=schema_version,
             recent_folders=recent_folders,
             recent_files=recent_files,
+            recent_csvs=recent_csvs,
             last_path=LastPath(path=last_path, depth=last_depth),
             window_rect=window_rect,
             default_folder_depth=default_folder_depth,
@@ -390,8 +408,8 @@ class UserConfig:
         logger.info('saving user_config to disk')
         logger.info(f'  path: {self.path}')
 
-        # from pprint import pprint
-        # pprint(payload, sort_dicts=False, indent=4)
+        from pprint import pprint
+        pprint(payload, sort_dicts=False, indent=4)
         
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -405,8 +423,9 @@ class UserConfig:
     # -----------------------------
     def push_recent_path(self, path: str | Path, *, depth: int) -> None:
         """
-        Add/update a path (folder or file) in the recents list.
-        - Files go to recent_files (depth ignored, stored as 0)
+        Add/update a path (folder, file, or CSV) in the recents list.
+        - CSV files go to recent_csvs (depth ignored, stored as 0)
+        - Other files go to recent_files (depth ignored, stored as 0)
         - Folders go to recent_folders (with depth)
         Also updates last_path.
         """
@@ -414,26 +433,36 @@ class UserConfig:
         path_obj = Path(p)
         depth_int = int(depth)
 
+        # Check if CSV file
+        is_csv = path_obj.is_file() and path_obj.suffix.lower() == '.csv'
+        
+        if is_csv:
+            # CSV: delegate to push_recent_csv
+            self.push_recent_csv(path)
+            return
+
         # Determine if path is file or folder
         is_file = path_obj.is_file()
         
         if is_file:
-            # File: add to recent_files, remove from both lists first
+            # File: add to recent_files, remove from all lists first
             self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
             self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
+            self.data.recent_csvs = [rc for rc in self.data.recent_csvs if _normalize_folder_path(rc.path) != p]
             self.data.recent_files.insert(0, RecentFile(path=p))
             # Update last_path with depth=0 for files
             self.data.last_path = LastPath(path=p, depth=0)
         else:
-            # Folder: add to recent_folders, remove from both lists first
+            # Folder: add to recent_folders, remove from all lists first
             self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
             self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
+            self.data.recent_csvs = [rc for rc in self.data.recent_csvs if _normalize_folder_path(rc.path) != p]
             self.data.recent_folders.insert(0, RecentFolder(path=p, depth=depth_int))
             # Update last_path with actual depth
             self.data.last_path = LastPath(path=p, depth=depth_int)
 
         # Apply MAX_RECENTS limit to combined total
-        combined = len(self.data.recent_folders) + len(self.data.recent_files)
+        combined = len(self.data.recent_folders) + len(self.data.recent_files) + len(self.data.recent_csvs)
         if combined > MAX_RECENTS:
             excess = combined - MAX_RECENTS
             # Trim from oldest (end of lists)
@@ -444,6 +473,45 @@ class UserConfig:
             if excess > 0 and len(self.data.recent_files) > 0:
                 files_to_remove = min(excess, len(self.data.recent_files))
                 self.data.recent_files = self.data.recent_files[:-files_to_remove]
+                excess -= files_to_remove
+            if excess > 0 and len(self.data.recent_csvs) > 0:
+                csvs_to_remove = min(excess, len(self.data.recent_csvs))
+                self.data.recent_csvs = self.data.recent_csvs[:-csvs_to_remove]
+
+    def push_recent_csv(self, csv_path: str | Path) -> None:
+        """
+        Add/update a CSV file in the recents list.
+        Also updates last_path.
+        """
+        p = _normalize_folder_path(csv_path)
+        
+        # Remove from all lists first
+        self.data.recent_csvs = [rc for rc in self.data.recent_csvs if _normalize_folder_path(rc.path) != p]
+        self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
+        self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
+        
+        # Insert at front
+        self.data.recent_csvs.insert(0, RecentCsv(path=p))
+        
+        # Update last_path with depth=0 for CSVs (like files)
+        self.data.last_path = LastPath(path=p, depth=0)
+        
+        # Apply MAX_RECENTS limit to combined total
+        combined = len(self.data.recent_folders) + len(self.data.recent_files) + len(self.data.recent_csvs)
+        if combined > MAX_RECENTS:
+            excess = combined - MAX_RECENTS
+            # Trim from oldest (end of lists)
+            if len(self.data.recent_folders) > 0:
+                folders_to_remove = min(excess, len(self.data.recent_folders))
+                self.data.recent_folders = self.data.recent_folders[:-folders_to_remove]
+                excess -= folders_to_remove
+            if excess > 0 and len(self.data.recent_files) > 0:
+                files_to_remove = min(excess, len(self.data.recent_files))
+                self.data.recent_files = self.data.recent_files[:-files_to_remove]
+                excess -= files_to_remove
+            if excess > 0 and len(self.data.recent_csvs) > 0:
+                csvs_to_remove = min(excess, len(self.data.recent_csvs))
+                self.data.recent_csvs = self.data.recent_csvs[:-csvs_to_remove]
 
     def prune_missing_folders(self) -> int:
         """Remove recent/last paths that no longer exist on disk."""
@@ -479,6 +547,21 @@ class UserConfig:
         if kept_files != self.data.recent_files:
             self.data.recent_files = kept_files
 
+        # Prune missing CSVs
+        kept_csvs: List[RecentCsv] = []
+        for rc in self.data.recent_csvs:
+            try:
+                path_obj = Path(rc.path).expanduser()
+                exists = path_obj.exists() and path_obj.is_file() and path_obj.suffix.lower() == '.csv'
+            except Exception:
+                exists = False
+            if exists:
+                kept_csvs.append(rc)
+            else:
+                removed += 1
+        if kept_csvs != self.data.recent_csvs:
+            self.data.recent_csvs = kept_csvs
+
         # Check last_path
         last_path = self.data.last_path.path
         if last_path:
@@ -500,6 +583,10 @@ class UserConfig:
     def get_recent_files(self) -> List[str]:
         """Return recent files as list of paths."""
         return [rf.path for rf in self.data.recent_files]
+
+    def get_recent_csvs(self) -> List[str]:
+        """Return recent CSV files as list of paths."""
+        return [rc.path for rc in self.data.recent_csvs]
 
     def get_last_path(self) -> Tuple[str, int]:
         """Return (last_path, last_depth)."""
@@ -562,13 +649,16 @@ class UserConfig:
     # Public API: window geometry
     # -----------------------------
     def set_window_rect(self, x: int, y: int, w: int, h: int) -> None:
+        # logger.debug(f'\n\nx:{x} y:{y} w:{w} h:{h}\n\n')
         self.data.window_rect = [int(x), int(y), int(w), int(h)]
 
     def get_window_rect(self) -> Tuple[int, int, int, int]:
         r = self.data.window_rect
         if not (isinstance(r, list) and len(r) == 4):
-            return (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
+            _ret = (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
         try:
-            return (int(r[0]), int(r[1]), int(r[2]), int(r[3]))
+            _ret = (int(r[0]), int(r[1]), int(r[2]), int(r[3]))
         except Exception:
-            return (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
+            _ret = (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
+        # logger.debug(f'\n\n_ret:{_ret}\n\n')
+        return _ret

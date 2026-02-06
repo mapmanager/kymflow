@@ -94,7 +94,8 @@ class FileTableBindings:
         Args:
             e: FileListChanged event containing the new file list.
         """
-        logger.debug("FileTableBindings._on_file_list_changed: files=%s", len(e.files))
+        # logger.debug("FileTableBindings._on_file_list_changed: files=%s", len(e.files))
+        
         safe_call(self._table.set_files, e.files)
 
     def _on_selected_file_changed(self, e: FileSelection) -> None:
@@ -148,7 +149,7 @@ class FileTableBindings:
 
     def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
         """Handle analysis completion by refreshing table rows."""
-        logger.debug("analysis_completed file=%s roi_id=%s success=%s", e.file, e.roi_id, e.success)
+        # logger.debug("analysis_completed file=%s roi_id=%s success=%s", e.file, e.roi_id, e.success)
         if not e.success:
             return
         self._refresh_rows_preserve_selection()
@@ -159,7 +160,7 @@ class FileTableBindings:
         When events are detected, the number of velocity events changes,
         so we need to refresh the table to update the "Total Num Velocity Events" column.
         """
-        logger.debug("detect_events file=%s roi_id=%s", e.path, e.roi_id)
+        # logger.debug("detect_events file=%s roi_id=%s", e.path, e.roi_id)
         self._refresh_rows_preserve_selection()
 
     def _on_task_state_changed(self, e: TaskStateChanged) -> None:

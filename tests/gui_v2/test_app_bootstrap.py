@@ -241,3 +241,43 @@ def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
 
     # Should NOT emit SelectPathEvent since there's no folder to load
     bus.emit.assert_not_called()
+
+
+def test_home_bootstrap_loads_csv_from_last_path(monkeypatch, tmp_path: Path) -> None:
+    """Home route should load CSV from last_path when it's a CSV file."""
+    app_module = _load_app_module(monkeypatch)
+    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
+    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
+    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
+    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
+
+    bus = SimpleNamespace(emit=MagicMock())
+    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
+
+    def _homepage(_context, _bus):
+        return DummyPage(bus=_bus)
+
+    monkeypatch.setattr(app_module, "HomePage", _homepage)
+
+    # Disable dev folder override
+    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", False)
+    
+    # Create CSV file
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_text("path\n/file1.tif\n/file2.tif")
+    
+    # Set up user config with CSV as last path
+    app_module.context.app_state.folder = None
+    app_module.context.user_config.push_recent_csv(str(csv_file))
+    app_module.context.user_config.save()
+
+    app_module.home()
+
+    # Should emit SelectPathEvent for CSV
+    bus.emit.assert_called_once()
+    emitted = bus.emit.call_args.args[0]
+    assert isinstance(emitted, SelectPathEvent)
+    assert emitted.new_path == str(csv_file)
+    # Should NOT have csv_path field (auto-detected by controller)
+    assert not hasattr(emitted, 'csv_path') or getattr(emitted, 'csv_path', None) is None
+    assert emitted.phase == "intent"

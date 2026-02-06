@@ -549,3 +549,173 @@ def test_clear_recent_paths(tmp_path: Path) -> None:
     last_path2, last_depth2 = cfg2.get_last_path()
     assert last_path2 == ""
     assert last_depth2 == DEFAULT_FOLDER_DEPTH
+
+
+# ============================================================================
+# CSV-related tests
+# ============================================================================
+
+def test_push_recent_csv(tmp_path: Path) -> None:
+    """Test push_recent_csv() method adds CSV to recent_csvs and sets last_path."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_text("path\n/file1.tif\n/file2.tif")
+    
+    # Verify initial state
+    assert len(cfg.get_recent_csvs()) == 0, "Should start with empty CSV list"
+    
+    # Get normalized path (what push_recent_csv will use)
+    from kymflow.core.user_config import _normalize_folder_path
+    normalized_path = _normalize_folder_path(csv_file)
+    
+    cfg.push_recent_csv(csv_file)
+    
+    # Verify CSV is in recent_csvs (check in-memory, no save needed)
+    csvs = cfg.get_recent_csvs()
+    assert len(csvs) == 1, f"Expected 1 CSV, got {len(csvs)}: {csvs}. Data.recent_csvs: {cfg.data.recent_csvs}"
+    # Use normalized path for comparison (push_recent_csv normalizes the path)
+    assert csvs[0] == normalized_path, f"Expected {normalized_path}, got {csvs[0]}"
+    
+    # Verify last_path is set to CSV
+    last_path, last_depth = cfg.get_last_path()
+    assert last_path == normalized_path, f"Expected {normalized_path}, got {last_path}"
+    assert last_depth == 0  # CSVs use depth=0 (like files)
+
+
+def test_get_recent_csvs(tmp_path: Path) -> None:
+    """Test get_recent_csvs() returns list of CSV paths."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    csv1 = tmp_path / "csv1.csv"
+    csv2 = tmp_path / "csv2.csv"
+    csv1.write_text("path\n/file1.tif")
+    csv2.write_text("path\n/file2.tif")
+    
+    cfg.push_recent_csv(csv1)
+    cfg.push_recent_csv(csv2)
+    
+    csvs = cfg.get_recent_csvs()
+    assert len(csvs) == 2
+    # Most recent first
+    assert csvs[0] == str(csv2.resolve(strict=False))
+    assert csvs[1] == str(csv1.resolve(strict=False))
+
+
+def test_push_recent_path_detects_csv(tmp_path: Path) -> None:
+    """Test push_recent_path() detects CSV and routes to recent_csvs."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_text("path\n/file1.tif")
+    tif_file = tmp_path / "test.tif"
+    tif_file.touch()
+    
+    # Push CSV - should go to recent_csvs, not recent_files
+    cfg.push_recent_path(csv_file, depth=0)
+    csvs = cfg.get_recent_csvs()
+    files = cfg.get_recent_files()
+    assert len(csvs) == 1
+    assert len(files) == 0
+    assert csvs[0] == str(csv_file.resolve(strict=False))
+    
+    # Push TIF - should go to recent_files, not recent_csvs
+    cfg.push_recent_path(tif_file, depth=0)
+    csvs = cfg.get_recent_csvs()
+    files = cfg.get_recent_files()
+    assert len(csvs) == 1  # Still 1 CSV
+    assert len(files) == 1
+    assert files[0] == str(tif_file.resolve(strict=False))
+
+
+def test_prune_missing_csvs(tmp_path: Path) -> None:
+    """Test prune_missing_folders() removes non-existent CSVs."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    csv1 = tmp_path / "csv1.csv"
+    csv2 = tmp_path / "csv2.csv"
+    csv1.write_text("path\n/file1.tif")
+    csv2.write_text("path\n/file2.tif")
+    
+    cfg.push_recent_csv(csv1)
+    cfg.push_recent_csv(csv2)
+    
+    # Delete one CSV
+    csv2.unlink()
+    
+    # Prune missing paths (method is still called prune_missing_folders but handles CSVs too)
+    cfg.prune_missing_folders()
+    
+    csvs = cfg.get_recent_csvs()
+    assert len(csvs) == 1
+    assert csvs[0] == str(csv1.resolve(strict=False))
+
+
+def test_user_config_loads_csvs_from_json(tmp_path: Path) -> None:
+    """Test UserConfig loads recent_csvs from JSON (backward compatibility)."""
+    cfg_path = tmp_path / "user_config.json"
+    
+    # Create JSON with recent_csvs
+    csv1 = tmp_path / "csv1.csv"
+    csv2 = tmp_path / "csv2.csv"
+    csv1.write_text("path\n/file1.tif")
+    csv2.write_text("path\n/file2.tif")
+    
+    csv1_path = str(csv1.resolve(strict=False))
+    csv2_path = str(csv2.resolve(strict=False))
+    
+    # last_path must be a dict with path and depth keys (not a string)
+    config_data = {
+        "schema_version": SCHEMA_VERSION,
+        "recent_folders": [],
+        "recent_files": [],
+        "recent_csvs": [
+            {"path": csv1_path},
+            {"path": csv2_path},
+        ],
+        "last_path": {"path": csv2_path, "depth": DEFAULT_FOLDER_DEPTH},
+    }
+    cfg_path.write_text(json.dumps(config_data), encoding="utf-8")
+    
+    cfg = UserConfig.load(config_path=cfg_path)
+    csvs = cfg.get_recent_csvs()
+    assert len(csvs) == 2
+    # Order is preserved from JSON (csv1 first, csv2 second)
+    # Note: last_path doesn't affect the order of recent_csvs when loading from JSON
+    assert csvs[0] == csv1_path
+    assert csvs[1] == csv2_path
+    # But last_path should be set to csv2
+    last_path, _ = cfg.get_last_path()
+    assert last_path == csv2_path
+
+
+def test_recent_csvs_max_limit(tmp_path: Path) -> None:
+    """Test that recent_csvs respects MAX_RECENTS limit (combined with folders/files)."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Add many folders, files, and CSVs
+    for i in range(10):
+        folder = tmp_path / f"folder_{i}"
+        folder.mkdir()
+        cfg.push_recent_path(folder, depth=1)
+    
+    for i in range(5):
+        file = tmp_path / f"file_{i}.tif"
+        file.touch()
+        cfg.push_recent_path(file, depth=0)
+    
+    for i in range(5):
+        csv = tmp_path / f"csv_{i}.csv"
+        csv.write_text("path\n/file.tif")
+        cfg.push_recent_csv(csv)
+    
+    # Should be limited to MAX_RECENTS (15) total
+    folders = cfg.get_recent_folders()
+    files = cfg.get_recent_files()
+    csvs = cfg.get_recent_csvs()
+    assert len(folders) + len(files) + len(csvs) <= 15

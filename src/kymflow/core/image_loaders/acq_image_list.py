@@ -1,16 +1,24 @@
-"""Container for a list of AcqImage instances loaded from a folder *or* a single file.
+"""Container for a list of AcqImage instances loaded from a folder, a single file, or a list of file paths.
 
 AcqImageList automatically scans a folder (and optionally subfolders up to a specified depth)
 for files matching a given extension and creates AcqImage instances for each one.
 
+Modes:
+- Directory scan: `path` is a directory - scans recursively based on `depth`
+- Single file: `path` is a file - loads that one file if it matches filters
+- File list: `file_path_list` is provided - loads specified files (mutually exclusive with `path`)
+- Empty: `path` is None and `file_path_list` is None - creates empty list
+
 Refactor note:
 - The public constructor signature is unchanged in spirit: `path` can now be either a directory or a file.
 - NEW: `path` may be None to create an empty list (backwards-compat with your original behavior).
+- NEW: `file_path_list` can be provided to load a specific list of files.
 - If `path` is a file and it matches `file_extension`, the list will contain exactly that one file.
 """
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
@@ -30,22 +38,29 @@ T = TypeVar("T", bound=AcqImage)
 
 
 class AcqImageList(Generic[T]):
-    """Container for a list of AcqImage instances loaded from a folder or a file.
+    """Container for a list of AcqImage instances loaded from a folder, a file, or a list of file paths.
 
     Automatically scans a folder (and optionally subfolders up to a specified depth)
     for files matching a given extension and creates AcqImage instances for each one.
     Files are created WITHOUT loading image data (lazy loading).
 
+    Modes:
+    - Directory scan: `path` is a directory - scans recursively based on `depth`
+    - Single file: `path` is a file - loads that one file if it matches filters
+    - File list: `file_path_list` is provided - loads specified files (mutually exclusive with `path`)
+    - Empty: `path` is None and `file_path_list` is None - creates empty list
+
     If `path` is a file, and its extension matches `file_extension`, then the resulting
     list contains exactly that one file.
 
-    If `path` is None, the resulting list is empty (backwards-compat).
+    If `path` is None and `file_path_list` is None, the resulting list is empty (backwards-compat).
     """
 
     def __init__(
         self,
         path: str | Path | None = None,
         *,
+        file_path_list: list[str] | list[Path] | None = None,
         image_cls: Type[T] = AcqImage,
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
@@ -56,8 +71,12 @@ class AcqImageList(Generic[T]):
 
         Args:
             path: Directory path to scan for files, a single file path, or None for empty list.
+                Mutually exclusive with `file_path_list`.
+            file_path_list: List of file paths to load. Each path should be a full path to a .tif file.
+                Mutually exclusive with `path`. If provided, `path` must be None.
             image_cls: Class to instantiate for each file. Defaults to AcqImage.
             file_extension: File extension to match (e.g., ".tif"). Defaults to ".tif".
+                Applies to all modes (directory scan, single file, and file_path_list).
             ignore_file_stub: Stub string to ignore in filenames. If a filename contains
                 this stub, the file is skipped. Checks filename only, not full path.
                 Defaults to None (no filtering).
@@ -69,35 +88,107 @@ class AcqImageList(Generic[T]):
             follow_symlinks: If True, follow symbolic links when searching.
                 Defaults to False.
         """
+        # Validate mutual exclusivity
+        if path is not None and file_path_list is not None:
+            raise ValueError("path and file_path_list are mutually exclusive. Provide only one.")
+
         self.depth = depth
         self.file_extension = file_extension
         self.ignore_file_stub = ignore_file_stub
         self.image_cls = image_cls
         self.images: List[T] = []
 
-        # Internal mode: directory scan vs single-file
+        # Internal mode: directory scan vs single-file vs file_list
         self._single_file: Optional[Path] = None
+        self._file_path_list: Optional[List[Path]] = None
+
+        # Handle file_path_list mode
+        if file_path_list is not None:
+            if not file_path_list:
+                raise ValueError("file_path_list cannot be empty")
+            
+            # Normalize and validate paths
+            normalized_paths: List[Path] = []
+            seen_paths: set[Path] = set()
+            
+            for file_path in file_path_list:
+                resolved_path = Path(file_path).expanduser().resolve()
+                
+                # Check for duplicates
+                if resolved_path in seen_paths:
+                    raise ValueError(f"Duplicate file path found: {resolved_path}")
+                seen_paths.add(resolved_path)
+                
+                # Check if file exists
+                if not resolved_path.exists():
+                    raise ValueError(f"File does not exist: {resolved_path}")
+                
+                if not resolved_path.is_file():
+                    raise ValueError(f"Path is not a file: {resolved_path}")
+                
+                normalized_paths.append(resolved_path)
+            
+            self._file_path_list = normalized_paths
+            self._path: Optional[Path] = None
+            self._folder: Optional[Path] = None
+            
+            # Automatically load files during initialization
+            self._load_files(follow_symlinks=follow_symlinks)
+            return
 
         # Allow initializing an empty list (backwards-compat)
         if path is None:
-            self.path: Optional[Path] = None
-            self.folder: Optional[Path] = None
+            self._path: Optional[Path] = None
+            self._folder: Optional[Path] = None
             return
 
         resolved = Path(path).expanduser().resolve()
 
         # Store the true source path (may be a directory or a file).
-        self.path: Optional[Path] = resolved
+        self._path: Optional[Path] = resolved
 
         # Backwards-compat: `.folder` remains "directory-like".
         # If source is a file, `.folder` is its parent directory.
-        self.folder: Optional[Path] = resolved if resolved.is_dir() else resolved.parent
+        self._folder: Optional[Path] = resolved if resolved.is_dir() else resolved.parent
 
         # Determine single-file mode
         self._single_file = resolved if resolved.is_file() else None
 
         # Automatically load files during initialization
         self._load_files(follow_symlinks=follow_symlinks)
+
+    @property
+    def path(self) -> Optional[Path]:
+        """Get the source path.
+        
+        Returns:
+            The source path for directory/file modes, None for empty/file_list modes.
+        """
+        return self._path
+
+    @property
+    def folder(self) -> Optional[Path]:
+        """Get the folder path.
+        
+        Returns:
+            The folder path for directory/file modes (parent directory for single files),
+            None for empty/file_list modes.
+        """
+        return self._folder
+
+    def _get_mode(self) -> str:
+        """Get the current mode of the AcqImageList.
+        
+        Returns:
+            One of: "empty", "file", "folder", "file_list"
+        """
+        if self._file_path_list is not None:
+            return "file_list"
+        if self._path is None:
+            return "empty"
+        if self._single_file is not None:
+            return "file"
+        return "folder"
 
     def _normalized_ext(self) -> str:
         """Return normalized extension with leading dot (e.g. '.tif')."""
@@ -135,7 +226,22 @@ class AcqImageList(Generic[T]):
             return None
 
     def _load_files(self, follow_symlinks: bool = False) -> None:
-        """Internal method to load either a single file or scan a folder."""
+        """Internal method to load either a single file, scan a folder, or load from file list."""
+
+        # --- File list mode ---
+        if self._file_path_list is not None:
+            for file_path in self._file_path_list:
+                if not self._file_matches_filters(file_path):
+                    logger.warning(
+                        "AcqImageList: file does not match filters "
+                        f"(extension={self._normalized_ext()}, ignore_file_stub={self.ignore_file_stub}): {file_path}"
+                    )
+                    continue
+                
+                image = self._instantiate_image(file_path)
+                if image is not None:
+                    self.images.append(image)
+            return
 
         # --- Single-file mode ---
         if self._single_file is not None:
@@ -156,8 +262,8 @@ class AcqImageList(Generic[T]):
             return
 
         # --- Directory-scan mode ---
-        if self.folder is None or (not self.folder.exists()) or (not self.folder.is_dir()):
-            logger.warning(f"AcqImageList: folder does not exist or is not a directory: {self.folder}")
+        if self._folder is None or (not self._folder.exists()) or (not self._folder.is_dir()):
+            logger.warning(f"AcqImageList: folder does not exist or is not a directory: {self._folder}")
             return
 
         # Build glob pattern from file extension
@@ -167,9 +273,9 @@ class AcqImageList(Generic[T]):
 
         # Collect all matching files recursively
         if follow_symlinks:
-            all_paths = list(self.folder.rglob(glob_pattern))
+            all_paths = list(self._folder.rglob(glob_pattern))
         else:
-            all_paths = list(self.folder.glob(f"**/{glob_pattern}"))
+            all_paths = list(self._folder.glob(f"**/{glob_pattern}"))
 
         # Filter by depth: calculate depth relative to base folder
         # Code depth: base folder = 0, first subfolder = 1, second subfolder = 2, etc.
@@ -181,7 +287,7 @@ class AcqImageList(Generic[T]):
 
             # Calculate code depth: number of parent directories between file and base
             try:
-                relative_path = p.relative_to(self.folder)
+                relative_path = p.relative_to(self._folder)
                 path_depth = len(relative_path.parts) - 1
                 # Include files where code depth < GUI depth
                 if path_depth < self.depth:
@@ -203,16 +309,26 @@ class AcqImageList(Generic[T]):
         - if constructed with a file path: reloads that one file
         - if constructed with a folder path: rescans the folder
         - if constructed with path=None: remains empty
+        - if constructed with file_path_list: reloads from the same list
 
         Args:
             follow_symlinks: If True, follow symbolic links when searching.
-                Defaults to False.
+                Defaults to False. (Only relevant for directory-scan mode.)
         """
         self.images.clear()
         self._load_files(follow_symlinks=follow_symlinks)
 
     def reload(self, follow_symlinks: bool = False) -> None:
-        """Alias for load() method."""
+        """Alias for load() method.
+        
+        .. deprecated:: 
+            This method is deprecated. Use :meth:`load` instead.
+        """
+        warnings.warn(
+            "reload() is deprecated and will be removed in a future version. Use load() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.load(follow_symlinks=follow_symlinks)
 
     def iter_metadata(self) -> Iterator[Dict[str, Any]]:
@@ -312,8 +428,15 @@ class AcqImageList(Generic[T]):
         return iter(self.images)
 
     def __str__(self) -> str:
-        mode = "empty" if self.path is None else ("file" if self._single_file is not None else "folder")
-        src = self._single_file if self._single_file is not None else (self.folder or self.path)
+        mode = self._get_mode()
+        if mode == "file_list":
+            src = f"{len(self._file_path_list)} files" if self._file_path_list else "0 files"
+        elif mode == "file":
+            src = self._single_file
+        elif mode == "folder":
+            src = self._folder or self._path
+        else:  # empty
+            src = None
         return (
             f"AcqImageList(mode: {mode}, source: {src}, depth: {self.depth}, "
             f"file_extension: {self.file_extension}, ignore_file_stub: {self.ignore_file_stub}, "
