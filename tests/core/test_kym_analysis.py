@@ -485,6 +485,45 @@ def test_kymanalysis_velocity_event_get_report() -> None:
     assert len(report_all) == 1
 
 
+def test_kymanalysis_get_velocity_report_blinded() -> None:
+    """Test get_velocity_report() with blinded=True."""
+    from pathlib import Path
+    
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    test_path = Path("/a/b/c/test_file.tif")
+    kym_image = KymImage(path=test_path, img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    
+    # Add event
+    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    
+    # Get report with blinded=True
+    report = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=True)
+    assert len(report) == 1
+    
+    # Check that file_name is blinded
+    assert report[0]["file_name"] == "Blinded"
+    
+    # Check that grandparent_folder is blinded (from getRowDict)
+    assert report[0]["grandparent_folder"] == "Blinded"
+    
+    # Other fields should remain unchanged
+    assert report[0]["roi_id"] == roi.id
+    assert report[0]["t_start"] == 0.5
+    assert report[0]["t_end"] == 1.0
+    
+    # Get report with blinded=False (should have real values)
+    report_unblinded = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=False)
+    assert len(report_unblinded) == 1
+    assert report_unblinded[0]["file_name"] == "test_file"  # Path.stem
+    assert report_unblinded[0]["grandparent_folder"] == "a"  # Real grandparent folder
+
+
 def test_kymanalysis_velocity_event_remove() -> None:
     """Test removing velocity events by type."""
     test_image = np.zeros((100, 100), dtype=np.uint16)

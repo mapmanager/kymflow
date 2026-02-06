@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # from pathlib import Path  # Commented out - only used in _update_file_path_label which is also commented out
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, TYPE_CHECKING
 
 from nicegui import ui
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
@@ -23,6 +23,9 @@ from kymflow.gui_v2.events import (
     SetKymEventXRange,
     VelocityEventUpdate,
 )
+
+if TYPE_CHECKING:
+    from kymflow.gui_v2.app_context import AppContext
 
 Rows = List[dict[str, object]]
 OnSelected = Callable[[EventSelection], None]
@@ -104,6 +107,7 @@ class KymEventView:
 
     def __init__(
         self,
+        app_context: "AppContext",
         *,
         on_selected: OnSelected,
         on_file_selected: OnFileSelected | None = None,
@@ -114,6 +118,7 @@ class KymEventView:
         on_next_prev_file: OnNextPrevFile | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
+        self._app_context = app_context
         self._on_selected = on_selected
         self._on_file_selected = on_file_selected
         self._on_event_update = on_event_update

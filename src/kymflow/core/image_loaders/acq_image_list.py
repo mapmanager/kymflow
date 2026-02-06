@@ -331,14 +331,22 @@ class AcqImageList(Generic[T]):
         )
         self.load(follow_symlinks=follow_symlinks)
 
-    def iter_metadata(self) -> Iterator[Dict[str, Any]]:
-        """Iterate over metadata for all loaded AcqImage instances."""
-        for image in self.images:
-            yield image.getRowDict()
+    def iter_metadata(self, *, blinded: bool = False) -> Iterator[Dict[str, Any]]:
+        """Iterate over metadata for all loaded AcqImage instances.
+        
+        Args:
+            blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
+        """
+        for index, image in enumerate(self.images):
+            yield image.getRowDict(blinded=blinded, file_index=index)
 
-    def collect_metadata(self) -> List[Dict[str, Any]]:
-        """Collect metadata for all loaded AcqImage instances into a list."""
-        return list(self.iter_metadata())
+    def collect_metadata(self, *, blinded: bool = False) -> List[Dict[str, Any]]:
+        """Collect metadata for all loaded AcqImage instances into a list.
+        
+        Args:
+            blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
+        """
+        return list(self.iter_metadata(blinded=blinded))
 
     def any_dirty_analysis(self) -> bool:
         """Return True if any image has unsaved analysis or metadata."""

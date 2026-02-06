@@ -11,9 +11,20 @@ from kymflow.gui_v2.views.kym_event_view import KymEventView
 
 
 @pytest.fixture
-def kym_event_view() -> KymEventView:
+def mock_app_context():
+    """Create a mock AppContext for testing."""
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = False
+    mock_context.user_config = mock_user_config
+    return mock_context
+
+
+@pytest.fixture
+def kym_event_view(mock_app_context) -> KymEventView:
     """Create a KymEventView instance for testing."""
     return KymEventView(
+        mock_app_context,
         on_selected=lambda e: None,
         on_file_selected=lambda e: None,
         on_event_update=lambda e: None,
@@ -371,6 +382,56 @@ def test_apply_filter_combines_roi_and_event_type_filters(kym_event_view: KymEve
     assert len(filtered_rows) == 1
     assert filtered_rows[0]["roi_id"] == 1
     assert filtered_rows[0]["event_type"] == "baseline_drop"
+
+
+def test_kym_event_view_blinded_displays_blinded_data() -> None:
+    """Test that KymEventView uses blinded data when blinded=True."""
+    from unittest.mock import MagicMock
+    from kymflow.core.image_loaders.kym_image import KymImage
+    from pathlib import Path
+    import numpy as np
+    
+    # Create mock app context with blinded=True
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = True
+    mock_context.user_config = mock_user_config
+    
+    # Create a KymImage with path
+    test_path = Path("/a/b/c/test_file.tif")
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(path=test_path, img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 200), ndim=2, voxels=[0.001, 0.284])
+    
+    kym_analysis = kym_image.get_kym_analysis()
+    from kymflow.core.image_loaders.roi import RoiBounds
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    
+    # Create view with blinded context
+    view = KymEventView(
+        mock_context,
+        on_selected=lambda e: None,
+    )
+    
+    # Get velocity report (should be blinded)
+    report = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=True)
+    view.set_events(report)
+    
+    # Check that all_rows has blinded data
+    assert len(view._all_rows) == 1
+    row = view._all_rows[0]
+    
+    # file_name should be blinded
+    assert row["file_name"] == "Blinded"
+    
+    # grandparent_folder should be blinded
+    assert row["grandparent_folder"] == "Blinded"
+    
+    # Other fields should remain unchanged
+    assert row["roi_id"] == roi.id
+    assert row["t_start"] == 0.5
 
 
 def test_apply_filter_with_all_event_types_disabled(kym_event_view: KymEventView) -> None:

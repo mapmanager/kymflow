@@ -104,7 +104,8 @@ class KymEventBindings:
         if hasattr(e.file, "path") and e.file.path:
             self._view._current_file_path = str(e.file.path)
             # safe_call(self._view._update_file_path_label)  # Commented out - aggrid has 'file' column
-        report = e.file.get_kym_analysis().get_velocity_report()
+        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        report = e.file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
 
     def _on_roi_selection_changed(self, e: ROISelection) -> None:
@@ -182,7 +183,8 @@ class KymEventBindings:
         if self._current_file is None:
             return
         self._logger.debug("velocity_event_update(state) event_id=%s", e.event_id)
-        report = self._current_file.get_kym_analysis().get_velocity_report()
+        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
         if e.event_id:
             safe_call(
@@ -207,7 +209,8 @@ class KymEventBindings:
         if self._current_file is None:
             return
         self._logger.debug("add_kym_event(state) event_id=%s", e.event_id)
-        report = self._current_file.get_kym_analysis().get_velocity_report()
+        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         # Select the newly created event during set_events to ensure proper timing
         safe_call(
             self._view.set_events,
@@ -231,7 +234,8 @@ class KymEventBindings:
         if self._current_file is None:
             return
         self._logger.debug("delete_kym_event(state) event_id=%s", e.event_id)
-        report = self._current_file.get_kym_analysis().get_velocity_report()
+        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
         # Clear selection since the event was deleted
         safe_call(
@@ -261,7 +265,8 @@ class KymEventBindings:
                 # Event is for a different file, ignore
                 return
         self._logger.debug("detect_events_done(state) roi_id=%s", e.roi_id)
-        report = self._current_file.get_kym_analysis().get_velocity_report()
+        blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+        report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
         # Clear selection when new events are detected
         safe_call(
@@ -292,10 +297,11 @@ class KymEventBindings:
             # All-files mode: collect from all files
             if self._app_state is None:
                 return
+            blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
             all_events = []
             for kym_image in self._app_state.files:
                 try:
-                    report = kym_image.get_kym_analysis().get_velocity_report(roi_id=None)
+                    report = kym_image.get_kym_analysis().get_velocity_report(roi_id=None, blinded=blinded)
                     all_events.extend(report)
                 except Exception:
                     # Skip files that can't be processed
@@ -306,5 +312,6 @@ class KymEventBindings:
             if self._current_file is None:
                 safe_call(self._view.set_events, [])
                 return
-            report = self._current_file.get_kym_analysis().get_velocity_report()
+            blinded = self._view._app_context.user_config.get_blinded() if self._view._app_context.user_config else False
+            report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
             safe_call(self._view.set_events, report)

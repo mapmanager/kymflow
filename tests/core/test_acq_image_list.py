@@ -355,6 +355,78 @@ def test_acq_image_list_collect_metadata() -> None:
         # Should be same as iter_metadata
         iter_metadata = list(image_list.iter_metadata())
         assert len(metadata) == len(iter_metadata)
+
+
+def test_acq_image_list_iter_metadata_blinded() -> None:
+    """Test AcqImageList iter_metadata() with blinded=True."""
+    logger.info("Testing AcqImageList iter_metadata() with blinded=True")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # Create test files
+        file1 = tmp_path / "file1.tif"
+        file2 = tmp_path / "file2.tif"
+        file3 = tmp_path / "file3.tif"
+        file1.touch()
+        file2.touch()
+        file3.touch()
+        
+        # Create AcqImageList with synthetic images
+        image_list = AcqImageList(
+            file_path_list=[str(file1), str(file2), str(file3)],
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Test iter_metadata with blinded=True
+        metadata_list = list(image_list.iter_metadata(blinded=True))
+        
+        assert len(metadata_list) == len(image_list)
+        
+        # Check that filenames are blinded
+        for index, metadata in enumerate(metadata_list):
+            assert metadata['filename'] == f"File {index + 1}"
+            assert metadata['parent3'] == "Blinded"
+        
+        logger.info(f"  - iter_metadata(blinded=True) returned {len(metadata_list)} items with blinded filenames")
+
+
+def test_acq_image_list_collect_metadata_blinded() -> None:
+    """Test AcqImageList collect_metadata() with blinded=True."""
+    logger.info("Testing AcqImageList collect_metadata() with blinded=True")
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # Create test files
+        file1 = tmp_path / "file1.tif"
+        file2 = tmp_path / "file2.tif"
+        file1.touch()
+        file2.touch()
+        
+        # Create AcqImageList
+        image_list = AcqImageList(
+            file_path_list=[str(file1), str(file2)],
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Test collect_metadata with blinded=True
+        metadata = image_list.collect_metadata(blinded=True)
+        
+        assert len(metadata) == len(image_list)
+        
+        # Check that filenames are blinded
+        for index, item in enumerate(metadata):
+            assert item['filename'] == f"File {index + 1}"
+            assert item['parent3'] == "Blinded"
+        
+        # Should be same as iter_metadata
+        iter_metadata = list(image_list.iter_metadata(blinded=True))
+        assert len(metadata) == len(iter_metadata)
+        
+        logger.info(f"  - collect_metadata(blinded=True) returned {len(metadata)} items with blinded filenames")
         
         # If images were successfully created, verify metadata structure
         if len(metadata) > 0:

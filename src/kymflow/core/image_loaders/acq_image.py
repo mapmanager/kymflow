@@ -429,8 +429,12 @@ class AcqImage:
         else:
             raise ValueError(f"Image data must be 2D or 3D, got {ndim}D")
     
-    def getRowDict(self) -> dict:
+    def getRowDict(self, *, blinded: bool = False, file_index: int | None = None) -> dict:
         """Get dictionary with header and file information for table/row display.
+        
+        Args:
+            blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
+            file_index: Zero-based index of file in list (used for blinded file names).
         
         Returns:
             Dictionary containing file info (path, filename, parent folders) and 
@@ -442,9 +446,22 @@ class AcqImage:
         # Compute parent folders on-the-fly
         parent1, parent2, parent3 = self._compute_parents_from_path(representative_path) if representative_path else (None, None, None)
         
+        # Apply blinding if requested
+        if blinded:
+            # Replace filename with "File {index+1}" if index is provided AND path exists
+            if file_index is not None and representative_path is not None:
+                filename = f"File {file_index + 1}"
+            else:
+                filename = representative_path.name if representative_path is not None else None
+            # Replace parent3 (Grandparent Folder) with "Blinded" only if it exists
+            if parent3 is not None:
+                parent3 = "Blinded"
+        else:
+            filename = representative_path.name if representative_path is not None else None
+        
         result = {
             'path': str(representative_path) if representative_path is not None else None,
-            'filename': representative_path.name if representative_path is not None else None,
+            'filename': filename,
             'parent1': parent1,
             'parent2': parent2,
             'parent3': parent3,

@@ -7,7 +7,7 @@ users select rows, but does not subscribe to events (that's handled by FileTable
 
 from __future__ import annotations
 
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, TYPE_CHECKING
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from nicegui import ui
@@ -17,6 +17,9 @@ from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.custom_ag_grid.config import ColumnConfig, GridConfig, SelectionMode
 from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
+
+if TYPE_CHECKING:
+    from kymflow.gui_v2.app_context import AppContext
 
 Rows = List[dict[str, object]]
 OnSelected = Callable[[FileSelection], None]
@@ -103,12 +106,14 @@ class FileTableView:
 
     def __init__(
         self,
+        app_context: "AppContext",
         *,
         on_selected: OnSelected,
         on_metadata_update: OnMetadataUpdate | None = None,
         on_analysis_update: OnAnalysisUpdate | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
+        self._app_context = app_context
         self._on_selected = on_selected
         self._on_metadata_update = on_metadata_update
         self._on_analysis_update = on_analysis_update
@@ -196,7 +201,12 @@ class FileTableView:
         self._files_by_path = {
             str(f.path): f for f in files_list if getattr(f, "path", None) is not None
         }
-        rows: Rows = [f.getRowDict() for f in files_list]
+        # Get blinded setting from UserConfig
+        blinded = self._app_context.user_config.get_blinded() if self._app_context.user_config else False
+        rows: Rows = [
+            f.getRowDict(blinded=blinded, file_index=index)
+            for index, f in enumerate(files_list)
+        ]
         rows_unchanged = rows == self._pending_rows
         
         # logger.info(f'=== rows: {len(rows)}')

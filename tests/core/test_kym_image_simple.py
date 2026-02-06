@@ -227,3 +227,79 @@ def test_kym_image_image_dur() -> None:
         assert kym_image_path_only.image_dur is None
     
     logger.info("  - image_dur property works correctly")
+
+
+def test_kym_image_getrowdict_blinded() -> None:
+    """Test KymImage.getRowDict() with blinded=True."""
+    import numpy as np
+    from pathlib import Path
+    
+    # Create a path with multiple parent folders
+    test_path = Path("/a/b/c/test_file.tif")
+    
+    # Create synthetic kymograph image with path
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(path=test_path, img_data=test_image, load_image=False)
+    
+    # Set up header
+    kym_image.update_header(
+        shape=(100, 200),
+        ndim=2,
+        voxels=[0.001, 0.284],
+        voxels_units=["s", "um"],
+        labels=["Time (s)", "Space (um)"],
+    )
+    kym_image._header.physical_size = [0.1, 56.8]
+    
+    # Get row dict with blinded=True and file_index=0
+    row_dict = kym_image.getRowDict(blinded=True, file_index=0)
+    
+    # Check that "File Name" is blinded
+    assert row_dict["File Name"] == "File 1"
+    assert row_dict["path"] == str(test_path)  # Path should remain unchanged
+    
+    # Check that "Grandparent Folder" is blinded
+    assert row_dict["Grandparent Folder"] == "Blinded"
+    assert row_dict["Parent Folder"] == "c"  # Parent Folder should remain unchanged
+    
+    # Test with different file_index
+    row_dict2 = kym_image.getRowDict(blinded=True, file_index=5)
+    assert row_dict2["File Name"] == "File 6"  # 5 + 1 = 6
+    
+    # Test with file_index=None (should keep original filename)
+    row_dict3 = kym_image.getRowDict(blinded=True, file_index=None)
+    assert row_dict3["File Name"] == "test_file.tif"
+    assert row_dict3["Grandparent Folder"] == "Blinded"  # Still blinded
+    
+    # All other fields should remain unchanged
+    assert row_dict["Num ROIS"] == 0
+    assert row_dict["Total Num Velocity Events"] == 0
+    assert row_dict["duration (s)"] == pytest.approx(0.1, abs=0.001)
+    
+    logger.info(f"  - getRowDict() with blinded=True: File Name={row_dict['File Name']}, Grandparent Folder={row_dict['Grandparent Folder']}")
+
+
+def test_kym_image_getrowdict_blinded_no_path() -> None:
+    """Test KymImage.getRowDict() with blinded=True but no path."""
+    import numpy as np
+    
+    # Create synthetic kymograph image without path
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    
+    # Set up header
+    kym_image.update_header(
+        shape=(100, 200),
+        ndim=2,
+        voxels=[0.001, 0.284],
+    )
+    
+    # Get row dict with blinded=True
+    row_dict = kym_image.getRowDict(blinded=True, file_index=0)
+    
+    # Should handle None path gracefully
+    assert row_dict["File Name"] is None
+    assert row_dict["path"] is None
+    assert row_dict["Grandparent Folder"] is None  # No path, so no grandparent to blind
+    
+    logger.info(f"  - getRowDict() with blinded=True but no path handled correctly")

@@ -719,3 +719,75 @@ def test_recent_csvs_max_limit(tmp_path: Path) -> None:
     files = cfg.get_recent_files()
     csvs = cfg.get_recent_csvs()
     assert len(folders) + len(files) + len(csvs) <= 15
+
+
+def test_user_config_blinded_defaults_to_false(tmp_path: Path) -> None:
+    """Test that blinded defaults to False when not set."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    assert cfg.get_blinded() is False
+    assert cfg.data.blinded is False
+
+
+def test_user_config_blinded_getter_setter(tmp_path: Path) -> None:
+    """Test blinded getter and setter methods."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Default should be False
+    assert cfg.get_blinded() is False
+    
+    # Set to True
+    cfg.set_blinded(True)
+    assert cfg.get_blinded() is True
+    assert cfg.data.blinded is True
+    
+    # Set back to False
+    cfg.set_blinded(False)
+    assert cfg.get_blinded() is False
+    assert cfg.data.blinded is False
+
+
+def test_user_config_blinded_persists(tmp_path: Path) -> None:
+    """Test that blinded setting persists across save/load."""
+    cfg_path = tmp_path / "user_config.json"
+    cfg = UserConfig.load(config_path=cfg_path)
+    
+    # Set blinded to True
+    cfg.set_blinded(True)
+    cfg.save()
+    
+    # Reload and verify
+    cfg2 = UserConfig.load(config_path=cfg_path)
+    assert cfg2.get_blinded() is True
+    
+    # Set to False and verify
+    cfg2.set_blinded(False)
+    cfg2.save()
+    
+    cfg3 = UserConfig.load(config_path=cfg_path)
+    assert cfg3.get_blinded() is False
+
+
+def test_user_config_blinded_backward_compatible(tmp_path: Path) -> None:
+    """Test that old config files without blinded field default to False."""
+    cfg_path = tmp_path / "user_config.json"
+    
+    # Create a config file with schema v2 (no blinded field)
+    old_config = {
+        "schema_version": 2,
+        "recent_folders": [],
+        "recent_files": [],
+        "recent_csvs": [],
+        "last_path": {"path": "", "depth": 1},
+        "window_rect": [100, 100, 1200, 800],
+        "default_folder_depth": 1,
+        "home_file_plot_splitter": 15.0,
+        "home_plot_event_splitter": 50.0,
+    }
+    cfg_path.write_text(json.dumps(old_config), encoding="utf-8")
+    
+    # Load should default blinded to False
+    cfg = UserConfig.load(config_path=cfg_path, schema_version=3, reset_on_version_mismatch=False)
+    assert cfg.get_blinded() is False

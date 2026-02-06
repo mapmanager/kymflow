@@ -10,6 +10,8 @@ import numpy as np
 import pytest
 import tifffile
 
+from unittest.mock import MagicMock
+
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_state import TaskStateChanged
@@ -18,6 +20,16 @@ from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
+
+
+@pytest.fixture
+def mock_app_context():
+    """Create a mock AppContext for testing."""
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = False
+    mock_context.user_config = mock_user_config
+    return mock_context
 
 
 @pytest.fixture
@@ -72,9 +84,9 @@ def test_analysis_toolbar_stores_task_state(
         assert view._task_state.running is False
 
 
-def test_file_table_stores_task_state(sample_kym_file: KymImage) -> None:
+def test_file_table_stores_task_state(sample_kym_file: KymImage, mock_app_context) -> None:
     """Test that FileTableView stores task state and calls update method."""
-    view = FileTableView(on_selected=lambda e: None)
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
 
     # Mock the update method
     with patch.object(view, "_update_interaction_state") as mock_update:

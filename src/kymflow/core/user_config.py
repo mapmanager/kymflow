@@ -2,7 +2,7 @@
 """
 Per-user config persistence for kymflow (platformdirs + JSON).
 
-Persisted items (schema v2):
+Persisted items (schema v3):
 - recent_folders: list[{path, depth}]  (folders only, each path has an associated folder_depth)
 - recent_files: list[{path}]          (files only, no depth)
 - last_path: {path, depth}             (most recently opened path, file or folder)
@@ -35,7 +35,7 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Increment when you make a breaking change to the on-disk JSON schema.
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
 
 # Defaults
 DEFAULT_FOLDER_DEPTH: int = 1
@@ -109,6 +109,9 @@ class UserConfigData:
     # Home page splitter positions (percentages).
     home_file_plot_splitter: float = DEFAULT_HOME_FILE_PLOT_SPLITTER
     home_plot_event_splitter: float = DEFAULT_HOME_PLOT_EVENT_SPLITTER
+
+    # Blinded analysis mode (hides file names and folder paths)
+    blinded: bool = False
 
     def to_json_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -202,6 +205,16 @@ class UserConfigData:
         except Exception:
             home_plot_event_splitter = DEFAULT_HOME_PLOT_EVENT_SPLITTER
 
+        # blinded
+        blinded_raw = d.get("blinded", False)
+        blinded = False
+        if isinstance(blinded_raw, bool):
+            blinded = blinded_raw
+        elif isinstance(blinded_raw, str):
+            blinded = blinded_raw.lower() in ("true", "1", "yes", "on")
+        elif isinstance(blinded_raw, (int, float)):
+            blinded = bool(blinded_raw)
+
         return cls(
             schema_version=schema_version,
             recent_folders=recent_folders,
@@ -212,6 +225,7 @@ class UserConfigData:
             default_folder_depth=default_folder_depth,
             home_file_plot_splitter=home_file_plot_splitter,
             home_plot_event_splitter=home_plot_event_splitter,
+            blinded=blinded,
         )
 
 
@@ -662,3 +676,14 @@ class UserConfig:
             _ret = (DEFAULT_WINDOW_RECT[0], DEFAULT_WINDOW_RECT[1], DEFAULT_WINDOW_RECT[2], DEFAULT_WINDOW_RECT[3])
         # logger.debug(f'\n\n_ret:{_ret}\n\n')
         return _ret
+
+    # -----------------------------
+    # Public API: blinded analysis
+    # -----------------------------
+    def get_blinded(self) -> bool:
+        """Return blinded analysis mode setting."""
+        return bool(self.data.blinded)
+
+    def set_blinded(self, blinded: bool) -> None:
+        """Set blinded analysis mode."""
+        self.data.blinded = bool(blinded)

@@ -1359,13 +1359,14 @@ class KymAnalysis:
         self._dirty = True
         return True
 
-    def get_velocity_report(self, roi_id: int | None = None) -> list[VelocityReportRow]:
+    def get_velocity_report(self, roi_id: int | None = None, *, blinded: bool = False) -> list[VelocityReportRow]:
         """Return velocity report rows for roi_id (or all ROIs if None).
 
         Used by gui, we are rounding values to 3 decimal places
 
         Args:
             roi_id: Identifier of the ROI, or None for all ROIs.
+            blinded: If True, replace file names with "Blinded" and grandparent folder with "Blinded".
 
         Returns:
             Stored list of velocity report rows (possibly empty).
@@ -1378,7 +1379,7 @@ class KymAnalysis:
         event_dicts: list[VelocityReportRow] = []
         path = str(self.acq_image.path) if self.acq_image.path is not None else None
         
-        _rowDict = self.acq_image.getRowDict()
+        _rowDict = self.acq_image.getRowDict(blinded=blinded, file_index=None)
         grandparent_folder = _rowDict.get("Grandparent Folder")
         if grandparent_folder is None:
             logger.warning(f'grandparent_folder is none -> happend when loaded with synth data in pytest')
@@ -1400,7 +1401,10 @@ class KymAnalysis:
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path
-                event_dict["file_name"] = Path(path).stem if path else None
+                if blinded:
+                    event_dict["file_name"] = "Blinded"
+                else:
+                    event_dict["file_name"] = Path(path).stem if path else None
                 event_dict["grandparent_folder"] = grandparent_folder
                 event_dicts.append(event_dict)
         return event_dicts

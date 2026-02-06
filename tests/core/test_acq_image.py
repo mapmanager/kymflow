@@ -372,6 +372,57 @@ def test_acq_image_getRowDict_shallow_path() -> None:
     logger.info(f"  - getRowDict() with shallow path: parent1={row_dict['parent1']}, parent2={row_dict['parent2']}, parent3={row_dict['parent3']}")
 
 
+def test_acq_image_getRowDict_blinded() -> None:
+    """Test getRowDict() with blinded=True."""
+    logger.info("Testing AcqImage getRowDict() with blinded=True")
+    
+    # Create a path with multiple parent folders
+    test_path = Path("/a/b/c/test_file.tif")
+    acq = AcqImage(path=test_path)
+    
+    # Get row dict with blinded=True and file_index=0
+    row_dict = acq.getRowDict(blinded=True, file_index=0)
+    
+    # Check that filename is blinded
+    assert row_dict['filename'] == "File 1"
+    assert row_dict['path'] == str(test_path)  # Path should remain unchanged
+    
+    # Check that parent3 (Grandparent Folder) is blinded
+    assert row_dict['parent3'] == "Blinded"
+    assert row_dict['parent1'] == "c"  # parent1 should remain unchanged
+    assert row_dict['parent2'] == "b"  # parent2 should remain unchanged
+    
+    # Test with different file_index
+    row_dict2 = acq.getRowDict(blinded=True, file_index=5)
+    assert row_dict2['filename'] == "File 6"  # 5 + 1 = 6
+    
+    # Test with file_index=None (should keep original filename)
+    row_dict3 = acq.getRowDict(blinded=True, file_index=None)
+    assert row_dict3['filename'] == "test_file.tif"
+    assert row_dict3['parent3'] == "Blinded"  # Still blinded
+    
+    logger.info(f"  - getRowDict() with blinded=True: filename={row_dict['filename']}, parent3={row_dict['parent3']}")
+
+
+def test_acq_image_getRowDict_blinded_no_path() -> None:
+    """Test getRowDict() with blinded=True but no path."""
+    logger.info("Testing AcqImage getRowDict() with blinded=True but no path")
+    
+    # Create AcqImage with data but no path
+    img_2d = np.random.randint(0, 255, size=(50, 75), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d)
+    
+    # Get row dict with blinded=True
+    row_dict = acq.getRowDict(blinded=True, file_index=0)
+    
+    # Should handle None path gracefully
+    assert row_dict['filename'] is None
+    assert row_dict['path'] is None
+    assert row_dict['parent3'] is None  # No path, so no parent3 to blind
+    
+    logger.info(f"  - getRowDict() with blinded=True but no path handled correctly")
+
+
 def test_acq_image_metadata_dirty_flag() -> None:
     """Test that metadata dirty flag is set correctly."""
     logger.info("Testing AcqImage metadata dirty flag")

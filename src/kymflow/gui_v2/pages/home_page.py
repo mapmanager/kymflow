@@ -130,6 +130,7 @@ class HomePage(BasePage):
             on_save_all=bus.emit,
         )
         self._file_table_view = FileTableView(
+            context,
             on_selected=bus.emit,
             on_metadata_update=bus.emit,
             on_analysis_update=bus.emit,
@@ -140,6 +141,7 @@ class HomePage(BasePage):
             on_set_roi_bounds=bus.emit,
         )
         self._event_view = KymEventView(
+            context,
             on_selected=bus.emit,
             on_file_selected=bus.emit,
             on_event_update=bus.emit,
@@ -684,7 +686,8 @@ class HomePage(BasePage):
                             self._event_view.render()
                             current_file = self.context.app_state.selected_file
                             if current_file is not None:
-                                report = current_file.get_kym_analysis().get_velocity_report()
+                                blinded = self.context.user_config.get_blinded() if self.context.user_config else False
+                                report = current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
                                 self._event_view.set_events(report)
                             current_roi = self.context.app_state.selected_roi_id
                             if current_roi is not None:

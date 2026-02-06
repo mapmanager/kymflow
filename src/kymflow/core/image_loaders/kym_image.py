@@ -215,11 +215,15 @@ class KymImage(AcqImage):
             return None
         return self.num_lines * self.seconds_per_line
     
-    def getRowDict(self) -> dict:
+    def getRowDict(self, *, blinded: bool = False, file_index: int | None = None) -> dict:
         """Get dictionary with header, file, and analysis information for table/row display.
         
         Overrides base class method to add analysis-specific fields matching summary_row() keys.
         This ensures compatibility with file_table.py which expects these specific keys.
+        
+        Args:
+            blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
+            file_index: Zero-based index of file in list (used for blinded file names).
         
         Returns:
             Dictionary containing file info, header fields, and analysis status.
@@ -227,15 +231,34 @@ class KymImage(AcqImage):
         # Get representative path for folder hierarchy
         representative_path = self._get_representative_path()
         
+        # Compute parent folders on-the-fly (same logic as AcqImage)
+        parent1, parent2, parent3 = self._compute_parents_from_path(representative_path) if representative_path else (None, None, None)
+        
+        # Apply blinding if requested
+        if blinded:
+            # Replace "File Name" with "File {index+1}" if index is provided AND path exists
+            if file_index is not None and representative_path is not None:
+                file_name = f"File {file_index + 1}"
+            else:
+                file_name = representative_path.name if representative_path is not None else None
+            # Replace "Grandparent Folder" with "Blinded" only if it exists
+            if parent3 is not None:
+                grandparent_folder = "Blinded"
+            else:
+                grandparent_folder = None
+        else:
+            file_name = representative_path.name if representative_path is not None else None
+            grandparent_folder = parent3  # Use computed parent3 (grandparent)
+        
         # Map to summary_row() keys and add analysis fields
         result = {
-            "File Name": representative_path.name if representative_path is not None else None,
+            "File Name": file_name,
             "Analyzed": "✓" if self.get_kym_analysis().has_analysis() else "",
             "Saved": "✓" if not self.get_kym_analysis().is_dirty else "",
             "Num ROIS": self.rois.numRois(),
             "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),
-            "Parent Folder": representative_path.parent.name if representative_path is not None else None,
-            "Grandparent Folder": representative_path.parent.parent.name if representative_path is not None and len(representative_path.parent.parts) > 0 else None,
+            "Parent Folder": parent1,  # Use computed parent1
+            "Grandparent Folder": grandparent_folder,
             "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",
             "lines": self.num_lines if self.num_lines is not None else "-",
             

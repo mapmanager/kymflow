@@ -13,6 +13,16 @@ from kymflow.gui_v2.views.file_table_view import FileTableView
 
 
 @pytest.fixture
+def mock_app_context():
+    """Create a mock AppContext for testing."""
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = False
+    mock_context.user_config = mock_user_config
+    return mock_context
+
+
+@pytest.fixture
 def sample_kym_file() -> KymImage:
     """Create a sample KymImage for testing."""
     import tempfile
@@ -29,7 +39,7 @@ def sample_kym_file() -> KymImage:
         return kym_file
 
 
-def test_file_table_view_emits_analysis_update_for_accepted(sample_kym_file: KymImage) -> None:
+def test_file_table_view_emits_analysis_update_for_accepted(sample_kym_file: KymImage, mock_app_context) -> None:
     """Test that FileTableView emits AnalysisUpdate when accepted checkbox is toggled."""
     emitted_events = []
     
@@ -37,6 +47,7 @@ def test_file_table_view_emits_analysis_update_for_accepted(sample_kym_file: Kym
         emitted_events.append(event)
     
     view = FileTableView(
+        mock_app_context,
         on_selected=lambda e: None,
         on_analysis_update=capture_event,
     )
@@ -64,7 +75,7 @@ def test_file_table_view_emits_analysis_update_for_accepted(sample_kym_file: Kym
     assert event.phase == "intent"
 
 
-def test_file_table_view_handles_accepted_bool_conversion(sample_kym_file: KymImage) -> None:
+def test_file_table_view_handles_accepted_bool_conversion(sample_kym_file: KymImage, mock_app_context) -> None:
     """Test that FileTableView correctly converts various input types to bool for accepted."""
     emitted_events = []
     
@@ -72,6 +83,7 @@ def test_file_table_view_handles_accepted_bool_conversion(sample_kym_file: KymIm
         emitted_events.append(event)
     
     view = FileTableView(
+        mock_app_context,
         on_selected=lambda e: None,
         on_analysis_update=capture_event,
     )
@@ -96,9 +108,10 @@ def test_file_table_view_handles_accepted_bool_conversion(sample_kym_file: KymIm
     assert emitted_events[-1].fields["accepted"] is True
 
 
-def test_file_table_view_does_not_emit_when_callback_missing(sample_kym_file: KymImage) -> None:
+def test_file_table_view_does_not_emit_when_callback_missing(sample_kym_file: KymImage, mock_app_context) -> None:
     """Test that FileTableView does not crash when on_analysis_update callback is None."""
     view = FileTableView(
+        mock_app_context,
         on_selected=lambda e: None,
         on_analysis_update=None,  # No callback
     )
@@ -116,9 +129,9 @@ def test_file_table_view_does_not_emit_when_callback_missing(sample_kym_file: Ky
     )
 
 
-def test_file_table_view_includes_accepted_in_row_dict(sample_kym_file: KymImage) -> None:
+def test_file_table_view_includes_accepted_in_row_dict(sample_kym_file: KymImage, mock_app_context) -> None:
     """Test that accepted field is included in getRowDict() and displayed in table."""
-    view = FileTableView(on_selected=lambda e: None)
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
     
     # Set files and get rows
     view.set_files([sample_kym_file])
@@ -135,3 +148,70 @@ def test_file_table_view_includes_accepted_in_row_dict(sample_kym_file: KymImage
     sample_kym_file.get_kym_analysis().set_accepted(False)
     row_dict = sample_kym_file.getRowDict()
     assert row_dict["accepted"] is False
+
+
+def test_file_table_view_blinded_displays_blinded_data(sample_kym_file: KymImage) -> None:
+    """Test that FileTableView displays blinded data when blinded=True."""
+    from unittest.mock import MagicMock
+    
+    # Create mock app context with blinded=True
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = True
+    mock_context.user_config = mock_user_config
+    
+    view = FileTableView(
+        mock_context,
+        on_selected=lambda e: None,
+    )
+    
+    # Set files - should use blinded data
+    view.set_files([sample_kym_file])
+    
+    # Check that pending_rows has blinded data
+    assert len(view._pending_rows) == 1
+    row = view._pending_rows[0]
+    
+    # File Name should be blinded
+    assert row["File Name"] == "File 1"
+    
+    # Grandparent Folder should be blinded (always "Blinded" when blinded=True)
+    assert row["Grandparent Folder"] == "Blinded"
+    
+    # Path should remain unchanged (for internal use)
+    assert row["path"] is not None
+    
+    # Verify the original file name is different (if path exists)
+    if sample_kym_file.path:
+        assert row["File Name"] != sample_kym_file.path.name
+
+
+def test_file_table_view_blinded_false_displays_real_data(sample_kym_file: KymImage) -> None:
+    """Test that FileTableView displays real data when blinded=False."""
+    from unittest.mock import MagicMock
+    
+    # Create mock app context with blinded=False
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = False
+    mock_context.user_config = mock_user_config
+    
+    view = FileTableView(
+        mock_context,
+        on_selected=lambda e: None,
+    )
+    
+    # Set files - should use real data
+    view.set_files([sample_kym_file])
+    
+    # Check that pending_rows has real data
+    assert len(view._pending_rows) == 1
+    row = view._pending_rows[0]
+    
+    # File Name should be real
+    assert row["File Name"] == sample_kym_file.path.name
+    
+    # Grandparent Folder should be real (if path has grandparent)
+    if sample_kym_file.path and len(sample_kym_file.path.parent.parts) > 0:
+        # Grandparent folder might be None if path is shallow, but shouldn't be "Blinded"
+        assert row["Grandparent Folder"] != "Blinded"

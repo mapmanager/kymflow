@@ -21,6 +21,16 @@ from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 
 
+@pytest.fixture
+def mock_app_context():
+    """Create a mock AppContext for testing."""
+    mock_context = MagicMock()
+    mock_user_config = MagicMock()
+    mock_user_config.get_blinded.return_value = False
+    mock_context.user_config = mock_user_config
+    return mock_context
+
+
 def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus) -> None:
     """Test that AnalysisToolbarBindings subscribes to TaskStateChanged."""
     view = AnalysisToolbarView(
@@ -86,9 +96,9 @@ def test_analysis_toolbar_bindings_filters_task_type(bus: EventBus) -> None:
     bindings.teardown()
 
 
-def test_file_table_bindings_subscribes_to_task_state(bus: EventBus) -> None:
+def test_file_table_bindings_subscribes_to_task_state(bus: EventBus, mock_app_context) -> None:
     """Test that FileTableBindings subscribes to TaskStateChanged."""
-    view = FileTableView(on_selected=lambda e: None)
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
 
     view.set_task_state = MagicMock()
 
@@ -106,9 +116,9 @@ def test_file_table_bindings_subscribes_to_task_state(bus: EventBus) -> None:
     bindings.teardown()
 
 
-def test_file_table_bindings_filters_task_type(bus: EventBus) -> None:
+def test_file_table_bindings_filters_task_type(bus: EventBus, mock_app_context) -> None:
     """Test that FileTableBindings only processes 'home' task type."""
-    view = FileTableView(on_selected=lambda e: None)
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
 
     view.set_task_state = MagicMock()
 
@@ -230,9 +240,9 @@ def test_folder_selector_bindings_filters_task_type(bus: EventBus) -> None:
     bindings.teardown()
 
 
-def test_file_table_bindings_subscribes_to_analysis_update(bus: EventBus) -> None:
+def test_file_table_bindings_subscribes_to_analysis_update(bus: EventBus, mock_app_context) -> None:
     """Test that FileTableBindings subscribes to AnalysisUpdate state events."""
-    view = FileTableView(on_selected=lambda e: None)
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
     view.refresh_rows = MagicMock()
     
     bindings = FileTableBindings(bus, view)
