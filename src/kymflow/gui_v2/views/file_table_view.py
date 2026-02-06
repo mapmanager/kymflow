@@ -190,7 +190,7 @@ class FileTableView:
         """Update table contents from KymImage list."""
         files_list = list(files)
         
-        logger.info(f'files_list:{len(files_list)}')
+        # logger.info(f'files_list:{len(files_list)}')
 
         self._files = files_list
         self._files_by_path = {
@@ -199,10 +199,12 @@ class FileTableView:
         rows: Rows = [f.getRowDict() for f in files_list]
         rows_unchanged = rows == self._pending_rows
         
-        logger.info(f'=== rows: {len(rows)}')
+        # logger.info(f'=== rows: {len(rows)}')
+        
         for _row in rows:
             logger.info(f'  {_row}')
-        logger.info(f'rows_unchanged:{rows_unchanged}')
+        
+        # logger.info(f'rows_unchanged:{rows_unchanged}')
 
         self._pending_rows = rows
         if rows_unchanged and self._grid is not None:

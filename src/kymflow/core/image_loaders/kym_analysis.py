@@ -1258,7 +1258,7 @@ class KymAnalysis:
 
         Creates a new VelocityEvent with the given t_start/t_end. Other fields
         are set to defaults (event_type="baseline_drop", user_type=UNREVIEWED, etc.).
-        The event is appended to the ROI's event list. Future TODO: sort events by t_start.
+        The event is appended to the ROI's event list and sorted by t_start.
 
         Args:
             roi_id: Identifier of the ROI.
@@ -1301,8 +1301,13 @@ class KymAnalysis:
             self._velocity_events[roi_id] = []
         self._velocity_events[roi_id].append(new_event)
         
+        # Sort events by t_start (same as run_velocity_event_analysis)
+        self._velocity_events[roi_id].sort(key=lambda e: e.t_start)
+        
+        # Find the new index of the event after sorting
+        idx = self._velocity_events[roi_id].index(new_event)
+        
         # Generate UUID for the new event and add to mappings
-        idx = len(self._velocity_events[roi_id]) - 1  # Index of the newly appended event
         event_uuid = str(uuid4())
         self._velocity_event_uuid_map[event_uuid] = (roi_id, idx)
         self._velocity_event_uuid_reverse[(roi_id, idx)] = event_uuid
