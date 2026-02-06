@@ -182,9 +182,7 @@ class ROI:
         # Get 2D image slice for this ROI's channel and z
         img_slice = acq_image.get_img_slice(slice_num=self.z, channel=self.channel)
         if img_slice is None:
-            raise ValueError(
-                f"Image data not loaded/available for {acq_image.path.name} channel {self.channel}, z={self.z}"
-            )
+            raise ValueError("Image data not available")
         
         # Extract ROI region from the image
         # ROI bounds: dim0 = rows (height), dim1 = cols (width)

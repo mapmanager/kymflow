@@ -1181,7 +1181,7 @@ def test_roi_calculate_image_stats_invalid_channel() -> None:
     bounds = RoiBounds(dim0_start=0, dim0_stop=10, dim1_start=0, dim1_stop=10)
     roi = ROI(id=1, channel=99, z=0, bounds=bounds)  # Invalid channel
     
-    # Should raise ValueError
+    # Should raise ValueError (invalid channel means get_img_slice returns None)
     with pytest.raises(ValueError, match="Image data not available"):
         roi.calculate_image_stats(acq_image)
     

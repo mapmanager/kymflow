@@ -315,7 +315,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         window_size = None
 
     # Register minimal shutdown handlers to persist configs (window_rect is updated by poller).
-    # install_shutdown_handlers(context, native=native)
+    install_shutdown_handlers(context, native=native)
 
     ui.run(
         port=DEFAULT_PORT,
