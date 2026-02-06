@@ -379,12 +379,16 @@ def test_acq_image_list_iter_metadata_blinded() -> None:
             file_extension=".tif"
         )
         
+        # Verify _blind_index is set correctly on images
+        for index, image in enumerate(image_list):
+            assert image._blind_index == index, f"Image {index} should have _blind_index={index}"
+        
         # Test iter_metadata with blinded=True
         metadata_list = list(image_list.iter_metadata(blinded=True))
         
         assert len(metadata_list) == len(image_list)
         
-        # Check that filenames are blinded
+        # Check that filenames are blinded (using _blind_index automatically)
         for index, metadata in enumerate(metadata_list):
             assert metadata['filename'] == f"File {index + 1}"
             assert metadata['parent3'] == "Blinded"
@@ -411,6 +415,10 @@ def test_acq_image_list_collect_metadata_blinded() -> None:
             image_cls=AcqImage,
             file_extension=".tif"
         )
+        
+        # Verify _blind_index is set correctly on images
+        for index, image in enumerate(image_list):
+            assert image._blind_index == index, f"Image {index} should have _blind_index={index}"
         
         # Test collect_metadata with blinded=True
         metadata = image_list.collect_metadata(blinded=True)

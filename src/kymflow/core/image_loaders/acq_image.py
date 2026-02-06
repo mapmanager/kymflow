@@ -30,6 +30,7 @@ class AcqImage:
                  img_data: np.ndarray | None = None,
                  channel: int = 1,
                  load_image: bool = False,
+                 _blind_index: int | None = None,
                  ):
         if path is None and img_data is None:
             raise ValueError("Either path or img_data must be provided")
@@ -52,6 +53,9 @@ class AcqImage:
         
         # ROI set (lazy initialization)
         self._roi_set: "RoiSet" | None = None
+        
+        # Internal blind index for blinded file name display (set by AcqImageList)
+        self._blind_index: int | None = _blind_index
         
         if img_data is not None:
             self.addColorChannel(channel, img_data)
@@ -84,6 +88,30 @@ class AcqImage:
             Representative path from _file_path_dict, or None if no path available.
         """
         return self._get_representative_path()
+    
+    def get_file_name(self, *, blinded: bool = False) -> str | None:
+        """Get file name for display, with optional blinding.
+        
+        Uses internal _blind_index if available when blinded=True.
+        If blinded=True but _blind_index is None, returns "unknown".
+        
+        Args:
+            blinded: If True, return "File {index+1}" using _blind_index.
+        
+        Returns:
+            File name string, "unknown" if blinded without index, or None if no path.
+        """
+        representative_path = self._get_representative_path()
+        if representative_path is None:
+            return None
+        
+        if blinded:
+            if self._blind_index is not None:
+                return f"File {self._blind_index + 1}"
+            else:
+                return "unknown"  # No fallback to real name
+        
+        return representative_path.name
     
     def _compute_parents_from_path(self, path: Path) -> tuple[str | None, str | None, str | None]:
         """Compute parent folder names from a path.
@@ -434,7 +462,8 @@ class AcqImage:
         
         Args:
             blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
-            file_index: Zero-based index of file in list (used for blinded file names).
+            file_index: DEPRECATED: Zero-based index (used only if _blind_index is None).
+                       Prefer using _blind_index set during AcqImageList instantiation.
         
         Returns:
             Dictionary containing file info (path, filename, parent folders) and 
@@ -446,13 +475,16 @@ class AcqImage:
         # Compute parent folders on-the-fly
         parent1, parent2, parent3 = self._compute_parents_from_path(representative_path) if representative_path else (None, None, None)
         
+        # Use _blind_index if available, otherwise fall back to file_index parameter (for backward compat)
+        effective_index = self._blind_index if self._blind_index is not None else file_index
+        
         # Apply blinding if requested
         if blinded:
-            # Replace filename with "File {index+1}" if index is provided AND path exists
-            if file_index is not None and representative_path is not None:
-                filename = f"File {file_index + 1}"
+            # Replace filename with "File {index+1}" if index is available AND path exists
+            if effective_index is not None and representative_path is not None:
+                filename = f"File {effective_index + 1}"
             else:
-                filename = representative_path.name if representative_path is not None else None
+                filename = "unknown" if representative_path is not None else None
             # Replace parent3 (Grandparent Folder) with "Blinded" only if it exists
             if parent3 is not None:
                 parent3 = "Blinded"

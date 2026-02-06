@@ -165,6 +165,9 @@ def test_file_table_view_blinded_displays_blinded_data(sample_kym_file: KymImage
         on_selected=lambda e: None,
     )
     
+    # Set _blind_index on file (simulating AcqImageList behavior)
+    sample_kym_file._blind_index = 0
+    
     # Set files - should use blinded data
     view.set_files([sample_kym_file])
     

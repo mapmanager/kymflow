@@ -16,9 +16,16 @@ from kymflow.gui_v2.events import FileSelection, ROISelection, SelectionOrigin
 
 def test_selection_flow_preserves_origin(bus: EventBus, app_state: AppState) -> None:
     """Test that SelectionOrigin is preserved through the selection flow."""
+    from unittest.mock import MagicMock
+    
+    mock_context = MagicMock()
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
+    
     # Set up controllers
     bridge = AppStateBridgeController(app_state, bus)
-    controller = FileSelectionController(app_state, bus)
+    controller = FileSelectionController(app_state, bus, mock_context)
 
     # Track FileSelection (phase="state") events
     received_events: list[FileSelection] = []
@@ -49,9 +56,16 @@ def test_selection_flow_no_loop_on_file_table_origin(
     bus: EventBus, app_state: AppState
 ) -> None:
     """Test that FILE_TABLE origin prevents feedback loops."""
+    from unittest.mock import MagicMock
+    
+    mock_context = MagicMock()
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
+    
     # Set up controllers
     bridge = AppStateBridgeController(app_state, bus)
-    controller = FileSelectionController(app_state, bus)
+    controller = FileSelectionController(app_state, bus, mock_context)
 
     # Track how many times FileSelection (phase="state") is emitted
     event_count = 0

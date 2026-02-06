@@ -26,11 +26,12 @@ class KymImage(AcqImage):
                  img_data: np.ndarray | None = None,
                  channel: int = 1,
                  load_image: bool = False,
+                 _blind_index: int | None = None,
                  ):
         
         # Call super().__init__ with load_image=False since KymImage handles its own loading
         # after header discovery (which may discover additional channels)
-        super().__init__(path=path, img_data=img_data, channel=channel, load_image=False)
+        super().__init__(path=path, img_data=img_data, channel=channel, load_image=False, _blind_index=_blind_index)
 
         # Try and load Olympus header from txt file if it exists
         # This discovers additional channels and sets header metadata
@@ -223,7 +224,8 @@ class KymImage(AcqImage):
         
         Args:
             blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
-            file_index: Zero-based index of file in list (used for blinded file names).
+            file_index: DEPRECATED: Zero-based index (used only if _blind_index is None).
+                       Prefer using _blind_index set during AcqImageList instantiation.
         
         Returns:
             Dictionary containing file info, header fields, and analysis status.
@@ -234,13 +236,16 @@ class KymImage(AcqImage):
         # Compute parent folders on-the-fly (same logic as AcqImage)
         parent1, parent2, parent3 = self._compute_parents_from_path(representative_path) if representative_path else (None, None, None)
         
+        # Use _blind_index if available, otherwise fall back to file_index parameter (for backward compat)
+        effective_index = self._blind_index if self._blind_index is not None else file_index
+        
         # Apply blinding if requested
         if blinded:
-            # Replace "File Name" with "File {index+1}" if index is provided AND path exists
-            if file_index is not None and representative_path is not None:
-                file_name = f"File {file_index + 1}"
+            # Replace "File Name" with "File {index+1}" if index is available AND path exists
+            if effective_index is not None and representative_path is not None:
+                file_name = f"File {effective_index + 1}"
             else:
-                file_name = representative_path.name if representative_path is not None else None
+                file_name = "unknown" if representative_path is not None else None
             # Replace "Grandparent Folder" with "Blinded" only if it exists
             if parent3 is not None:
                 grandparent_folder = "Blinded"

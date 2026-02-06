@@ -1379,7 +1379,7 @@ class KymAnalysis:
         event_dicts: list[VelocityReportRow] = []
         path = str(self.acq_image.path) if self.acq_image.path is not None else None
         
-        _rowDict = self.acq_image.getRowDict(blinded=blinded, file_index=None)
+        _rowDict = self.acq_image.getRowDict(blinded=blinded)
         grandparent_folder = _rowDict.get("Grandparent Folder")
         if grandparent_folder is None:
             logger.warning(f'grandparent_folder is none -> happend when loaded with synth data in pytest')

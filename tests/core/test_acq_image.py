@@ -378,10 +378,10 @@ def test_acq_image_getRowDict_blinded() -> None:
     
     # Create a path with multiple parent folders
     test_path = Path("/a/b/c/test_file.tif")
-    acq = AcqImage(path=test_path)
+    acq = AcqImage(path=test_path, _blind_index=0)
     
-    # Get row dict with blinded=True and file_index=0
-    row_dict = acq.getRowDict(blinded=True, file_index=0)
+    # Get row dict with blinded=True (uses _blind_index)
+    row_dict = acq.getRowDict(blinded=True)
     
     # Check that filename is blinded
     assert row_dict['filename'] == "File 1"
@@ -392,14 +392,21 @@ def test_acq_image_getRowDict_blinded() -> None:
     assert row_dict['parent1'] == "c"  # parent1 should remain unchanged
     assert row_dict['parent2'] == "b"  # parent2 should remain unchanged
     
-    # Test with different file_index
-    row_dict2 = acq.getRowDict(blinded=True, file_index=5)
+    # Test with different _blind_index
+    acq2 = AcqImage(path=test_path, _blind_index=5)
+    row_dict2 = acq2.getRowDict(blinded=True)
     assert row_dict2['filename'] == "File 6"  # 5 + 1 = 6
     
-    # Test with file_index=None (should keep original filename)
-    row_dict3 = acq.getRowDict(blinded=True, file_index=None)
-    assert row_dict3['filename'] == "test_file.tif"
-    assert row_dict3['parent3'] == "Blinded"  # Still blinded
+    # Test backward compatibility: file_index parameter still works if _blind_index is None
+    acq3 = AcqImage(path=test_path)  # No _blind_index
+    row_dict3 = acq3.getRowDict(blinded=True, file_index=2)
+    assert row_dict3['filename'] == "File 3"  # Uses file_index parameter
+    
+    # Test with _blind_index=None and file_index=None (should return "unknown")
+    acq4 = AcqImage(path=test_path)  # No _blind_index
+    row_dict4 = acq4.getRowDict(blinded=True, file_index=None)
+    assert row_dict4['filename'] == "unknown"
+    assert row_dict4['parent3'] == "Blinded"  # Still blinded
     
     logger.info(f"  - getRowDict() with blinded=True: filename={row_dict['filename']}, parent3={row_dict['parent3']}")
 
@@ -410,10 +417,10 @@ def test_acq_image_getRowDict_blinded_no_path() -> None:
     
     # Create AcqImage with data but no path
     img_2d = np.random.randint(0, 255, size=(50, 75), dtype=np.uint8)
-    acq = AcqImage(path=None, img_data=img_2d)
+    acq = AcqImage(path=None, img_data=img_2d, _blind_index=0)
     
     # Get row dict with blinded=True
-    row_dict = acq.getRowDict(blinded=True, file_index=0)
+    row_dict = acq.getRowDict(blinded=True)
     
     # Should handle None path gracefully
     assert row_dict['filename'] is None
@@ -421,6 +428,40 @@ def test_acq_image_getRowDict_blinded_no_path() -> None:
     assert row_dict['parent3'] is None  # No path, so no parent3 to blind
     
     logger.info(f"  - getRowDict() with blinded=True but no path handled correctly")
+
+
+def test_acq_image_get_file_name() -> None:
+    """Test get_file_name() method with blinded support."""
+    logger.info("Testing AcqImage get_file_name()")
+    
+    test_path = Path("/a/b/c/test_file.tif")
+    
+    # Test with blinded=False (should return real name)
+    acq = AcqImage(path=test_path)
+    file_name = acq.get_file_name(blinded=False)
+    assert file_name == "test_file.tif"
+    
+    # Test with blinded=True and _blind_index set
+    acq2 = AcqImage(path=test_path, _blind_index=0)
+    file_name2 = acq2.get_file_name(blinded=True)
+    assert file_name2 == "File 1"
+    
+    acq3 = AcqImage(path=test_path, _blind_index=5)
+    file_name3 = acq3.get_file_name(blinded=True)
+    assert file_name3 == "File 6"
+    
+    # Test with blinded=True but no _blind_index (should return "unknown")
+    acq4 = AcqImage(path=test_path)  # No _blind_index
+    file_name4 = acq4.get_file_name(blinded=True)
+    assert file_name4 == "unknown"
+    
+    # Test with no path (should return None)
+    img_2d = np.random.randint(0, 255, size=(50, 75), dtype=np.uint8)
+    acq5 = AcqImage(path=None, img_data=img_2d)
+    file_name5 = acq5.get_file_name(blinded=False)
+    assert file_name5 is None
+    
+    logger.info("  - get_file_name() works correctly with blinded support")
 
 
 def test_acq_image_metadata_dirty_flag() -> None:

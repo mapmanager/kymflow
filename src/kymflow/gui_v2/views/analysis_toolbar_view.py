@@ -9,12 +9,15 @@ by AnalysisToolbarBindings).
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 from pathlib import Path
 
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
+
+if TYPE_CHECKING:
+    from kymflow.gui_v2.app_context import AppContext
 from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.config import MAX_NUM_ROI, ALLOW_EDIT_ROI
@@ -64,11 +67,13 @@ class AnalysisToolbarView:
         _cancel_button: Cancel button (created in render()).
         _current_file: Currently selected file (for enabling/disabling buttons).
         _task_state: Current task state (for button states).
+        _app_context: AppContext for accessing app configuration.
     """
 
     def __init__(
         self,
         *,
+        app_context: "AppContext",
         on_analysis_start: OnAnalysisStart,
         on_analysis_cancel: OnAnalysisCancel,
         on_add_roi: OnAddRoi,
@@ -80,6 +85,7 @@ class AnalysisToolbarView:
         """Initialize analysis toolbar view.
 
         Args:
+            app_context: AppContext for accessing app configuration.
             on_analysis_start: Callback function that receives AnalysisStart events.
             on_analysis_cancel: Callback function that receives AnalysisCancel events.
             on_add_roi: Callback function that receives AddRoi events.
@@ -88,6 +94,7 @@ class AnalysisToolbarView:
             on_roi_selected: Callback function that receives ROISelection events.
             on_detect_events: Callback function that receives DetectEvents events.
         """
+        self._app_context = app_context
         self._on_analysis_start = on_analysis_start
         self._on_analysis_cancel = on_analysis_cancel
         self._on_add_roi = on_add_roi
@@ -681,16 +688,13 @@ class AnalysisToolbarView:
         )
 
     def _update_file_path_label(self) -> None:
-        """Update the file path label with current file name (stem) or placeholder."""
+        """Update the file path label with current file name (blinded or real)."""
         if self._file_path_label is None:
             return
-        if self._current_file and self._current_file.path:
-            try:
-                from pathlib import Path
-                file_name = Path(self._current_file.path).stem
-                self._file_path_label.text = file_name
-            except (ValueError, TypeError):
-                self._file_path_label.text = "No file selected"
+        if self._current_file:
+            blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
+            file_name = self._current_file.get_file_name(blinded=blinded) or "No file selected"
+            self._file_path_label.text = file_name
         else:
             self._file_path_label.text = "No file selected"
 

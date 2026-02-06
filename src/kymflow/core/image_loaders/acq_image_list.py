@@ -211,15 +211,26 @@ class AcqImageList(Generic[T]):
 
         return True
 
-    def _instantiate_image(self, file_path: Path) -> Optional[T]:
-        """Instantiate an image_cls for the file path, without loading image data when possible."""
+    def _instantiate_image(self, file_path: Path, *, blind_index: int | None = None) -> Optional[T]:
+        """Instantiate an image_cls for the file path, without loading image data when possible.
+        
+        Args:
+            file_path: Path to the image file.
+            blind_index: Optional index for blinded display (0-based).
+        """
         try:
             import inspect
 
             sig = inspect.signature(self.image_cls.__init__)
+            
+            # Build kwargs based on signature
+            kwargs = {"path": file_path}
             if "load_image" in sig.parameters:
-                return self.image_cls(path=file_path, load_image=False)
-            return self.image_cls(path=file_path)
+                kwargs["load_image"] = False
+            if "_blind_index" in sig.parameters:
+                kwargs["_blind_index"] = blind_index
+            
+            return self.image_cls(**kwargs)
         except Exception as e:
             logger.warning(f"AcqImageList: could not load file: {file_path}")
             logger.warning(f"  -->> e:{e}")
@@ -230,7 +241,7 @@ class AcqImageList(Generic[T]):
 
         # --- File list mode ---
         if self._file_path_list is not None:
-            for file_path in self._file_path_list:
+            for index, file_path in enumerate(self._file_path_list):
                 if not self._file_matches_filters(file_path):
                     logger.warning(
                         "AcqImageList: file does not match filters "
@@ -238,7 +249,7 @@ class AcqImageList(Generic[T]):
                     )
                     continue
                 
-                image = self._instantiate_image(file_path)
+                image = self._instantiate_image(file_path, blind_index=index)
                 if image is not None:
                     self.images.append(image)
             return
@@ -256,7 +267,7 @@ class AcqImageList(Generic[T]):
                 )
                 return
 
-            image = self._instantiate_image(self._single_file)
+            image = self._instantiate_image(self._single_file, blind_index=0)
             if image is not None:
                 self.images.append(image)
             return
@@ -297,8 +308,8 @@ class AcqImageList(Generic[T]):
                 continue
 
         # Sort paths for consistent ordering
-        for file_path in sorted(filtered_paths):
-            image = self._instantiate_image(file_path)
+        for index, file_path in enumerate(sorted(filtered_paths)):
+            image = self._instantiate_image(file_path, blind_index=index)
             if image is not None:
                 self.images.append(image)
 
@@ -337,8 +348,8 @@ class AcqImageList(Generic[T]):
         Args:
             blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
         """
-        for index, image in enumerate(self.images):
-            yield image.getRowDict(blinded=blinded, file_index=index)
+        for image in self.images:
+            yield image.getRowDict(blinded=blinded)
 
     def collect_metadata(self, *, blinded: bool = False) -> List[Dict[str, Any]]:
         """Collect metadata for all loaded AcqImage instances into a list.

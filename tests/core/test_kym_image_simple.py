@@ -250,9 +250,10 @@ def test_kym_image_getrowdict_blinded() -> None:
         labels=["Time (s)", "Space (um)"],
     )
     kym_image._header.physical_size = [0.1, 56.8]
+    kym_image._blind_index = 0  # Set blind index
     
-    # Get row dict with blinded=True and file_index=0
-    row_dict = kym_image.getRowDict(blinded=True, file_index=0)
+    # Get row dict with blinded=True (uses _blind_index)
+    row_dict = kym_image.getRowDict(blinded=True)
     
     # Check that "File Name" is blinded
     assert row_dict["File Name"] == "File 1"
@@ -262,14 +263,27 @@ def test_kym_image_getrowdict_blinded() -> None:
     assert row_dict["Grandparent Folder"] == "Blinded"
     assert row_dict["Parent Folder"] == "c"  # Parent Folder should remain unchanged
     
-    # Test with different file_index
-    row_dict2 = kym_image.getRowDict(blinded=True, file_index=5)
+    # Test with different _blind_index
+    kym_image2 = KymImage(path=test_path, load_image=False)
+    kym_image2._header = kym_image._header  # Copy header
+    kym_image2._blind_index = 5
+    row_dict2 = kym_image2.getRowDict(blinded=True)
     assert row_dict2["File Name"] == "File 6"  # 5 + 1 = 6
     
-    # Test with file_index=None (should keep original filename)
-    row_dict3 = kym_image.getRowDict(blinded=True, file_index=None)
-    assert row_dict3["File Name"] == "test_file.tif"
-    assert row_dict3["Grandparent Folder"] == "Blinded"  # Still blinded
+    # Test backward compatibility: file_index parameter still works if _blind_index is None
+    kym_image3 = KymImage(path=test_path, load_image=False)
+    kym_image3._header = kym_image._header  # Copy header
+    # No _blind_index set
+    row_dict3 = kym_image3.getRowDict(blinded=True, file_index=2)
+    assert row_dict3["File Name"] == "File 3"  # Uses file_index parameter
+    
+    # Test with _blind_index=None and file_index=None (should return "unknown")
+    kym_image4 = KymImage(path=test_path, load_image=False)
+    kym_image4._header = kym_image._header  # Copy header
+    # No _blind_index set
+    row_dict4 = kym_image4.getRowDict(blinded=True, file_index=None)
+    assert row_dict4["File Name"] == "unknown"
+    assert row_dict4["Grandparent Folder"] == "Blinded"  # Still blinded
     
     # All other fields should remain unchanged
     assert row_dict["Num ROIS"] == 0
@@ -285,7 +299,7 @@ def test_kym_image_getrowdict_blinded_no_path() -> None:
     
     # Create synthetic kymograph image without path
     test_image = np.zeros((100, 200), dtype=np.uint16)
-    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image = KymImage(img_data=test_image, load_image=False, _blind_index=0)
     
     # Set up header
     kym_image.update_header(
@@ -295,7 +309,7 @@ def test_kym_image_getrowdict_blinded_no_path() -> None:
     )
     
     # Get row dict with blinded=True
-    row_dict = kym_image.getRowDict(blinded=True, file_index=0)
+    row_dict = kym_image.getRowDict(blinded=True)
     
     # Should handle None path gracefully
     assert row_dict["File Name"] is None
@@ -303,3 +317,38 @@ def test_kym_image_getrowdict_blinded_no_path() -> None:
     assert row_dict["Grandparent Folder"] is None  # No path, so no grandparent to blind
     
     logger.info(f"  - getRowDict() with blinded=True but no path handled correctly")
+
+
+def test_kym_image_get_file_name() -> None:
+    """Test get_file_name() method with blinded support."""
+    logger.info("Testing KymImage get_file_name()")
+    
+    test_path = Path("/a/b/c/test_file.tif")
+    
+    # Test with blinded=False (should return real name)
+    kym_image = KymImage(path=test_path, load_image=False)
+    file_name = kym_image.get_file_name(blinded=False)
+    assert file_name == "test_file.tif"
+    
+    # Test with blinded=True and _blind_index set
+    kym_image2 = KymImage(path=test_path, load_image=False, _blind_index=0)
+    file_name2 = kym_image2.get_file_name(blinded=True)
+    assert file_name2 == "File 1"
+    
+    kym_image3 = KymImage(path=test_path, load_image=False, _blind_index=5)
+    file_name3 = kym_image3.get_file_name(blinded=True)
+    assert file_name3 == "File 6"
+    
+    # Test with blinded=True but no _blind_index (should return "unknown")
+    kym_image4 = KymImage(path=test_path, load_image=False)  # No _blind_index
+    file_name4 = kym_image4.get_file_name(blinded=True)
+    assert file_name4 == "unknown"
+    
+    # Test with no path (should return None)
+    import numpy as np
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image5 = KymImage(img_data=test_image, load_image=False)
+    file_name5 = kym_image5.get_file_name(blinded=False)
+    assert file_name5 is None
+    
+    logger.info("  - get_file_name() works correctly with blinded support")

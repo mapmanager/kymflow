@@ -7,10 +7,15 @@ such as setting window titles based on file or folder paths.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nicegui import app
 
 from kymflow.core.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from kymflow.core.image_loaders.kym_image import KymImage
+    from kymflow.gui_v2.app_context import AppContext
 
 logger = get_logger(__name__)
 
@@ -39,6 +44,34 @@ def set_window_title_for_path(path: Path | str, *, is_file: bool = False) -> Non
         title = f'KymFlow - {path_obj.name}'
     else:
         title = f'KymFlow - {path_obj.name}/'
+    
+    # Only set window title in native mode
+    native = getattr(app, "native", None)
+    if native is not None:
+        main_window = getattr(native, "main_window", None)
+        if main_window is not None:
+            logger.debug(f'=== setting window title to "{title}"')
+            main_window.set_title(title)
+        else:
+            logger.error(f'=== main_window is None for title:{title}')
+
+
+def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> None:
+    """Set native window title based on KymImage with blinded support.
+    
+    Only sets title in native mode. Does nothing in web mode.
+    
+    Args:
+        file: KymImage instance.
+        app_context: AppContext to get blinded setting.
+    """
+    if file is None:
+        return
+    
+    blinded = app_context.app_config.get_blinded() if app_context.app_config else False
+    file_name = file.get_file_name(blinded=blinded) or "unknown"
+    
+    title = f'KymFlow - {file_name}'
     
     # Only set window title in native mode
     native = getattr(app, "native", None)

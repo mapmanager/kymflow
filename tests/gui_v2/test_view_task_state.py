@@ -46,7 +46,15 @@ def test_analysis_toolbar_stores_task_state(
     sample_kym_file: KymImage,
 ) -> None:
     """Test that AnalysisToolbarView stores task state and calls update method."""
+    from unittest.mock import MagicMock
+    
+    mock_context = MagicMock()
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
+    
     view = AnalysisToolbarView(
+        app_context=mock_context,
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,

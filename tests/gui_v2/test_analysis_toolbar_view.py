@@ -17,6 +17,16 @@ from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 
 
 @pytest.fixture
+def mock_app_context():
+    """Create a mock AppContext for testing."""
+    mock_context = MagicMock()
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
+    return mock_context
+
+
+@pytest.fixture
 def kym_file_with_analysis() -> KymImage:
     """Create a KymImage with ROI and analysis."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -39,6 +49,7 @@ def kym_file_with_analysis() -> KymImage:
 
 def test_analysis_toolbar_shows_dialog_when_analysis_exists(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that AnalysisToolbarView shows dialog when has_analysis(roi_id) returns True."""
     received_events: list[AnalysisStart] = []
@@ -47,6 +58,7 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -90,6 +102,7 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
 
 def test_analysis_toolbar_no_dialog_when_no_analysis(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that AnalysisToolbarView does not show dialog when no analysis exists."""
     received_events: list[AnalysisStart] = []
@@ -98,6 +111,7 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -138,6 +152,7 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
 
 def test_analysis_toolbar_cancel_blocks_analysis_start(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that canceling dialog prevents analysis start."""
     received_events: list[AnalysisStart] = []
@@ -146,6 +161,7 @@ def test_analysis_toolbar_cancel_blocks_analysis_start(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -194,6 +210,7 @@ def test_analysis_toolbar_cancel_blocks_analysis_start(
 
 def test_analysis_toolbar_confirm_proceeds_with_analysis(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that confirming dialog proceeds with analysis start."""
     received_events: list[AnalysisStart] = []
@@ -202,6 +219,7 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -257,6 +275,7 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
 
 def test_detect_events_click_collects_ui_inputs(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that _on_detect_events_click() collects UI input values and creates BaselineDropParams."""
     received_events: list[DetectEvents] = []
@@ -265,6 +284,7 @@ def test_detect_events_click_collects_ui_inputs(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -315,6 +335,7 @@ def test_detect_events_click_collects_ui_inputs(
 
 def test_detect_events_click_handles_none_inputs(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that None/invalid UI input values fall back to dataclass defaults."""
     received_events: list[DetectEvents] = []
@@ -323,6 +344,7 @@ def test_detect_events_click_handles_none_inputs(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -367,6 +389,7 @@ def test_detect_events_click_handles_none_inputs(
 
 def test_detect_all_events_click_uses_same_params(
     kym_file_with_analysis: KymImage,
+    mock_app_context,
 ) -> None:
     """Test that _on_detect_all_events_click() collects and uses the same UI inputs."""
     received_events: list[DetectEvents] = []
@@ -375,6 +398,7 @@ def test_detect_all_events_click_uses_same_params(
         received_events.append(event)
 
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,

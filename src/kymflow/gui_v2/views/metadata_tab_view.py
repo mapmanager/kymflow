@@ -8,7 +8,7 @@ of metadata editing widgets.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from nicegui import ui
 
@@ -16,6 +16,9 @@ from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.core.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from kymflow.gui_v2.app_context import AppContext
 
 logger = get_logger(__name__)
 
@@ -38,21 +41,25 @@ class MetadataTabView:
         _header_view: Header metadata view instance.
         _file_path_label: Label showing current file name.
         _current_file: Currently selected file.
+        _app_context: AppContext for accessing app configuration.
     """
 
     def __init__(
         self,
         experimental_view: MetadataExperimentalView,
         header_view: MetadataHeaderView,
+        app_context: "AppContext",
     ) -> None:
         """Initialize metadata tab view.
 
         Args:
             experimental_view: Experimental metadata view instance.
             header_view: Header metadata view instance.
+            app_context: AppContext for accessing app configuration.
         """
         self._experimental_view = experimental_view
         self._header_view = header_view
+        self._app_context = app_context
         self._file_path_label: Optional[ui.label] = None
         self._current_file: Optional[KymImage] = None
 
@@ -88,14 +95,12 @@ class MetadataTabView:
         self._header_view.set_selected_file(file)
 
     def _update_file_path_label(self) -> None:
-        """Update the file path label with current file name (stem) or placeholder."""
+        """Update the file path label with current file name (blinded or real)."""
         if self._file_path_label is None:
             return
-        if self._current_file and self._current_file.path:
-            try:
-                file_name = Path(self._current_file.path).stem
-                self._file_path_label.text = file_name
-            except (ValueError, TypeError):
-                self._file_path_label.text = "No file selected"
+        if self._current_file:
+            blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
+            file_name = self._current_file.get_file_name(blinded=blinded) or "No file selected"
+            self._file_path_label.text = file_name
         else:
             self._file_path_label.text = "No file selected"

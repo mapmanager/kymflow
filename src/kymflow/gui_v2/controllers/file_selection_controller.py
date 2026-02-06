@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
-from kymflow.gui_v2.window_utils import set_window_title_for_path
+from kymflow.gui_v2.window_utils import set_window_title_for_file
 
 if TYPE_CHECKING:
-    pass
+    from kymflow.gui_v2.app_context import AppContext
 
 
 class FileSelectionController:
@@ -40,9 +40,10 @@ class FileSelectionController:
 
     Attributes:
         _app_state: AppState instance to update.
+        _app_context: AppContext for accessing app configuration.
     """
 
-    def __init__(self, app_state: AppState, bus: EventBus) -> None:
+    def __init__(self, app_state: AppState, bus: EventBus, app_context: "AppContext") -> None:
         """Initialize file selection controller.
 
         Subscribes to FileSelection (phase="intent") events from the bus.
@@ -50,8 +51,10 @@ class FileSelectionController:
         Args:
             app_state: AppState instance to update.
             bus: EventBus instance to subscribe to.
+            app_context: AppContext for accessing app configuration.
         """
         self._app_state: AppState = app_state
+        self._app_context: AppContext = app_context
         bus.subscribe_intent(FileSelection, self._on_file_selected)
 
     def _on_file_selected(self, e: FileSelection) -> None:
@@ -82,6 +85,6 @@ class FileSelectionController:
         # Update AppState with selection (origin preserved for feedback loop prevention)
         self._app_state.select_file(match, origin=e.origin)
         
-        # Set window title for selected file
-        if e.path is not None:
-            set_window_title_for_path(e.path, is_file=True)
+        # Set window title for selected file (use file object for blinded support)
+        if match is not None:
+            set_window_title_for_file(match, self._app_context)

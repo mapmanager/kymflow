@@ -31,9 +31,10 @@ def mock_app_context():
     return mock_context
 
 
-def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus) -> None:
+def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus, mock_app_context) -> None:
     """Test that AnalysisToolbarBindings subscribes to TaskStateChanged."""
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
@@ -59,9 +60,10 @@ def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus) -> No
     bindings.teardown()
 
 
-def test_analysis_toolbar_bindings_filters_task_type(bus: EventBus) -> None:
+def test_analysis_toolbar_bindings_filters_task_type(bus: EventBus, mock_app_context) -> None:
     """Test that AnalysisToolbarBindings only processes 'home' task type."""
     view = AnalysisToolbarView(
+        app_context=mock_app_context,
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,

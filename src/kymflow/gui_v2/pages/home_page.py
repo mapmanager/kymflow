@@ -158,6 +158,7 @@ class HomePage(BasePage):
 
         # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
+            app_context=context,
             on_analysis_start=bus.emit,
             on_analysis_cancel=bus.emit,
             on_add_roi=bus.emit,
@@ -180,6 +181,7 @@ class HomePage(BasePage):
         self._drawer_metadata_tab_view = MetadataTabView(
             self._drawer_metadata_experimental_view,
             self._drawer_metadata_header_view,
+            context,
         )
         self._drawer_about_tab_view = AboutTabView()
         self._drawer_options_tab_view = OptionsTabView(context.app_config, context)
@@ -230,7 +232,7 @@ class HomePage(BasePage):
             self.context.app_state, self.bus, self.context.user_config
         )
         self._file_selection_controller = FileSelectionController(
-            self.context.app_state, self.bus
+            self.context.app_state, self.bus, self.context
         )
         self._next_prev_file_controller = NextPrevFileController(
             self.context.app_state, self.bus
