@@ -315,7 +315,6 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         window_size = None
 
     # Register minimal shutdown handlers to persist configs (window_rect is updated by poller).
-    # declan
     # install_shutdown_handlers(context, native=native)
 
     ui.run(
@@ -338,7 +337,7 @@ if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
     logger.info(f"__name__: {__name__}, process: {current_process.name}, is_main: {is_main_process}")
     
     # abb 20260205
-    configure_native_window_args()
+    # configure_native_window_args()
 
     if is_main_process:
         main()

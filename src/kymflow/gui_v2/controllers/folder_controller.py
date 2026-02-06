@@ -14,6 +14,7 @@ from nicegui import ui
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
+from kymflow.gui_v2.window_utils import set_window_title_for_path
 from kymflow.core.user_config import UserConfig
 from kymflow.core.utils.logging import get_logger
 
@@ -90,11 +91,7 @@ class FolderController:
                 self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
             return
         
-        if self._app_state.files and self._app_state.files.any_dirty_analysis():
-            original_depth = e.depth
-            self._show_unsaved_dialog(new_path, current_path, original_depth)
-            return
-        
+        # Calculate depth early (needed for both dirty and non-dirty paths)
         # For files, depth is always 0 (ignored by AcqImageList)
         # For folders, use event depth or current app_state depth
         if is_file:
@@ -104,37 +101,38 @@ class FolderController:
             if e.depth is not None:
                 self._app_state.folder_depth = depth
         
-        self._app_state.load_folder(new_path, depth=depth)
+        # Check for unsaved changes
+        if self._app_state.files and self._app_state.files.any_dirty_analysis():
+            self._show_unsaved_dialog(new_path, current_path, depth)
+            return
         
+        # Not dirty - proceed directly
+        self._finally_set_path(new_path, depth, is_file)
+
+    def _finally_set_path(self, path: Path, depth: int, is_file: bool) -> None:
+        """Finalize path switch: load folder, save config, set title, emit event.
+        
+        This is called by both the non-dirty path and the confirmed dirty path.
+        
+        Args:
+            path: The path to switch to.
+            depth: The depth to use (0 for files, folder depth for folders).
+            is_file: True if path is a file, False if folder.
+        """
+        # Load the folder/file
+        self._app_state.load_folder(path, depth=depth)
+        
+        # Persist to user config
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
-            self._user_config.push_recent_path(str(new_path), depth=config_depth)
+            self._user_config.push_recent_path(str(path), depth=config_depth)
         
-        from nicegui import app
-        if is_file:
-            title = f'KymFlow - {new_path.name}'
-        else:
-            title = f'KymFlow - {new_path.name}/'
+        # Set window title
+        set_window_title_for_path(path, is_file=is_file)
         
-        # Only set window title in native mode
-        native = getattr(app, "native", None)
-        if native is not None:
-            main_window = getattr(native, "main_window", None)
-            if main_window is not None:
-                logger.debug(f'=== setting window title to "{title}"')
-                main_window.set_title(title)
-            else:
-                logger.error(f'=== main_window is None for title:{title}')
-        
-        # import asyncio
-        # _size = ui.run().io(app.native.main_window.get_size())
-        # # _size = app.native.main_window.get_size()
-        # logger.debug(f'=== window size: {_size}')
-
         # Emit state event to confirm successful load
-        # logger.debug('-->> emit SelectPathEvent')
         self._bus.emit(SelectPathEvent(
-            new_path=str(new_path),
+            new_path=str(path),
             depth=depth,
             phase="state",
         ))
@@ -154,16 +152,14 @@ class FolderController:
             config_depth = 0 if is_file else depth
             self._user_config.push_recent_path(str(path), depth=config_depth)
 
-    def _show_unsaved_dialog(self, new_path: Path, previous_path_str: str | None, original_depth: int | None) -> None:
+    def _show_unsaved_dialog(self, new_path: Path, previous_path_str: str | None, depth: int) -> None:
         """Prompt before switching paths if unsaved changes exist.
         
         Args:
             new_path: The new path to switch to.
             previous_path_str: The previous path (for revert on cancel).
-            original_depth: The depth from the original SelectPathEvent (for folders only).
+            depth: The calculated depth to use (already computed from event).
         """
-
-
         dest_path_type = "file" if new_path.is_file() else "folder"
         
         prev_path_type = "folder"
@@ -184,7 +180,7 @@ class FolderController:
                 ).props("outline")
                 ui.button(
                     f"Switch to {dest_path_type}",
-                    on_click=lambda: self._confirm_switch_path(dialog, new_path, previous_path_str, original_depth),
+                    on_click=lambda: self._confirm_switch_path(dialog, new_path, previous_path_str, depth),
                 ).props("color=red")
 
         dialog.open()
@@ -195,38 +191,22 @@ class FolderController:
         if previous_path:
             self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
 
-    def _confirm_switch_path(self, dialog, path: Path, previous_path: str | None, original_depth: int | None) -> None:
+    def _confirm_switch_path(self, dialog, path: Path, previous_path: str | None, depth: int) -> None:
         """Confirm path switch after unsaved changes warning.
         
         Args:
             dialog: The dialog to close.
             path: The new path to switch to.
             previous_path: The previous path (for revert on cancel).
-            original_depth: The depth from the original SelectPathEvent (for folders only).
+            depth: The depth to use (already calculated, passed from dialog).
         """
         dialog.close()
+        
         is_file = path.is_file()
-        is_folder = path.is_dir()
         
-        if is_file:
-            depth = 0
-        elif original_depth is not None:
-            depth = original_depth
-        else:
-            depth = self._app_state.folder_depth
+        # Update folder_depth if this is a folder (depth was calculated from event)
+        if not is_file and depth != self._app_state.folder_depth:
+            self._app_state.folder_depth = depth
         
-        if is_folder and original_depth is not None:
-            self._app_state.folder_depth = original_depth
-        
-        self._app_state.load_folder(path, depth=depth)
-        
-        if self._user_config is not None:
-            config_depth = 0 if is_file else depth
-            self._user_config.push_recent_path(str(path), depth=config_depth)
-        
-        # Emit state event to confirm successful load
-        self._bus.emit(SelectPathEvent(
-            new_path=str(path),
-            depth=depth,
-            phase="state",
-        ))
+        # Use the shared finalization logic
+        self._finally_set_path(path, depth, is_file)

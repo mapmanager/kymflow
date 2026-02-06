@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
+from kymflow.gui_v2.window_utils import set_window_title_for_path
 
 if TYPE_CHECKING:
     pass
@@ -80,3 +81,7 @@ class FileSelectionController:
 
         # Update AppState with selection (origin preserved for feedback loop prevention)
         self._app_state.select_file(match, origin=e.origin)
+        
+        # Set window title for selected file
+        if e.path is not None:
+            set_window_title_for_path(e.path, is_file=True)

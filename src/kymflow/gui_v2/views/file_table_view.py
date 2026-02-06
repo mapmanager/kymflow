@@ -142,6 +142,30 @@ class FileTableView:
         self._grid = None
         self._grid_container = None
 
+        # Create grid container with flex constraints for proper rendering at all window sizes
+        # Parent container (home_page) already provides flex column context
+        # Match kym_event_view structure: h-full + flex flex-col + overflow-hidden for proper sizing
+
+        # self._grid_container = ui.column().classes("w-full h-full flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden")
+
+        # self._grid_container = ui.column().classes(
+        #     "w-full h-full min-h-0 flex flex-col overflow-hidden"
+        # )
+
+
+        self._grid_container = ui.column().classes(
+            "w-full h-full min-h-0 min-w-0 flex flex-col overflow-hidden"
+        )
+
+
+        # self._grid_container = ui.column().classes("w-full flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden")
+        self._create_grid(self._pending_rows)
+        self._update_interaction_state()
+
+    def _create_grid(self, rows: Rows) -> None:
+        """Create a fresh grid instance inside the current container."""
+        # if self._grid_container is None:
+        #     return
         grid_cfg = GridConfig(
             selection_mode=self._selection_mode,  # type: ignore[arg-type]
             # height="24rem",
@@ -151,39 +175,12 @@ class FileTableView:
             zebra_rows=False,
             hover_highlight=False,
         )
-        # if hasattr(grid_cfg, "row_id_field"):
-        #     setattr(grid_cfg, "row_id_field", "path")
 
-        # Create the grid *now*, inside whatever container the caller opened.
-        # self._grid_container = ui.column().classes("w-full h-full")  # pyinstaller table view
-        # self._grid_container = ui.column().classes("w-full")  # pyinstaller table view
-        # self._grid_container = ui.column().classes("w-full h-full min-w-0 overflow-x-auto")
-        # self._grid_container = ui.column().classes("w-full h-full")
-        # abb 20260129 trying to fix custom table so it is top aligned
-        
-        # abb 20260205 was this        
-        # self._grid_container = ui.column().classes(
-        #     "w-full h-full min-w-0 overflow-hidden flex flex-col"
-        # )
-        self._create_grid(self._pending_rows, grid_cfg)
-        self._update_interaction_state()
-
-        # from kym event view
-        # with ui.row().classes("flex-1 min-w-0 flex flex-col"):
-        #     self._grid_container = ui.column().classes(
-        #         "w-full h-full min-h-0 flex flex-col overflow-hidden"
-        #     )  # pyinstaller event table
-        #     self._create_grid(self._pending_rows, grid_cfg)
-
-    def _create_grid(self, rows: Rows, grid_cfg: GridConfig) -> None:
-        """Create a fresh grid instance inside the current container."""
-        # if self._grid_container is None:
-        #     return
         self._grid = CustomAgGrid_v2(
             data=rows,
             columns=_default_columns(),
             grid_config=grid_cfg,
-            # parent=self._grid_container,
+            parent=self._grid_container,
             runtimeWidgetName="FileTableView",
         )
         self._grid.on_row_selected(self._on_row_selected)
@@ -192,15 +189,24 @@ class FileTableView:
     def set_files(self, files: Iterable[KymImage]) -> None:
         """Update table contents from KymImage list."""
         files_list = list(files)
+        
+        logger.info(f'files_list:{len(files_list)}')
+
         self._files = files_list
         self._files_by_path = {
             str(f.path): f for f in files_list if getattr(f, "path", None) is not None
         }
         rows: Rows = [f.getRowDict() for f in files_list]
         rows_unchanged = rows == self._pending_rows
+        
+        logger.info(f'=== rows: {len(rows)}')
+        for _row in rows:
+            logger.info(f'  {_row}')
+        logger.info(f'rows_unchanged:{rows_unchanged}')
+
         self._pending_rows = rows
         if rows_unchanged and self._grid is not None:
-            # logger.debug("FileTableView.set_files: rows unchanged; skip refresh")
+            logger.debug("rows unchanged -->> skip refresh")
             return
         
         # logger.error(f'self._grid_container:{self._grid_container}')

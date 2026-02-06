@@ -63,6 +63,8 @@ from kymflow.gui_v2.views import (
     TaskProgressBindings,
     TaskProgressView,
 )
+from kymflow.core.utils.logging import get_logger
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -87,7 +89,7 @@ class HomePage(BasePage):
         _file_selection_controller: Handles file selection events.
         _persistence: Persists file selection to browser storage.
         _folder_view: Folder selector UI component.
-        _table_view: File table UI component (CustomAgGrid).
+        _file_table_view: File table UI component (CustomAgGrid).
         _table_bindings: Binds table view to event bus (state → view updates).
         _restored_once: Tracks if selection has been restored for this client.
     """
@@ -127,7 +129,7 @@ class HomePage(BasePage):
             on_save_selected=bus.emit,
             on_save_all=bus.emit,
         )
-        self._table_view = FileTableView(
+        self._file_table_view = FileTableView(
             on_selected=bus.emit,
             on_metadata_update=bus.emit,
             on_analysis_update=bus.emit,
@@ -287,7 +289,7 @@ class HomePage(BasePage):
 
         # Bindings (subscribe to events once per client)
         self._table_bindings = FileTableBindings(
-            self.bus, self._table_view, app_state=self.context.app_state
+            self.bus, self._file_table_view, app_state=self.context.app_state
         )
         self._folder_bindings = FolderSelectorBindings(self.bus, self._folder_view)
         self._image_line_viewer_bindings = ImageLineViewerBindings(
@@ -616,31 +618,34 @@ class HomePage(BasePage):
                     _update_splitter_positions()
                 # TOP: Folder controls + file table
                 with file_plot_splitter_ui.before:
-                    # with ui.column().classes("w-full h-full min-w-0 overflow-x-auto"):
 
-                    # abb 20260129 gpt
-                    # with ui.column().classes('w-full h-full min-h-0 flex flex-col overflow-hidden'):
+                    with ui.column().classes("w-full h-full min-h-0 flex flex-col"):
+                        # IMPORTANT: constrain folder controls to *natural height* (do not let it become flex-1)
+                        with ui.column().classes("w-full flex-none"):
+                            self._folder_view.render(initial_folder=self.context.app_state.folder)
 
-                    # abb 20260129 trying to fix custom table so it is top aligned
-                    with ui.column().classes("w-full h-full min-w-0 overflow-x-auto items-start justify-start"):
-                        # Folder selector FIRST (renders first in DOM)
-                        self._folder_view.render(initial_folder=self.context.app_state.folder)
+                        # File table gets all remaining height
+                        with ui.column().classes("w-full flex-1 min-h-0"):
+                            self._file_table_view.render()
+                            self._file_table_view.set_files(list(self.context.app_state.files))
 
-                        self._table_view.render()
-                        # abb 20260129 gpt, everything inside must also respect min-h-0 if it’s a flex child
-                        # self._table_view.root.classes('w-full h-full min-h-0 flex-1 overflow-hidden')
+                    # Flex container ensures layout constraints work at all window sizes
+                    # with ui.column().classes("w-full h-full flex flex-col"):
+                    #     # Folder selector FIRST (renders first in DOM)
+                    #     self._folder_view.render(initial_folder=self.context.app_state.folder)
+                    #     self._file_table_view.render()
 
-                    # Populate with current state (if already loaded, shows immediately)
-                    self._table_view.set_files(list(self.context.app_state.files))
+                    #     # Populate with current state (if already loaded, shows immediately)
+                    #     self._file_table_view.set_files(list(self.context.app_state.files))
 
-                    # Restore current selection from AppState (ensures visibility on navigation back)
-                    # This handles both initial load and navigation back scenarios
-                    current_file = self.context.app_state.selected_file
-                    if current_file is not None and hasattr(current_file, "path"):
-                        self._table_view.set_selected_paths(
-                            [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
-                        )
-
+                    #     # Restore current selection from AppState (ensures visibility on navigation back)
+                    #     # This handles both initial load and navigation back scenarios
+                    #     current_file = self.context.app_state.selected_file
+                    #     if current_file is not None and hasattr(current_file, "path"):
+                    #         self._file_table_view.set_selected_paths(
+                    #             [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
+                    #         )
+                
                 # BOTTOM: Image/line viewer + event table in a nested splitter
                 # abb turned off expansion
                 # with ui.expansion("Image & Line Viewer", value=True).classes("w-full"):
@@ -714,7 +719,8 @@ class HomePage(BasePage):
             if self._persistence is not None:
                 restored = self._persistence.restore_selection()
                 if restored:
-                    self._table_view.set_selected_paths(
+                    logger.error(f'=== CALLING self._file_table_view.set_selected_paths')
+                    self._file_table_view.set_selected_paths(
                         restored, origin=SelectionOrigin.RESTORE
                     )
             self._restored_once = True

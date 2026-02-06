@@ -318,6 +318,7 @@ class FolderSelectorView:
         
         # Get current paths from app state for comparison
         current_folder_path = str(self._app_state.folder) if self._app_state.folder else None
+        
         current_file_path = None
         if self._app_state.selected_file and hasattr(self._app_state.selected_file, "path"):
             current_file_path = str(self._app_state.selected_file.path)
@@ -349,7 +350,7 @@ class FolderSelectorView:
             
             # File items
             for path in file_paths:
-                is_current = (current_file_path == path)
+                is_current = (current_folder_path == path)
                 prefix = "✓ " if is_current else "  "
                 ui.menu_item(
                     f"{prefix} {path}",
