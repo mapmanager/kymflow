@@ -485,7 +485,11 @@ class AcqImage:
                 filename = f"File {effective_index + 1}"
             else:
                 filename = "unknown" if representative_path is not None else None
-            # Replace parent3 (Grandparent Folder) with "Blinded" only if it exists
+            # Blind all parent folders if they exist to prevent information leakage
+            if parent1 is not None:
+                parent1 = "Blinded"
+            if parent2 is not None:
+                parent2 = "Blinded"
             if parent3 is not None:
                 parent3 = "Blinded"
         else:

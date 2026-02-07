@@ -28,7 +28,7 @@ class FolderController:
     """Controller that applies path selection events to AppState.
 
     This controller handles SelectPathEvent intent events (typically from FolderSelectorView)
-    and triggers AppState.load_folder(), which scans the path for kymograph
+    and triggers AppState.load_path(), which scans the path for kymograph
     files and updates the file list.
 
     Flow:
@@ -130,7 +130,7 @@ class FolderController:
         # Not dirty - proceed with CSV load
         try:
             # Load CSV (will validate 'path' column inside)
-            self._app_state.load_folder(csv_path, depth=0)
+            self._app_state.load_path(csv_path, depth=0)
             
             # Persist to user config
             if self._user_config is not None:
@@ -173,8 +173,8 @@ class FolderController:
             depth: The depth to use (0 for files, folder depth for folders).
             is_file: True if path is a file, False if folder.
         """
-        # Load the folder/file
-        self._app_state.load_folder(path, depth=depth)
+        # Load the path (folder/file/CSV)
+        self._app_state.load_path(path, depth=depth)
         
         # Persist to user config
         if self._user_config is not None:
@@ -201,7 +201,7 @@ class FolderController:
         """
         is_file = path.is_file()
         depth = 0 if is_file else self._app_state.folder_depth
-        self._app_state.load_folder(path, depth=depth)
+        self._app_state.load_path(path, depth=depth)
         if self._user_config is not None:
             config_depth = 0 if is_file else depth
             self._user_config.push_recent_path(str(path), depth=config_depth)
@@ -268,7 +268,7 @@ class FolderController:
         if is_csv:
             # Handle CSV loading
             try:
-                self._app_state.load_folder(path, depth=0)
+                self._app_state.load_path(path, depth=0)
                 
                 if self._user_config is not None:
                     self._user_config.push_recent_csv(str(path))

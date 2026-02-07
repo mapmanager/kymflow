@@ -198,7 +198,7 @@ def test_refresh_file_rows_uses_find_by_path(
 
     # Mock find_by_path to verify it's called
     with patch.object(app_state.files, "find_by_path") as mock_find:
-        with patch.object(app_state, "load_folder") as mock_load:
+        with patch.object(app_state, "load_path") as mock_load:
             # Mock find_by_path to return the file
             mock_find.return_value = kym_file
             
@@ -206,7 +206,7 @@ def test_refresh_file_rows_uses_find_by_path(
             
             # Verify find_by_path was called (not a manual loop)
             assert mock_find.called
-            # Verify load_folder was called
+            # Verify load_path was called
             assert mock_load.called
 
 
@@ -224,24 +224,24 @@ def test_refresh_file_rows_preserves_selection_when_file_exists(
     # Set folder
     app_state.folder = Path(kym_file.path).parent
 
-    # Mock load_folder to simulate refresh without actually reloading
-    original_load_folder = app_state.load_folder
-    def mock_load_folder(folder: Path, depth: int | None = None) -> None:
+    # Mock load_path to simulate refresh without actually reloading
+    original_load_path = app_state.load_path
+    def mock_load_path(folder: Path, depth: int | None = None) -> None:
         # Don't actually reload, just verify it would be called
         pass
 
-    with patch.object(app_state, "load_folder", side_effect=mock_load_folder):
+    with patch.object(app_state, "load_path", side_effect=mock_load_path):
         # Mock find_by_path to return the file (simulating file still exists)
         with patch.object(app_state.files, "find_by_path", return_value=kym_file):
-            # Since we're mocking load_folder, we need to manually set up the state
-            # that refresh_file_rows expects after load_folder
+            # Since we're mocking load_path, we need to manually set up the state
+            # that refresh_file_rows expects after load_path
             selected_path = str(kym_file.path)
             selected_roi_id = app_state.selected_roi_id
 
             # Call refresh_file_rows
             app_state.refresh_file_rows()
 
-            # Restore the file list and selection manually (since load_folder is mocked)
+            # Restore the file list and selection manually (since load_path is mocked)
             # This simulates what would happen after a real refresh
             image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
             image_list.images = [kym_file]
@@ -270,21 +270,21 @@ def test_refresh_file_rows_handles_file_deleted(
     # Set folder
     app_state.folder = Path(kym_file.path).parent
 
-    # Mock load_folder
-    with patch.object(app_state, "load_folder") as mock_load:
+    # Mock load_path
+    with patch.object(app_state, "load_path") as mock_load:
         # Mock find_by_path to return None (file deleted)
         with patch.object(app_state.files, "find_by_path", return_value=None):
-            # After load_folder, files list would be different
+            # After load_path, files list would be different
             # Simulate by creating a new file list without the original file
             new_file_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
             app_state.files = new_file_list
 
             app_state.refresh_file_rows()
 
-            # Verify load_folder was called
+            # Verify load_path was called
             assert mock_load.called
             # File should not be selected (since it doesn't exist in new list)
-            # Note: load_folder will select first file if available, or None if empty
+            # Note: load_path will select first file if available, or None if empty
 
 
 def test_refresh_file_rows_no_folder(
@@ -296,11 +296,11 @@ def test_refresh_file_rows_no_folder(
     # Clear folder
     app_state.folder = None
 
-    # Mock load_folder to verify it's NOT called
-    with patch.object(app_state, "load_folder") as mock_load:
+    # Mock load_path to verify it's NOT called
+    with patch.object(app_state, "load_path") as mock_load:
         app_state.refresh_file_rows()
         
-        # Verify load_folder was NOT called (early return)
+        # Verify load_path was NOT called (early return)
         assert not mock_load.called
 
 
@@ -325,8 +325,8 @@ def test_refresh_file_rows_handles_roi_deleted(
     # Simulate refresh: delete roi1, then refresh
     kym_file.rois.delete(roi1.id)
 
-    # Mock load_folder to not actually reload
-    with patch.object(app_state, "load_folder"):
+    # Mock load_path to not actually reload
+    with patch.object(app_state, "load_path"):
         # Mock find_by_path to return the file
         with patch.object(app_state.files, "find_by_path", return_value=kym_file):
             # Manually set up state after refresh

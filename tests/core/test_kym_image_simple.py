@@ -259,9 +259,9 @@ def test_kym_image_getrowdict_blinded() -> None:
     assert row_dict["File Name"] == "File 1"
     assert row_dict["path"] == str(test_path)  # Path should remain unchanged
     
-    # Check that "Grandparent Folder" is blinded
+    # Check that both "Grandparent Folder" and "Parent Folder" are blinded
     assert row_dict["Grandparent Folder"] == "Blinded"
-    assert row_dict["Parent Folder"] == "c"  # Parent Folder should remain unchanged
+    assert row_dict["Parent Folder"] == "Blinded"  # Parent Folder should also be blinded
     
     # Test with different _blind_index
     kym_image2 = KymImage(path=test_path, load_image=False)

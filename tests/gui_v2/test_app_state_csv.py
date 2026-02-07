@@ -22,24 +22,31 @@ def app_state() -> AppState:
     return AppState()
 
 
-def test_load_folder_detects_csv(app_state: AppState) -> None:
-    """Test that load_folder() detects CSV files by extension."""
+def test_load_path_detects_csv(app_state: AppState) -> None:
+    """Test that load_path() detects CSV files by extension."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
-        csv_file.write_text("path\n/file1.tif\n/file2.tif")
+        file1 = Path(tmpdir) / "file1.tif"
+        file2 = Path(tmpdir) / "file2.tif"
+        test_image = np.zeros((100, 200), dtype=np.uint16)
+        tifffile.imwrite(file1, test_image)
+        tifffile.imwrite(file2, test_image)
         
-        # Should detect CSV and call _load_from_csv
-        with patch.object(app_state, "_load_from_csv") as mock_load_csv:
-            app_state.load_folder(csv_file, depth=0)
-            mock_load_csv.assert_called_once_with(csv_file)
+        csv_file.write_text(f"path\n{file1}\n{file2}")
+        
+        # Should detect CSV and load it
+        app_state.load_path(csv_file, depth=0)
+        
+        # Verify files were loaded
+        assert len(app_state.files.images) == 2
+        assert app_state.folder == csv_file
 
 
-def test_load_from_csv_valid(app_state: AppState) -> None:
-    """Test _load_from_csv() with valid CSV containing 'path' column."""
+def test_load_path_csv_valid(app_state: AppState) -> None:
+    """Test load_path() with valid CSV containing 'path' column."""
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create CSV with path column
         csv_file = Path(tmpdir) / "test.csv"
-        csv_file.write_text("path\n/file1.tif\n/file2.tif")
         
         # Create actual TIF files referenced in CSV
         file1 = Path(tmpdir) / "file1.tif"
@@ -59,8 +66,8 @@ def test_load_from_csv_valid(app_state: AppState) -> None:
         
         app_state.on_file_list_changed(mock_handler)
         
-        # Load CSV
-        app_state._load_from_csv(csv_file)
+        # Load CSV via load_path
+        app_state.load_path(csv_file)
         
         # Verify AcqImageList was created
         assert app_state.files is not None
@@ -74,18 +81,18 @@ def test_load_from_csv_valid(app_state: AppState) -> None:
         assert handler_called
 
 
-def test_load_from_csv_missing_path_column(app_state: AppState) -> None:
-    """Test _load_from_csv() raises ValueError when 'path' column is missing."""
+def test_load_path_csv_missing_path_column(app_state: AppState) -> None:
+    """Test load_path() raises ValueError when 'path' column is missing."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("name,value\nfile1,1\nfile2,2")
         
         with pytest.raises(ValueError, match="CSV must have a 'path' column"):
-            app_state._load_from_csv(csv_file)
+            app_state.load_path(csv_file)
 
 
-def test_load_from_csv_invalid_format(app_state: AppState) -> None:
-    """Test _load_from_csv() handles pandas read errors."""
+def test_load_path_csv_invalid_format(app_state: AppState) -> None:
+    """Test load_path() handles pandas read errors."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("invalid,malformed,csv")
@@ -95,24 +102,24 @@ def test_load_from_csv_invalid_format(app_state: AppState) -> None:
             import pandas.errors
             mock_pd.read_csv.side_effect = pandas.errors.EmptyDataError("Empty CSV")
             
-            # Should raise ValueError (wrapped by _load_from_csv)
+            # Should raise ValueError (wrapped by load_path)
             with pytest.raises(ValueError, match="Failed to read CSV file"):
-                app_state._load_from_csv(csv_file)
+                app_state.load_path(csv_file)
 
 
-def test_load_from_csv_empty_paths(app_state: AppState) -> None:
-    """Test _load_from_csv() with CSV containing no paths (empty DataFrame)."""
+def test_load_path_csv_empty_paths(app_state: AppState) -> None:
+    """Test load_path() with CSV containing no paths (empty DataFrame)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("path\n")
         
         # Empty path_list should raise ValueError (AcqImageList doesn't allow empty file_path_list)
         with pytest.raises(ValueError, match="file_path_list cannot be empty"):
-            app_state._load_from_csv(csv_file)
+            app_state.load_path(csv_file)
 
 
-def test_load_from_csv_sets_folder(app_state: AppState) -> None:
-    """Test _load_from_csv() sets app_state.folder to CSV path."""
+def test_load_path_csv_sets_folder(app_state: AppState) -> None:
+    """Test load_path() sets app_state.folder to CSV path."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         file1 = Path(tmpdir) / "file1.tif"
@@ -121,13 +128,13 @@ def test_load_from_csv_sets_folder(app_state: AppState) -> None:
         
         csv_file.write_text(f"path\n{file1}")
         
-        app_state._load_from_csv(csv_file)
+        app_state.load_path(csv_file)
         
         assert app_state.folder == csv_file
 
 
-def test_load_from_csv_triggers_callbacks(app_state: AppState) -> None:
-    """Test _load_from_csv() triggers file_list_changed callbacks."""
+def test_load_path_csv_triggers_callbacks(app_state: AppState) -> None:
+    """Test load_path() triggers file_list_changed callbacks."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         file1 = Path(tmpdir) / "file1.tif"
@@ -142,7 +149,7 @@ def test_load_from_csv_triggers_callbacks(app_state: AppState) -> None:
             handler_called = True
         
         app_state.on_file_list_changed(mock_handler)
-        app_state._load_from_csv(csv_file)
+        app_state.load_path(csv_file)
         
         assert handler_called
 
@@ -159,12 +166,12 @@ def test_refresh_file_rows_with_csv(app_state: AppState) -> None:
         
         csv_file.write_text(f"path\n{file1}\n{file2}")
         
-        app_state._load_from_csv(csv_file)
+        app_state.load_path(csv_file)
         
         # Verify files are loaded
         assert len(app_state.files.images) == 2
         
-        # Refresh should work (no-op for CSV mode, but shouldn't error)
+        # Refresh should work (reloads CSV, but shouldn't error)
         app_state.refresh_file_rows()
         
         # Files should still be there

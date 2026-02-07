@@ -41,7 +41,7 @@ class AppStateBridgeController:
     emitting to prevent errors from stale callbacks.
 
     Flow:
-        AppState.load_folder() → callback → emit FileListChanged
+        AppState.load_path() → callback → emit FileListChanged
         AppState.select_file() → callback → emit FileSelection(phase="state")
 
     Attributes:

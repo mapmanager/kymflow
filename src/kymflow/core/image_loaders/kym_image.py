@@ -223,7 +223,7 @@ class KymImage(AcqImage):
         This ensures compatibility with file_table.py which expects these specific keys.
         
         Args:
-            blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
+            blinded: If True, replace file names with "File {index+1}" and all parent folders with "Blinded".
             file_index: DEPRECATED: Zero-based index (used only if _blind_index is None).
                        Prefer using _blind_index set during AcqImageList instantiation.
         
@@ -246,14 +246,19 @@ class KymImage(AcqImage):
                 file_name = f"File {effective_index + 1}"
             else:
                 file_name = "unknown" if representative_path is not None else None
-            # Replace "Grandparent Folder" with "Blinded" only if it exists
+            # Blind all parent folders if they exist to prevent information leakage
             if parent3 is not None:
                 grandparent_folder = "Blinded"
             else:
                 grandparent_folder = None
+            if parent1 is not None:
+                parent_folder = "Blinded"
+            else:
+                parent_folder = None
         else:
             file_name = representative_path.name if representative_path is not None else None
             grandparent_folder = parent3  # Use computed parent3 (grandparent)
+            parent_folder = parent1  # Use computed parent1
         
         # Map to summary_row() keys and add analysis fields
         result = {
@@ -262,7 +267,7 @@ class KymImage(AcqImage):
             "Saved": "✓" if not self.get_kym_analysis().is_dirty else "",
             "Num ROIS": self.rois.numRois(),
             "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),
-            "Parent Folder": parent1,  # Use computed parent1
+            "Parent Folder": parent_folder,  # Use blinded or unblinded parent1
             "Grandparent Folder": grandparent_folder,
             "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",
             "lines": self.num_lines if self.num_lines is not None else "-",

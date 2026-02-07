@@ -387,10 +387,10 @@ def test_acq_image_getRowDict_blinded() -> None:
     assert row_dict['filename'] == "File 1"
     assert row_dict['path'] == str(test_path)  # Path should remain unchanged
     
-    # Check that parent3 (Grandparent Folder) is blinded
+    # Check that all parent folders are blinded
+    assert row_dict['parent1'] == "Blinded"
+    assert row_dict['parent2'] == "Blinded"
     assert row_dict['parent3'] == "Blinded"
-    assert row_dict['parent1'] == "c"  # parent1 should remain unchanged
-    assert row_dict['parent2'] == "b"  # parent2 should remain unchanged
     
     # Test with different _blind_index
     acq2 = AcqImage(path=test_path, _blind_index=5)
@@ -406,7 +406,10 @@ def test_acq_image_getRowDict_blinded() -> None:
     acq4 = AcqImage(path=test_path)  # No _blind_index
     row_dict4 = acq4.getRowDict(blinded=True, file_index=None)
     assert row_dict4['filename'] == "unknown"
-    assert row_dict4['parent3'] == "Blinded"  # Still blinded
+    # All parent folders should still be blinded
+    assert row_dict4['parent1'] == "Blinded"
+    assert row_dict4['parent2'] == "Blinded"
+    assert row_dict4['parent3'] == "Blinded"
     
     logger.info(f"  - getRowDict() with blinded=True: filename={row_dict['filename']}, parent3={row_dict['parent3']}")
 

@@ -31,7 +31,11 @@ def sample_kym_file() -> KymImage:
     import tifffile
     
     with tempfile.TemporaryDirectory() as tmpdir:
-        test_file = Path(tmpdir) / "test.tif"
+        # Create nested directory structure to ensure parent3 exists
+        tmp_path = Path(tmpdir)
+        subdir = tmp_path / "a" / "b" / "c"
+        subdir.mkdir(parents=True)
+        test_file = subdir / "test.tif"
         test_image = np.zeros((100, 200), dtype=np.uint16)
         tifffile.imwrite(test_file, test_image)
 
@@ -178,8 +182,11 @@ def test_file_table_view_blinded_displays_blinded_data(sample_kym_file: KymImage
     # File Name should be blinded
     assert row["File Name"] == "File 1"
     
-    # Grandparent Folder should be blinded (always "Blinded" when blinded=True)
-    assert row["Grandparent Folder"] == "Blinded"
+    # Both Grandparent Folder and Parent Folder should be blinded if they exist
+    if row["Grandparent Folder"] is not None:
+        assert row["Grandparent Folder"] == "Blinded"
+    if row["Parent Folder"] is not None:
+        assert row["Parent Folder"] == "Blinded"
     
     # Path should remain unchanged (for internal use)
     assert row["path"] is not None

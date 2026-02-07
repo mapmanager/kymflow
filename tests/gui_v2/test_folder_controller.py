@@ -54,11 +54,11 @@ def test_folder_controller_shows_dialog_when_dirty(
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
             with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
-                with patch.object(app_state, "load_folder") as mock_load:
+                with patch.object(app_state, "load_path") as mock_load:
                     # Emit path chosen event
                     bus.emit(SelectPathEvent(new_path=str(new_folder), depth=None, phase="intent"))
 
-                    # Verify dialog was called (not load_folder)
+                    # Verify dialog was called (not load_path)
                     # _show_unsaved_dialog takes: new_path, previous_path_str, original_depth
                     mock_dialog.assert_called_once()
                     assert mock_dialog.call_args[0][0] == new_folder
@@ -77,16 +77,16 @@ def test_folder_controller_loads_when_not_dirty(
 
     controller = FolderController(app_state, bus, user_config=None)
 
-    # Mock path checks and app_state.load_folder to verify it's called
+    # Mock path checks and app_state.load_path to verify it's called
     new_folder = Path("/new/folder")
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_folder") as mock_load:
+            with patch.object(app_state, "load_path") as mock_load:
                 with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
                     # Emit path chosen event
                     bus.emit(SelectPathEvent(new_path=str(new_folder), depth=None, phase="intent"))
 
-                    # Should call app_state.load_folder directly (no dialog)
+                    # Should call app_state.load_path directly (no dialog)
                     mock_load.assert_called_once_with(new_folder, depth=app_state.folder_depth)
                     mock_dialog.assert_not_called()
 
@@ -104,7 +104,7 @@ def test_folder_controller_cancel_blocks_folder_switch(
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
             with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
-                with patch.object(app_state, "load_folder") as mock_load:
+                with patch.object(app_state, "load_path") as mock_load:
                     # Emit path chosen event
                     bus.emit(SelectPathEvent(new_path=str(new_folder), depth=None, phase="intent"))
 
@@ -115,7 +115,7 @@ def test_folder_controller_cancel_blocks_folder_switch(
 
                     # Simulate cancel: _confirm_switch_path is NOT called
                     # (In real UI, user clicks Cancel button which just closes dialog)
-                    # So load_folder should NOT be called
+                    # So load_path should NOT be called
                     mock_load.assert_not_called()
 
 
@@ -127,22 +127,22 @@ def test_folder_controller_confirm_proceeds_with_switch(
 
     controller = FolderController(app_state, bus, user_config=None)
 
-    # Mock path checks and app_state.load_folder to verify it's called on confirm
+    # Mock path checks and app_state.load_path to verify it's called on confirm
     new_folder = Path("/new/folder")
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_folder") as mock_load:
+            with patch.object(app_state, "load_path") as mock_load:
                 # Mock _show_unsaved_dialog to simulate confirm
                 def simulate_confirm(new_path: Path, previous_path_str: str | None, original_depth: int | None) -> None:
                     # Simulate user clicking "Switch to folder" button
-                    # This calls _confirm_switch_path which calls app_state.load_folder
+                    # This calls _confirm_switch_path which calls app_state.load_path
                     controller._confirm_switch_path(MagicMock(), new_path, previous_path_str, original_depth)
 
                 with patch.object(controller, "_show_unsaved_dialog", side_effect=simulate_confirm):
                     # Emit path chosen event
                     bus.emit(SelectPathEvent(new_path=str(new_folder), depth=None, phase="intent"))
 
-                    # Verify app_state.load_folder was called (folder switch proceeded)
+                    # Verify app_state.load_path was called (folder switch proceeded)
                     mock_load.assert_called_once_with(new_folder, depth=app_state.folder_depth)
 
 
@@ -183,7 +183,7 @@ def test_folder_controller_persists_valid_folder_after_guard(
     folder_path_obj = Path(folder_path)
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_folder") as mock_load:
+            with patch.object(app_state, "load_path") as mock_load:
                 bus.emit(SelectPathEvent(new_path=folder_path, depth=7, phase="intent"))
 
                 assert app_state.folder_depth == 7
@@ -207,10 +207,10 @@ def test_folder_controller_handles_file_path(
         # Ensure file exists
         assert test_file.exists() and test_file.is_file()
 
-        with patch.object(app_state, "load_folder") as mock_load:
+        with patch.object(app_state, "load_path") as mock_load:
             bus.emit(SelectPathEvent(new_path=str(test_file), depth=None, phase="intent"))
 
-            # Should call load_folder with depth=0 for files
+            # Should call load_path with depth=0 for files
             mock_load.assert_called_once_with(test_file, depth=0)
             # Should persist with depth=0
             user_config.push_recent_path.assert_called_once_with(str(test_file), depth=0)
@@ -229,7 +229,7 @@ def test_folder_controller_uses_depth_from_event(
     folder_path_obj = Path(folder_path)
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_folder") as mock_load:
+            with patch.object(app_state, "load_path") as mock_load:
                 bus.emit(SelectPathEvent(new_path=folder_path, depth=5, phase="intent"))
 
                 # Should update folder_depth and use it
@@ -261,11 +261,11 @@ def test_folder_controller_handles_csv_auto_detection(
             mock_df.__getitem__.return_value.tolist.return_value = []
             mock_pd.read_csv.return_value = mock_df
             
-            with patch.object(app_state, "load_folder") as mock_load:
+            with patch.object(app_state, "load_path") as mock_load:
                 # Emit event without csv_path - should auto-detect CSV
                 bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
                 
-                # Should call load_folder (which will detect CSV internally)
+                # Should call load_path (which will detect CSV internally)
                 mock_load.assert_called_once_with(csv_file, depth=0)
                 # Should persist to recent_csvs, not recent_paths
                 user_config.push_recent_csv.assert_called_once_with(str(csv_file))
@@ -339,7 +339,7 @@ def test_folder_controller_csv_unsaved_dialog(
         csv_file.write_text("path\n/file1.tif")
         
         with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
-            with patch.object(app_state, "load_folder") as mock_load:
+            with patch.object(app_state, "load_path") as mock_load:
                 bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
                 
                 # Should show dialog (not load directly)
@@ -367,7 +367,7 @@ def test_folder_controller_csv_persists_to_config(
             mock_df.__getitem__.return_value.tolist.return_value = []
             mock_pd.read_csv.return_value = mock_df
             
-            with patch.object(app_state, "load_folder"):
+            with patch.object(app_state, "load_path"):
                 bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
                 
                 # Should persist to recent_csvs

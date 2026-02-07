@@ -22,7 +22,7 @@ else:
 class FileListChanged:
     """AppState file list change notification.
 
-    Emitted by AppStateBridgeController when AppState.load_folder() completes
+    Emitted by AppStateBridgeController when AppState.load_path() completes
     and the file list is updated. Views (e.g., FileTableBindings) subscribe
     to this to update their UI when files are loaded.
 
