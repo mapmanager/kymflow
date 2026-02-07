@@ -2,12 +2,14 @@
 """
 
 from pathlib import Path
+import threading
 from typing import Tuple, Any
 import numpy as np
 import json
 
 from kymflow.core.image_loaders.metadata import ExperimentMetadata, AcqImgHeader
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.utils.progress import ProgressCallback
 from typing import TYPE_CHECKING
 
 from kymflow.core.image_loaders.roi import RoiBoundsFloat
@@ -31,6 +33,8 @@ class AcqImage:
                  channel: int = 1,
                  load_image: bool = False,
                  _blind_index: int | None = None,
+                 cancel_event: threading.Event | None = None,
+                 progress_cb: ProgressCallback | None = None,
                  ):
         if path is None and img_data is None:
             raise ValueError("Either path or img_data must be provided")
@@ -792,4 +796,3 @@ class AcqImage:
         except Exception as e:
             logger.error(f"Failed to load metadata from {metadata_path}: {e}")
             return False
-

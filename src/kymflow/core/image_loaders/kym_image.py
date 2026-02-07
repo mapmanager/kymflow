@@ -2,6 +2,7 @@
 """
 
 from pathlib import Path
+import threading
 from typing import TYPE_CHECKING
 import numpy as np
 import tifffile
@@ -11,6 +12,7 @@ from kymflow.core.image_loaders.metadata import AcqImgHeader
 from kymflow.core.image_loaders.olympus_header.read_olympus_header import _readOlympusHeader  # OlympusHeader
 
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.utils.progress import ProgressCallback
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
@@ -27,11 +29,21 @@ class KymImage(AcqImage):
                  channel: int = 1,
                  load_image: bool = False,
                  _blind_index: int | None = None,
+                 cancel_event: threading.Event | None = None,
+                 progress_cb: ProgressCallback | None = None,
                  ):
         
         # Call super().__init__ with load_image=False since KymImage handles its own loading
         # after header discovery (which may discover additional channels)
-        super().__init__(path=path, img_data=img_data, channel=channel, load_image=False, _blind_index=_blind_index)
+        super().__init__(
+            path=path,
+            img_data=img_data,
+            channel=channel,
+            load_image=False,
+            _blind_index=_blind_index,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
 
         # Try and load Olympus header from txt file if it exists
         # This discovers additional channels and sets header metadata

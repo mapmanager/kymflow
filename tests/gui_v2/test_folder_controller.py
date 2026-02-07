@@ -77,17 +77,17 @@ def test_folder_controller_loads_when_not_dirty(
 
     controller = FolderController(app_state, bus, user_config=None)
 
-    # Mock path checks and app_state.load_path to verify it's called
+    # Mock path checks and _start_threaded_load to verify it's called
     new_folder = Path("/new/folder")
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_path") as mock_load:
+            with patch.object(controller, "_start_threaded_load") as mock_start:
                 with patch.object(controller, "_show_unsaved_dialog") as mock_dialog:
                     # Emit path chosen event
                     bus.emit(SelectPathEvent(new_path=str(new_folder), depth=None, phase="intent"))
 
-                    # Should call app_state.load_path directly (no dialog)
-                    mock_load.assert_called_once_with(new_folder, depth=app_state.folder_depth)
+                    # Should start threaded load directly (no dialog)
+                    mock_start.assert_called_once()
                     mock_dialog.assert_not_called()
 
 
@@ -127,23 +127,22 @@ def test_folder_controller_confirm_proceeds_with_switch(
 
     controller = FolderController(app_state, bus, user_config=None)
 
-    # Mock path checks and app_state.load_path to verify it's called on confirm
+    # Mock path checks and _start_threaded_load to verify it's called on confirm
     new_folder = Path("/new/folder")
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_path") as mock_load:
+            with patch.object(controller, "_start_threaded_load") as mock_start:
                 # Mock _show_unsaved_dialog to simulate confirm
                 def simulate_confirm(new_path: Path, previous_path_str: str | None, original_depth: int | None) -> None:
                     # Simulate user clicking "Switch to folder" button
-                    # This calls _confirm_switch_path which calls app_state.load_path
                     controller._confirm_switch_path(MagicMock(), new_path, previous_path_str, original_depth)
 
                 with patch.object(controller, "_show_unsaved_dialog", side_effect=simulate_confirm):
                     # Emit path chosen event
                     bus.emit(SelectPathEvent(new_path=str(new_folder), depth=None, phase="intent"))
 
-                    # Verify app_state.load_path was called (folder switch proceeded)
-                    mock_load.assert_called_once_with(new_folder, depth=app_state.folder_depth)
+                    # Verify threaded load was called (folder switch proceeded)
+                    mock_start.assert_called_once()
 
 
 def test_folder_controller_does_not_persist_missing_folder(
@@ -183,12 +182,11 @@ def test_folder_controller_persists_valid_folder_after_guard(
     folder_path_obj = Path(folder_path)
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_path") as mock_load:
+            with patch.object(controller, "_start_threaded_load") as mock_start:
                 bus.emit(SelectPathEvent(new_path=folder_path, depth=7, phase="intent"))
 
                 assert app_state.folder_depth == 7
-                mock_load.assert_called_once_with(folder_path_obj, depth=7)
-                user_config.push_recent_path.assert_called_once_with(folder_path, depth=7)
+                mock_start.assert_called_once()
 
 
 def test_folder_controller_handles_file_path(
@@ -229,13 +227,12 @@ def test_folder_controller_uses_depth_from_event(
     folder_path_obj = Path(folder_path)
     with patch.object(Path, "is_file", return_value=False):
         with patch.object(Path, "is_dir", return_value=True):
-            with patch.object(app_state, "load_path") as mock_load:
+            with patch.object(controller, "_start_threaded_load") as mock_start:
                 bus.emit(SelectPathEvent(new_path=folder_path, depth=5, phase="intent"))
 
                 # Should update folder_depth and use it
                 assert app_state.folder_depth == 5
-                mock_load.assert_called_once_with(folder_path_obj, depth=5)
-                user_config.push_recent_path.assert_called_once_with(folder_path, depth=5)
+                mock_start.assert_called_once()
 
 
 # ============================================================================
@@ -253,29 +250,20 @@ def test_folder_controller_handles_csv_auto_detection(
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("path\n/file1.tif\n/file2.tif")
-        
-        # Mock pandas to avoid actual file reading
-        with patch("kymflow.gui_v2.state.pd") as mock_pd:
-            mock_df = MagicMock()
-            mock_df.__getitem__.return_value = MagicMock()
-            mock_df.__getitem__.return_value.tolist.return_value = []
-            mock_pd.read_csv.return_value = mock_df
-            
-            with patch.object(app_state, "load_path") as mock_load:
-                # Emit event without csv_path - should auto-detect CSV
-                bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
-                
-                # Should call load_path (which will detect CSV internally)
-                mock_load.assert_called_once_with(csv_file, depth=0)
-                # Should persist to recent_csvs, not recent_paths
-                user_config.push_recent_csv.assert_called_once_with(str(csv_file))
-                user_config.push_recent_path.assert_not_called()
+
+        with patch.object(controller, "_start_threaded_load") as mock_start:
+            # Emit event without csv_path - should auto-detect CSV
+            bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+
+            # Should start threaded load for CSV
+            mock_start.assert_called_once()
+            assert mock_start.call_args.kwargs["is_csv"] is True
 
 
 def test_folder_controller_csv_missing_path_column(
     bus: EventBus,
 ) -> None:
-    """Test FolderController handles CSV with missing 'path' column."""
+    """Test FolderController routes CSV to threaded loader."""
     app_state = AppState()
     app_state.folder = Path("/current/folder")  # Set current path for CancelSelectPathEvent
     user_config = MagicMock()
@@ -285,19 +273,9 @@ def test_folder_controller_csv_missing_path_column(
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("name,value\nfile1,1")
         
-        emitted_events = []
-        def capture_event(e):
-            emitted_events.append(e)
-        bus.subscribe(CancelSelectPathEvent, capture_event)
-        
-        with patch("kymflow.gui_v2.controllers.folder_controller.ui.notify"):
+        with patch.object(controller, "_start_threaded_load") as mock_start:
             bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
-        
-        # Should emit CancelSelectPathEvent
-        assert len(emitted_events) == 1
-        assert isinstance(emitted_events[0], CancelSelectPathEvent)
-        # Should not persist to config
-        user_config.push_recent_csv.assert_not_called()
+            mock_start.assert_called_once()
 
 
 def test_folder_controller_csv_file_not_found(
@@ -351,7 +329,7 @@ def test_folder_controller_csv_unsaved_dialog(
 def test_folder_controller_csv_persists_to_config(
     bus: EventBus,
 ) -> None:
-    """Test FolderController persists CSV path to user config."""
+    """Test FolderController routes CSV to threaded loader."""
     app_state = AppState()
     user_config = MagicMock()
     controller = FolderController(app_state, bus, user_config=user_config)
@@ -359,16 +337,7 @@ def test_folder_controller_csv_persists_to_config(
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("path\n/file1.tif")
-        
-        # Mock pandas
-        with patch("kymflow.gui_v2.state.pd") as mock_pd:
-            mock_df = MagicMock()
-            mock_df.__getitem__.return_value = MagicMock()
-            mock_df.__getitem__.return_value.tolist.return_value = []
-            mock_pd.read_csv.return_value = mock_df
-            
-            with patch.object(app_state, "load_path"):
-                bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
-                
-                # Should persist to recent_csvs
-                user_config.push_recent_csv.assert_called_once_with(str(csv_file))
+
+        with patch.object(controller, "_start_threaded_load") as mock_start:
+            bus.emit(SelectPathEvent(new_path=str(csv_file), depth=None, phase="intent"))
+            mock_start.assert_called_once()

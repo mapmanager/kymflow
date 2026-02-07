@@ -18,12 +18,16 @@ Refactor note:
 
 from __future__ import annotations
 
+import threading
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
+import pandas as pd
+
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import (
@@ -66,6 +70,8 @@ class AcqImageList(Generic[T]):
         ignore_file_stub: str | None = None,
         depth: int = 1,
         follow_symlinks: bool = False,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
     ):
         """Initialize AcqImageList and automatically load files.
 
@@ -133,7 +139,11 @@ class AcqImageList(Generic[T]):
             self._folder: Optional[Path] = None
             
             # Automatically load files during initialization
-            self._load_files(follow_symlinks=follow_symlinks)
+            self._load_files(
+                follow_symlinks=follow_symlinks,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
             return
 
         # Allow initializing an empty list (backwards-compat)
@@ -155,7 +165,11 @@ class AcqImageList(Generic[T]):
         self._single_file = resolved if resolved.is_file() else None
 
         # Automatically load files during initialization
-        self._load_files(follow_symlinks=follow_symlinks)
+        self._load_files(
+            follow_symlinks=follow_symlinks,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
 
     @property
     def path(self) -> Optional[Path]:
@@ -236,22 +250,25 @@ class AcqImageList(Generic[T]):
             logger.warning(f"  -->> e:{e}")
             return None
 
-    def _load_files(self, follow_symlinks: bool = False) -> None:
+    def _load_files(
+        self,
+        *,
+        follow_symlinks: bool = False,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> None:
         """Internal method to load either a single file, scan a folder, or load from file list."""
+        images: List[T] = []
 
         # --- File list mode ---
         if self._file_path_list is not None:
-            for index, file_path in enumerate(self._file_path_list):
-                if not self._file_matches_filters(file_path):
-                    logger.warning(
-                        "AcqImageList: file does not match filters "
-                        f"(extension={self._normalized_ext()}, ignore_file_stub={self.ignore_file_stub}): {file_path}"
-                    )
-                    continue
-                
-                image = self._instantiate_image(file_path, blind_index=index)
-                if image is not None:
-                    self.images.append(image)
+            paths_to_wrap = self._file_path_list
+            images = self._wrap_paths(
+                paths_to_wrap,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+            self.images = images
             return
 
         # --- Single-file mode ---
@@ -267,9 +284,12 @@ class AcqImageList(Generic[T]):
                 )
                 return
 
-            image = self._instantiate_image(self._single_file, blind_index=0)
-            if image is not None:
-                self.images.append(image)
+            images = self._wrap_paths(
+                [self._single_file],
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+            self.images = images
             return
 
         # --- Directory-scan mode ---
@@ -282,38 +302,30 @@ class AcqImageList(Generic[T]):
         ext = self._normalized_ext()
         glob_pattern = f"*{ext}" if ext else "*"
 
-        # Collect all matching files recursively
-        if follow_symlinks:
-            all_paths = list(self._folder.rglob(glob_pattern))
-        else:
-            all_paths = list(self._folder.glob(f"**/{glob_pattern}"))
+        paths_to_wrap = self.collect_paths_from_folder(
+            self._folder,
+            depth=self.depth,
+            file_extension=self.file_extension,
+            ignore_file_stub=self.ignore_file_stub,
+            follow_symlinks=follow_symlinks,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
+        images = self._wrap_paths(
+            paths_to_wrap,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
+        self.images = images
+        return
 
-        # Filter by depth: calculate depth relative to base folder
-        # Code depth: base folder = 0, first subfolder = 1, second subfolder = 2, etc.
-        # GUI depth N maps to code depths 0 through (N-1)
-        filtered_paths: List[Path] = []
-        for p in all_paths:
-            if not self._file_matches_filters(p):
-                continue
-
-            # Calculate code depth: number of parent directories between file and base
-            try:
-                relative_path = p.relative_to(self._folder)
-                path_depth = len(relative_path.parts) - 1
-                # Include files where code depth < GUI depth
-                if path_depth < self.depth:
-                    filtered_paths.append(p)
-            except ValueError:
-                # Path is not relative to base (shouldn't happen, but handle gracefully)
-                continue
-
-        # Sort paths for consistent ordering
-        for index, file_path in enumerate(sorted(filtered_paths)):
-            image = self._instantiate_image(file_path, blind_index=index)
-            if image is not None:
-                self.images.append(image)
-
-    def load(self, follow_symlinks: bool = False) -> None:
+    def load(
+        self,
+        follow_symlinks: bool = False,
+        *,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> None:
         """Reload files.
 
         Clears existing images and reloads from the same source:
@@ -327,9 +339,19 @@ class AcqImageList(Generic[T]):
                 Defaults to False. (Only relevant for directory-scan mode.)
         """
         self.images.clear()
-        self._load_files(follow_symlinks=follow_symlinks)
+        self._load_files(
+            follow_symlinks=follow_symlinks,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
 
-    def reload(self, follow_symlinks: bool = False) -> None:
+    def reload(
+        self,
+        follow_symlinks: bool = False,
+        *,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> None:
         """Alias for load() method.
         
         .. deprecated:: 
@@ -340,7 +362,270 @@ class AcqImageList(Generic[T]):
             DeprecationWarning,
             stacklevel=2
         )
-        self.load(follow_symlinks=follow_symlinks)
+        self.load(
+            follow_symlinks=follow_symlinks,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
+
+    @classmethod
+    def load_from_path(
+        cls,
+        path: str | Path | None,
+        *,
+        image_cls: Type[T] = AcqImage,
+        file_extension: str = ".tif",
+        ignore_file_stub: str | None = None,
+        depth: int = 1,
+        follow_symlinks: bool = False,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> "AcqImageList[T]":
+        """Load from a folder, file, or CSV path.
+
+        Args:
+            path: Path to a folder, file, CSV, or None.
+            image_cls: Class to instantiate for each file. Defaults to AcqImage.
+            file_extension: File extension to match (e.g., ".tif").
+            ignore_file_stub: Optional filename stub to ignore.
+            depth: Folder scan depth (ignored for single files and CSV).
+            follow_symlinks: Whether to follow symlinks during folder scan.
+            cancel_event: Optional cancellation event.
+            progress_cb: Optional progress callback.
+        """
+        if path is None:
+            return cls(
+                path=None,
+                image_cls=image_cls,
+                file_extension=file_extension,
+                ignore_file_stub=ignore_file_stub,
+                depth=depth,
+                follow_symlinks=follow_symlinks,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+
+        path_obj = Path(path).expanduser().resolve()
+
+        if path_obj.is_file() and path_obj.suffix.lower() == ".csv":
+            file_path_list = cls.collect_paths_from_csv(
+                path_obj,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+            return cls(
+                file_path_list=file_path_list,
+                image_cls=image_cls,
+                file_extension=file_extension,
+                ignore_file_stub=ignore_file_stub,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+
+        if path_obj.is_file():
+            return cls(
+                path=path_obj,
+                image_cls=image_cls,
+                file_extension=file_extension,
+                ignore_file_stub=ignore_file_stub,
+                depth=0,
+                follow_symlinks=follow_symlinks,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+
+        return cls(
+            path=path_obj,
+            image_cls=image_cls,
+            file_extension=file_extension,
+            ignore_file_stub=ignore_file_stub,
+            depth=depth,
+            follow_symlinks=follow_symlinks,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
+
+    @staticmethod
+    def collect_paths_from_csv(
+        csv_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> List[Path]:
+        """Collect file paths from a CSV with a required 'path' column."""
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelledError("Cancelled before reading CSV.")
+
+        if progress_cb is not None:
+            progress_cb(ProgressMessage(phase="read_csv", done=0, total=None, path=csv_path))
+
+        try:
+            df = pd.read_csv(csv_path)
+        except Exception as exc:
+            raise ValueError(f"Failed to read CSV file: {exc}") from exc
+
+        if "path" not in df.columns:
+            raise ValueError("CSV must have a 'path' column")
+
+        path_list = [Path(p).expanduser().resolve() for p in df["path"].tolist()]
+
+        if progress_cb is not None:
+            progress_cb(
+                ProgressMessage(
+                    phase="read_csv",
+                    done=len(path_list),
+                    total=len(path_list),
+                    path=csv_path,
+                )
+            )
+
+        return path_list
+
+    @staticmethod
+    def collect_paths_from_file(
+        file_path: Path,
+        *,
+        file_extension: str,
+        ignore_file_stub: str | None,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> List[Path]:
+        """Validate a single file path and return it if it matches filters."""
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelledError("Cancelled before file validation.")
+
+        if progress_cb is not None:
+            progress_cb(ProgressMessage(phase="scan", done=0, total=None, path=file_path))
+
+        if not file_path.exists() or not file_path.is_file():
+            return []
+
+        ext = file_extension.strip()
+        if ext and not ext.startswith("."):
+            ext = f".{ext}"
+
+        if ext and file_path.suffix.lower() != ext.lower():
+            return []
+
+        if ignore_file_stub is not None and ignore_file_stub in file_path.name:
+            return []
+
+        temp_list = [file_path]
+        if progress_cb is not None:
+            progress_cb(ProgressMessage(phase="scan", done=len(temp_list), total=len(temp_list), path=file_path))
+
+        return temp_list
+
+    @staticmethod
+    def collect_paths_from_folder(
+        folder: Path,
+        *,
+        depth: int,
+        file_extension: str,
+        ignore_file_stub: str | None,
+        follow_symlinks: bool,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> List[Path]:
+        """Collect matching file paths from a folder with depth filtering."""
+        if progress_cb is not None:
+            progress_cb(ProgressMessage(phase="scan", done=0, total=None, path=folder))
+
+        # Build glob pattern from file extension
+        ext = file_extension.strip()
+        if ext and not ext.startswith("."):
+            ext = f".{ext}"
+        glob_pattern = f"*{ext}" if ext else "*"
+
+        # Collect all matching files recursively
+        if follow_symlinks:
+            all_paths = list(folder.rglob(glob_pattern))
+        else:
+            all_paths = list(folder.glob(f"**/{glob_pattern}"))
+
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelledError("Cancelled during folder scan.")
+
+        # Filter by depth: calculate depth relative to base folder
+        # Code depth: base folder = 0, first subfolder = 1, second subfolder = 2, etc.
+        # GUI depth N maps to code depths 0 through (N-1)
+        filtered_paths: List[Path] = []
+        for p in all_paths:
+            if cancel_event is not None and cancel_event.is_set():
+                raise CancelledError("Cancelled during folder scan.")
+
+            if not p.is_file():
+                continue
+
+            if ext and p.suffix.lower() != ext.lower():
+                continue
+
+            if ignore_file_stub is not None and ignore_file_stub in p.name:
+                continue
+
+            try:
+                relative_path = p.relative_to(folder)
+                path_depth = len(relative_path.parts) - 1
+                if path_depth < depth:
+                    filtered_paths.append(p)
+            except ValueError:
+                continue
+
+        filtered_paths = sorted(filtered_paths)
+
+        if progress_cb is not None:
+            progress_cb(
+                ProgressMessage(
+                    phase="scan",
+                    done=len(filtered_paths),
+                    total=len(filtered_paths),
+                    path=folder,
+                )
+            )
+
+        return filtered_paths
+
+    def _wrap_paths(
+        self,
+        paths_to_wrap: List[Path],
+        *,
+        cancel_event: threading.Event | None,
+        progress_cb: ProgressCallback | None,
+    ) -> List[T]:
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelledError("Cancelled before wrap.")
+
+        if progress_cb is not None:
+            progress_cb(ProgressMessage(phase="wrap", done=0, total=len(paths_to_wrap)))
+
+        wrapped: List[T] = []
+        progress_every = 25
+        for index, file_path in enumerate(paths_to_wrap):
+            if cancel_event is not None and cancel_event.is_set():
+                raise CancelledError("Cancelled during wrap.")
+
+            if not self._file_matches_filters(file_path):
+                logger.warning(
+                    "AcqImageList: file does not match filters "
+                    f"(extension={self._normalized_ext()}, ignore_file_stub={self.ignore_file_stub}): {file_path}"
+                )
+                continue
+
+            image = self._instantiate_image(file_path, blind_index=index)
+            if image is not None:
+                wrapped.append(image)
+
+            if progress_cb is not None and ((index + 1) % progress_every == 0 or (index + 1) == len(paths_to_wrap)):
+                progress_cb(
+                    ProgressMessage(
+                        phase="wrap",
+                        done=index + 1,
+                        total=len(paths_to_wrap),
+                        path=file_path,
+                    )
+                )
+
+        return wrapped
 
     def iter_metadata(self, *, blinded: bool = False) -> Iterator[Dict[str, Any]]:
         """Iterate over metadata for all loaded AcqImage instances.

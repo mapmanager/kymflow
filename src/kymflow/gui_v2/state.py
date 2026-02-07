@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
-
-import pandas as pd
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.utils.progress import ProgressCallback
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin, SelectionOrigin
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.utils.logging import get_logger
@@ -144,69 +144,60 @@ class AppState:
         Raises:
             ValueError: If CSV file is invalid (missing 'path' column, read error, etc.).
         """
+        build_result = self._build_files_for_path(path, depth=depth)
+        if build_result is None:
+            return
+        files, selected_path = build_result
+        self._apply_loaded_files(files, selected_path)
+
+    def _build_files_for_path(
+        self,
+        path: Path,
+        depth: Optional[int] = None,
+        *,
+        cancel_event: threading.Event | None = None,
+        progress_cb: ProgressCallback | None = None,
+    ) -> Optional[tuple[AcqImageList[KymImage], Path]]:
+        """Build files for a path without mutating UI state (worker-safe)."""
         if depth is None:
             depth = self.folder_depth
-        
+
         path = Path(path)
-        
-        # Determine mode and prepare parameters for AcqImageList
-        file_path_list = None
-        acq_path = None
-        acq_depth = depth
-        
-        # CSV mode detection
-        if path.is_file() and path.suffix.lower() == '.csv':
-            # CSV mode - validate and extract paths
-            try:
-                df = pd.read_csv(path)
-            except Exception as e:
-                raise ValueError(f"Failed to read CSV file: {e}")
-            
-            if 'path' not in df.columns:
-                raise ValueError("CSV must have a 'path' column")
-            
-            file_path_list = df['path'].tolist()
-            logger.info(f"Loaded {len(file_path_list)} paths from CSV: {path}")
-        elif path.is_file():
-            # Single file mode (depth ignored by AcqImageList for files)
-            acq_path = path
-            acq_depth = 0  # Ignored for files, but set for clarity
-        elif path.is_dir():
-            # Folder mode
-            acq_path = path
-            acq_depth = depth
-        else:
+
+        if not path.is_file() and not path.is_dir():
             logger.warning(f"Path is neither file nor directory: {path}")
-            return
-        
-        # Unified AcqImageList initialization (handles path, file, or file_path_list)
-        # logger.info(f'\n\n constructing AcqImageList \n\n')
-        if file_path_list is not None:
-            self.files = AcqImageList(
-                file_path_list=file_path_list,
-                image_cls=KymImage,
-                file_extension=".tif",
-            )
-        else:
-            self.files = AcqImageList(
-                path=acq_path,
-                image_cls=KymImage,
-                file_extension=".tif",
-                depth=acq_depth,
-            )
-        
+            return None
+
+        # Single file mode is synchronous by default (threading handled by controller)
+        if path.is_file():
+            depth = 0
+
+        files = AcqImageList.load_from_path(
+            path,
+            image_cls=KymImage,
+            file_extension=".tif",
+            depth=depth,
+            cancel_event=cancel_event,
+            progress_cb=progress_cb,
+        )
+        return files, path
+
+    def _apply_loaded_files(self, files: AcqImageList[KymImage], selected_path: Path) -> None:
+        """Apply loaded files to UI state and fire handlers (UI-thread only)."""
+        self.files = files
+
         # Store the actual selected path (file, folder, or CSV), not the parent directory
         # AcqImageList.folder is for internal use (parent dir for files), but AppState.folder
         # should always represent the actual selected path for UI consistency (e.g., cancellation revert)
-        self.folder = path
-        
+        self.folder = selected_path
+
         logger.info("load_path: calling file_list_changed handlers")
         for handler in list(self._file_list_changed_handlers):
             try:
                 handler()
             except Exception:
                 logger.exception("Error in file_list_changed handler")
-        
+
         if len(self.files) > 0:
             _selectFile = self.files[0]
             logger.info(f"selected file: {_selectFile}")

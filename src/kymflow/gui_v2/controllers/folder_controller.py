@@ -7,21 +7,24 @@ from the UI into AppState path loading operations.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from nicegui import ui
 
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
+from kymflow.gui_v2.thread_job_runner import ThreadJobRunner
 from kymflow.gui_v2.window_utils import set_window_title_for_path
 from kymflow.core.user_config import UserConfig
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.utils.progress import ProgressMessage
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    pass
+    from kymflow.core.image_loaders.acq_image_list import AcqImageList
+    from kymflow.core.image_loaders.kym_image import KymImage
 
 
 class FolderController:
@@ -59,6 +62,7 @@ class FolderController:
         self._app_state: AppState = app_state
         self._user_config: UserConfig | None = user_config
         self._bus: EventBus = bus
+        self._thread_runner: ThreadJobRunner[tuple["AcqImageList[KymImage]", Path]] = ThreadJobRunner()
         bus.subscribe_intent(SelectPathEvent, self._on_select_path_event)
 
     def _on_select_path_event(self, e: SelectPathEvent) -> None:
@@ -77,6 +81,12 @@ class FolderController:
         """
         new_path = Path(e.new_path)
         current_path = str(self._app_state.folder) if self._app_state.folder else None
+
+        if self._thread_runner.is_running():
+            ui.notify("A load is already in progress", type="warning")
+            if current_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+            return
         
         # Auto-detect CSV: must exist, be a file, and have .csv extension
         is_csv = new_path.exists() and new_path.is_file() and new_path.suffix.lower() == '.csv'
@@ -113,7 +123,16 @@ class FolderController:
             return
         
         # Not dirty - proceed directly
-        self._finally_set_path(new_path, depth, is_file)
+        if is_file:
+            self._finally_set_path(new_path, depth, is_file)
+        else:
+            self._start_threaded_load(
+                new_path,
+                depth=depth,
+                is_file=False,
+                is_csv=False,
+                previous_path=current_path,
+            )
     
     def _handle_csv_event_from_path(self, csv_path: Path, current_path: str | None) -> None:
         """Handle CSV file loading from path.
@@ -122,46 +141,25 @@ class FolderController:
             csv_path: Path to CSV file (already validated to exist and be .csv).
             current_path: Current path from app_state (for cancellation).
         """
+        if self._thread_runner.is_running():
+            ui.notify("A load is already in progress", type="warning")
+            if current_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+            return
+
         # Check for unsaved changes
         if self._app_state.files and self._app_state.files.any_dirty_analysis():
             self._show_unsaved_dialog(csv_path, current_path, 0)
             return
         
-        # Not dirty - proceed with CSV load
-        try:
-            # Load CSV (will validate 'path' column inside)
-            self._app_state.load_path(csv_path, depth=0)
-            
-            # Persist to user config
-            if self._user_config is not None:
-                self._user_config.push_recent_csv(str(csv_path))
-            
-            # Set window title
-            set_window_title_for_path(csv_path, is_file=True)
-            
-            # Emit state event
-            self._bus.emit(SelectPathEvent(
-                new_path=str(csv_path),
-                depth=0,
-                phase="state",
-            ))
-            
-            ui.notify(f"Loaded CSV: {csv_path.name}", type="positive")
-            
-        except ValueError as ve:
-            # CSV validation error (missing 'path' column, etc.)
-            error_msg = str(ve)
-            logger.error(f"CSV validation error: {error_msg}")
-            ui.notify(f"CSV error: {error_msg}", type="negative")
-            if current_path:
-                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
-        except Exception as exc:
-            # Other errors (pandas read error, etc.)
-            error_msg = str(exc)
-            logger.error(f"Failed to load CSV: {error_msg}", exc_info=True)
-            ui.notify(f"Failed to load CSV: {error_msg}", type="negative")
-            if current_path:
-                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+        # Not dirty - proceed with CSV load (threaded)
+        self._start_threaded_load(
+            csv_path,
+            depth=0,
+            is_file=True,
+            is_csv=True,
+            previous_path=current_path,
+        )
 
     def _finally_set_path(self, path: Path, depth: int, is_file: bool) -> None:
         """Finalize path switch: load folder, save config, set title, emit event.
@@ -190,6 +188,149 @@ class FolderController:
             depth=depth,
             phase="state",
         ))
+
+    def _start_threaded_load(
+        self,
+        path: Path,
+        *,
+        depth: int,
+        is_file: bool,
+        is_csv: bool,
+        previous_path: Optional[str],
+    ) -> None:
+        """Run a threaded load with progress and cancellation."""
+        progress_label = None
+        progress_bar = None
+        cancel_button = None
+
+        def on_cancel_click() -> None:
+            if cancel_button is not None:
+                cancel_button.props("disable")
+            if progress_label is not None:
+                progress_label.text = "Cancelling..."
+            self._thread_runner.cancel()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Loading files...").classes("text-lg font-semibold")
+            progress_label = ui.label("Starting...").classes("text-sm")
+            progress_bar = ui.linear_progress(value=0.0).classes("w-full")
+            with ui.row():
+                cancel_button = ui.button("Cancel", on_click=on_cancel_click)
+
+        def on_progress(msg: ProgressMessage) -> None:
+            if progress_label is not None:
+                progress_label.text = self._format_progress_message(msg)
+            if progress_bar is not None:
+                if msg.total is not None and msg.total > 0:
+                    progress_bar.value = min(1.0, msg.done / msg.total)
+                else:
+                    progress_bar.value = 0.0
+
+        def on_done(result: tuple["AcqImageList[KymImage]", Path]) -> None:
+            dialog.close()
+            files, selected_path = result
+            self._app_state._apply_loaded_files(files, selected_path)
+
+            if self._user_config is not None:
+                if is_csv:
+                    self._user_config.push_recent_csv(str(path))
+                else:
+                    config_depth = 0 if is_file else depth
+                    self._user_config.push_recent_path(str(path), depth=config_depth)
+
+            set_window_title_for_path(path, is_file=is_file or is_csv)
+
+            self._bus.emit(SelectPathEvent(
+                new_path=str(path),
+                depth=0 if is_file or is_csv else depth,
+                phase="state",
+            ))
+
+            try:
+                if is_csv:
+                    ui.notify(f"Loaded CSV: {path.name}", type="positive")
+                else:
+                    ui.notify(f"Loaded: {path.name}", type="positive")
+            except RuntimeError as e:
+                if "parent element" in str(e) or "slot" in str(e).lower():
+                    # UI context is gone, skip notification
+                    logger.debug(f"Skipping notification - UI context deleted: {e}")
+                else:
+                    raise
+
+        def on_cancelled() -> None:
+            dialog.close()
+            try:
+                ui.notify("Load cancelled", type="warning")
+            except RuntimeError as e:
+                if "parent element" in str(e) or "slot" in str(e).lower():
+                    # UI context is gone, skip notification
+                    logger.debug(f"Skipping notification - UI context deleted: {e}")
+                else:
+                    raise
+            if previous_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+
+        def on_error(exc: BaseException, tb: str) -> None:
+            dialog.close()
+            logger.error(f"Failed to load path: {exc}", exc_info=True)
+            try:
+                if is_csv and isinstance(exc, ValueError):
+                    ui.notify(f"CSV error: {exc}", type="negative")
+                else:
+                    ui.notify(f"Failed to load: {exc}", type="negative")
+            except RuntimeError as e:
+                if "parent element" in str(e) or "slot" in str(e).lower():
+                    # UI context is gone, skip notification
+                    logger.debug(f"Skipping notification - UI context deleted: {e}")
+                else:
+                    raise
+            if previous_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+
+        def worker_fn(cancel_event, progress_cb):
+            result = self._app_state._build_files_for_path(
+                path,
+                depth=depth,
+                cancel_event=cancel_event,
+                progress_cb=progress_cb,
+            )
+            if result is None:
+                raise RuntimeError(f"Path is neither file nor directory: {path}")
+            return result
+
+        dialog.open()
+        self._thread_runner.start(
+            ui_timer_factory=lambda dt, cb: ui.timer(dt, cb),
+            poll_interval_s=0.05,
+            worker_fn=worker_fn,
+            on_progress=on_progress,
+            on_done=on_done,
+            on_cancelled=on_cancelled,
+            on_error=on_error,
+            cancel_previous=False,
+        )
+
+    def _format_progress_message(self, msg: ProgressMessage) -> str:
+        """Format ProgressMessage for user-facing UI."""
+        if msg.phase == "scan":
+            prefix = "Scanning"
+        elif msg.phase == "read_csv":
+            prefix = "Reading CSV"
+        elif msg.phase == "wrap":
+            prefix = "Preparing files"
+        elif msg.phase == "done":
+            prefix = "Done"
+        else:
+            prefix = msg.phase
+
+        if msg.total is not None and msg.total > 0:
+            return f"{prefix}: {msg.done}/{msg.total}"
+
+        if msg.detail:
+            return f"{prefix}: {msg.detail}"
+
+        return prefix
 
     def _load_folder(self, path: Path) -> None:
         """Load path with current depth and persist to config.
@@ -261,31 +402,24 @@ class FolderController:
             depth: The depth to use (already calculated, passed from dialog).
         """
         dialog.close()
+
+        if self._thread_runner.is_running():
+            ui.notify("A load is already in progress", type="warning")
+            if previous_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+            return
         
         # Check if CSV
         is_csv = path.is_file() and path.suffix.lower() == '.csv'
         
         if is_csv:
-            # Handle CSV loading
-            try:
-                self._app_state.load_path(path, depth=0)
-                
-                if self._user_config is not None:
-                    self._user_config.push_recent_csv(str(path))
-                
-                set_window_title_for_path(path, is_file=True)
-                
-                self._bus.emit(SelectPathEvent(
-                    new_path=str(path),
-                    depth=0,
-                    phase="state",
-                ))
-            except Exception as exc:
-                error_msg = str(exc)
-                logger.error(f"Failed to load CSV: {error_msg}", exc_info=True)
-                ui.notify(f"Failed to load CSV: {error_msg}", type="negative")
-                if previous_path:
-                    self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+            self._start_threaded_load(
+                path,
+                depth=0,
+                is_file=True,
+                is_csv=True,
+                previous_path=previous_path,
+            )
             return
         
         is_file = path.is_file()
@@ -294,5 +428,14 @@ class FolderController:
         if not is_file and depth != self._app_state.folder_depth:
             self._app_state.folder_depth = depth
         
-        # Use the shared finalization logic
-        self._finally_set_path(path, depth, is_file)
+        if is_file:
+            # Use the shared finalization logic
+            self._finally_set_path(path, depth, is_file)
+        else:
+            self._start_threaded_load(
+                path,
+                depth=depth,
+                is_file=False,
+                is_csv=False,
+                previous_path=previous_path,
+            )

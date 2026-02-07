@@ -98,7 +98,7 @@ def test_load_path_csv_invalid_format(app_state: AppState) -> None:
         csv_file.write_text("invalid,malformed,csv")
         
         # Mock pandas to raise EmptyDataError
-        with patch("kymflow.gui_v2.state.pd") as mock_pd:
+        with patch("kymflow.core.image_loaders.acq_image_list.pd") as mock_pd:
             import pandas.errors
             mock_pd.read_csv.side_effect = pandas.errors.EmptyDataError("Empty CSV")
             
