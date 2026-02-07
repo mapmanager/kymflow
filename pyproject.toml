@@ -51,7 +51,7 @@ classifiers = [
 
 [project.optional-dependencies]  # pip/venv/conda extras
 gui = [
-    "nicegui==3.6.0",
+    "nicegui==3.7.1",  # 3.6.0
     "pywebview>=6.1",
 ]
 test = [
@@ -84,7 +84,7 @@ dev = [
 
 [dependency-groups]  # uv dependency groups (kept in sync with extras)
 gui = [
-    "nicegui==3.6.0",
+    "nicegui==3.7.1",  #3.6.0",
     "pywebview>=6.1",
 ]
 test = [

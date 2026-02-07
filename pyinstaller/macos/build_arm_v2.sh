@@ -64,8 +64,8 @@ python -m pip install -e '../../.[gui]'
 echo "[build_arm] Installing nicewidgets (editable) with [no_mpl]..."
 python -m pip install -e '../../../nicewidgets/.[no_mpl]'  # abb 2026
 
-echo "[build_arm] Pinning nicegui==3.6.0 for clarity..."
-python -m pip install 'nicegui==3.6.0'
+echo "[build_arm] Pinning nicegui==3.7.1 for clarity..."
+python -m pip install 'nicegui==3.7.1'
 
 echo "[build_arm] Installing pyinstaller..."
 python -m pip install pyinstaller

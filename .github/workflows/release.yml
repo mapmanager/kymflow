@@ -93,69 +93,6 @@ jobs:
         run: |
           python -m twine upload dist/*
 
-  # ----------------------------------------------------------------------------
-  # DEPRECATED: macOS Intel build (kept for reference; commented out intentionally)
-  # ----------------------------------------------------------------------------
-  #
-  # macos-intel-app:
-  #   name: Build macOS Intel app and attach to release (DEPRECATED)
-  #   runs-on: macos-13   # Intel macOS runner
-  #   needs: build-and-publish
-  #   if: startsWith(github.ref, 'refs/tags/v')
-  #
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: "3.11"
-  #         cache: pip
-  #
-  #     - name: Install kymflow (GUI + PyInstaller) and pack tooling
-  #       run: |
-  #         python -m pip install --upgrade pip
-  #
-  #         # Install nicewidgets from GitHub (not PyPI)
-  #         python -m pip install "nicewidgets @ git+https://github.com/mapmanager/nicewidgets.git"
-  #
-  #         # Install your package with GUI + pyinstaller extras
-  #         python -m pip install ".[gui,pyinstaller]"
-  #
-  #         # Install nicegui pack deps pinned to your gui version
-  #         python -m pip install "nicegui[pack]==3.6.0"
-  #
-  #     - name: Clean previous build artifacts
-  #       run: |
-  #         rm -rf dist build
-  #
-  #     - name: Build macOS Intel app with nicegui-pack
-  #       env:
-  #         KYMFLOW_GUI_RELOAD: "0"
-  #         KYMFLOW_GUI_NATIVE: "1"
-  #       run: |
-  #         nicegui-pack \
-  #           --windowed \
-  #           --clean \
-  #           --name "KymFlow" \
-  #           --icon "pyinstaller/macos/kymflow.icns" \
-  #           src/kymflow/gui_v2/app.py
-  #
-  #     - name: Archive KymFlow.app (Intel)
-  #       run: |
-  #         mkdir -p release
-  #         cd dist
-  #         zip -r "../release/KymFlow-macos-intel-${{ github.ref_name }}.zip" "KymFlow.app"
-  #         cd ..
-  #
-  #     - name: Upload macOS Intel app to GitHub Release
-  #       uses: softprops/action-gh-release@v1
-  #       with:
-  #         files: release/KymFlow-macos-intel-${{ github.ref_name }}.zip
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   macos-arm-app:
     name: Build macOS Apple Silicon app and attach to release
     runs-on: macos-15 # Apple Silicon runner (ARM64)
@@ -183,7 +120,7 @@ jobs:
           python -m pip install ".[gui,pyinstaller]"
 
           # Install nicegui pack deps pinned to your gui version to avoid version drift
-          python -m pip install "nicegui[pack]==3.6.0"
+          python -m pip install "nicegui[pack]==3.7.1"
 
       - name: Clean previous build artifacts
         run: |

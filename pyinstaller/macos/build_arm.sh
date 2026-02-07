@@ -30,7 +30,7 @@ pip install --upgrade pip
 pip install -e '../../.[gui]'
 pip install -e '../../../nicewidgets/.'  # abb 2026
 
-pip install nicegui==3.6.0
+pip install nicegui==3.7.1
 
 pip install pyinstaller
 
