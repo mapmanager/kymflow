@@ -430,7 +430,7 @@ class UserConfig:
             self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
             self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
             self.data.recent_csvs = [rc for rc in self.data.recent_csvs if _normalize_folder_path(rc.path) != p]
-            self.data.recent_files.insert(0, RecentFile(path=p))
+            self.data.recent_files.append(RecentFile(path=p))
             # Update last_path with depth=0 for files
             self.data.last_path = LastPath(path=p, depth=0)
         else:
@@ -438,7 +438,7 @@ class UserConfig:
             self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
             self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
             self.data.recent_csvs = [rc for rc in self.data.recent_csvs if _normalize_folder_path(rc.path) != p]
-            self.data.recent_folders.insert(0, RecentFolder(path=p, depth=depth_int))
+            self.data.recent_folders.append(RecentFolder(path=p, depth=depth_int))
             # Update last_path with actual depth
             self.data.last_path = LastPath(path=p, depth=depth_int)
 
@@ -446,18 +446,18 @@ class UserConfig:
         combined = len(self.data.recent_folders) + len(self.data.recent_files) + len(self.data.recent_csvs)
         if combined > MAX_RECENTS:
             excess = combined - MAX_RECENTS
-            # Trim from oldest (end of lists)
+            # Trim from oldest (beginning of lists, since we append new items to end)
             if len(self.data.recent_folders) > 0:
                 folders_to_remove = min(excess, len(self.data.recent_folders))
-                self.data.recent_folders = self.data.recent_folders[:-folders_to_remove]
+                self.data.recent_folders = self.data.recent_folders[folders_to_remove:]
                 excess -= folders_to_remove
             if excess > 0 and len(self.data.recent_files) > 0:
                 files_to_remove = min(excess, len(self.data.recent_files))
-                self.data.recent_files = self.data.recent_files[:-files_to_remove]
+                self.data.recent_files = self.data.recent_files[files_to_remove:]
                 excess -= files_to_remove
             if excess > 0 and len(self.data.recent_csvs) > 0:
                 csvs_to_remove = min(excess, len(self.data.recent_csvs))
-                self.data.recent_csvs = self.data.recent_csvs[:-csvs_to_remove]
+                self.data.recent_csvs = self.data.recent_csvs[csvs_to_remove:]
 
     def push_recent_csv(self, csv_path: str | Path) -> None:
         """
@@ -471,8 +471,8 @@ class UserConfig:
         self.data.recent_folders = [rf for rf in self.data.recent_folders if _normalize_folder_path(rf.path) != p]
         self.data.recent_files = [rf for rf in self.data.recent_files if _normalize_folder_path(rf.path) != p]
         
-        # Insert at front
-        self.data.recent_csvs.insert(0, RecentCsv(path=p))
+        # Append to end (maintains ordering, newest at end)
+        self.data.recent_csvs.append(RecentCsv(path=p))
         
         # Update last_path with depth=0 for CSVs (like files)
         self.data.last_path = LastPath(path=p, depth=0)
@@ -481,18 +481,18 @@ class UserConfig:
         combined = len(self.data.recent_folders) + len(self.data.recent_files) + len(self.data.recent_csvs)
         if combined > MAX_RECENTS:
             excess = combined - MAX_RECENTS
-            # Trim from oldest (end of lists)
+            # Trim from oldest (beginning of lists, since we append new items to end)
             if len(self.data.recent_folders) > 0:
                 folders_to_remove = min(excess, len(self.data.recent_folders))
-                self.data.recent_folders = self.data.recent_folders[:-folders_to_remove]
+                self.data.recent_folders = self.data.recent_folders[folders_to_remove:]
                 excess -= folders_to_remove
             if excess > 0 and len(self.data.recent_files) > 0:
                 files_to_remove = min(excess, len(self.data.recent_files))
-                self.data.recent_files = self.data.recent_files[:-files_to_remove]
+                self.data.recent_files = self.data.recent_files[files_to_remove:]
                 excess -= files_to_remove
             if excess > 0 and len(self.data.recent_csvs) > 0:
                 csvs_to_remove = min(excess, len(self.data.recent_csvs))
-                self.data.recent_csvs = self.data.recent_csvs[:-csvs_to_remove]
+                self.data.recent_csvs = self.data.recent_csvs[csvs_to_remove:]
 
     def prune_missing_folders(self) -> int:
         """Remove recent/last paths that no longer exist on disk."""
