@@ -521,7 +521,8 @@ def test_kymanalysis_get_velocity_report_blinded() -> None:
     report_unblinded = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=False)
     assert len(report_unblinded) == 1
     assert report_unblinded[0]["file_name"] == "test_file"  # Path.stem
-    assert report_unblinded[0]["grandparent_folder"] == "a"  # Real grandparent folder
+    # Grandparent Folder now uses parent2 (not parent3) - for /a/b/c/test_file.tif, parent2 = "b"
+    assert report_unblinded[0]["grandparent_folder"] == "b"  # Real grandparent folder (parent2)
 
 
 def test_kymanalysis_velocity_event_remove() -> None:

@@ -40,6 +40,7 @@ def _col(
     editable: bool = False,
     filterable: bool = False,
     editor: Optional[str] = None,
+    extra_grid_options: Optional[dict[str, object]] = None,
 ) -> ColumnConfig:
     extra: dict[str, object] = {}
 
@@ -57,6 +58,10 @@ def _col(
     if cell_class is not None:
         extra["cellClass"] = cell_class
 
+    # Merge any additional grid options
+    if extra_grid_options is not None:
+        extra.update(extra_grid_options)
+
     col_config = ColumnConfig(
         field=field,
         header=header,
@@ -71,8 +76,12 @@ def _col(
 def _default_columns() -> list[ColumnConfig]:
     return [
         _col("File Name", "File Name", filterable=True, flex=2, width=180, min_width=180),
-        _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center"),
-        _col("Saved", "Saved", width=80, cell_class="ag-cell-center"),
+        _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center", extra_grid_options={
+            ":cellRenderer": "(params) => params.value === 'True' ? '✓' : ''"
+        }),
+        _col("Saved", "Saved", width=80, cell_class="ag-cell-center", extra_grid_options={
+            ":cellRenderer": "(params) => params.value === 'False' ? '❌' : ''"
+        }),
         _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
         _col("Total Num Velocity Events", "Events", width=100, cell_class="ag-cell-right"),  # abb 202601
         _col("Parent Folder", "Parent", flex=1, min_width=120),

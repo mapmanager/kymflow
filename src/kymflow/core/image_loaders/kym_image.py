@@ -275,8 +275,8 @@ class KymImage(AcqImage):
         # Map to summary_row() keys and add analysis fields
         result = {
             "File Name": file_name,
-            "Analyzed": "✓" if self.get_kym_analysis().has_analysis() else "",
-            "Saved": "✓" if not self.get_kym_analysis().is_dirty else "",
+            "Analyzed": "True" if self.get_kym_analysis().has_analysis() else "False",
+            "Saved": "True" if not self.get_kym_analysis().is_dirty else "False",
             "Num ROIS": self.rois.numRois(),
             "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),
             "Parent Folder": parent_folder,  # Use blinded or unblinded parent1

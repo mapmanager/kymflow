@@ -6,21 +6,21 @@
       "roi_id": 1,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-02-08T18:00:39.857414+00:00",
+      "analyzed_at": "2026-02-08T18:51:54.730944+00:00",
       "roi_revision_at_analysis": 0
     },
     "2": {
       "roi_id": 2,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-02-08T18:00:42.047512+00:00",
+      "analyzed_at": "2026-02-08T18:51:56.774872+00:00",
       "roi_revision_at_analysis": 0
     },
     "3": {
       "roi_id": 3,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-02-08T18:00:44.728714+00:00",
+      "analyzed_at": "2026-02-08T18:51:59.137680+00:00",
       "roi_revision_at_analysis": 0
     }
   },
