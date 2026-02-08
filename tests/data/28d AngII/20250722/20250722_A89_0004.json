@@ -1,0 +1,66 @@
+{
+  "version": "1.0",
+  "header": {
+    "shape": [
+      30000,
+      14
+    ],
+    "ndim": 2,
+    "voxels": [
+      0.0011219666666666666,
+      0.45
+    ],
+    "voxels_units": [
+      "s",
+      "um"
+    ],
+    "labels": [
+      "Time (s)",
+      "Space (um)"
+    ],
+    "physical_size": [
+      33.659,
+      6.3
+    ]
+  },
+  "experiment_metadata": {
+    "species": "",
+    "region": "",
+    "cell_type": "",
+    "depth": null,
+    "branch_order": null,
+    "direction": "",
+    "sex": "",
+    "genotype": "",
+    "condition": "",
+    "note": "",
+    "acq_date": "",
+    "acq_time": ""
+  },
+  "rois": [
+    {
+      "id": 1,
+      "channel": 1,
+      "z": 0,
+      "name": "",
+      "note": "",
+      "revision": 0,
+      "dim0_start": 0,
+      "dim0_stop": 30000,
+      "dim1_start": 0,
+      "dim1_stop": 14
+    },
+    {
+      "id": 2,
+      "channel": 1,
+      "z": 0,
+      "name": "",
+      "note": "",
+      "revision": 0,
+      "dim0_start": 0,
+      "dim0_stop": 30000,
+      "dim1_start": 0,
+      "dim1_stop": 14
+    }
+  ]
+}

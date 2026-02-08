@@ -1,0 +1,43 @@
+# Dockerfile
+# Render deployment: run NiceGUI in web mode (native=False), bind to $HOST:$PORT
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy metadata first for caching
+COPY pyproject.toml README.md LICENSE* ./
+
+# Copy source
+COPY src ./src
+
+# Include sample/test data inside the image (Render-friendly)
+# (This makes it available at /app/tests/data at runtime)
+COPY tests/data ./tests/data
+
+# Install deps
+RUN python -m pip install --upgrade pip && \
+    # install nicewidgets from GitHub WITH the no_mpl extra (robust PEP 508 form)
+    python -m pip install --no-cache-dir "nicewidgets[no_mpl] @ git+https://github.com/mapmanager/nicewidgets" && \
+    # install kymflow itself
+    python -m pip install --no-cache-dir ".[web]"
+
+ENV PYTHONUNBUFFERED=1
+ENV HOST=0.0.0.0
+ENV PORT=8080
+
+# Force web behavior in container
+ENV KYMFLOW_GUI_NATIVE=0
+ENV KYMFLOW_GUI_RELOAD=0
+
+# Default sample folder for Render/web runs
+ENV KYMFLOW_DEFAULT_PATH=/app/tests/data
+ENV KYMFLOW_DEFAULT_DEPTH=3
+
+EXPOSE 8080
+
+CMD ["python", "-m", "kymflow.gui_v2.app"]

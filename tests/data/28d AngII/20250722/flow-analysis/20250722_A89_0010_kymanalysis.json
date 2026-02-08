@@ -1,0 +1,21 @@
+{
+  "version": "2.0",
+  "accepted": true,
+  "analysis_metadata": {
+    "1": {
+      "roi_id": 1,
+      "algorithm": "mpRadon_v0",
+      "window_size": 16,
+      "analyzed_at": "2026-02-05T12:19:32.515561+00:00",
+      "roi_revision_at_analysis": 0
+    },
+    "2": {
+      "roi_id": 2,
+      "algorithm": "mpRadon",
+      "window_size": 16,
+      "analyzed_at": "2026-02-05T12:27:55.322039+00:00",
+      "roi_revision_at_analysis": 0
+    }
+  },
+  "velocity_events": {}
+}
