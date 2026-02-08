@@ -11,7 +11,7 @@ from kymflow.core.user_config import UserConfig
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import SelectPathEvent
 from kymflow.gui_v2.state import AppState
-from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
+from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView, PathType
 
 
 @pytest.fixture
@@ -105,7 +105,7 @@ def test_on_recent_path_selected_csv_auto_detection(
 def test_on_open_csv_emits_event(
     bus: EventBus, app_state: AppState, user_config: UserConfig, tmp_path: Path
 ) -> None:
-    """Test _on_open_csv() emits SelectPathEvent when CSV is selected.
+    """Test _on_open_path(PathType.CSV) emits SelectPathEvent when CSV is selected.
     
     Note: We don't test pywebview directly - we mock _prompt_for_path
     which is the actual function that handles the file dialog. This follows the
@@ -151,7 +151,7 @@ def test_on_open_csv_emits_event(
                 
                 with patch("builtins.__import__", side_effect=mock_import):
                     import asyncio
-                    asyncio.run(view._on_open_csv())
+                    asyncio.run(view._on_open_path(PathType.CSV))
         
         # Should emit SelectPathEvent
         assert len(emitted_events) == 1, f"Expected 1 event, got {len(emitted_events)}: {emitted_events}"

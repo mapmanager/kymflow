@@ -6,6 +6,7 @@ emitting SelectPathEvent intent events when paths are selected.
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -24,6 +25,17 @@ from kymflow.gui_v2._pywebview import _prompt_for_path
 
 logger = get_logger(__name__)
 
+# Error message constants
+_ERROR_NATIVE_REQUIRED = "{} selection requires native mode with pywebview. Please restart with KYMFLOW_GUI_NATIVE=1"
+_ERROR_NATIVE_WINDOW = "Native window not available. Please ensure you're running with KYMFLOW_GUI_NATIVE=1"
+
+
+class PathType(str, Enum):
+    """Type of path selection (folder, file, or CSV)."""
+    FOLDER = "folder"
+    FILE = "file"
+    CSV = "csv"
+
 
 def _is_native_mode_available() -> bool:
     """Check if native mode and pywebview are available for folder dialogs.
@@ -38,6 +50,36 @@ def _is_native_mode_available() -> bool:
     
     windows = getattr(webview, "windows", None)
     return windows is not None and len(windows) > 0
+
+
+def _validate_native_mode_for_dialog(path_type: PathType) -> tuple[bool, Optional[str]]:
+    """Validate that native mode is available for path selection dialog.
+    
+    Args:
+        path_type: Type of path selection (FOLDER, FILE, or CSV).
+    
+    Returns:
+        Tuple of (is_available, error_message). If is_available is True,
+        error_message will be None. If False, error_message contains the
+        user-facing error message.
+    """
+    # Check if pywebview module is available at all
+    try:
+        import webview  # type: ignore
+    except ImportError:
+        path_type_str = path_type.value.capitalize()
+        return False, _ERROR_NATIVE_REQUIRED.format(path_type_str)
+    
+    native = getattr(app, "native", None)
+    main_window = getattr(native, "main_window", None) if native else None
+    
+    windows = getattr(webview, "windows", None)
+    num_windows = len(windows) if windows else 0
+    
+    if main_window is None and (not windows or num_windows == 0):
+        return False, _ERROR_NATIVE_WINDOW
+    
+    return True, None
 
 
 OnSaveSelected = Callable[[SaveSelected], None]
@@ -174,111 +216,73 @@ class FolderSelectorView:
             # Rebuild menu to reflect cleared state
             safe_call(self._rebuild_menu_if_needed)
             ui.notify("Cleared recently opened items", type="info")
-
-    async def _on_choose_folder(self) -> None:
-        """Handle folder selection button click."""
-        # Check if pywebview module is available at all
-        try:
-            import webview  # type: ignore
-        except ImportError:
-            msg = "Folder selection requires native mode with pywebview. Please restart with KYMFLOW_GUI_NATIVE=1"
-            ui.notify(msg, type="warning")
-            return
-
-        native = getattr(app, "native", None)
-        main_window = getattr(native, "main_window", None) if native else None
+    
+    def _calculate_depth_for_path(self, path_type: PathType) -> int | None:
+        """Calculate depth for path selection based on path type.
         
-        windows = getattr(webview, "windows", None)
-        num_windows = len(windows) if windows else 0
+        Args:
+            path_type: Type of path selection (FOLDER, FILE, or CSV).
         
-        if main_window is None and (not windows or num_windows == 0):
-            msg = "Native window not available. Please ensure you're running with KYMFLOW_GUI_NATIVE=1"
-            ui.notify(msg, type="warning")
-            return
+        Returns:
+            Depth value for folders, or None for files/CSV (controller will use 0).
+        """
+        if path_type == PathType.FOLDER:
+            return self._depth_input.value if self._depth_input is not None else self._app_state.folder_depth
+        else:
+            # Files and CSV don't use depth (controller will use 0)
+            return None
 
+    async def _on_open_path(self, path_type: PathType, file_extension: Optional[str] = None) -> None:
+        """Unified handler for opening folder, file, or CSV path selection.
+        
+        Args:
+            path_type: Type of path selection (FOLDER, FILE, or CSV).
+            file_extension: File extension for file/CSV dialogs. Defaults to ".tif" for FILE,
+                ".csv" for CSV. Ignored for FOLDER.
+        """
+        # Validate native mode availability
+        is_available, error_msg = _validate_native_mode_for_dialog(path_type)
+        if not is_available:
+            ui.notify(error_msg, type="warning")
+            return
+        
+        # Determine file extension and dialog type
+        if path_type == PathType.FOLDER:
+            dialog_type = "folder"
+            ext = None
+        else:  # FILE or CSV
+            dialog_type = "file"
+            if file_extension is None:
+                ext = ".csv" if path_type == PathType.CSV else ".tif"
+            else:
+                ext = file_extension
+        
         try:
             initial = self._current_folder if self._current_folder is not None else Path.home()
-            selected = await _prompt_for_path(initial)
-            logger.warning(f'  recieved from _prompt_for_path() selected:{selected}')
+            
+            # Call _prompt_for_path with appropriate parameters
+            if ext is not None:
+                selected = await _prompt_for_path(initial, dialog_type=dialog_type, file_extension=ext)
+            else:
+                selected = await _prompt_for_path(initial, dialog_type=dialog_type)
+            
             if selected:
-                depth = self._depth_input.value if self._depth_input is not None else self._app_state.folder_depth
+                # Calculate depth for the path type
+                depth = self._calculate_depth_for_path(path_type)
+                
+                # Emit event with consistent parameters (always include depth)
                 self._bus.emit(SelectPathEvent(
                     new_path=str(selected),
                     depth=depth,
                     phase="intent",
                 ))
-                ui.notify(f"Folder selected: {selected}", type="positive")
+                
+                # Show success notification
+                path_type_str = path_type.value.capitalize()
+                ui.notify(f"{path_type_str} selected: {selected}", type="positive")
         except Exception as exc:
-            logger.error("Folder selection failed: %s", exc, exc_info=True)
-            ui.notify(f"Failed to select folder: {exc}", type="negative")
-
-    async def _on_open_file(self) -> None:
-        """Handle file selection button click."""
-        # Check if pywebview module is available at all
-        try:
-            import webview  # type: ignore
-        except ImportError:
-            msg = "File selection requires native mode with pywebview. Please restart with KYMFLOW_GUI_NATIVE=1"
-            ui.notify(msg, type="warning")
-            return
-
-        native = getattr(app, "native", None)
-        main_window = getattr(native, "main_window", None) if native else None
-        
-        windows = getattr(webview, "windows", None)
-        num_windows = len(windows) if windows else 0
-        
-        if main_window is None and (not windows or num_windows == 0):
-            msg = "Native window not available. Please ensure you're running with KYMFLOW_GUI_NATIVE=1"
-            ui.notify(msg, type="warning")
-            return
-
-        try:
-            initial = self._current_folder if self._current_folder is not None else Path.home()
-            selected = await _prompt_for_path(initial, dialog_type="file")
-            if selected:
-                self._bus.emit(SelectPathEvent(
-                    new_path=str(Path(selected)),
-                    phase="intent",
-                ))
-                ui.notify(f"File selected: {selected}", type="positive")
-        except Exception as exc:
-            logger.error("File selection failed: %s", exc, exc_info=True)
-            ui.notify(f"Failed to select file: {exc}", type="negative")
-
-    async def _on_open_csv(self) -> None:
-        """Handle CSV file selection button click."""
-        # Check if pywebview module is available at all
-        try:
-            import webview  # type: ignore
-        except ImportError:
-            msg = "CSV selection requires native mode with pywebview. Please restart with KYMFLOW_GUI_NATIVE=1"
-            ui.notify(msg, type="warning")
-            return
-
-        native = getattr(app, "native", None)
-        main_window = getattr(native, "main_window", None) if native else None
-        
-        windows = getattr(webview, "windows", None)
-        num_windows = len(windows) if windows else 0
-        
-        if main_window is None and (not windows or num_windows == 0):
-            msg = "Native window not available. Please ensure you're running with KYMFLOW_GUI_NATIVE=1"
-            ui.notify(msg, type="warning")
-            return
-
-        try:
-            initial = self._current_folder if self._current_folder is not None else Path.home()
-            selected = await _prompt_for_path(initial, dialog_type="file", file_extension=".csv")
-            if selected:
-                self._bus.emit(SelectPathEvent(
-                    new_path=str(selected),
-                    phase="intent",
-                ))
-                ui.notify(f"CSV selected: {selected}", type="positive")
-        except Exception as exc:
-            logger.error("CSV selection failed: %s", exc, exc_info=True)
-            ui.notify(f"Failed to select CSV: {exc}", type="negative")
+            logger.error(f"{path_type.value.capitalize()} selection failed: %s", exc, exc_info=True)
+            ui.notify(f"Failed to select {path_type.value}: {exc}", type="negative")
 
     def render(self, *, initial_folder: Path | None = None) -> None:
         """Create the folder selector UI inside the current container.
@@ -329,9 +333,9 @@ class FolderSelectorView:
                 if not folder_paths and not file_paths and not csv_paths:
                     self._recent_menu_button.disable()
             
-            self._choose_button = ui.button("Open folder", on_click=self._on_choose_folder).props("dense").classes("text-sm")
-            self._open_file_button = ui.button("Open file", on_click=self._on_open_file).props("dense").classes("text-sm")
-            self._open_csv_button = ui.button("Open CSV", on_click=self._on_open_csv).props("dense").classes("text-sm")
+            self._choose_button = ui.button("Open folder", on_click=lambda: self._on_open_path(PathType.FOLDER)).props("dense").classes("text-sm")
+            self._open_file_button = ui.button("Open file", on_click=lambda: self._on_open_path(PathType.FILE)).props("dense").classes("text-sm")
+            self._open_csv_button = ui.button("Open CSV", on_click=lambda: self._on_open_path(PathType.CSV)).props("dense").classes("text-sm")
 
             ui.label("Depth:").classes("ml-2")
             self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-10")

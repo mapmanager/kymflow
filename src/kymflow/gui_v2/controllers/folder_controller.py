@@ -64,6 +64,53 @@ class FolderController:
         self._bus: EventBus = bus
         self._thread_runner: ThreadJobRunner[tuple["AcqImageList[KymImage]", Path]] = ThreadJobRunner()
         bus.subscribe_intent(SelectPathEvent, self._on_select_path_event)
+    
+    def _detect_path_type(self, path: Path) -> tuple[bool, bool, bool]:
+        """Detect the type of path (file, folder, or CSV).
+        
+        Args:
+            path: Path to check.
+        
+        Returns:
+            Tuple of (is_file, is_folder, is_csv). Only one will be True.
+            If path doesn't exist, all will be False.
+        """
+        is_file = path.is_file()
+        is_folder = path.is_dir()
+        is_csv = is_file and path.exists() and path.suffix.lower() == '.csv'
+        return (is_file, is_folder, is_csv)
+    
+    def _check_thread_runner_available(self, current_path: Optional[str]) -> bool:
+        """Check if thread runner is available for path loading.
+        
+        Args:
+            current_path: Current path from app_state (for cancellation if busy).
+        
+        Returns:
+            True if thread runner is available, False if busy (and emits CancelSelectPathEvent).
+        """
+        if self._thread_runner.is_running():
+            ui.notify("A load is already in progress", type="warning")
+            if current_path:
+                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+            return False
+        return True
+    
+    def _persist_path_to_config(self, path: Path, depth: int, is_file: bool, is_csv: bool) -> None:
+        """Persist path selection to user config.
+        
+        Args:
+            path: Path to persist.
+            depth: Depth value (0 for files/CSV, folder depth for folders).
+            is_file: True if path is a file.
+            is_csv: True if path is a CSV file.
+        """
+        if self._user_config is not None:
+            if is_csv:
+                self._user_config.push_recent_csv(str(path))
+            else:
+                config_depth = 0 if is_file else depth
+                self._user_config.push_recent_path(str(path), depth=config_depth)
 
     def _on_select_path_event(self, e: SelectPathEvent) -> None:
         """Handle SelectPathEvent intent event.
@@ -82,23 +129,19 @@ class FolderController:
         new_path = Path(e.new_path)
         current_path = str(self._app_state.folder) if self._app_state.folder else None
 
-        if self._thread_runner.is_running():
-            ui.notify("A load is already in progress", type="warning")
-            if current_path:
-                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+        # 1. Thread runner check
+        if not self._check_thread_runner_available(current_path):
             return
         
-        # Auto-detect CSV: must exist, be a file, and have .csv extension
-        is_csv = new_path.exists() and new_path.is_file() and new_path.suffix.lower() == '.csv'
+        # 2. Path type detection
+        is_file, is_folder, is_csv = self._detect_path_type(new_path)
         
+        # Handle CSV separately (early return)
         if is_csv:
             self._handle_csv_event_from_path(new_path, current_path)
             return
         
-        # Determine if file or folder
-        is_file = new_path.is_file()
-        is_folder = new_path.is_dir()
-
+        # 3. Validation (path exists)
         if not (is_file or is_folder):
             logger.error(f'Path does not exist: "{new_path}"')
             ui.notify(f"Path does not exist: {new_path}", type="warning")
@@ -107,7 +150,7 @@ class FolderController:
                 self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
             return
         
-        # Calculate depth early (needed for both dirty and non-dirty paths)
+        # 4. Depth calculation
         # For files, depth is always 0 (ignored by AcqImageList)
         # For folders, use event depth or current app_state depth
         if is_file:
@@ -117,12 +160,12 @@ class FolderController:
             if e.depth is not None:
                 self._app_state.folder_depth = depth
         
-        # Check for unsaved changes
+        # 5. Unsaved changes check
         if self._app_state.files and self._app_state.files.any_dirty_analysis():
             self._show_unsaved_dialog(new_path, current_path, depth)
             return
         
-        # Not dirty - proceed directly
+        # 6. Route to appropriate handler (file vs folder)
         if is_file:
             self._finally_set_path(new_path, depth, is_file)
         else:
@@ -141,10 +184,8 @@ class FolderController:
             csv_path: Path to CSV file (already validated to exist and be .csv).
             current_path: Current path from app_state (for cancellation).
         """
-        if self._thread_runner.is_running():
-            ui.notify("A load is already in progress", type="warning")
-            if current_path:
-                self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
+        # Thread runner check
+        if not self._check_thread_runner_available(current_path):
             return
 
         # Check for unsaved changes
@@ -175,9 +216,7 @@ class FolderController:
         self._app_state.load_path(path, depth=depth)
         
         # Persist to user config
-        if self._user_config is not None:
-            config_depth = 0 if is_file else depth
-            self._user_config.push_recent_path(str(path), depth=config_depth)
+        self._persist_path_to_config(path, depth, is_file, is_csv=False)
         
         # Set window title
         set_window_title_for_path(path, is_file=is_file)
@@ -231,12 +270,8 @@ class FolderController:
             files, selected_path = result
             self._app_state._apply_loaded_files(files, selected_path)
 
-            if self._user_config is not None:
-                if is_csv:
-                    self._user_config.push_recent_csv(str(path))
-                else:
-                    config_depth = 0 if is_file else depth
-                    self._user_config.push_recent_path(str(path), depth=config_depth)
+            # Persist to user config
+            self._persist_path_to_config(path, depth, is_file, is_csv)
 
             set_window_title_for_path(path, is_file=is_file or is_csv)
 
@@ -403,10 +438,8 @@ class FolderController:
         """
         dialog.close()
 
-        if self._thread_runner.is_running():
-            ui.notify("A load is already in progress", type="warning")
-            if previous_path:
-                self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+        # Thread runner check
+        if not self._check_thread_runner_available(previous_path):
             return
         
         # Check if CSV
