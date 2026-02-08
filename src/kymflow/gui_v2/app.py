@@ -196,7 +196,7 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
     # default_native = os.getenv("KYMFLOW_GUI_NATIVE", "0") == "1"
     # native = default_native if native is None else native
 
-    native = True
+    native = False
     reload = False
 
     logger.info(
@@ -206,23 +206,23 @@ def main(*, reload: bool | None = None, native: bool | None = None) -> None:
         native,
     )
 
-    if native:
-        x, y, w, h = context.app_config.get_window_rect()
-        logger.info(f'  === loaded window_rect: {x}, {y}, {w}, {h}')
-        if w<100 or h<100:
-            logger.error(f'20260205 window_rect is too small: {w}, {h}')
-            window_size = None
-        else:
-            window_size = (w, h)
-    else:
-        window_size = None
+    # if native:
+    #     x, y, w, h = context.app_config.get_window_rect()
+    #     logger.info(f'  === loaded window_rect: {x}, {y}, {w}, {h}')
+    #     if w<100 or h<100:
+    #         logger.error(f'20260205 window_rect is too small: {w}, {h}')
+    #         window_size = None
+    #     else:
+    #         window_size = (w, h)
+    # else:
+    #     window_size = None
 
     # Register minimal shutdown handlers to persist configs
     # window_rect is updated by poller in app_config
     install_shutdown_handlers(context, native=native)
 
     # never set nicegui window_size, is handled in configure_native_window_args()
-    window_size = None
+    # window_size = None
     
     # configure_save_on_quit()
     
