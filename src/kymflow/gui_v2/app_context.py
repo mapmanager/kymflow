@@ -20,6 +20,7 @@ from kymflow.core.plotting.theme import ThemeMode
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.user_config import UserConfig
 from kymflow.gui_v2.app_config import AppConfig
+from kymflow.gui_v2.native_ui_gate import NativeUiGate
 
 logger = get_logger(__name__)
 
@@ -141,6 +142,10 @@ class AppContext:
             self.batch_task = None
             self.batch_overall_task = None
             self.default_folder = Path.home()
+
+            # abb 20260207: always present
+            self.native_ui_gate = NativeUiGate()
+
             return
             
         logger.info("Initializing AppContext singleton (should happen once)")
@@ -178,6 +183,9 @@ class AppContext:
         
         # Default folder (used as fallback for file dialogs)
         self.default_folder: Path = Path.home()
+        
+        # abb 20260207 while adding global lock for pywebview. not sure the correct location ???
+        self.native_ui_gate = NativeUiGate()
         
         self._initialized = True
         logger.info("AppContext initialized successfully")

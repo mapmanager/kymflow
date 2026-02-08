@@ -20,7 +20,7 @@ from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.user_config import UserConfig
-from kymflow.gui_v2.folder_picker import _prompt_for_directory_pywebview, _prompt_for_file_pywebview
+from kymflow.gui_v2._pywebview import _prompt_for_path
 
 logger = get_logger(__name__)
 
@@ -198,7 +198,8 @@ class FolderSelectorView:
 
         try:
             initial = self._current_folder if self._current_folder is not None else Path.home()
-            selected = await _prompt_for_directory_pywebview(initial)
+            selected = await _prompt_for_path(initial)
+            logger.warning(f'  recieved from _prompt_for_path() selected:{selected}')
             if selected:
                 depth = self._depth_input.value if self._depth_input is not None else self._app_state.folder_depth
                 self._bus.emit(SelectPathEvent(
@@ -234,7 +235,7 @@ class FolderSelectorView:
 
         try:
             initial = self._current_folder if self._current_folder is not None else Path.home()
-            selected = await _prompt_for_file_pywebview(initial)
+            selected = await _prompt_for_path(initial, dialog_type="file")
             if selected:
                 self._bus.emit(SelectPathEvent(
                     new_path=str(Path(selected)),
@@ -268,7 +269,7 @@ class FolderSelectorView:
 
         try:
             initial = self._current_folder if self._current_folder is not None else Path.home()
-            selected = await _prompt_for_file_pywebview(initial, file_extension=".csv")
+            selected = await _prompt_for_path(initial, dialog_type="file", file_extension=".csv")
             if selected:
                 self._bus.emit(SelectPathEvent(
                     new_path=str(selected),

@@ -107,7 +107,7 @@ def test_on_open_csv_emits_event(
 ) -> None:
     """Test _on_open_csv() emits SelectPathEvent when CSV is selected.
     
-    Note: We don't test pywebview directly - we mock _prompt_for_file_pywebview
+    Note: We don't test pywebview directly - we mock _prompt_for_path
     which is the actual function that handles the file dialog. This follows the
     same pattern as other tests that don't test native UI components directly.
     """
@@ -121,9 +121,9 @@ def test_on_open_csv_emits_event(
         emitted_events.append(e)
     bus.subscribe_intent(SelectPathEvent, capture_event)
     
-    # Mock _prompt_for_file_pywebview to return CSV path (this bypasses all pywebview checks)
+    # Mock _prompt_for_path to return CSV path (this bypasses all pywebview checks)
     # This is the same approach used in other tests - we test the logic, not the native UI
-    with patch("kymflow.gui_v2.views.folder_selector_view._prompt_for_file_pywebview") as mock_prompt:
+    with patch("kymflow.gui_v2.views.folder_selector_view._prompt_for_path") as mock_prompt:
         # Make it return the CSV path (it's async, but return_value works for awaited calls)
         async def mock_prompt_async(*args, **kwargs):
             return str(csv_file)

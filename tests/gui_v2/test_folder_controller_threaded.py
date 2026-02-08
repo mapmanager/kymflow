@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.gui_v2.bus import EventBus
+from kymflow.gui_v2.bus import BusConfig, EventBus
 from kymflow.gui_v2.controllers.folder_controller import FolderController
 from kymflow.gui_v2.events_folder import CancelSelectPathEvent, SelectPathEvent
 from kymflow.gui_v2.state import AppState
@@ -87,7 +87,7 @@ def test_start_threaded_load_done_applies_state_and_emits(monkeypatch) -> None:
     _mock_ui(monkeypatch)
 
     app_state = AppState()
-    bus = EventBus()
+    bus = EventBus(client_id="test-client", config=BusConfig(trace=False))
     user_config = MagicMock()
     controller = FolderController(app_state, bus, user_config=user_config)
 
@@ -129,7 +129,7 @@ def test_start_threaded_load_csv_persists_recent_csv(monkeypatch) -> None:
     _mock_ui(monkeypatch)
 
     app_state = AppState()
-    bus = EventBus()
+    bus = EventBus(client_id="test-client", config=BusConfig(trace=False))
     user_config = MagicMock()
     controller = FolderController(app_state, bus, user_config=user_config)
 
@@ -167,7 +167,7 @@ def test_start_threaded_load_cancelled_emits_cancel(monkeypatch) -> None:
     _mock_ui(monkeypatch)
 
     app_state = AppState()
-    bus = EventBus()
+    bus = EventBus(client_id="test-client", config=BusConfig(trace=False))
     controller = FolderController(app_state, bus, user_config=None)
 
     emitted = []

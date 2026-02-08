@@ -67,7 +67,7 @@ def test_home_reuses_cached_page(monkeypatch) -> None:
 
 
 def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None:
-    """Home route should emit PathChosen once when dev folder exists."""
+    """Home route should emit SelectPathEvent when last folder exists in config."""
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -82,10 +82,10 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", True)
-    monkeypatch.setattr(app_module, "DEV_FOLDER", tmp_path)
-
+    # Set up user config with last folder
     app_module.context.app_state.folder = None
+    app_module.context.user_config.push_recent_path(str(tmp_path), depth=1)
+    app_module.context.user_config.save()
 
     app_module.home()
 
@@ -93,12 +93,12 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
     emitted = bus.emit.call_args.args[0]
     assert isinstance(emitted, SelectPathEvent)
     assert emitted.new_path == str(tmp_path)
-    assert emitted.depth is None  # Dev folder doesn't specify depth
+    assert emitted.depth == 1  # Depth from config
     assert emitted.phase == "intent"
 
 
 def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> None:
-    """Home route should not emit PathChosen if folder already loaded."""
+    """Home route should not emit SelectPathEvent if folder already loaded."""
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -109,9 +109,11 @@ def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> N
     monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
     monkeypatch.setattr(app_module, "HomePage", lambda _context, _bus: DummyPage(bus=_bus))
 
-    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", True)
-    monkeypatch.setattr(app_module, "DEV_FOLDER", tmp_path)
-
+    # Set up user config with last folder
+    app_module.context.user_config.push_recent_path(str(tmp_path), depth=1)
+    app_module.context.user_config.save()
+    
+    # But folder is already loaded
     app_module.context.app_state.folder = tmp_path
 
     app_module.home()
@@ -120,7 +122,7 @@ def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> N
 
 
 def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Path) -> None:
-    """Home route should load last folder from config when dev override is disabled."""
+    """Home route should load last folder from config."""
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -135,9 +137,6 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Disable dev folder override
-    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", False)
-    
     # Set up user config with last folder
     app_module.context.app_state.folder = None
     app_module.context.user_config.push_recent_path(str(tmp_path), depth=2)
@@ -153,44 +152,6 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
     assert emitted.phase == "intent"
 
 
-def test_home_bootstrap_dev_override_takes_precedence(monkeypatch, tmp_path: Path) -> None:
-    """Home route should prefer dev folder over last folder from config."""
-    app_module = _load_app_module(monkeypatch)
-    monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
-    monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
-    monkeypatch.setattr(app_module, "get_cached_page", lambda *_: None)
-    monkeypatch.setattr(app_module, "cache_page", lambda *_: None)
-
-    bus = SimpleNamespace(emit=MagicMock())
-    monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
-
-    def _homepage(_context, _bus):
-        return DummyPage(bus=_bus)
-
-    monkeypatch.setattr(app_module, "HomePage", _homepage)
-
-    # Enable dev folder override
-    dev_folder = tmp_path / "dev"
-    dev_folder.mkdir()
-    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", True)
-    monkeypatch.setattr(app_module, "DEV_FOLDER", dev_folder)
-    
-    # Set up user config with different last folder
-    config_folder = tmp_path / "config"
-    config_folder.mkdir()
-    app_module.context.app_state.folder = None
-    app_module.context.user_config.push_recent_path(str(config_folder), depth=3)
-    app_module.context.user_config.save()
-
-    app_module.home()
-
-    # Should emit dev folder, not config folder
-    bus.emit.assert_called_once()
-    emitted = bus.emit.call_args.args[0]
-    assert isinstance(emitted, SelectPathEvent)
-    assert emitted.new_path == str(dev_folder)
-    assert emitted.depth is None  # Dev folder doesn't specify depth
-    assert emitted.phase == "intent"
 
 
 def test_main_registers_shutdown_handlers(monkeypatch) -> None:
@@ -223,9 +184,6 @@ def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Disable dev folder override
-    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", False)
-    
     # Set up user config with empty recent_folders and no last_folder
     # (simulating first-time user with no config)
     app_module.context.app_state.folder = None
@@ -259,9 +217,6 @@ def test_home_bootstrap_loads_csv_from_last_path(monkeypatch, tmp_path: Path) ->
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Disable dev folder override
-    monkeypatch.setattr(app_module, "USE_DEV_FOLDER", False)
-    
     # Create CSV file
     csv_file = tmp_path / "test.csv"
     csv_file.write_text("path\n/file1.tif\n/file2.tif")

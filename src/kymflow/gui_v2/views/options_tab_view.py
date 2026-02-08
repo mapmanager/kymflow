@@ -13,7 +13,8 @@ from nicegui import ui
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.app_config import AppConfig
 from kymflow.gui_v2.app_context import AppContext
-from kymflow.gui_v2.shutdown_handlers import save_all_configs
+
+from kymflow.gui_v2._pywebview import _save_all_configs
 
 logger = get_logger(__name__)
 
@@ -178,7 +179,7 @@ class OptionsTabView:
     def _on_save_settings(self) -> None:
         """Handle Save Settings button click - saves both user_config and app_config."""
         try:
-            success = save_all_configs(self._context)
+            success = _save_all_configs(self._context)
             if success:
                 ui.notify("Settings saved successfully", type="positive")
             else:
