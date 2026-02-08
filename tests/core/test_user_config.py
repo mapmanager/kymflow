@@ -61,24 +61,26 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     assert cfg2.get_last_path() == (str(folder_b.resolve(strict=False)), 3)
     recents = cfg2.get_recent_folders()
     assert len(recents) == 2
-    assert recents[0][1] == 3
-    assert recents[1][1] == 2
+    # With append behavior: oldest first - folder_a (depth=2) was added first, folder_b (depth=3) was added last
+    assert recents[0][1] == 2
+    assert recents[1][1] == 3
     assert cfg2.get_home_splitter_positions() == (12.5, 61.0)
 
 
-def test_push_recent_moves_to_front_and_updates_depth(tmp_path: Path) -> None:
+def test_push_recent_moves_to_end_and_updates_depth(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
     cfg = UserConfig.load(config_path=cfg_path)
 
     cfg.push_recent_path("/tmp/a", depth=2)
     cfg.push_recent_path("/tmp/b", depth=3)
-    cfg.push_recent_path("/tmp/a", depth=5)  # move to front + update depth
+    cfg.push_recent_path("/tmp/a", depth=5)  # remove from old position, append to end + update depth
 
     recents = cfg.get_recent_folders()
-    assert recents[0][0] == str(Path("/tmp/a").resolve(strict=False))
-    assert recents[0][1] == 5
-    assert recents[1][0] == str(Path("/tmp/b").resolve(strict=False))
-    assert recents[1][1] == 3
+    # With append behavior: /tmp/b stays first, /tmp/a moves to end
+    assert recents[0][0] == str(Path("/tmp/b").resolve(strict=False))
+    assert recents[0][1] == 3
+    assert recents[1][0] == str(Path("/tmp/a").resolve(strict=False))
+    assert recents[1][1] == 5
 
     assert cfg.get_last_path() == (str(Path("/tmp/a").resolve(strict=False)), 5)
 
@@ -92,8 +94,9 @@ def test_set_last_path_does_not_reorder_recents(tmp_path: Path) -> None:
     cfg.set_last_path("/tmp/a", depth=9)
 
     recents = cfg.get_recent_folders()
-    assert recents[0][0] == str(Path("/tmp/b").resolve(strict=False))
-    assert recents[1][0] == str(Path("/tmp/a").resolve(strict=False))
+    # With append behavior: order stays the same (oldest first)
+    assert recents[0][0] == str(Path("/tmp/a").resolve(strict=False))
+    assert recents[1][0] == str(Path("/tmp/b").resolve(strict=False))
     assert cfg.get_last_path() == (str(Path("/tmp/a").resolve(strict=False)), 9)
 
 
@@ -372,9 +375,9 @@ def test_get_recent_files(tmp_path: Path) -> None:
     
     files = cfg.get_recent_files()
     assert len(files) == 2
-    # Most recent first - file2 was added last, so it should be first
-    assert files[0] == str(file2.resolve(strict=False))
-    assert files[1] == str(file1.resolve(strict=False))
+    # With append behavior: oldest first, newest last - file1 was added first, file2 was added last
+    assert files[0] == str(file1.resolve(strict=False))
+    assert files[1] == str(file2.resolve(strict=False))
 
 
 def test_path_existence_validation_on_load(tmp_path: Path) -> None:
@@ -566,9 +569,9 @@ def test_get_recent_csvs(tmp_path: Path) -> None:
     
     csvs = cfg.get_recent_csvs()
     assert len(csvs) == 2
-    # Most recent first
-    assert csvs[0] == str(csv2.resolve(strict=False))
-    assert csvs[1] == str(csv1.resolve(strict=False))
+    # With append behavior: oldest first, newest last - csv1 was added first, csv2 was added last
+    assert csvs[0] == str(csv1.resolve(strict=False))
+    assert csvs[1] == str(csv2.resolve(strict=False))
 
 
 def test_push_recent_path_detects_csv(tmp_path: Path) -> None:

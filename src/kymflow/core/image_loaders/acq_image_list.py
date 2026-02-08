@@ -452,7 +452,23 @@ class AcqImageList(Generic[T]):
         cancel_event: threading.Event | None = None,
         progress_cb: ProgressCallback | None = None,
     ) -> List[Path]:
-        """Collect file paths from a CSV with a required 'path' column."""
+        """Collect file paths from a CSV with a required 'rel_path' column.
+        
+        Constructs full paths by combining the CSV file's parent directory with
+        each 'rel_path' value from the CSV. Validates that all constructed paths exist.
+        
+        Args:
+            csv_path: Path to CSV file containing 'rel_path' column.
+            cancel_event: Optional cancellation event.
+            progress_cb: Optional progress callback.
+            
+        Returns:
+            List of validated absolute Path objects.
+            
+        Raises:
+            ValueError: If CSV is invalid, missing 'rel_path' column, or any
+                constructed path doesn't exist.
+        """
         if cancel_event is not None and cancel_event.is_set():
             raise CancelledError("Cancelled before reading CSV.")
 
@@ -464,11 +480,40 @@ class AcqImageList(Generic[T]):
         except Exception as exc:
             raise ValueError(f"Failed to read CSV file: {exc}") from exc
 
-        if "path" not in df.columns:
-            raise ValueError("CSV must have a 'path' column")
+        if "rel_path" not in df.columns:
+            raise ValueError("CSV must have a 'rel_path' column")
 
-        path_list = [Path(p).expanduser().resolve() for p in df["path"].tolist()]
-
+        # Get CSV file's parent directory (base directory for relative paths)
+        csv_parent_dir = csv_path.parent.resolve()
+        
+        # Construct full paths from CSV parent directory + rel_path values
+        path_list: List[Path] = []
+        invalid_paths: List[str] = []
+        
+        for idx, rel_path_value in enumerate(df["rel_path"].tolist()):
+            if cancel_event is not None and cancel_event.is_set():
+                raise CancelledError("Cancelled during CSV path construction.")
+            
+            # Skip None/NaN values
+            if pd.isna(rel_path_value) or not rel_path_value:
+                continue
+            
+            # Construct full path: csv_parent_dir / rel_path_value
+            full_path = (csv_parent_dir / str(rel_path_value)).resolve()
+            
+            # Validate path exists
+            if not full_path.exists():
+                invalid_paths.append(str(rel_path_value))
+            else:
+                path_list.append(full_path)
+        
+        # Raise error if any paths don't exist
+        if invalid_paths:
+            raise ValueError(
+                f"CSV contains {len(invalid_paths)} invalid rel_path values that don't exist: "
+                f"{', '.join(invalid_paths[:5])}" + ("..." if len(invalid_paths) > 5 else "")
+            )
+        
         if progress_cb is not None:
             progress_cb(
                 ProgressMessage(

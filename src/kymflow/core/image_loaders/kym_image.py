@@ -269,8 +269,8 @@ class KymImage(AcqImage):
                 parent_folder = None
         else:
             file_name = representative_path.name if representative_path is not None else None
-            grandparent_folder = parent3  # Use computed parent3 (grandparent)
-            parent_folder = parent1  # Use computed parent1
+            grandparent_folder = parent2  # Use parent2 (condition folder like "14d Saline")
+            parent_folder = parent1  # Use parent1 (date folder like "20251014")
         
         # Map to summary_row() keys and add analysis fields
         result = {

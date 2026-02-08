@@ -18,13 +18,17 @@ def _make_tif(path: Path) -> None:
 
 
 def test_collect_paths_from_csv_valid(tmp_path: Path) -> None:
-    file1 = tmp_path / "a.tif"
-    file2 = tmp_path / "b.tif"
+    # Create folder structure: tmp_path/subdir/file.tif
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    file1 = subdir / "a.tif"
+    file2 = subdir / "b.tif"
     _make_tif(file1)
     _make_tif(file2)
 
+    # CSV is in tmp_path, rel_paths are relative to tmp_path
     csv_path = tmp_path / "files.csv"
-    csv_path.write_text(f"path\n{file1}\n{file2}\n")
+    csv_path.write_text("rel_path\nsubdir/a.tif\nsubdir/b.tif\n")
 
     paths = AcqImageList.collect_paths_from_csv(csv_path)
     assert len(paths) == 2
@@ -36,7 +40,85 @@ def test_collect_paths_from_csv_missing_column(tmp_path: Path) -> None:
     csv_path = tmp_path / "files.csv"
     csv_path.write_text("name\nfoo\n")
 
-    with pytest.raises(ValueError, match="CSV must have a 'path' column"):
+    with pytest.raises(ValueError, match="CSV must have a 'rel_path' column"):
+        AcqImageList.collect_paths_from_csv(csv_path)
+
+
+def test_collect_paths_from_csv_nested_structure(tmp_path: Path) -> None:
+    """Test collect_paths_from_csv() with nested folder structure matching real use case.
+    
+    Creates structure like:
+    base/
+      condition1/
+        date1/
+          file1.tif
+        date2/
+          file2.tif
+      condition2/
+        date3/
+          file3.tif
+      files.csv (at base level with rel_path column)
+    
+    Verifies that rel_path values correctly resolve to nested files.
+    """
+    # Create nested folder structure
+    condition1 = tmp_path / "14d Saline"
+    condition2 = tmp_path / "28d AngII"
+    condition1.mkdir()
+    condition2.mkdir()
+    
+    date1 = condition1 / "20251014"
+    date2 = condition1 / "20251015"
+    date3 = condition2 / "20250708"
+    date1.mkdir()
+    date2.mkdir()
+    date3.mkdir()
+    
+    # Create TIF files in nested directories
+    file1 = date1 / "20251014_A100_0001.tif"
+    file2 = date2 / "20251015_A101_0002.tif"
+    file3 = date3 / "20250708_A85_0003.tif"
+    _make_tif(file1)
+    _make_tif(file2)
+    _make_tif(file3)
+    
+    # Create CSV at base level with rel_path column
+    csv_path = tmp_path / "randomized-declan-data-20260208-n-5.csv"
+    csv_content = """rel_path
+14d Saline/20251014/20251014_A100_0001.tif
+14d Saline/20251015/20251015_A101_0002.tif
+28d AngII/20250708/20250708_A85_0003.tif
+"""
+    csv_path.write_text(csv_content)
+    
+    # Test collect_paths_from_csv
+    paths = AcqImageList.collect_paths_from_csv(csv_path)
+    
+    # Verify all paths were found
+    assert len(paths) == 3
+    
+    # Verify paths are correct
+    assert paths[0] == file1.resolve()
+    assert paths[1] == file2.resolve()
+    assert paths[2] == file3.resolve()
+    
+    # Verify file names
+    assert paths[0].name == "20251014_A100_0001.tif"
+    assert paths[1].name == "20251015_A101_0002.tif"
+    assert paths[2].name == "20250708_A85_0003.tif"
+
+
+def test_collect_paths_from_csv_invalid_rel_path(tmp_path: Path) -> None:
+    """Test collect_paths_from_csv() raises ValueError when rel_path doesn't exist."""
+    # Create CSV with invalid rel_path
+    csv_path = tmp_path / "files.csv"
+    csv_content = """rel_path
+nonexistent/file.tif
+"""
+    csv_path.write_text(csv_content)
+    
+    # Should raise ValueError because file doesn't exist
+    with pytest.raises(ValueError, match="invalid rel_path values that don't exist"):
         AcqImageList.collect_paths_from_csv(csv_path)
 
 
@@ -47,7 +129,7 @@ def test_load_from_path_emits_progress_for_csv(tmp_path: Path) -> None:
     _make_tif(file2)
 
     csv_path = tmp_path / "files.csv"
-    csv_path.write_text(f"path\n{file1}\n{file2}\n")
+    csv_path.write_text("rel_path\na.tif\nb.tif\n")
 
     phases: list[str] = []
 

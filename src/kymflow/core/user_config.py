@@ -56,6 +56,67 @@ def _normalize_folder_path(path: str | Path) -> str:
     return str(p)
 
 
+def _path_to_display(path: str | Path) -> str:
+    """Convert full path to display-friendly ~ notation.
+    
+    If the path is under the user's home directory, replaces the home directory
+    portion with ~. If the path is outside the home directory, returns it unchanged.
+    Works cross-platform (macOS, Linux, Windows).
+    
+    Args:
+        path: Full path to convert.
+    
+    Returns:
+        Path with home directory replaced by ~, or original path if outside home.
+    
+    Examples:
+        /Users/username/Dropbox/file.tif -> ~/Dropbox/file.tif
+        /usr/local/bin -> /usr/local/bin (unchanged, outside home)
+        C:\\Users\\username\\Documents -> ~\\Documents (Windows)
+    """
+    try:
+        path_obj = Path(path).expanduser()
+        home = Path.home()
+        
+        # Try to make paths relative to home directory
+        try:
+            # Use resolve() to handle symlinks and normalize paths
+            path_resolved = path_obj.resolve(strict=False)
+            home_resolved = home.resolve(strict=False)
+            
+            # Check if path is under home directory
+            try:
+                # Check if resolved path is under resolved home
+                path_resolved.relative_to(home_resolved)
+                # If we get here, path is under home directory
+                # Use path_obj (not resolved) to preserve original format
+                # but still get relative path correctly
+                relative_original = Path(path).expanduser().relative_to(home)
+                return str(Path("~") / relative_original)
+            except ValueError:
+                # Path is not under home directory, return as-is
+                return str(path_obj)
+        except Exception:
+            # If resolve fails, try simpler comparison
+            try:
+                path_str = str(path_obj)
+                home_str = str(home)
+                if path_str.startswith(home_str):
+                    # Replace home directory with ~
+                    remainder = path_str[len(home_str):].lstrip("/").lstrip("\\")
+                    if remainder:
+                        return str(Path("~") / remainder)
+                    else:
+                        return "~"
+                return str(path_obj)
+            except Exception:
+                # Fallback: return original path as string
+                return str(path)
+    except Exception:
+        # If anything fails, return original path as string
+        return str(path)
+
+
 def _clamp_float(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
@@ -568,6 +629,31 @@ class UserConfig:
     def get_recent_csvs(self) -> List[str]:
         """Return recent CSV files as list of paths."""
         return [rc.path for rc in self.data.recent_csvs]
+    
+    def get_recent_folders_display(self) -> List[Tuple[str, int]]:
+        """Return recent folders with display-friendly paths (using ~ notation).
+        
+        Returns:
+            List of (display_path, depth) tuples where display_path uses ~ notation
+            for paths under the home directory.
+        """
+        return [(_path_to_display(rf.path), int(rf.depth)) for rf in self.data.recent_folders]
+
+    def get_recent_files_display(self) -> List[str]:
+        """Return recent files with display-friendly paths (using ~ notation).
+        
+        Returns:
+            List of display paths where paths under the home directory use ~ notation.
+        """
+        return [_path_to_display(rf.path) for rf in self.data.recent_files]
+
+    def get_recent_csvs_display(self) -> List[str]:
+        """Return recent CSV files with display-friendly paths (using ~ notation).
+        
+        Returns:
+            List of display paths where paths under the home directory use ~ notation.
+        """
+        return [_path_to_display(rc.path) for rc in self.data.recent_csvs]
 
     def get_last_path(self) -> Tuple[str, int]:
         """Return (last_path, last_depth)."""

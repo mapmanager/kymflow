@@ -293,6 +293,67 @@ def test_kym_image_getrowdict_blinded() -> None:
     logger.info(f"  - getRowDict() with blinded=True: File Name={row_dict['File Name']}, Grandparent Folder={row_dict['Grandparent Folder']}")
 
 
+def test_kym_image_getrowdict_parent_folders() -> None:
+    """Test KymImage.getRowDict() parent folder calculation with known folder hierarchy.
+    
+    Verifies that Parent Folder and Grandparent Folder are calculated correctly
+    for a folder structure like: base/condition/date/file.tif
+    
+    Expected:
+    - Parent Folder = date folder (parent1)
+    - Grandparent Folder = condition folder (parent2, not parent3)
+    """
+    import numpy as np
+    from pathlib import Path
+    
+    # Create a path matching the user's folder structure:
+    # /base/v1-analysis/14d Saline/20251014/file.tif
+    # Where:
+    # - base = "/base/v1-analysis" (base folder)
+    # - condition = "14d Saline" (parent2)
+    # - date = "20251014" (parent1)
+    test_path = Path("/base/v1-analysis/14d Saline/20251014/test_file.tif")
+    
+    # Create synthetic kymograph image with path
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(path=test_path, img_data=test_image, load_image=False)
+    
+    # Set up header
+    kym_image.update_header(
+        shape=(100, 200),
+        ndim=2,
+        voxels=[0.001, 0.284],
+        voxels_units=["s", "um"],
+        labels=["Time (s)", "Space (um)"],
+    )
+    kym_image._header.physical_size = [0.1, 56.8]
+    
+    # Get row dict
+    row_dict = kym_image.getRowDict()
+    
+    # Verify parent folder calculation
+    # Path structure: /base/v1-analysis/14d Saline/20251014/test_file.tif
+    # parts[-1] = test_file.tif (filename)
+    # parts[-2] = 20251014 (parent1) -> should be "Parent Folder"
+    # parts[-3] = 14d Saline (parent2) -> should be "Grandparent Folder"
+    # parts[-4] = v1-analysis (parent3) -> should NOT be used
+    
+    assert row_dict["Parent Folder"] == "20251014", \
+        f'Expected Parent Folder to be "20251014" (date folder), got "{row_dict["Parent Folder"]}"'
+    
+    assert row_dict["Grandparent Folder"] == "14d Saline", \
+        f'Expected Grandparent Folder to be "14d Saline" (condition folder from parent2), got "{row_dict["Grandparent Folder"]}"'
+    
+    # Verify it's NOT using parent3 (v1-analysis)
+    assert row_dict["Grandparent Folder"] != "v1-analysis", \
+        'Grandparent Folder should use parent2 (condition folder), not parent3 (base folder)'
+    
+    logger.info(
+        f'  - Parent Folder: "{row_dict["Parent Folder"]}", '
+        f'Grandparent Folder: "{row_dict["Grandparent Folder"]}"'
+    )
+
+
 def test_kym_image_getrowdict_blinded_no_path() -> None:
     """Test KymImage.getRowDict() with blinded=True but no path."""
     import numpy as np

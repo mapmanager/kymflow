@@ -148,6 +148,7 @@ class FolderSelectorView:
         
         Returns:
             Tuple of (folder_paths_with_depths, file_paths, csv_paths).
+            These are the FULL paths used for event emission.
         """
         folder_paths: list[tuple[str, int]] = []
         file_paths: list[str] = []
@@ -156,6 +157,22 @@ class FolderSelectorView:
             folder_paths = self._user_config.get_recent_folders()
             file_paths = self._user_config.get_recent_files()
             csv_paths = self._user_config.get_recent_csvs()
+        return (folder_paths, file_paths, csv_paths)
+    
+    def _build_recent_menu_data_display(self) -> tuple[list[tuple[str, int]], list[str], list[str]]:
+        """Build recent folders/files/CSVs display data from UserConfig for menu building.
+        
+        Returns:
+            Tuple of (folder_paths_with_depths, file_paths, csv_paths).
+            These are DISPLAY paths (using ~ notation) for menu labels.
+        """
+        folder_paths: list[tuple[str, int]] = []
+        file_paths: list[str] = []
+        csv_paths: list[str] = []
+        if self._user_config is not None:
+            folder_paths = self._user_config.get_recent_folders_display()
+            file_paths = self._user_config.get_recent_files_display()
+            csv_paths = self._user_config.get_recent_csvs_display()
         return (folder_paths, file_paths, csv_paths)
 
     def _on_recent_path_selected(self, new_path_selection: str, is_csv: bool = False) -> None:
@@ -361,9 +378,13 @@ class FolderSelectorView:
     
     def _build_recent_menu(self) -> None:
         """Build or rebuild the recent paths menu."""
-        folder_paths, file_paths, csv_paths = self._build_recent_menu_data()
+        # Get display paths for menu labels (using ~ notation)
+        folder_paths_display, file_paths_display, csv_paths_display = self._build_recent_menu_data_display()
         
-        # Get current paths from app state for comparison
+        # Get full paths for event emission (used in callbacks)
+        folder_paths_full, file_paths_full, csv_paths_full = self._build_recent_menu_data()
+        
+        # Get current paths from app state for comparison (use full paths)
         current_folder_path = str(self._app_state.folder) if self._app_state.folder else None
 
         # Build menu first (needed for button callback)
@@ -374,45 +395,45 @@ class FolderSelectorView:
             # header_folders = ui.menu_item("Folders")
             # header_folders.disable()
             
-            # Folder items
-            for path, _depth in folder_paths:
-                is_current = (current_folder_path == path)
+            # Folder items - use display path for label, full path for callback
+            for (display_path, _depth), (full_path, _) in zip(folder_paths_display, folder_paths_full):
+                is_current = (current_folder_path == full_path)
                 prefix = "✓ " if is_current else "  "
                 ui.menu_item(
-                    f"{prefix} {path}",
-                    lambda p=path: self._on_recent_path_selected(p),
+                    f"{prefix} {display_path}",
+                    lambda p=full_path: self._on_recent_path_selected(p),
                 )
             
-            if folder_paths:
+            if folder_paths_display:
                 ui.separator()
             
             # Files header
-            # if file_paths:
+            # if file_paths_display:
             #     header_files = ui.menu_item("Files")
             #     header_files.disable()
             
-            # File items
-            for path in file_paths:
-                is_current = (current_folder_path == path)
+            # File items - use display path for label, full path for callback
+            for display_path, full_path in zip(file_paths_display, file_paths_full):
+                is_current = (current_folder_path == full_path)
                 prefix = "✓ " if is_current else "  "
                 ui.menu_item(
-                    f"{prefix} {path}",
-                    lambda p=path: self._on_recent_path_selected(p),
+                    f"{prefix} {display_path}",
+                    lambda p=full_path: self._on_recent_path_selected(p),
                 )
             
-            if file_paths:
+            if file_paths_display:
                 ui.separator()
             
-            # CSV items
-            for path in csv_paths:
-                is_current = (current_folder_path == path)
+            # CSV items - use display path for label, full path for callback
+            for display_path, full_path in zip(csv_paths_display, csv_paths_full):
+                is_current = (current_folder_path == full_path)
                 prefix = "✓ " if is_current else "  "
                 ui.menu_item(
-                    f"{prefix} {path}",
-                    lambda p=path: self._on_recent_path_selected(p, is_csv=True),
+                    f"{prefix} {display_path}",
+                    lambda p=full_path: self._on_recent_path_selected(p, is_csv=True),
                 )
             
-            if folder_paths or file_paths or csv_paths:
+            if folder_paths_display or file_paths_display or csv_paths_display:
                 ui.separator()
             
                 # Clear option

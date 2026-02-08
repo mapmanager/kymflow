@@ -32,7 +32,8 @@ def test_load_path_detects_csv(app_state: AppState) -> None:
         tifffile.imwrite(file1, test_image)
         tifffile.imwrite(file2, test_image)
         
-        csv_file.write_text(f"path\n{file1}\n{file2}")
+        # CSV uses rel_path relative to tmpdir
+        csv_file.write_text(f"rel_path\nfile1.tif\nfile2.tif")
         
         # Should detect CSV and load it
         app_state.load_path(csv_file, depth=0)
@@ -43,20 +44,20 @@ def test_load_path_detects_csv(app_state: AppState) -> None:
 
 
 def test_load_path_csv_valid(app_state: AppState) -> None:
-    """Test load_path() with valid CSV containing 'path' column."""
+    """Test load_path() with valid CSV containing 'rel_path' column."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create CSV with path column
+        # Create CSV with rel_path column
         csv_file = Path(tmpdir) / "test.csv"
         
-        # Create actual TIF files referenced in CSV
+        # Create actual TIF files referenced in CSV (relative to tmpdir)
         file1 = Path(tmpdir) / "file1.tif"
         file2 = Path(tmpdir) / "file2.tif"
         test_image = np.zeros((100, 200), dtype=np.uint16)
         tifffile.imwrite(file1, test_image)
         tifffile.imwrite(file2, test_image)
         
-        # Update CSV to use actual paths
-        csv_file.write_text(f"path\n{file1}\n{file2}")
+        # CSV uses rel_path relative to tmpdir
+        csv_file.write_text(f"rel_path\nfile1.tif\nfile2.tif")
         
         # Mock file_list_changed handlers
         handler_called = False
@@ -82,12 +83,12 @@ def test_load_path_csv_valid(app_state: AppState) -> None:
 
 
 def test_load_path_csv_missing_path_column(app_state: AppState) -> None:
-    """Test load_path() raises ValueError when 'path' column is missing."""
+    """Test load_path() raises ValueError when 'rel_path' column is missing."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("name,value\nfile1,1\nfile2,2")
         
-        with pytest.raises(ValueError, match="CSV must have a 'path' column"):
+        with pytest.raises(ValueError, match="CSV must have a 'rel_path' column"):
             app_state.load_path(csv_file)
 
 
@@ -111,7 +112,7 @@ def test_load_path_csv_empty_paths(app_state: AppState) -> None:
     """Test load_path() with CSV containing no paths (empty DataFrame)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
-        csv_file.write_text("path\n")
+        csv_file.write_text("rel_path\n")
         
         # Empty path_list should raise ValueError (AcqImageList doesn't allow empty file_path_list)
         with pytest.raises(ValueError, match="file_path_list cannot be empty"):
@@ -126,7 +127,7 @@ def test_load_path_csv_sets_folder(app_state: AppState) -> None:
         test_image = np.zeros((100, 200), dtype=np.uint16)
         tifffile.imwrite(file1, test_image)
         
-        csv_file.write_text(f"path\n{file1}")
+        csv_file.write_text(f"rel_path\nfile1.tif")
         
         app_state.load_path(csv_file)
         
@@ -141,7 +142,7 @@ def test_load_path_csv_triggers_callbacks(app_state: AppState) -> None:
         test_image = np.zeros((100, 200), dtype=np.uint16)
         tifffile.imwrite(file1, test_image)
         
-        csv_file.write_text(f"path\n{file1}")
+        csv_file.write_text(f"rel_path\nfile1.tif")
         
         handler_called = False
         def mock_handler() -> None:
@@ -164,7 +165,7 @@ def test_refresh_file_rows_with_csv(app_state: AppState) -> None:
         tifffile.imwrite(file1, test_image)
         tifffile.imwrite(file2, test_image)
         
-        csv_file.write_text(f"path\n{file1}\n{file2}")
+        csv_file.write_text(f"rel_path\nfile1.tif\nfile2.tif")
         
         app_state.load_path(csv_file)
         
