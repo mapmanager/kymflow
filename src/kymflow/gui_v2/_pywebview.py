@@ -211,9 +211,18 @@ def _save_all_configs(context: AppContext) -> bool:
     return success
 
 
-def install_shutdown_handlers(context: AppContext, *, native: bool) -> None:
-    """Register app shutdown handlers for GUI v2."""
-    logger.info("install_shutdown_handlers(native=%s)", native)
+def install_shutdown_handlers(context: AppContext) -> None:
+    """Register app shutdown handlers for GUI v2.
+    
+    Only installs handlers when running in native mode (native=True).
+    In browser mode, configs are saved via other mechanisms.
+    """
+    native = getattr(app, "native", None)
+    if native is None:
+        logger.debug("install_shutdown_handlers: skipping (not native mode)")
+        return
+    
+    logger.info("install_shutdown_handlers: installing (native mode detected)")
 
     async def _persist_on_shutdown() -> None:
         """Persist user and app config on shutdown without touching native window APIs."""

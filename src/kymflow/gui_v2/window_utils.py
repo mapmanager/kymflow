@@ -81,4 +81,6 @@ def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> No
             logger.debug(f'=== setting window title to "{title}"')
             main_window.set_title(title)
         else:
-            logger.error(f'=== main_window is None for title:{title}')
+            pass
+            # perfectly fine in native=False mode
+            # logger.error(f'=== main_window is None for title:{title}')

@@ -4,7 +4,6 @@ from typing import Optional
 from nicegui import native
 
 APP_NAME = "KymFlow"
-DEFAULT_PORT = native.find_open_port()  # 8080
 STORAGE_SECRET = "kymflow-session-secret"  # Secret key for browser session storage
 
 # Developer-level runtime configuration
