@@ -140,14 +140,32 @@ class ImageLineViewerView:
             # and setting start/stop of a single velocity event.
             self._plot.on("plotly_relayout", self._on_plotly_relayout)
 
-    def ui_plotly_update_figure(self, fig: go.Figure) -> None:
+    def ui_plotly_update_figure(self, fig: go.Figure | None = None) -> None:
         """Update the plotly plot with a new figure."""
         
         logger.info('XXX DO NOT CALL THIS A LOT -->> SLOW')
 
-        figDict = fig.to_dict()
-        self._plot.update_figure(figDict)
-        # self._plot.update_figure(fig)
+        import inspect
+        from pathlib import Path
+        
+        caller_frame = inspect.stack()[1]
+        
+        # Extract details
+        caller_name = caller_frame.function
+        caller_filename = caller_frame.filename
+        caller_lineno = caller_frame.lineno
+        
+        print(f"  calling fn:{caller_name} {Path(caller_filename).name}, line:{caller_lineno}")
+
+
+        if fig is None:
+            # just update, no change to plotly go figure
+            self._plot.update()
+        else:
+            figDict = fig.to_dict()
+            self._plot.update_figure(figDict)
+
+        # self._plot.update()
 
     def _on_plotly_relayout(self, e: GenericEventArguments) -> None:
         """
@@ -555,7 +573,10 @@ class ImageLineViewerView:
         self._render_combined()
 
     def _render_combined(self) -> None:
-        """Render the combined image and line plot."""
+        """Render the combined image and line plot.
+        
+        This recreated fig from scratch with plot_image_line_plotly_v3()
+        """
         
         kf = self._current_file
         theme = self._theme
@@ -576,8 +597,9 @@ class ImageLineViewerView:
         zmax = display_params.zmax if display_params else None
 
         # Determine if ROI overlay should be shown (only if > 1 ROI)
-        num_rois = kf.rois.numRois() if kf is not None else 0
-        plot_rois = (num_rois > 1)
+        # num_rois = kf.rois.numRois() if kf is not None else 0
+        # plot_rois = (num_rois > 1)
+        plot_rois = False
 
         # logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
         # logger.debug(f'  kf={kf}')
@@ -690,7 +712,7 @@ class ImageLineViewerView:
 
         # Get current filter settings from stored state
         remove_outliers = self._remove_outliers
-        median_filter_size = 5 if self._median_filter else 0
+        median_filter_size = 3 if self._median_filter else 0
 
         # Re-compute filtered y-values using KymAnalysis API
         kym_analysis = kf.get_kym_analysis()
@@ -711,10 +733,12 @@ class ImageLineViewerView:
         # Find the Scatter trace and update its y-values
         for trace in fig.data:
             if isinstance(trace, go.Scatter):
+                logger.warning(f'successfully Updating Scatter trace y-values')
                 trace.y = filtered_y
                 break
         else:
             # No Scatter trace found, do full render
+            logger.warning(f'No Scatter trace found, do full render -> _render_combined()')
             self._render_combined()
             return
 

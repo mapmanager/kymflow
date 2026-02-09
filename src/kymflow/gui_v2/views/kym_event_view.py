@@ -434,11 +434,11 @@ class KymEventView:
 
     def set_selected_roi(self, roi_id: int | None) -> None:
         """Filter rows by ROI ID (None clears filter)."""
-        logger.debug(f'== roi_id:{roi_id}')
+        # logger.debug(f'== roi_id:{roi_id}')
         self._roi_filter = roi_id
         # In all-files mode, if we originated a FileSelection, skip refresh to preserve column state
         skip_refresh = self._show_all_files and self._file_selection_originated_from_view is not None
-        logger.warning(f'skip_refresh:{skip_refresh}')
+        # logger.warning(f'skip_refresh:{skip_refresh}')
         self._apply_filter(skip_if_originated=skip_refresh)
 
     def _apply_filter(self, *, skip_if_originated: bool = False) -> None:
