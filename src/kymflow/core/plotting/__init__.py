@@ -9,6 +9,11 @@ from kymflow.core.plotting.line_plots import (
     update_contrast,
     update_xaxis_range,
     update_xaxis_range_v2,
+    add_kym_event_rect,
+    delete_kym_event_rect,
+    move_kym_event_rect,
+    clear_kym_event_rects,
+    select_kym_event_rect,
 )
 
 __all__ = [
@@ -20,4 +25,9 @@ __all__ = [
     "update_contrast",
     "update_xaxis_range",
     "update_xaxis_range_v2",
+    "add_kym_event_rect",
+    "delete_kym_event_rect",
+    "move_kym_event_rect",
+    "clear_kym_event_rects",
+    "select_kym_event_rect",
 ]

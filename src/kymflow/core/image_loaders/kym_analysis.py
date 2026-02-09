@@ -761,9 +761,11 @@ class KymAnalysis:
                     VelocityEvent.from_dict(ev_dict) for ev_dict in events_list
                 ]
                 self._velocity_events[roi_id] = events
-                # Generate stable UUIDs for each event on load
-                for idx, _ in enumerate(events):
+                # Generate stable UUIDs for each event on load and assign to event object
+                for idx, event in enumerate(events):
                     uuid = str(uuid4())
+                    # Assign UUID to frozen dataclass using object.__setattr__
+                    object.__setattr__(event, '_uuid', uuid)
                     self._velocity_event_uuid_map[uuid] = (roi_id, idx)
                     self._velocity_event_uuid_reverse[(roi_id, idx)] = uuid
             except Exception as e:
@@ -1008,6 +1010,27 @@ class KymAnalysis:
             self._velocity_events[roi_id] = self._velocity_events[roi_id] + events
             # sort event by t_start
             self._velocity_events[roi_id].sort(key=lambda e: e.t_start)
+        
+        # Assign UUIDs to all events in the list (including newly detected ones)
+        # Rebuild UUID mappings for this ROI after sorting
+        events_list = self._velocity_events[roi_id]
+        # Remove old UUID mappings for this ROI
+        keys_to_remove = [(roi_id, idx) for idx in range(len(events_list) + 100) if (roi_id, idx) in self._velocity_event_uuid_reverse]
+        for key in keys_to_remove:
+            uuid = self._velocity_event_uuid_reverse.pop(key, None)
+            if uuid and uuid in self._velocity_event_uuid_map:
+                del self._velocity_event_uuid_map[uuid]
+        
+        # Assign UUIDs to all events
+        for idx, event in enumerate(events_list):
+            # Only assign UUID if event doesn't already have one
+            if not hasattr(event, '_uuid') or event._uuid is None:
+                uuid = str(uuid4())
+                object.__setattr__(event, '_uuid', uuid)
+            else:
+                uuid = event._uuid
+            self._velocity_event_uuid_map[uuid] = (roi_id, idx)
+            self._velocity_event_uuid_reverse[(roi_id, idx)] = uuid
 
         # Mark dirty so callers know there are unsaved results.
         self._dirty = True
@@ -1327,6 +1350,8 @@ class KymAnalysis:
         
         # Generate UUID for the new event and add to mappings
         event_uuid = str(uuid4())
+        # Assign UUID to frozen dataclass using object.__setattr__
+        object.__setattr__(new_event, '_uuid', event_uuid)
         self._velocity_event_uuid_map[event_uuid] = (roi_id, idx)
         self._velocity_event_uuid_reverse[(roi_id, idx)] = event_uuid
 

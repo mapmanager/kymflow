@@ -24,6 +24,7 @@ from kymflow.core.plotting import (
     reset_image_zoom,
     # update_xaxis_range,  # OLD: kept for reference during transition (replaced by update_xaxis_range_v2)
     update_xaxis_range_v2,
+    select_kym_event_rect,
 )
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
@@ -494,51 +495,52 @@ class ImageLineViewerView:
         
         # Early returns for invalid cases
         if e.event is None or e.options is None:
-            # Update highlight if selection changed
+            # Update highlight if selection changed - use dict-based update
             if old_selected != e.event_id:
-                self._render_combined()
+                # OLD: self._render_combined()  # Removed during refactor - now using dict-based updates
+                if self._current_figure_dict is not None and self._plot is not None:
+                    select_kym_event_rect(self._current_figure_dict, None, row=2)  # Deselect all
+                    try:
+                        self.ui_plotly_update_figure()
+                    except RuntimeError as ex:
+                        logger.error(f"Error updating selection: {ex}")
+                        if "deleted" not in str(ex).lower():
+                            raise
             return
         if self._current_roi_id is None or e.roi_id != self._current_roi_id:
             # ROI mismatch - update highlight if selection changed
             if old_selected != e.event_id:
-                self._render_combined()
-            return
-        if self._current_figure is None or self._plot is None:
-            return
-        
-        # Always re-render to show highlight (if selection changed)
-        needs_render = (old_selected != e.event_id)
-        if needs_render:
-            # Preserve x-axis range if zoom is disabled (e.g., after adding event)
-            preserved_range = None
-            if not e.options.zoom:
-                x_range = self._current_figure.layout.xaxis.range
-                if isinstance(x_range, (list, tuple)) and len(x_range) == 2:
-                    try:
-                        preserved_range = (float(x_range[0]), float(x_range[1]))
-                    except (TypeError, ValueError):
-                        pass
-            
-            self._render_combined()
-            
-            # Restore preserved x-axis range if we captured it
-            if preserved_range is not None:
-                # OLD: update_xaxis_range(fig, list(preserved_range))
-                # NEW: Use dict-based update
+                # OLD: self._render_combined()  # Removed during refactor - now using dict-based updates
                 if self._current_figure_dict is not None and self._plot is not None:
-                    update_xaxis_range_v2(self._current_figure_dict, list(preserved_range))
+                    select_kym_event_rect(self._current_figure_dict, None, row=2)  # Deselect all
                     try:
                         self.ui_plotly_update_figure()
                     except RuntimeError as ex:
-                        logger.error(f"Error restoring zoom: {ex}")
+                        logger.error(f"Error updating selection: {ex}")
                         if "deleted" not in str(ex).lower():
                             raise
-                else:
-                    logger.warning("Cannot update x-axis range: _current_figure_dict is None")
+            return
+        if self._current_figure_dict is None or self._plot is None:
+            return
+        
+        # Determine what needs updating
+        needs_highlight = (old_selected != e.event_id)
+        needs_zoom = (e.options.zoom and e.event is not None)
+        
+        # Update highlight using dict-based update (no render)
+        if needs_highlight:
+            # OLD: self._render_combined()  # Removed during refactor - now using dict-based updates
+            select_kym_event_rect(self._current_figure_dict, e.event, row=2)
+            try:
+                self.ui_plotly_update_figure()
+            except RuntimeError as ex:
+                logger.error(f"Error updating selection: {ex}")
+                if "deleted" not in str(ex).lower():
+                    raise
         
         # If zoom is enabled, apply it as a fast partial update (axis range only)
         # This is very fast and doesn't cause a full re-render
-        if e.options.zoom and e.event is not None:
+        if needs_zoom:
             t_start = e.event.t_start
             pad = float(e.options.zoom_pad_sec)
             x_min = t_start - pad
@@ -552,18 +554,16 @@ class ImageLineViewerView:
                     x_min = max(x_min, 0.0)
                     x_max = min(x_max, float(duration))
             
-            # OLD: update_xaxis_range(fig, [x_min, x_max])
-            # NEW: Use dict-based update
-            if self._current_figure_dict is not None:
-                update_xaxis_range_v2(self._current_figure_dict, [x_min, x_max])
-                try:
-                    self.ui_plotly_update_figure()
-                except RuntimeError as ex:
-                    logger.error(f"Error updating zoom: {ex}")
-                    if "deleted" not in str(ex).lower():
-                        raise
-            else:
-                logger.warning("Cannot update x-axis range: _current_figure_dict is None")
+            # Use dict-based update
+            update_xaxis_range_v2(self._current_figure_dict, [x_min, x_max])
+            try:
+                self.ui_plotly_update_figure()
+            except RuntimeError as ex:
+                logger.error(f"Error updating zoom: {ex}")
+                if "deleted" not in str(ex).lower():
+                    raise
+        
+        # TODO: In next round, refactor filter changes and event data changes to use CRUD instead of full render
 
     def _set_metadata_impl(self, file: KymImage) -> None:
         """Internal implementation of set_metadata."""

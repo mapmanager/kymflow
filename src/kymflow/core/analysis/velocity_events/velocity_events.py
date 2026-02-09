@@ -232,6 +232,9 @@ class VelocityEvent:
     machine_type: MachineType = MachineType.OTHER
     user_type: UserType = UserType.UNREVIEWED
     note: str = ""
+    
+    # Runtime-only UUID for stable event identification (not serialized)
+    _uuid: Optional[str] = None
 
     def to_dict(self, round_decimals: Optional[int] = None) -> dict:
         """Serialize to a JSON-friendly dictionary.
@@ -307,7 +310,16 @@ class VelocityEvent:
             machine_type=MachineType(d.get("machine_type", MachineType.OTHER.value)),
             user_type=UserType(d.get("user_type", UserType.UNREVIEWED.value)),
             note=str(d.get("note", "")),
+            # _uuid is runtime-only, not loaded from dict (defaults to None)
         )
+    
+    def get_uuid(self) -> Optional[str]:
+        """Get the runtime UUID for this event.
+        
+        Returns:
+            UUID string if assigned, None otherwise.
+        """
+        return self._uuid
 
 
 def estimate_fs(time_s: np.ndarray) -> float:  # pragma: no cover

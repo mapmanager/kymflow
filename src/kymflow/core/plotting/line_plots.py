@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import plotly.graph_objects as go
@@ -19,6 +19,9 @@ from kymflow.core.plotting.roi_config import (
 )
 
 from kymflow.core.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
 
 logger = get_logger(__name__)
 
@@ -409,19 +412,12 @@ def _add_velocity_event_overlays(  # pragma: no cover
         if x1 < x0:
             x0, x1 = x1, x0
         
-        # Get event_id (UUID) for this event to compare with selected
-        # Find index of this event in the list
-        velocity_events_list = kym_analysis.get_velocity_events(roi_id)
-        if velocity_events_list is None:
-            event_id = None
-        else:
-            try:
-                event_idx = velocity_events_list.index(event)
-                event_id = kym_analysis._velocity_event_uuid_reverse.get((roi_id, event_idx))
-            except (ValueError, AttributeError):
-                # Fallback if event not found or UUID mapping not available
-                event_id = None
-        is_selected = (selected_event_id is not None and event_id is not None and event_id == selected_event_id)
+        # Get event_id (UUID) from event object
+        event_uuid = event._uuid if hasattr(event, '_uuid') and event._uuid else None
+        if event_uuid is None:
+            logger.warning(f'VelocityEvent for roi {roi_id} missing UUID, skipping name assignment')
+        
+        is_selected = (selected_event_id is not None and event_uuid is not None and event_uuid == selected_event_id)
         
         # Get color based on event_type
         event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
@@ -434,10 +430,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
         # logger.warning(f'  x0:{x0} x1:{x1} y0:0 y1:1')
         # logger.warning(f'  color:{event_color}')
 
-        event_uuid = kym_analysis.get_velocity_event_uuid(roi_id, event)
-
         logger.info(f'adding velocity event overlay for roi {roi_id}:')
-        logger.info(f'  event_id:{event_id}')
         logger.info(f'  event_uuid:{event_uuid}')
         logger.info(f'  is_selected:{is_selected}')
 
@@ -452,7 +445,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
             "y1": 1,
             "fillcolor": event_color,
             "layer": "below",
-            "name": event_uuid,  # abb 20260209
+            "name": event_uuid,  # UUID for CRUD operations
         }
         
         # Add border for selected event
@@ -848,6 +841,341 @@ def update_xaxis_range_v2(plotly_dict: dict, x_range: list[float]) -> None:  # p
         layout['xaxis2']['range'] = x_range
 
     # return plotly_dict
+
+
+# ============================================================================
+# CRUD functions for kym event rects in plotly dict
+# ============================================================================
+
+def _find_kym_event_rect_by_uuid(plotly_dict: dict, event_uuid: str, row: int = 2) -> Optional[tuple[int, dict]]:
+    """Find a kym event rect shape by UUID in plotly dict.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary to search.
+        event_uuid: UUID string to find.
+        row: Subplot row number (default: 2 for line plot).
+    
+    Returns:
+        Tuple of (shape_index, shape_dict) if found, None otherwise.
+    """
+    if 'layout' not in plotly_dict:
+        return None
+    
+    layout = plotly_dict['layout']
+    if 'shapes' not in layout or not layout['shapes']:
+        return None
+    
+    # Determine xref and yref for this row
+    xref = f"x{row if row > 1 else ''}"
+    yref = f"y{row if row > 1 else ''}"
+    
+    shapes = layout['shapes']
+    for idx, shape in enumerate(shapes):
+        # Validate shape is a rect
+        if shape.get('type') != 'rect':
+            continue
+        
+        # Check if xref/yref match this row
+        if shape.get('xref') != xref:
+            continue
+        if shape.get('yref') != f"{yref} domain":
+            continue
+        
+        # Check if name matches UUID
+        if shape.get('name') == event_uuid:
+            return (idx, shape)
+    
+    return None
+
+
+def _calculate_event_rect_coords(
+    event: "VelocityEvent",
+    analysis_time_values: np.ndarray,
+    span_sec_if_no_end: float = 0.20,
+) -> tuple[float, float]:
+    """Calculate x0, x1 coordinates for an event rect.
+    
+    Args:
+        event: VelocityEvent to calculate coordinates for.
+        analysis_time_values: Time array for validation and clamping.
+        span_sec_if_no_end: Fixed width when t_end is None.
+    
+    Returns:
+        Tuple of (x0, x1) coordinates.
+    """
+    t_start = float(event.t_start)
+    
+    # Get time range for clamping
+    time_max = float(np.max(analysis_time_values))
+    
+    # Determine t_end
+    if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
+        # Use fixed span when t_end is missing or invalid
+        t_end_plot = t_start + span_sec_if_no_end
+    else:
+        t_end_plot = float(event.t_end)
+        # Clamp to time range
+        if t_end_plot > time_max:
+            t_end_plot = time_max
+    
+    # Ensure x0 < x1
+    x0 = t_start
+    x1 = t_end_plot
+    if x1 < x0:
+        x0, x1 = x1, x0
+    
+    return (x0, x1)
+
+
+def add_kym_event_rect(
+    plotly_dict: dict,
+    event: "VelocityEvent",
+    analysis_time_values: np.ndarray,
+    row: int = 2,
+    span_sec_if_no_end: float = 0.20,
+    event_filter: Optional[dict[str, bool]] = None,
+) -> None:
+    """Add a kym event rect shape to plotly dict.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary to modify.
+        event: VelocityEvent to add.
+        analysis_time_values: Time array for coordinate calculation.
+        row: Subplot row number (default: 2 for line plot).
+        span_sec_if_no_end: Fixed width when t_end is None.
+        event_filter: Optional event type filter (for color mapping, currently unused).
+    """
+    if 'layout' not in plotly_dict:
+        logger.error("add_kym_event_rect: plotly_dict missing 'layout' key")
+        return
+    
+    layout = plotly_dict['layout']
+    
+    # Check event has UUID
+    if not hasattr(event, '_uuid') or not event._uuid:
+        logger.error("add_kym_event_rect: event missing UUID")
+        return
+    
+    event_uuid = event._uuid
+    
+    # Check UUID not already present
+    existing = _find_kym_event_rect_by_uuid(plotly_dict, event_uuid, row)
+    if existing is not None:
+        logger.error(f"add_kym_event_rect: rect with UUID {event_uuid} already exists in row {row}")
+        return
+    
+    # Calculate coordinates
+    x0, x1 = _calculate_event_rect_coords(event, analysis_time_values, span_sec_if_no_end)
+    
+    # Determine xref and yref for this row
+    xref = f"x{row if row > 1 else ''}"
+    yref = f"y{row if row > 1 else ''}"
+    
+    # Get event color (same logic as _add_velocity_event_overlays)
+    event_overlay_alpha = 0.5
+    color_map = {
+        "baseline_drop": f"rgba(255, 0, 0, {event_overlay_alpha})",  # red
+        "baseline_rise": f"rgba(0, 255, 0, {event_overlay_alpha})",  # green
+        "nan_gap": f"rgba(0, 0, 255, {event_overlay_alpha})",  # blue
+        "User Added": f"rgba(255, 255, 0, {event_overlay_alpha})",  # yellow
+    }
+    event_color = color_map.get(event.event_type, "rgba(128, 128, 128, 0.25)")  # Gray fallback
+    
+    # Create shape_dict
+    shape_dict = {
+        "type": "rect",
+        "xref": xref,
+        "yref": f"{yref} domain",
+        "x0": x0,
+        "x1": x1,
+        "y0": 0,
+        "y1": 1,
+        "fillcolor": event_color,
+        "layer": "below",
+        "name": event_uuid,
+        "line_width": 0,  # Non-selected by default
+    }
+    
+    # Initialize shapes list if needed
+    if 'shapes' not in layout:
+        layout['shapes'] = []
+    elif layout['shapes'] is None:
+        layout['shapes'] = []
+    
+    # Append to shapes list
+    layout['shapes'].append(shape_dict)
+
+
+def delete_kym_event_rect(plotly_dict: dict, event_uuid: str, row: int = 2) -> None:
+    """Delete a kym event rect shape from plotly dict by UUID.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary to modify.
+        event_uuid: UUID of the event rect to delete.
+        row: Subplot row number (default: 2).
+    """
+    if 'layout' not in plotly_dict:
+        logger.error("delete_kym_event_rect: plotly_dict missing 'layout' key")
+        return
+    
+    layout = plotly_dict['layout']
+    if 'shapes' not in layout or not layout['shapes']:
+        logger.error(f"delete_kym_event_rect: no shapes found for UUID {event_uuid}")
+        return
+    
+    # Find the shape
+    result = _find_kym_event_rect_by_uuid(plotly_dict, event_uuid, row)
+    if result is None:
+        logger.error(f"delete_kym_event_rect: rect with UUID {event_uuid} not found in row {row}")
+        return
+    
+    shape_idx, _ = result
+    
+    # Remove from shapes list
+    layout['shapes'].pop(shape_idx)
+
+
+def move_kym_event_rect(
+    plotly_dict: dict,
+    event: "VelocityEvent",
+    analysis_time_values: np.ndarray,
+    row: int = 2,
+    span_sec_if_no_end: float = 0.20,
+) -> None:
+    """Move/update a kym event rect shape coordinates in plotly dict.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary to modify.
+        event: VelocityEvent with updated coordinates.
+        analysis_time_values: Time array for coordinate calculation.
+        row: Subplot row number (default: 2).
+        span_sec_if_no_end: Fixed width when t_end is None.
+    """
+    if 'layout' not in plotly_dict:
+        logger.error("move_kym_event_rect: plotly_dict missing 'layout' key")
+        return
+    
+    # Check event has UUID
+    if not hasattr(event, '_uuid') or not event._uuid:
+        logger.error("move_kym_event_rect: event missing UUID")
+        return
+    
+    event_uuid = event._uuid
+    
+    # Find the shape
+    result = _find_kym_event_rect_by_uuid(plotly_dict, event_uuid, row)
+    if result is None:
+        logger.error(f"move_kym_event_rect: rect with UUID {event_uuid} not found in row {row}")
+        return
+    
+    shape_idx, shape_dict = result
+    
+    # Calculate new coordinates
+    x0, x1 = _calculate_event_rect_coords(event, analysis_time_values, span_sec_if_no_end)
+    
+    # Update coordinates (preserve other properties)
+    layout = plotly_dict['layout']
+    layout['shapes'][shape_idx]['x0'] = x0
+    layout['shapes'][shape_idx]['x1'] = x1
+
+
+def clear_kym_event_rects(plotly_dict: dict, row: int = 2) -> None:
+    """Clear all kym event rect shapes from plotly dict.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary to modify.
+        row: Subplot row number (default: 2).
+    """
+    if 'layout' not in plotly_dict:
+        logger.error("clear_kym_event_rects: plotly_dict missing 'layout' key")
+        return
+    
+    layout = plotly_dict['layout']
+    if 'shapes' not in layout or not layout['shapes']:
+        return
+    
+    # Determine xref and yref for this row
+    xref = f"x{row if row > 1 else ''}"
+    yref = f"y{row if row > 1 else ''}"
+    
+    # Filter out UUID-named rects for this row
+    shapes = layout['shapes']
+    filtered_shapes = []
+    for shape in shapes:
+        # Keep shape if it's not a UUID-named rect for this row
+        if shape.get('type') == 'rect':
+            if shape.get('xref') == xref and shape.get('yref') == f"{yref} domain":
+                if 'name' in shape and shape.get('name'):  # Has UUID name
+                    continue  # Skip this shape (it's a kym event rect)
+        # Keep all other shapes
+        filtered_shapes.append(shape)
+    
+    layout['shapes'] = filtered_shapes
+
+
+def select_kym_event_rect(
+    plotly_dict: dict,
+    event: Optional["VelocityEvent"],
+    row: int = 2,
+) -> None:
+    """Select a kym event rect by setting yellow outline, deselect others.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary to modify.
+        event: VelocityEvent to select (None to deselect all).
+        row: Subplot row number (default: 2).
+    """
+    if 'layout' not in plotly_dict:
+        logger.error("select_kym_event_rect: plotly_dict missing 'layout' key")
+        return
+    
+    layout = plotly_dict['layout']
+    if 'shapes' not in layout or not layout['shapes']:
+        return
+    
+    # Determine xref and yref for this row
+    xref = f"x{row if row > 1 else ''}"
+    yref = f"y{row if row > 1 else ''}"
+    
+    target_uuid = event._uuid if event is not None and hasattr(event, '_uuid') and event._uuid else None
+    
+    # Determine dash style for selected event
+    use_dash = False
+    if event is not None:
+        if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= event.t_start:
+            use_dash = True
+    
+    # Iterate all shapes and update selection state
+    shapes = layout['shapes']
+    for shape in shapes:
+        # Only process UUID-named rects for this row
+        if shape.get('type') != 'rect':
+            continue
+        if shape.get('xref') != xref:
+            continue
+        if shape.get('yref') != f"{yref} domain":
+            continue
+        if 'name' not in shape or not shape.get('name'):
+            continue  # Not a UUID-named rect
+        
+        shape_uuid = shape.get('name')
+        
+        if target_uuid is not None and shape_uuid == target_uuid:
+            # Selected: set yellow outline
+            shape['line'] = {
+                "color": "yellow",
+                "width": 2,
+                "dash": "dot" if use_dash else "solid",
+            }
+            # Remove line_width if present
+            if 'line_width' in shape:
+                del shape['line_width']
+        else:
+            # Non-selected: remove outline
+            shape['line_width'] = 0
+            if 'line' in shape:
+                del shape['line']
+
 
 def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:  # pragma: no cover
     """Update the x-axis range for both subplots in an image/line plotly figure."""
