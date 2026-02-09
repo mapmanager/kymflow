@@ -167,6 +167,21 @@ class KymAnalysis:
         # Always try to load analysis (handles path=None gracefully)
         self.load_analysis()
     
+    # abb 20260209 -- NOT WORKING
+    def get_velocity_event_uuid(self, roi_id: int, event: VelocityEvent) -> Optional[str]:
+        """Get UUID for a VelocityEvent."""
+        logger.info(f'getting velocity event uuid for roi {roi_id}:')
+        logger.info(f'  event:{event}')
+
+        events = self.get_velocity_events(roi_id)
+        if events is None:
+            return None
+        try:
+            idx = events.index(event)
+            return self._velocity_event_uuid_reverse.get((roi_id, idx))
+        except ValueError:
+            return None
+
     def _filter_df_by_roi(self, df: pd.DataFrame, roi_id: int) -> pd.DataFrame:
         """Filter DataFrame to rows for a specific ROI.
         
@@ -1091,14 +1106,14 @@ class KymAnalysis:
             if event_filter.get(event.event_type, True) is True
         ]
 
-    def _velocity_event_id(self, roi_id: int, event: VelocityEvent) -> str:
-        """Generate a stable event_id for a velocity event.
+    # def _velocity_event_id(self, roi_id: int, event: VelocityEvent) -> str:
+    #     """Generate a stable event_id for a velocity event.
         
-        DEPRECATED: This method is kept for backward compatibility but is no longer
-        used for event identification. Events now use UUID-based event_id.
-        """
-        i_end_value = event.i_end if event.i_end is not None else "None"
-        return f"{roi_id}:{event.i_start}:{i_end_value}:{event.event_type}"
+    #     DEPRECATED: This method is kept for backward compatibility but is no longer
+    #     used for event identification. Events now use UUID-based event_id.
+    #     """
+    #     i_end_value = event.i_end if event.i_end is not None else "None"
+    #     return f"{roi_id}:{event.i_start}:{i_end_value}:{event.event_type}"
 
     def _find_event_by_uuid(self, event_id: str) -> tuple[int, int, VelocityEvent] | None:
         """Find event by UUID event_id.

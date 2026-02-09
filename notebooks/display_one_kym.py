@@ -1,7 +1,8 @@
+# DEPRECATED: plot_image_line_plotly() has been removed. Use plot_image_line_plotly_v3() instead.
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
-    plot_image_line_plotly,
+    plot_image_line_plotly,  # DEPRECATED: This function no longer exists. Use plot_image_line_plotly_v3() instead.
     update_contrast,
     update_xaxis_range,
 )

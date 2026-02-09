@@ -22,7 +22,8 @@ from kymflow.core.plotting import (
     update_colorscale,
     update_contrast,
     reset_image_zoom,
-    update_xaxis_range,
+    # update_xaxis_range,  # OLD: kept for reference during transition (replaced by update_xaxis_range_v2)
+    update_xaxis_range_v2,
 )
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
@@ -91,6 +92,7 @@ class ImageLineViewerView:
         self._theme: ThemeMode = ThemeMode.DARK  # Default, will be updated by set_theme()
         self._display_params: Optional[ImageDisplayParams] = None
         self._current_figure: Optional[go.Figure] = None
+        self._current_figure_dict: Optional[dict] = None
         self._original_y_values: Optional[np.ndarray] = None
         self._original_time_values: Optional[np.ndarray] = None
         self._uirevision: int = 0
@@ -157,13 +159,15 @@ class ImageLineViewerView:
         
         print(f"  calling fn:{caller_name} {Path(caller_filename).name}, line:{caller_lineno}")
 
+        self._plot.update_figure(self._current_figure_dict)
+        return
 
         if fig is None:
             # just update, no change to plotly go figure
             self._plot.update()
         else:
-            figDict = fig.to_dict()
-            self._plot.update_figure(figDict)
+            # figDict = fig.to_dict()
+            self._plot.update_figure(self._current_figure_dict)
 
         # self._plot.update()
 
@@ -519,16 +523,18 @@ class ImageLineViewerView:
             
             # Restore preserved x-axis range if we captured it
             if preserved_range is not None:
-                fig = self._current_figure
-                if fig is not None and self._plot is not None:
-                    update_xaxis_range(fig, list(preserved_range))
-                    # try:
-                    #     # self._plot.update_figure(fig)
-                    #     self.ui_plotly_update_figure(fig)
-                    # except RuntimeError as ex:
-                    #     if "deleted" not in str(ex).lower():
-                    #         logger.error(f"Error restoring zoom: {ex}")
-                    #         raise
+                # OLD: update_xaxis_range(fig, list(preserved_range))
+                # NEW: Use dict-based update
+                if self._current_figure_dict is not None and self._plot is not None:
+                    update_xaxis_range_v2(self._current_figure_dict, list(preserved_range))
+                    try:
+                        self.ui_plotly_update_figure()
+                    except RuntimeError as ex:
+                        logger.error(f"Error restoring zoom: {ex}")
+                        if "deleted" not in str(ex).lower():
+                            raise
+                else:
+                    logger.warning("Cannot update x-axis range: _current_figure_dict is None")
         
         # If zoom is enabled, apply it as a fast partial update (axis range only)
         # This is very fast and doesn't cause a full re-render
@@ -546,16 +552,18 @@ class ImageLineViewerView:
                     x_min = max(x_min, 0.0)
                     x_max = min(x_max, float(duration))
             
-            fig = self._current_figure
-            if fig is not None:
-                update_xaxis_range(fig, [x_min, x_max])
+            # OLD: update_xaxis_range(fig, [x_min, x_max])
+            # NEW: Use dict-based update
+            if self._current_figure_dict is not None:
+                update_xaxis_range_v2(self._current_figure_dict, [x_min, x_max])
                 try:
-                    # self._plot.update_figure(fig)
-                    self.ui_plotly_update_figure(fig)
+                    self.ui_plotly_update_figure()
                 except RuntimeError as ex:
                     logger.error(f"Error updating zoom: {ex}")
                     if "deleted" not in str(ex).lower():
                         raise
+            else:
+                logger.warning("Cannot update x-axis range: _current_figure_dict is None")
 
     def _set_metadata_impl(self, file: KymImage) -> None:
         """Internal implementation of set_metadata."""
@@ -602,10 +610,6 @@ class ImageLineViewerView:
         plot_rois = False
 
         # logger.debug(f'=== pyinstaller calling plot_image_line_plotly_v3()')
-        # logger.debug(f'  kf={kf}')
-        # logger.debug(f'  selected_roi_id roi_id={roi_id}')
-        # logger.debug(f'  plot_rois plot_rois={plot_rois}')
-        # logger.debug(f'  selected_event_id self.selected_event_id={self._selected_event_id}')
         
         fig = plot_image_line_plotly_v3(
             kf=kf,
@@ -641,27 +645,31 @@ class ImageLineViewerView:
         # Store figure reference
         self._set_uirevision(fig)
         self._current_figure = fig
+        self._current_figure_dict = fig.to_dict()  # abb 20260209
+
+        # abb - debug _current_figure_dict
+        # logger.info(f'_current_figure_dict:')
+        # logger.info(f'  {self._current_figure_dict.keys()}')  # always has 'List[data]' and 'Dict[layout]'
+        # logger.info(f"  len(self._current_figure_dict['data']): {len(self._current_figure_dict['data'])}")
+        # # ['template', 'xaxis', 'yaxis', 'xaxis2', 'yaxis2', 'font', 'paper_bgcolor', 'plot_bgcolor', 'uirevision']
+        # print(f"  layout keys are:{self._current_figure_dict['layout'].keys()}")
+        # print(f"  layout['xaxis'] is: {self._current_figure_dict['layout']['xaxis']}")
+        # print(f"  layout['xaxis2'] is: {self._current_figure_dict['layout']['xaxis2']}")
+
+        # abb just try and set range
+        # from kymflow.core.plotting.line_plots import update_x_axis
+        # x_range = [10, 20]
+        # update_x_axis(self._current_figure_dict, x_range)
+
         # Detect grid changes (1 row vs 2 rows) and rebuild plot if needed
         num_rows = 2 if getattr(fig.layout, "yaxis2", None) is not None else 1
         if self._last_num_rows is None:
             self._last_num_rows = num_rows
 
-        # elif num_rows != self._last_num_rows and self._plot_container is not None:
-        #     logger.debug(
-        #         "pyinstaller bug fix rebuild plot on grid change %s -> %s",
-        #         self._last_num_rows,
-        #         num_rows,
-        #     )
-        #     self._last_num_rows = num_rows
-        #     self._plot_container.clear()
-        #     with self._plot_container:
-        #         self._create_plot(fig)
-        #     return
-
         try:
             # abb this is a core plot function !!!
             # self._plot.update_figure(fig)
-            self.ui_plotly_update_figure(fig)
+            self.ui_plotly_update_figure()
         except RuntimeError as e:
             logger.error(f"Error updating figure: {e}")
             if "deleted" not in str(e).lower():
@@ -790,15 +798,17 @@ class ImageLineViewerView:
         
         # Restore preserved zoom if we captured it
         if preserved_range is not None:
-            fig = self._current_figure
-            if fig is not None and self._plot is not None:
-                update_xaxis_range(fig, list(preserved_range))
+            # OLD: update_xaxis_range(fig, list(preserved_range))
+            # NEW: Use dict-based update
+            if self._current_figure_dict is not None and self._plot is not None:
+                update_xaxis_range_v2(self._current_figure_dict, list(preserved_range))
                 try:
-                    # self._plot.update_figure(fig)
-                    self.ui_plotly_update_figure(fig)
+                    self.ui_plotly_update_figure()
                 except RuntimeError as e:
                     if "deleted" not in str(e).lower():
                         raise
+            else:
+                logger.warning("Cannot update x-axis range: _current_figure_dict is None")
         else:
             # No preserved range, apply pending range zoom if any
             self._apply_pending_range_zoom()
@@ -806,15 +816,15 @@ class ImageLineViewerView:
     def _apply_pending_range_zoom(self) -> None:
         if self._pending_range_zoom is None:
             return
-        fig = self._current_figure
-        if fig is None or self._plot is None:
+        if self._current_figure_dict is None or self._plot is None:
             return
         x_min, x_max = self._pending_range_zoom
         self._pending_range_zoom = None
-        update_xaxis_range(fig, [x_min, x_max])
+        # OLD: update_xaxis_range(fig, [x_min, x_max])
+        # NEW: Use dict-based update
+        update_xaxis_range_v2(self._current_figure_dict, [x_min, x_max])
         try:
-            # self._plot.update_figure(fig)
-            self.ui_plotly_update_figure(fig)
+            self.ui_plotly_update_figure()
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
