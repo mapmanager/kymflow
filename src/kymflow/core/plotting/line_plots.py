@@ -489,7 +489,8 @@ def _add_single_roi_line_plot(  # pragma: no cover
     ):
         # Add line plot trace with legend label
         fig.add_trace(
-            go.Scatter(
+            # go.Scatter(
+            go.Scattergl(
                 x=analysis_time_values,
                 y=y_values,
                 mode="lines",
@@ -1072,6 +1073,7 @@ def plot_image_line_plotly_v3(
     }
 
     fig.add_trace(
+        # go.Heatmapgl(**heatmap_kwargs),
         go.Heatmap(**heatmap_kwargs),
         row=1,
         col=1,

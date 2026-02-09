@@ -359,8 +359,10 @@ class AppState:
         self.selected_event = event
         self.selected_event_options = options
         self.selected_event_origin = origin
+        
+        n = len(self._event_selection_changed_handlers)
         logger.info(
-            f"select_event: calling event_selection_changed handlers for event_id={event_id}"
+            f"select_event: calling n:{n} event_selection_changed handlers for event_id={event_id}"
         )
         for handler in list(self._event_selection_changed_handlers):
             try:

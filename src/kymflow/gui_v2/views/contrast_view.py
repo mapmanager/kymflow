@@ -113,7 +113,9 @@ class ContrastView:
             self._log_checkbox.on("update:model-value", self._on_log_toggle)
 
         # Row 2: Histogram plot
-        self._histogram_plot = ui.plotly(go.Figure()).classes("w-full h-48")
+        # TEMPORARILY DISABLED
+        # self._histogram_plot = ui.plotly(go.Figure()).classes("w-full h-48")
+        self._histogram_plot = None
 
         # Row 3: Min slider
         with ui.row().classes("w-full items-center gap-2"):
