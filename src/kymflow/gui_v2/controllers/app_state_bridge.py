@@ -115,26 +115,17 @@ class AppStateBridgeController:
         # Derive path from file if available
         path = str(kym_file.path) if kym_file and hasattr(kym_file, "path") else None
 
+        # Get ROI ID from AppState (set by select_file() before this callback)
+        roi_id = self._app_state.selected_roi_id
+
         self._bus.emit(
             FileSelection(
                 path=path,
                 file=kym_file,
                 origin=selection_origin,
                 phase="state",
-            )
-        )
-
-        # When select_file() is called, it automatically sets selected_roi_id
-        # (first ROI if available, None otherwise). This doesn't trigger the
-        # roi_selection_changed callback, so we need to emit ROISelection(phase="state")
-        # here to notify viewers of the ROI change.
-        if not is_client_alive():
-            return
-        self._bus.emit(
-            ROISelection(
-                roi_id=self._app_state.selected_roi_id,
-                origin=SelectionOrigin.EXTERNAL,
-                phase="state",
+                roi_id=roi_id,
+                kym_event_selection=None,  # Always None on file change (no active velocity event)
             )
         )
 

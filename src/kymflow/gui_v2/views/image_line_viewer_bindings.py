@@ -120,13 +120,29 @@ class ImageLineViewerBindings:
     def _on_file_selection_changed(self, e: FileSelection) -> None:
         """Handle file selection change event.
 
-        Updates viewer for new file selection. Wrapped in safe_call to handle
-        deleted client errors gracefully.
+        Updates viewer for new file selection, ROI selection, and clears event zoom.
+        Wrapped in safe_call to handle deleted client errors gracefully.
 
         Args:
-            e: FileSelection event (phase="state") containing the selected file.
+            e: FileSelection event (phase="state") containing the selected file, roi_id, and kym_event_selection.
         """
         safe_call(self._view.set_selected_file, e.file)
+        # Update ROI selection from FileSelection (replaces separate ROISelection emission)
+        safe_call(self._view.set_selected_roi, e.roi_id)
+        # Clear event zoom on file change (kym_event_selection is always None on file change)
+        # Create a None EventSelection to pass to zoom_to_event for clearing
+        safe_call(
+            self._view.zoom_to_event,
+            EventSelection(
+                event_id=None,
+                roi_id=None,
+                path=None,
+                event=None,
+                options=None,
+                origin=e.origin,
+                phase="state",
+            ),
+        )
 
     def _on_roi_changed(self, e: ROISelection) -> None:
         """Handle ROI selection change event.

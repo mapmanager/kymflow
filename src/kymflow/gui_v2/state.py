@@ -231,15 +231,8 @@ class AppState:
         else:
             self.selected_roi_id = None
 
-        # Clear selected event when file changes
-        self.select_velocityevent(
-            event_id=None,
-            roi_id=None,
-            path=None,
-            event=None,
-            options=None,
-            origin=origin,
-        )
+        # Note: Event selection clearing is now handled via FileSelection.kym_event_selection=None
+        # emitted by AppStateBridge, so we no longer need to call select_velocity_event() here.
         
         logger.info(f"select_file: calling selection_changed handlers for {kym_file}, selected_roi_id={self.selected_roi_id}")
         for handler in list[SelectionChangedHandler](self._selection_changed_handlers):

@@ -10,9 +10,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Optional
 
-if TYPE_CHECKING:
-    from typing import Any
-
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
@@ -23,8 +20,6 @@ from kymflow.gui_v2.views.contrast_view import ContrastView
 from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 from kymflow.gui_v2.views.options_tab_view import OptionsTabView
-# DEPRECATED: Stall analysis is deprecated
-# from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
 
 logger = get_logger(__name__)
 
@@ -44,7 +39,6 @@ class DrawerView:
 
     Attributes:
         _analysis_toolbar_view: Analysis toolbar view instance.
-        _stall_analysis_toolbar_view: Stall analysis toolbar view instance.
         _contrast_view: Contrast view instance.
         _line_plot_controls_view: Line plot controls view instance.
         _metadata_tab_view: Metadata tab view instance.
@@ -55,7 +49,6 @@ class DrawerView:
     def __init__(
         self,
         analysis_toolbar_view: AnalysisToolbarView,
-        stall_analysis_toolbar_view: Optional[Any],  # DEPRECATED: StallAnalysisToolbarView | None
         contrast_view: ContrastView,
         line_plot_controls_view: LinePlotControlsView,
         metadata_tab_view: MetadataTabView,
@@ -66,7 +59,6 @@ class DrawerView:
 
         Args:
             analysis_toolbar_view: Analysis toolbar view instance.
-            stall_analysis_toolbar_view: Stall analysis toolbar view instance (DEPRECATED, can be None).
             contrast_view: Contrast view instance.
             line_plot_controls_view: Line plot controls view instance.
             metadata_tab_view: Metadata tab view instance.
@@ -74,8 +66,6 @@ class DrawerView:
             options_tab_view: Options tab view instance.
         """
         self._analysis_toolbar_view = analysis_toolbar_view
-        # DEPRECATED: Stall analysis is deprecated
-        self._stall_analysis_toolbar_view = stall_analysis_toolbar_view
         self._contrast_view = contrast_view
         self._line_plot_controls_view = line_plot_controls_view
         self._metadata_tab_view = metadata_tab_view
@@ -142,14 +132,6 @@ class DrawerView:
                             # to not update. Re-enable once multiprocessing task state communication is fixed.
                             # ui.label("Progress").classes("text-sm font-semibold mt-2")
                             # self._drawer_task_progress_view.render()
-                            
-                            # DEPRECATED: Stall analysis is deprecated
-                            # # Stall analysis section - in disclosure triangle (default closed)
-                            # if self._stall_analysis_toolbar_view is not None:
-                            #     with ui.expansion("Stall Analysis", value=False) \
-                            #         .props('header-class="my-expansion-header-shift-left"') \
-                            #         .classes("w-full"):
-                            #         self._stall_analysis_toolbar_view.render()
                     
                     # Plotting tab panel - contains plotting and visualization controls
                     with ui.tab_panel(tab_plotting):
@@ -199,18 +181,12 @@ class DrawerView:
         """
         if current_file is not None:
             self._analysis_toolbar_view.set_selected_file(current_file)
-            # DEPRECATED: Stall analysis is deprecated
-            # if self._stall_analysis_toolbar_view is not None:
-            #     self._stall_analysis_toolbar_view.set_selected_file(current_file)
             self._contrast_view.set_selected_file(current_file)
             self._line_plot_controls_view.set_selected_file(current_file)
             self._metadata_tab_view.set_selected_file(current_file)
         
         if current_roi is not None:
             self._analysis_toolbar_view.set_selected_roi(current_roi)
-            # DEPRECATED: Stall analysis is deprecated
-            # if self._stall_analysis_toolbar_view is not None:
-            #     self._stall_analysis_toolbar_view.set_selected_roi(current_roi)
             self._line_plot_controls_view.set_selected_roi(current_roi)
         
         # Initialize contrast view theme

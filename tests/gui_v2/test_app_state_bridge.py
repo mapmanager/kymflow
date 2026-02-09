@@ -6,7 +6,7 @@ from pathlib import Path
 
 from kymflow.gui_v2.bus import BusConfig, EventBus
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
-from kymflow.gui_v2.events import ROISelection
+from kymflow.gui_v2.events import FileSelection, ROISelection
 from kymflow.gui_v2.state import AppState
 
 
@@ -31,20 +31,21 @@ class DummyKymImage:
 
 
 def test_bridge_emits_roi_selection_after_file_select() -> None:
-    """Selecting a file should emit ROISelection for the default ROI."""
+    """Selecting a file should emit FileSelection with roi_id for the default ROI."""
     app_state = AppState()
     bus = EventBus(client_id="test-client", config=BusConfig(trace=False))
     AppStateBridgeController(app_state, bus)
 
-    received: list[ROISelection] = []
+    received: list[FileSelection] = []
 
-    def handler(event: ROISelection) -> None:
+    def handler(event: FileSelection) -> None:
         if event.phase == "state":
             received.append(event)
 
-    bus.subscribe_state(ROISelection, handler)
+    bus.subscribe_state(FileSelection, handler)
 
     app_state.select_file(DummyKymImage())
 
     assert received
     assert received[-1].roi_id == 1
+    assert received[-1].kym_event_selection is None  # Event selection should be None on file change

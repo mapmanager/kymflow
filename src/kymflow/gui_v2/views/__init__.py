@@ -15,8 +15,6 @@ from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimental
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 from kymflow.gui_v2.views.options_tab_view import OptionsTabView
-# DEPRECATED: Stall analysis is deprecated
-# from kymflow.gui_v2.views.stall_analysis_toolbar_view import StallAnalysisToolbarView
 from kymflow.gui_v2.views.task_progress_view import TaskProgressView
 
 # Bindings
@@ -29,8 +27,6 @@ from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
 from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
-# DEPRECATED: Stall analysis is deprecated
-# from kymflow.gui_v2.views.stall_analysis_toolbar_bindings import StallAnalysisToolbarBindings
 from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
 
 __all__ = [
@@ -48,8 +44,6 @@ __all__ = [
     "MetadataHeaderView",
     "MetadataTabView",
     "OptionsTabView",
-    # DEPRECATED: Stall analysis is deprecated
-    # "StallAnalysisToolbarView",
     "TaskProgressView",
     # Bindings
     "AnalysisToolbarBindings",
@@ -61,7 +55,5 @@ __all__ = [
     "LinePlotControlsBindings",
     "MetadataExperimentalBindings",
     "MetadataHeaderBindings",
-    # DEPRECATED: Stall analysis is deprecated
-    # "StallAnalysisToolbarBindings",
     "TaskProgressBindings",
 ]

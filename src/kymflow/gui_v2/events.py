@@ -61,16 +61,21 @@ class FileSelection:
     For intent phase:
         - path is set (file path as string)
         - file is None
+        - roi_id and kym_event_selection are None (not set)
         - Emitted by views when user selects a file
 
     For state phase:
         - file is set (KymImage instance)
         - path can be derived from file.path
+        - roi_id is set to AppState.selected_roi_id (first ROI if available, None otherwise)
+        - kym_event_selection is always None (signifies no velocity event selected on file change)
         - Emitted by AppStateBridge when AppState changes
 
     Attributes:
         path: File path as string, or None. Set in intent phase.
         file: KymImage instance, or None. Set in state phase.
+        roi_id: ROI ID for the selected file, or None. Set in state phase from AppState.selected_roi_id.
+        kym_event_selection: EventSelection instance, or None. Always None on file change (signifies no active velocity event).
         origin: SelectionOrigin indicating where the selection came from.
         phase: Event phase - "intent" or "state".
     """
@@ -79,6 +84,8 @@ class FileSelection:
     file: "KymImage | None"
     origin: SelectionOrigin
     phase: EventPhase
+    roi_id: int | None = None
+    kym_event_selection: "EventSelection | None" = None
 
 
 @dataclass(frozen=True, slots=True)

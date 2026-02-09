@@ -57,9 +57,6 @@ from kymflow.gui_v2.views import (
     MetadataHeaderView,
     MetadataTabView,
     OptionsTabView,
-    # DEPRECATED: Stall analysis is deprecated
-    # StallAnalysisToolbarBindings,
-    # StallAnalysisToolbarView,
     TaskProgressBindings,
     TaskProgressView,
 )
@@ -168,8 +165,6 @@ class HomePage(BasePage):
             on_detect_events=bus.emit,
         )
         self._drawer_task_progress_view = TaskProgressView()
-        # DEPRECATED: Stall analysis is deprecated
-        # self._drawer_stall_analysis_toolbar_view = StallAnalysisToolbarView()
         self._drawer_contrast_view = ContrastView(on_image_display_change=bus.emit)
         self._drawer_line_plot_controls_view = LinePlotControlsView(
             on_filter_change=self._on_drawer_filter_change,
@@ -188,9 +183,6 @@ class HomePage(BasePage):
         # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
             analysis_toolbar_view=self._drawer_analysis_toolbar_view,
-            # DEPRECATED: Stall analysis is deprecated
-            # stall_analysis_toolbar_view=self._drawer_stall_analysis_toolbar_view,
-            stall_analysis_toolbar_view=None,  # Pass None since it's deprecated
             contrast_view=self._drawer_contrast_view,
             line_plot_controls_view=self._drawer_line_plot_controls_view,
             metadata_tab_view=self._drawer_metadata_tab_view,
@@ -199,8 +191,6 @@ class HomePage(BasePage):
         )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None
-        # DEPRECATED: Stall analysis is deprecated
-        # self._drawer_stall_analysis_toolbar_bindings: StallAnalysisToolbarBindings | None = None
         self._drawer_contrast_bindings: ContrastBindings | None = None
         self._drawer_line_plot_controls_bindings: LinePlotControlsBindings | None = None
         self._drawer_metadata_experimental_bindings: MetadataExperimentalBindings | None = None
@@ -308,10 +298,6 @@ class HomePage(BasePage):
         self._drawer_task_progress_bindings = TaskProgressBindings(
             self.bus, self._drawer_task_progress_view
         )
-        # DEPRECATED: Stall analysis is deprecated
-        # self._drawer_stall_analysis_toolbar_bindings = StallAnalysisToolbarBindings(
-        #     self.bus, self._drawer_stall_analysis_toolbar_view
-        # )
         self._drawer_contrast_bindings = ContrastBindings(
             self.bus, self._drawer_contrast_view
         )
@@ -325,22 +311,7 @@ class HomePage(BasePage):
             self.bus, self._drawer_metadata_header_view
         )
 
-        # DEPRECATED: Stall analysis is deprecated
-        # # Set up stall analysis callback to trigger plot update
-        # self._drawer_stall_analysis_toolbar_view.set_on_stall_analysis_complete(
-        #     self._on_drawer_stall_analysis_complete
-        # )
-
         self._setup_complete = True
-
-    # DEPRECATED: Stall analysis is deprecated
-    # def _on_drawer_stall_analysis_complete(self) -> None:
-    #     """Callback when splitter pane stall analysis completes - triggers plot update."""
-    #     # Trigger plot re-render by calling set_selected_roi with current ROI
-    #     # This will cause the plot to refresh with the new stall analysis data
-    #     current_roi = self.context.app_state.selected_roi_id
-    #     if current_roi is not None:
-    #         self._image_line_viewer.set_selected_roi(current_roi)
 
     def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
         """Callback when splitter pane filter controls change - applies filters to plot."""

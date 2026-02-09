@@ -107,6 +107,11 @@ class KymEventBindings:
         blinded = self._view._app_context.app_config.get_blinded() if self._view._app_context.app_config else False
         report = e.file.get_kym_analysis().get_velocity_report(blinded=blinded)
         safe_call(self._view.set_events, report)
+        # Update ROI selection from FileSelection (replaces separate ROISelection emission)
+        safe_call(self._view.set_selected_roi, e.roi_id)
+        # Clear event selection on file change (kym_event_selection is always None on file change)
+        # This replaces the EventSelection(event_id=None) that was previously emitted
+        safe_call(self._view.set_selected_event_ids, [], origin=SelectionOrigin.EXTERNAL)
 
     def _on_roi_selection_changed(self, e: ROISelection) -> None:
         # Still call set_selected_roi to update filter state, but it will skip set_data

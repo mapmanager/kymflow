@@ -78,13 +78,15 @@ class AnalysisToolbarBindings:
     def _on_file_selection_changed(self, e: FileSelection) -> None:
         """Handle file selection change event.
 
-        Updates view for new file selection. Wrapped in safe_call to handle
+        Updates view for new file selection and ROI selection. Wrapped in safe_call to handle
         deleted client errors gracefully.
 
         Args:
-            e: FileSelection event (phase="state") containing the selected file.
+            e: FileSelection event (phase="state") containing the selected file and roi_id.
         """
         safe_call(self._view.set_selected_file, e.file)
+        # Update ROI selection from FileSelection (replaces separate ROISelection emission)
+        safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_roi_selection_changed(self, e: ROISelection) -> None:
         """Handle ROI selection change event.
