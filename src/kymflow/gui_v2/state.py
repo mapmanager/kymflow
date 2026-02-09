@@ -232,7 +232,7 @@ class AppState:
             self.selected_roi_id = None
 
         # Clear selected event when file changes
-        self.select_event(
+        self.select_velocityevent(
             event_id=None,
             roi_id=None,
             path=None,
@@ -242,7 +242,7 @@ class AppState:
         )
         
         logger.info(f"select_file: calling selection_changed handlers for {kym_file}, selected_roi_id={self.selected_roi_id}")
-        for handler in list(self._selection_changed_handlers):
+        for handler in list[SelectionChangedHandler](self._selection_changed_handlers):
             try:
                 handler(kym_file, origin)
             except Exception:
@@ -343,7 +343,7 @@ class AppState:
             except Exception:
                 logger.exception("Error in roi_selection_changed handler")
 
-    def select_event(
+    def select_velocity_event(
         self,
         event_id: Optional[str],
         roi_id: Optional[int],
@@ -362,7 +362,7 @@ class AppState:
         
         n = len(self._event_selection_changed_handlers)
         logger.info(
-            f"select_event: calling n:{n} event_selection_changed handlers for event_id={event_id}"
+            f"select_velocity_event: calling n:{n} event_selection_changed handlers for event_id={event_id}"
         )
         for handler in list(self._event_selection_changed_handlers):
             try:

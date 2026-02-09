@@ -28,7 +28,7 @@ class EventSelectionController:
         if e.origin != SelectionOrigin.EVENT_TABLE:
             return
 
-        self._app_state.select_event(
+        self._app_state.select_velocity_event(
             event_id=e.event_id,
             roi_id=e.roi_id,
             path=e.path,
