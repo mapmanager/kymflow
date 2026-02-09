@@ -157,15 +157,14 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
 def test_main_registers_shutdown_handlers(monkeypatch) -> None:
     """main() should register shutdown handlers before ui.run()."""
     app_module = _load_app_module(monkeypatch)
-    monkeypatch.setattr(app_module, "DEFAULT_PORT", 9999)
 
     install_mock = MagicMock()
     monkeypatch.setattr(app_module, "install_shutdown_handlers", install_mock)
     monkeypatch.setattr(app_module.ui, "run", lambda **_kwargs: None)
 
-    app_module.main(native=True)
+    app_module.main(native_bool=True)
 
-    install_mock.assert_called_once_with(app_module.context, native=True)
+    install_mock.assert_called_once_with(app_module.context)
 
 
 def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:

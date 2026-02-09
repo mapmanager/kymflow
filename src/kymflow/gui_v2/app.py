@@ -297,7 +297,6 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     )
 
     # Register minimal shutdown handlers to persist configs (native mode only)
-    native_bool = _env_bool("KYMFLOW_GUI_NATIVE", True)
     if native_bool:
         install_shutdown_handlers(context)
 

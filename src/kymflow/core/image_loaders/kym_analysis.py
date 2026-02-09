@@ -834,7 +834,7 @@ class KymAnalysis:
         # Make a writeable copy to avoid "assignment destination is read-only" errors
         # when arrays are passed to detection functions that may modify them in-place
         values = roi_df[key].values.copy()
-        logger.warning(f"get_analysis_value: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
+        logger.warning(f"qqq called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
 
         # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
         # print(values)

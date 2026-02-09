@@ -130,7 +130,8 @@ class ImageLineViewerView:
         # Plot container fills available height so nested splitters can resize vertically.
         self._plot_container = ui.column().classes("w-full h-full")
         with self._plot_container:
-            self._create_plot(go.Figure())
+            # self._create_plot(go.Figure())
+            self._create_plot({})
 
     def _create_plot(self, fig: go.Figure) -> None:
         """Create a fresh plot element inside the current container."""
@@ -142,6 +143,15 @@ class ImageLineViewerView:
         # abb when implementing getting user drawrect/rect selection
         # and setting start/stop of a single velocity event.
         self._plot.on("plotly_relayout", self._on_plotly_relayout)
+
+    def ui_plotly_update_figure(self, fig: go.Figure) -> None:
+        """Update the plotly plot with a new figure."""
+        
+        logger.info('XXX DO NOT CALL THIS A LOT -->> SLOW')
+
+        figDict = fig.to_dict()
+        self._plot.update_figure(figDict)
+        # self._plot.update_figure(fig)
 
     def _on_plotly_relayout(self, e: GenericEventArguments) -> None:
         """
@@ -392,6 +402,7 @@ class ImageLineViewerView:
         self._current_roi_id = None
         self._render_combined()
         # Reset to full zoom when selection changes
+        logger.warning('qqq turned off reset zoom')
         self._reset_zoom(force_new_uirevision=True)
 
     def set_selected_roi(self, roi_id: Optional[int]) -> None:
@@ -497,12 +508,13 @@ class ImageLineViewerView:
                 fig = self._current_figure
                 if fig is not None and self._plot is not None:
                     update_xaxis_range(fig, list(preserved_range))
-                    try:
-                        self._plot.update_figure(fig)
-                    except RuntimeError as ex:
-                        if "deleted" not in str(ex).lower():
-                            logger.error(f"Error restoring zoom: {ex}")
-                            raise
+                    # try:
+                    #     # self._plot.update_figure(fig)
+                    #     self.ui_plotly_update_figure(fig)
+                    # except RuntimeError as ex:
+                    #     if "deleted" not in str(ex).lower():
+                    #         logger.error(f"Error restoring zoom: {ex}")
+                    #         raise
         
         # If zoom is enabled, apply it as a fast partial update (axis range only)
         # This is very fast and doesn't cause a full re-render
@@ -524,7 +536,8 @@ class ImageLineViewerView:
             if fig is not None:
                 update_xaxis_range(fig, [x_min, x_max])
                 try:
-                    self._plot.update_figure(fig)
+                    # self._plot.update_figure(fig)
+                    self.ui_plotly_update_figure(fig)
                 except RuntimeError as ex:
                     logger.error(f"Error updating zoom: {ex}")
                     if "deleted" not in str(ex).lower():
@@ -629,7 +642,8 @@ class ImageLineViewerView:
 
         try:
             # abb this is a core plot function !!!
-            self._plot.update_figure(fig)
+            # self._plot.update_figure(fig)
+            self.ui_plotly_update_figure(fig)
         except RuntimeError as e:
             logger.error(f"Error updating figure: {e}")
             if "deleted" not in str(e).lower():
@@ -653,7 +667,8 @@ class ImageLineViewerView:
 
         reset_image_zoom(fig, kf)
         try:
-            self._plot.update_figure(fig)
+            # self._plot.update_figure(fig)
+            self.ui_plotly_update_figure(fig)
         except RuntimeError as e:
             logger.error(f"Error updating figure: {e}")
             if "deleted" not in str(e).lower():
@@ -712,7 +727,8 @@ class ImageLineViewerView:
             return
         try:
             # logger.debug(f'pyinstaller calling _plot.update_figure(fig)')
-            self._plot.update_figure(fig)
+            # self._plot.update_figure(fig)
+            self.ui_plotly_update_figure(fig)
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
@@ -758,7 +774,8 @@ class ImageLineViewerView:
             if fig is not None and self._plot is not None:
                 update_xaxis_range(fig, list(preserved_range))
                 try:
-                    self._plot.update_figure(fig)
+                    # self._plot.update_figure(fig)
+                    self.ui_plotly_update_figure(fig)
                 except RuntimeError as e:
                     if "deleted" not in str(e).lower():
                         raise
@@ -776,7 +793,8 @@ class ImageLineViewerView:
         self._pending_range_zoom = None
         update_xaxis_range(fig, [x_min, x_max])
         try:
-            self._plot.update_figure(fig)
+            # self._plot.update_figure(fig)
+            self.ui_plotly_update_figure(fig)
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
@@ -815,7 +833,8 @@ class ImageLineViewerView:
 
         # Update the plot with modified figure (preserves zoom via uirevision)
         try:
-            self._plot.update_figure(fig)
+            # self._plot.update_figure(fig)
+            self.ui_plotly_update_figure(fig)
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
