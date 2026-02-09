@@ -851,7 +851,10 @@ class KymAnalysis:
         # Make a writeable copy to avoid "assignment destination is read-only" errors
         # when arrays are passed to detection functions that may modify them in-place
         values = roi_df[key].values.copy()
+
         logger.warning(f"qqq called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
+        from kymflow.core.utils.get_stack_trace import get_stack_trace
+        print(get_stack_trace())
 
         # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
         # print(values)
@@ -1034,7 +1037,8 @@ class KymAnalysis:
 
         # Mark dirty so callers know there are unsaved results.
         self._dirty = True
-        return events
+        # Return events_list (all events with UUIDs assigned), not just newly detected events
+        return events_list
 
     def remove_velocity_event(self, roi_id:int, remove_these:str) -> None:
         """Remove velocity events by 'Type' and 'User Type'
@@ -1104,7 +1108,17 @@ class KymAnalysis:
             Stored list of VelocityEvent instances, or None if velocity event analysis
             has not been run for this ROI (or results were not loaded).
         """
-        return self._velocity_events.get(roi_id)
+        events = self._velocity_events.get(roi_id)
+        if events is None:
+            return None
+        
+        # Ensure all events have _uuid matching the mapping (mapping is source of truth)
+        for idx, event in enumerate(events):
+            event_id = self._velocity_event_uuid_reverse.get((roi_id, idx))
+            if event_id and (not hasattr(event, '_uuid') or event._uuid != event_id):
+                object.__setattr__(event, '_uuid', event_id)
+        
+        return events
 
     def get_velocity_events_filtered(
         self, roi_id: int, event_filter: dict[str, bool]
@@ -1122,6 +1136,13 @@ class KymAnalysis:
         events = self._velocity_events.get(roi_id)
         if events is None:
             return None
+        
+        # Ensure all events have _uuid matching the mapping (mapping is source of truth)
+        for idx, event in enumerate(events):
+            event_id = self._velocity_event_uuid_reverse.get((roi_id, idx))
+            if event_id and (not hasattr(event, '_uuid') or event._uuid != event_id):
+                object.__setattr__(event, '_uuid', event_id)
+        
         # Filter events where event_filter.get(event.event_type, True) is True
         # Default to True if event_type not in filter (show by default)
         return [
@@ -1154,7 +1175,23 @@ class KymAnalysis:
             if (roi_id, index) in self._velocity_event_uuid_reverse:
                 del self._velocity_event_uuid_reverse[(roi_id, index)]
             return None
-        return (roi_id, index, events[index])
+        event = events[index]
+        # Ensure event has UUID set (defensive check - should always be true)
+        if not hasattr(event, '_uuid') or event._uuid is None:
+            # Restore UUID from mapping (shouldn't happen, but be defensive)
+            object.__setattr__(event, '_uuid', event_id)
+        return (roi_id, index, event)
+
+    def find_event_by_uuid(self, event_id: str) -> tuple[int, int, VelocityEvent] | None:
+        """Find event by UUID event_id (public API).
+        
+        Args:
+            event_id: UUID string identifying the event.
+        
+        Returns:
+            Tuple of (roi_id, index, event) if found, None otherwise.
+        """
+        return self._find_event_by_uuid(event_id)
 
     def update_velocity_event_field(self, event_id: str, field: str, value: Any) -> str | None:
         """Update a field on a velocity event by event_id.
@@ -1203,7 +1240,7 @@ class KymAnalysis:
         seconds_per_line = float(self.acq_image.seconds_per_line)
         if field == "user_type":
             events = self._velocity_events[roi_id]
-            events[idx] = replace(event, user_type=new_user_type)
+            events[idx] = replace(event, user_type=new_user_type, _uuid=event._uuid)
             self._velocity_events[roi_id] = events
         elif field == "t_start":
             new_i_start = time_to_index(new_t_start, seconds_per_line)
@@ -1218,6 +1255,7 @@ class KymAnalysis:
                 t_start=new_t_start,
                 i_start=new_i_start,
                 duration_sec=new_duration,
+                _uuid=event._uuid,
             )
             self._velocity_events[roi_id] = events
         elif field == "t_end":
@@ -1237,6 +1275,7 @@ class KymAnalysis:
                 t_end=new_t_end,
                 i_end=new_i_end,
                 duration_sec=new_duration,
+                _uuid=event._uuid,
             )
             self._velocity_events[roi_id] = events
         
@@ -1286,6 +1325,7 @@ class KymAnalysis:
             t_end=new_t_end,
             i_end=new_i_end,
             duration_sec=new_duration,
+            _uuid=event._uuid,
         )
         self._velocity_events[roi_id] = events
         self._dirty = True
@@ -1441,6 +1481,12 @@ class KymAnalysis:
                     event_id = str(uuid4())
                     self._velocity_event_uuid_map[event_id] = (rid, idx)
                     self._velocity_event_uuid_reverse[(rid, idx)] = event_id
+                
+                # CRITICAL: Ensure event object has _uuid matching the mapping
+                # This is the authoritative source - sync event object to match
+                if not hasattr(event, '_uuid') or event._uuid != event_id:
+                    object.__setattr__(event, '_uuid', event_id)
+                
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path

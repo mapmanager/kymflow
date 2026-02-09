@@ -667,6 +667,8 @@ class HomePage(BasePage):
                                 self._event_view.set_selected_roi(current_roi)
                             # Wire up event filter callback to refresh plot
                             self._event_view._on_event_filter_changed = lambda filter: self._image_line_viewer.set_event_filter(filter)
+                            # Sync initial filter state from event view to image line viewer
+                            self._image_line_viewer.set_event_filter(self._event_view._event_filter)
 
                         # Draw a small visual handle on the nested splitter separator.
                         with plot_splitter.separator:

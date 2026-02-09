@@ -25,6 +25,13 @@ from kymflow.gui_v2.events import (
 from kymflow.gui_v2.events_state import AnalysisCompleted, ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.plotting.line_plots import (
+    add_kym_event_rect,
+    delete_kym_event_rect,
+    move_kym_event_rect,
+    select_kym_event_rect,
+)
+import numpy as np
 
 if TYPE_CHECKING:
     pass
@@ -239,14 +246,194 @@ class ImageLineViewerBindings:
         )
 
     def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:
-        """Handle velocity event updates by refreshing overlays."""
+        """Handle velocity event updates using CRUD operations (no full render).
+        
+        Args:
+            e: VelocityEventUpdate state event containing event_id, updates, etc.
+        """
         self._logger.debug("velocity_event_update(state) event_id=%s", e.event_id)
-        safe_call(self._view.refresh_velocity_events)
+        
+        # Check if we can use CRUD (dict-based update)
+        if self._view._current_figure_dict is None:  # noqa: SLF001
+            self._logger.error(
+                "velocity_event_update: _current_figure_dict is None, falling back to full render. "
+                "This should not happen!"
+            )
+            safe_call(self._view.refresh_velocity_events)
+            return
+        
+        # Validate we have required state
+        if self._view._current_file is None:  # noqa: SLF001
+            self._logger.warning("velocity_event_update: _current_file is None, skipping")
+            return
+        
+        if self._view._current_roi_id is None:  # noqa: SLF001
+            self._logger.warning("velocity_event_update: _current_roi_id is None, skipping")
+            return
+        
+        # Get updated event from KymAnalysis
+        kym_analysis = self._view._current_file.get_kym_analysis()  # noqa: SLF001
+        result = kym_analysis.find_event_by_uuid(e.event_id)
+        if result is None:
+            self._logger.warning(
+                "velocity_event_update: event not found (event_id=%s), skipping", e.event_id
+            )
+            return
+        
+        roi_id, index, event = result
+        
+        # Validate ROI match
+        if roi_id != self._view._current_roi_id:  # noqa: SLF001
+            self._logger.error(
+                "velocity_event_update: ROI mismatch - event roi_id=%s, current roi_id=%s. "
+                "Cross-ROI operations not allowed.",
+                roi_id,
+                self._view._current_roi_id,  # noqa: SLF001
+            )
+            return
+        
+        # Get analysis_time_values for coordinate calculation
+        if not kym_analysis.has_analysis(roi_id):
+            self._logger.warning(
+                "velocity_event_update: no analysis for roi_id=%s, skipping", roi_id
+            )
+            return
+        
+        analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
+        if analysis_time_values is None:
+            self._logger.warning(
+                "velocity_event_update: no time values for roi_id=%s, skipping", roi_id
+            )
+            return
+        
+        analysis_time_values = np.array(analysis_time_values)
+        
+        # Check if event was selected
+        is_selected = (
+            self._view._selected_event_id is not None  # noqa: SLF001
+            and e.event_id == self._view._selected_event_id  # noqa: SLF001
+        )
+        
+        # Use CRUD to move/update event rect
+        try:
+            move_kym_event_rect(
+                self._view._current_figure_dict,  # noqa: SLF001
+                event,
+                analysis_time_values,
+                row=2,
+            )
+            
+            # If event was selected, update selection styling
+            if is_selected:
+                select_kym_event_rect(
+                    self._view._current_figure_dict,  # noqa: SLF001
+                    event,
+                    row=2,
+                )
+            
+            # Update the plot
+            self._view.ui_plotly_update_figure()
+        except RuntimeError as ex:
+            self._logger.error(f"Error updating figure: {ex}")
+            if "deleted" not in str(ex).lower():
+                raise
 
     def _on_add_kym_event(self, e: AddKymEvent) -> None:
-        """Handle add kym event by refreshing overlays and resetting dragmode."""
+        """Handle add kym event using CRUD operations (no full render).
+        
+        Args:
+            e: AddKymEvent state event containing event_id, roi_id, etc.
+        """
         self._logger.debug("add_kym_event(state) event_id=%s", e.event_id)
-        safe_call(self._view.refresh_velocity_events)
+        
+        # Check if we can use CRUD (dict-based update)
+        if self._view._current_figure_dict is None:  # noqa: SLF001
+            self._logger.error(
+                "add_kym_event: _current_figure_dict is None, falling back to full render. "
+                "This should not happen!"
+            )
+            safe_call(self._view.refresh_velocity_events)
+            # Reset dragmode to zoom (disable selection mode)
+            safe_call(
+                self._view.set_kym_event_range_enabled,
+                False,
+                event_id=None,
+                roi_id=None,
+                path=None,
+            )
+            return
+        
+        # Validate we have required state
+        if self._view._current_file is None:  # noqa: SLF001
+            self._logger.warning("add_kym_event: _current_file is None, skipping")
+            return
+        
+        if self._view._current_roi_id is None:  # noqa: SLF001
+            self._logger.warning("add_kym_event: _current_roi_id is None, skipping")
+            return
+        
+        # Validate ROI match
+        if e.roi_id != self._view._current_roi_id:  # noqa: SLF001
+            self._logger.error(
+                "add_kym_event: ROI mismatch - event roi_id=%s, current roi_id=%s. "
+                "Cross-ROI operations not allowed.",
+                e.roi_id,
+                self._view._current_roi_id,  # noqa: SLF001
+            )
+            return
+        
+        # Get event from KymAnalysis
+        kym_analysis = self._view._current_file.get_kym_analysis()  # noqa: SLF001
+        if e.event_id is None:
+            self._logger.warning("add_kym_event: event_id is None, skipping")
+            return
+        
+        result = kym_analysis.find_event_by_uuid(e.event_id)
+        if result is None:
+            self._logger.warning(
+                "add_kym_event: event not found (event_id=%s), skipping", e.event_id
+            )
+            return
+        
+        roi_id, index, event = result
+        
+        # Get analysis_time_values for coordinate calculation
+        if not kym_analysis.has_analysis(roi_id):
+            self._logger.warning(
+                "add_kym_event: no analysis for roi_id=%s, skipping", roi_id
+            )
+            return
+        
+        analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
+        if analysis_time_values is None:
+            self._logger.warning(
+                "add_kym_event: no time values for roi_id=%s, skipping", roi_id
+            )
+            return
+        
+        analysis_time_values = np.array(analysis_time_values)
+        
+        # Use CRUD to add event rect
+        try:
+            add_kym_event_rect(
+                self._view._current_figure_dict,  # noqa: SLF001
+                event,
+                analysis_time_values,
+                row=2,
+            )
+            # Select the newly added event
+            select_kym_event_rect(
+                self._view._current_figure_dict,  # noqa: SLF001
+                event,
+                row=2,
+            )
+            # Update the plot
+            self._view.ui_plotly_update_figure()
+        except RuntimeError as ex:
+            self._logger.error(f"Error updating figure: {ex}")
+            if "deleted" not in str(ex).lower():
+                raise
+        
         # Reset dragmode to zoom (disable selection mode)
         safe_call(
             self._view.set_kym_event_range_enabled,
@@ -257,9 +444,50 @@ class ImageLineViewerBindings:
         )
 
     def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
-        """Handle delete kym event by refreshing overlays."""
+        """Handle delete kym event using CRUD operations (no full render).
+        
+        Args:
+            e: DeleteKymEvent state event containing event_id, roi_id, etc.
+        """
         self._logger.debug("delete_kym_event(state) event_id=%s", e.event_id)
-        safe_call(self._view.refresh_velocity_events)
+        
+        # Check if we can use CRUD (dict-based update)
+        if self._view._current_figure_dict is None:  # noqa: SLF001
+            self._logger.error(
+                "delete_kym_event: _current_figure_dict is None, falling back to full render. "
+                "This should not happen!"
+            )
+            safe_call(self._view.refresh_velocity_events)
+            return
+        
+        # Check if deleted event was selected
+        was_selected = (
+            self._view._selected_event_id is not None  # noqa: SLF001
+            and e.event_id == self._view._selected_event_id  # noqa: SLF001
+        )
+        
+        # Use CRUD to delete event rect
+        try:
+            delete_kym_event_rect(
+                self._view._current_figure_dict,  # noqa: SLF001
+                e.event_id,
+                row=2,
+            )
+            
+            # If deleted event was selected, deselect all
+            if was_selected:
+                select_kym_event_rect(
+                    self._view._current_figure_dict,  # noqa: SLF001
+                    None,
+                    row=2,
+                )
+            
+            # Update the plot
+            self._view.ui_plotly_update_figure()
+        except RuntimeError as ex:
+            self._logger.error(f"Error updating figure: {ex}")
+            if "deleted" not in str(ex).lower():
+                raise
 
     def _on_roi_edit_state(self, e: SetRoiEditState) -> None:
         """Handle ROI edit state change."""

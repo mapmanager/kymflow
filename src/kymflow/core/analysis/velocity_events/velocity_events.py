@@ -313,6 +313,27 @@ class VelocityEvent:
             # _uuid is runtime-only, not loaded from dict (defaults to None)
         )
     
+    @classmethod
+    def from_dict_with_uuid(cls, d: dict, uuid: str) -> "VelocityEvent":
+        """Create VelocityEvent from dict and set runtime UUID.
+        
+        This is for runtime use when you have the UUID available (e.g., from event_id in row data).
+        For JSON serialization/deserialization, use from_dict() instead.
+        
+        Args:
+            d: Dictionary containing VelocityEvent fields.
+            uuid: Runtime UUID string to assign to the event.
+        
+        Returns:
+            VelocityEvent instance with _uuid set.
+        """
+        event = cls.from_dict(d)
+        object.__setattr__(event, '_uuid', uuid)
+        # Verify UUID was set (should always succeed for frozen dataclass)
+        if not hasattr(event, '_uuid') or event._uuid != uuid:
+            raise RuntimeError(f"Failed to set _uuid on VelocityEvent: expected {uuid}, got {getattr(event, '_uuid', None)}")
+        return event
+    
     def get_uuid(self) -> Optional[str]:
         """Get the runtime UUID for this event.
         

@@ -430,9 +430,9 @@ def _add_velocity_event_overlays(  # pragma: no cover
         # logger.warning(f'  x0:{x0} x1:{x1} y0:0 y1:1')
         # logger.warning(f'  color:{event_color}')
 
-        logger.info(f'adding velocity event overlay for roi {roi_id}:')
-        logger.info(f'  event_uuid:{event_uuid}')
-        logger.info(f'  is_selected:{is_selected}')
+        # logger.info(f'adding velocity event overlay for roi {roi_id}:')
+        # logger.info(f'  event_uuid:{event_uuid}')
+        # logger.info(f'  is_selected:{is_selected}')
 
         # Add rectangle shape for velocity event overlay
         shape_dict = {
@@ -456,7 +456,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
                 "dash": "dot" if _outlineRect else "solid",
             }
         else:
-            shape_dict["line_width"] = 0
+            shape_dict["line"] = {"width": 0}
         
         fig.add_shape(**shape_dict)
 
@@ -993,7 +993,7 @@ def add_kym_event_rect(
         "fillcolor": event_color,
         "layer": "below",
         "name": event_uuid,
-        "line_width": 0,  # Non-selected by default
+        "line": {"width": 0},  # Non-selected by default (no outline)
     }
     
     # Initialize shapes list if needed
@@ -1126,7 +1126,7 @@ def select_kym_event_rect(
         row: Subplot row number (default: 2).
     """
     if 'layout' not in plotly_dict:
-        logger.error("select_kym_event_rect: plotly_dict missing 'layout' key")
+        # logger.error("select_kym_event_rect: plotly_dict missing 'layout' key")
         return
     
     layout = plotly_dict['layout']
@@ -1137,8 +1137,12 @@ def select_kym_event_rect(
     xref = f"x{row if row > 1 else ''}"
     yref = f"y{row if row > 1 else ''}"
     
+    # Get target UUID from event._uuid
     target_uuid = event._uuid if event is not None and hasattr(event, '_uuid') and event._uuid else None
     
+    logger.debug(f'event is:{event}')
+    logger.debug(f' target_uuid:{target_uuid}')
+
     # Determine dash style for selected event
     use_dash = False
     if event is not None:
@@ -1146,8 +1150,9 @@ def select_kym_event_rect(
             use_dash = True
     
     # Iterate all shapes and update selection state
-    shapes = layout['shapes']
-    for shape in shapes:
+    # IMPORTANT: Modify layout['shapes'][idx] directly, not through an intermediate variable
+    # This ensures changes are made to the actual plotly_dict structure
+    for idx, shape in enumerate(layout['shapes']):
         # Only process UUID-named rects for this row
         if shape.get('type') != 'rect':
             continue
@@ -1159,22 +1164,19 @@ def select_kym_event_rect(
             continue  # Not a UUID-named rect
         
         shape_uuid = shape.get('name')
-        
+
         if target_uuid is not None and shape_uuid == target_uuid:
             # Selected: set yellow outline
-            shape['line'] = {
+            # Modify directly in plotly_dict structure
+            layout['shapes'][idx]['line'] = {
                 "color": "yellow",
                 "width": 2,
                 "dash": "dot" if use_dash else "solid",
             }
-            # Remove line_width if present
-            if 'line_width' in shape:
-                del shape['line_width']
         else:
-            # Non-selected: remove outline
-            shape['line_width'] = 0
-            if 'line' in shape:
-                del shape['line']
+            # Non-selected: remove outline (set width to 0)
+            # Modify directly in plotly_dict structure
+            layout['shapes'][idx]['line'] = {"width": 0}
 
 
 def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:  # pragma: no cover

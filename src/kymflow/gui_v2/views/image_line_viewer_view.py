@@ -26,6 +26,10 @@ from kymflow.core.plotting import (
     update_xaxis_range_v2,
     select_kym_event_rect,
 )
+from kymflow.core.plotting.line_plots import (
+    clear_kym_event_rects,
+    add_kym_event_rect,
+)
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
@@ -107,7 +111,15 @@ class ImageLineViewerView:
         self._range_path: Optional[str] = None
         self._pending_range_zoom: Optional[tuple[float, float]] = None
         self._selected_event_id: str | None = None  # Track selected event for visual highlighting
-        self._event_filter: Optional[dict[str, bool]] = None  # Event type filter state
+        # Event type filter state: dict mapping event_type (str) to bool (True = show, False = hide)
+        # Initialize with same defaults as KymEventView to keep them in sync
+        self._event_filter: Optional[dict[str, bool]] = {
+            "baseline_drop": True,
+            "baseline_rise": True,
+            "nan_gap": False,
+            "zero_gap": True,
+            "User Added": True,
+        }
         
         # ROI edit selection state
         self._awaiting_roi_edit: bool = False
@@ -146,30 +158,10 @@ class ImageLineViewerView:
     def ui_plotly_update_figure(self, fig: go.Figure | None = None) -> None:
         """Update the plotly plot with a new figure."""
         
-        logger.info('XXX DO NOT CALL THIS A LOT -->> SLOW')
+        # logger.info('XXX DO NOT CALL THIS A LOT -->> SLOW')
 
-        import inspect
-        from pathlib import Path
-        
-        caller_frame = inspect.stack()[1]
-        
-        # Extract details
-        caller_name = caller_frame.function
-        caller_filename = caller_frame.filename
-        caller_lineno = caller_frame.lineno
-        
-        print(f"  calling fn:{caller_name} {Path(caller_filename).name}, line:{caller_lineno}")
 
         self._plot.update_figure(self._current_figure_dict)
-        return
-
-        if fig is None:
-            # just update, no change to plotly go figure
-            self._plot.update()
-        else:
-            # figDict = fig.to_dict()
-            self._plot.update_figure(self._current_figure_dict)
-
         # self._plot.update()
 
     def _on_plotly_relayout(self, e: GenericEventArguments) -> None:
@@ -571,14 +563,97 @@ class ImageLineViewerView:
             self._render_combined()
 
     def set_event_filter(self, event_filter: dict[str, bool] | None) -> None:
-        """Set event type filter and refresh plot.
+        """Set event type filter using CRUD operations (no full render).
         
         Args:
             event_filter: Dict mapping event_type (str) to bool (True = include, False = exclude),
                          or None to clear filter.
         """
         self._event_filter = event_filter
-        self._render_combined()
+        
+        # Check if we can use CRUD (dict-based update)
+        if self._current_figure_dict is None:
+            logger.warning(
+                "set_event_filter: _current_figure_dict is None, falling back to full render"
+            )
+            self._render_combined()
+            return
+        
+        # Validate we have required state
+        if self._current_file is None:
+            logger.warning("set_event_filter: _current_file is None, skipping")
+            return
+        
+        if self._current_roi_id is None:
+            logger.warning("set_event_filter: _current_roi_id is None, skipping")
+            return
+        
+        # Get KymAnalysis and analysis_time_values
+        kym_analysis = self._current_file.get_kym_analysis()
+        if not kym_analysis.has_analysis(self._current_roi_id):
+            logger.warning(
+                "set_event_filter: no analysis for roi_id=%s, skipping", self._current_roi_id
+            )
+            return
+        
+        analysis_time_values = kym_analysis.get_analysis_value(self._current_roi_id, "time")
+        if analysis_time_values is None:
+            logger.warning(
+                "set_event_filter: no time values for roi_id=%s, skipping", self._current_roi_id
+            )
+            return
+        
+        analysis_time_values = np.array(analysis_time_values)
+        
+        # Clear all event rects
+        clear_kym_event_rects(self._current_figure_dict, row=2)
+        
+        # Get filtered events
+        if event_filter is None:
+            velocity_events = kym_analysis.get_velocity_events(self._current_roi_id)
+        else:
+            velocity_events = kym_analysis.get_velocity_events_filtered(
+                self._current_roi_id, event_filter
+            )
+        
+        # Add back visible events
+        if velocity_events is not None:
+            for event in velocity_events:
+                add_kym_event_rect(
+                    self._current_figure_dict,
+                    event,
+                    analysis_time_values,
+                    row=2,
+                )
+        
+        # Restore selection if selected event is still visible
+        if self._selected_event_id is not None:
+            # Check if selected event is in the visible events
+            selected_event = None
+            if velocity_events is not None:
+                for event in velocity_events:
+                    if (
+                        hasattr(event, "_uuid")
+                        and event._uuid is not None
+                        and event._uuid == self._selected_event_id
+                    ):
+                        selected_event = event
+                        break
+            
+            if selected_event is not None:
+                # Selected event is still visible, restore selection
+                select_kym_event_rect(self._current_figure_dict, selected_event, row=2)
+            else:
+                # Selected event was filtered out, deselect all
+                select_kym_event_rect(self._current_figure_dict, None, row=2)
+        
+        # Update the plot
+        try:
+            self.ui_plotly_update_figure()
+        except RuntimeError as ex:
+            logger.error(f"Error updating figure: {ex}")
+            if "deleted" not in str(ex).lower():
+                raise
 
     def _render_combined(self) -> None:
         """Render the combined image and line plot.

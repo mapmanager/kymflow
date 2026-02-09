@@ -160,7 +160,7 @@ class KymEventView:
         self._event_filter: dict[str, bool] = {
             "baseline_drop": True,
             "baseline_rise": True,
-            "nan_gap": True,
+            "nan_gap": False,
             "zero_gap": True,
             "User Added": True,
         }
@@ -404,7 +404,9 @@ class KymEventView:
             if row_data is not None:
                 roi_id = row_data.get("roi_id")
                 path = row_data.get("path")
-                event = VelocityEvent.from_dict(row_data)
+                event_id = row_data.get("event_id") or event_ids[0]
+                # Use from_dict_with_uuid to set runtime UUID (needed for CRUD operations)
+                event = VelocityEvent.from_dict_with_uuid(row_data, str(event_id))
                 self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
                 self._selected_event_path = str(path) if path else None
                 # Only emit EventSelection for user-initiated selections (EVENT_TABLE origin)
@@ -413,7 +415,7 @@ class KymEventView:
                 if origin == SelectionOrigin.EVENT_TABLE:
                     self._on_selected(
                         EventSelection(
-                            event_id=str(event_ids[0]),
+                            event_id=str(event_id),
                             roi_id=int(roi_id) if roi_id is not None else None,
                             path=str(path) if path else None,
                             event=event,
@@ -476,7 +478,8 @@ class KymEventView:
             return
         roi_id = row_data.get("roi_id")
         path = row_data.get("path")
-        event = VelocityEvent.from_dict(row_data)
+        # Use from_dict_with_uuid to set runtime UUID (needed for CRUD operations)
+        event = VelocityEvent.from_dict_with_uuid(row_data, str(event_id))
         self._selected_event_id = str(event_id)
         self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
         self._selected_event_path = str(path) if path else None

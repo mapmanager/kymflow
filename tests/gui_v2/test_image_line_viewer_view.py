@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
-
+import numpy as np
 import pytest
 
 from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
+from kymflow.core.analysis.velocity_events.velocity_events import (
+    VelocityEvent,
+    MachineType,
+    UserType,
+)
 
 
 @pytest.fixture
@@ -90,3 +95,163 @@ def test_render_combined_passes_event_filter(image_line_viewer_view: ImageLineVi
         call_kwargs = mock_plot_func.call_args[1]
         assert "event_filter" in call_kwargs
         assert call_kwargs["event_filter"] == filter_dict
+
+
+def test_set_event_filter_uses_crud(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that set_event_filter uses CRUD operations when _current_figure_dict exists."""
+    # Setup: Create a valid figure dict with existing shapes
+    image_line_viewer_view._current_figure_dict = {
+        "layout": {
+            "shapes": [
+                {
+                    "type": "rect",
+                    "xref": "x2",
+                    "yref": "y2 domain",
+                    "name": "event-uuid-1",
+                    "x0": 1.0,
+                    "x1": 2.0,
+                },
+                {
+                    "type": "rect",
+                    "xref": "x2",
+                    "yref": "y2 domain",
+                    "name": "event-uuid-2",
+                    "x0": 3.0,
+                    "x1": 4.0,
+                },
+            ],
+        },
+        "data": [],
+    }
+    
+    # Setup: Mock file and analysis
+    mock_file = MagicMock()
+    mock_analysis = MagicMock()
+    mock_file.get_kym_analysis.return_value = mock_analysis
+    image_line_viewer_view._current_file = mock_file
+    image_line_viewer_view._current_roi_id = 1
+    image_line_viewer_view._selected_event_id = None
+    
+    # Create sample events
+    event1 = VelocityEvent(
+        event_type="baseline_drop",  # EventType is a Literal, use string directly
+        i_start=10,
+        t_start=1.0,
+        i_end=20,
+        t_end=2.0,
+        machine_type=MachineType.STALL_CANDIDATE,
+        user_type=UserType.UNREVIEWED,
+    )
+    object.__setattr__(event1, "_uuid", "event-uuid-1")
+    
+    event2 = VelocityEvent(
+        event_type="nan_gap",  # EventType is a Literal, use string directly
+        i_start=30,
+        t_start=3.0,
+        i_end=40,
+        t_end=4.0,
+        machine_type=MachineType.OTHER,
+        user_type=UserType.UNREVIEWED,
+    )
+    object.__setattr__(event2, "_uuid", "event-uuid-2")
+    
+    # Setup analysis mocks
+    mock_analysis.has_analysis.return_value = True
+    mock_analysis.get_analysis_value.return_value = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    mock_analysis.get_velocity_events_filtered.return_value = [event1]  # Only baseline_drop
+    
+    # Mock ui_plotly_update_figure
+    image_line_viewer_view.ui_plotly_update_figure = MagicMock()
+    
+    # Set filter (only baseline_drop visible)
+    filter_dict = {
+        "baseline_drop": True,
+        "baseline_rise": False,
+        "nan_gap": False,
+    }
+    
+    image_line_viewer_view.set_event_filter(filter_dict)
+    
+    # Verify filter was stored
+    assert image_line_viewer_view._event_filter == filter_dict
+    
+    # Verify CRUD was used (not full render)
+    # Check that shapes were cleared and re-added
+    shapes = image_line_viewer_view._current_figure_dict["layout"]["shapes"]
+    # Should have 1 shape (only baseline_drop event)
+    assert len(shapes) == 1
+    assert shapes[0]["name"] == "event-uuid-1"
+    
+    # Verify ui_plotly_update_figure was called
+    image_line_viewer_view.ui_plotly_update_figure.assert_called_once()
+
+
+def test_set_event_filter_fallback_when_dict_none(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that set_event_filter falls back to _render_combined when _current_figure_dict is None."""
+    # Setup
+    image_line_viewer_view._current_figure_dict = None
+    
+    filter_dict = {"baseline_drop": True}
+    
+    # Mock _render_combined
+    with patch.object(image_line_viewer_view, "_render_combined") as mock_render:
+        image_line_viewer_view.set_event_filter(filter_dict)
+        
+        # Verify filter was stored
+        assert image_line_viewer_view._event_filter == filter_dict
+        
+        # Verify fallback was used
+        mock_render.assert_called_once()
+
+
+def test_set_event_filter_deselects_when_filtered_out(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that set_event_filter deselects when selected event is filtered out."""
+    # Setup: Create a valid figure dict
+    image_line_viewer_view._current_figure_dict = {
+        "layout": {
+            "shapes": [
+                {
+                    "type": "rect",
+                    "xref": "x2",
+                    "yref": "y2 domain",
+                    "name": "event-uuid-1",
+                    "x0": 1.0,
+                    "x1": 2.0,
+                    "line": {"color": "yellow", "width": 2},  # Selected
+                },
+            ],
+        },
+        "data": [],
+    }
+    
+    # Setup: Mock file and analysis
+    mock_file = MagicMock()
+    mock_analysis = MagicMock()
+    mock_file.get_kym_analysis.return_value = mock_analysis
+    image_line_viewer_view._current_file = mock_file
+    image_line_viewer_view._current_roi_id = 1
+    image_line_viewer_view._selected_event_id = "event-uuid-1"  # Selected event
+    
+    # Setup analysis mocks - no events returned (all filtered out)
+    mock_analysis.has_analysis.return_value = True
+    mock_analysis.get_analysis_value.return_value = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    mock_analysis.get_velocity_events_filtered.return_value = []  # All filtered out
+    
+    # Mock ui_plotly_update_figure
+    image_line_viewer_view.ui_plotly_update_figure = MagicMock()
+    
+    # Set filter that excludes the selected event
+    filter_dict = {
+        "baseline_drop": False,  # Excludes event-uuid-1
+        "baseline_rise": True,
+    }
+    
+    image_line_viewer_view.set_event_filter(filter_dict)
+    
+    # Verify shapes were cleared
+    shapes = image_line_viewer_view._current_figure_dict["layout"]["shapes"]
+    assert len(shapes) == 0
+    
+    # Verify ui_plotly_update_figure was called
+    image_line_viewer_view.ui_plotly_update_figure.assert_called_once()
+
