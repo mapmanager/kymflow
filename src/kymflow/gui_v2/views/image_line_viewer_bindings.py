@@ -292,21 +292,19 @@ class ImageLineViewerBindings:
             )
             return
         
-        # Get analysis_time_values for coordinate calculation
+        # Get time_range for coordinate calculation
         if not kym_analysis.has_analysis(roi_id):
             self._logger.warning(
                 "velocity_event_update: no analysis for roi_id=%s, skipping", roi_id
             )
             return
         
-        analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
-        if analysis_time_values is None:
+        time_range = kym_analysis.get_time_bounds(roi_id)
+        if time_range is None:
             self._logger.warning(
-                "velocity_event_update: no time values for roi_id=%s, skipping", roi_id
+                "velocity_event_update: no time bounds for roi_id=%s, skipping", roi_id
             )
             return
-        
-        analysis_time_values = np.array(analysis_time_values)
         
         # Check if event was selected
         is_selected = (
@@ -319,7 +317,7 @@ class ImageLineViewerBindings:
             move_kym_event_rect(
                 self._view._current_figure_dict,  # noqa: SLF001
                 event,
-                analysis_time_values,
+                time_range,
                 row=2,
             )
             
@@ -397,28 +395,26 @@ class ImageLineViewerBindings:
         
         roi_id, index, event = result
         
-        # Get analysis_time_values for coordinate calculation
+        # Get time_range for coordinate calculation
         if not kym_analysis.has_analysis(roi_id):
             self._logger.warning(
                 "add_kym_event: no analysis for roi_id=%s, skipping", roi_id
             )
             return
         
-        analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
-        if analysis_time_values is None:
+        time_range = kym_analysis.get_time_bounds(roi_id)
+        if time_range is None:
             self._logger.warning(
-                "add_kym_event: no time values for roi_id=%s, skipping", roi_id
+                "add_kym_event: no time bounds for roi_id=%s, skipping", roi_id
             )
             return
-        
-        analysis_time_values = np.array(analysis_time_values)
         
         # Use CRUD to add event rect
         try:
             add_kym_event_rect(
                 self._view._current_figure_dict,  # noqa: SLF001
                 event,
-                analysis_time_values,
+                time_range,
                 row=2,
             )
             # Select the newly added event

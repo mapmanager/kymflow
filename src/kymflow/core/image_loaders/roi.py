@@ -166,6 +166,27 @@ class ROI:
         """
         self.bounds = clamp_coordinates_to_size(self.bounds, size)
 
+    def get_time_bounds(self, voxels: list[float] | None) -> tuple[float, float] | None:
+        """Get time range in physical units from ROI bounds.
+        
+        For kymographs, dim0 is the time dimension (rows). This method converts
+        the ROI's dim0 bounds from pixel coordinates to physical time units.
+        
+        Args:
+            voxels: Voxel sizes [time_voxel, space_voxel, ...] or None.
+                   For kymographs, voxels[0] is typically seconds per line.
+        
+        Returns:
+            Tuple of (time_min, time_max) in physical units (e.g., seconds),
+            or None if voxels is None or incomplete.
+        """
+        if voxels is None or len(voxels) < 1:
+            return None
+        
+        time_min = float(self.bounds.dim0_start * voxels[0])
+        time_max = float(self.bounds.dim0_stop * voxels[0])
+        return (time_min, time_max)
+
     def calculate_image_stats(self, acq_image: "AcqImage") -> None:
         """Calculate image statistics for this ROI from AcqImage.
         

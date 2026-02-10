@@ -38,6 +38,7 @@ def mock_kym_analysis() -> MagicMock:
     analysis = MagicMock()
     analysis.has_analysis.return_value = True
     analysis.get_analysis_value.return_value = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    analysis.get_time_bounds.return_value = (0.0, 5.0)  # Return tuple of (time_min, time_max)
     return analysis
 
 

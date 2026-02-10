@@ -588,7 +588,7 @@ class ImageLineViewerView:
             logger.warning("set_event_filter: _current_roi_id is None, skipping")
             return
         
-        # Get KymAnalysis and analysis_time_values
+        # Get KymAnalysis and time_range
         kym_analysis = self._current_file.get_kym_analysis()
         if not kym_analysis.has_analysis(self._current_roi_id):
             logger.warning(
@@ -596,14 +596,12 @@ class ImageLineViewerView:
             )
             return
         
-        analysis_time_values = kym_analysis.get_analysis_value(self._current_roi_id, "time")
-        if analysis_time_values is None:
+        time_range = kym_analysis.get_time_bounds(self._current_roi_id)
+        if time_range is None:
             logger.warning(
-                "set_event_filter: no time values for roi_id=%s, skipping", self._current_roi_id
+                "set_event_filter: no time bounds for roi_id=%s, skipping", self._current_roi_id
             )
             return
-        
-        analysis_time_values = np.array(analysis_time_values)
         
         # Clear all event rects
         clear_kym_event_rects(self._current_figure_dict, row=2)
@@ -622,7 +620,7 @@ class ImageLineViewerView:
                 add_kym_event_rect(
                     self._current_figure_dict,
                     event,
-                    analysis_time_values,
+                    time_range,
                     row=2,
                 )
         

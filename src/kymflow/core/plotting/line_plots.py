@@ -890,23 +890,30 @@ def _find_kym_event_rect_by_uuid(plotly_dict: dict, event_uuid: str, row: int = 
 
 def _calculate_event_rect_coords(
     event: "VelocityEvent",
-    analysis_time_values: np.ndarray,
+    time_range: tuple[float, float],
     span_sec_if_no_end: float = 0.20,
 ) -> tuple[float, float]:
     """Calculate x0, x1 coordinates for an event rect.
     
     Args:
         event: VelocityEvent to calculate coordinates for.
-        analysis_time_values: Time array for validation and clamping.
+        time_range: Tuple of (time_min, time_max) for clamping in physical units.
         span_sec_if_no_end: Fixed width when t_end is None.
     
     Returns:
         Tuple of (x0, x1) coordinates.
-    """
-    t_start = float(event.t_start)
     
-    # Get time range for clamping
-    time_max = float(np.max(analysis_time_values))
+    Raises:
+        ValueError: If time_range is None or invalid.
+    """
+    if time_range is None:
+        raise ValueError("time_range is None - cannot calculate event rect coordinates")
+    
+    time_min, time_max = time_range
+    if not np.isfinite(time_min) or not np.isfinite(time_max) or time_min >= time_max:
+        raise ValueError(f"Invalid time_range: {time_range}")
+    
+    t_start = float(event.t_start)
     
     # Determine t_end
     if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
@@ -930,7 +937,7 @@ def _calculate_event_rect_coords(
 def add_kym_event_rect(
     plotly_dict: dict,
     event: "VelocityEvent",
-    analysis_time_values: np.ndarray,
+    time_range: tuple[float, float],
     row: int = 2,
     span_sec_if_no_end: float = 0.20,
     event_filter: Optional[dict[str, bool]] = None,
@@ -940,10 +947,13 @@ def add_kym_event_rect(
     Args:
         plotly_dict: Plotly figure dictionary to modify.
         event: VelocityEvent to add.
-        analysis_time_values: Time array for coordinate calculation.
+        time_range: Tuple of (time_min, time_max) for coordinate calculation and clamping.
         row: Subplot row number (default: 2 for line plot).
         span_sec_if_no_end: Fixed width when t_end is None.
         event_filter: Optional event type filter (for color mapping, currently unused).
+    
+    Raises:
+        ValueError: If time_range is None or invalid.
     """
     if 'layout' not in plotly_dict:
         logger.error("add_kym_event_rect: plotly_dict missing 'layout' key")
@@ -965,7 +975,7 @@ def add_kym_event_rect(
         return
     
     # Calculate coordinates
-    x0, x1 = _calculate_event_rect_coords(event, analysis_time_values, span_sec_if_no_end)
+    x0, x1 = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end)
     
     # Determine xref and yref for this row
     xref = f"x{row if row > 1 else ''}"
@@ -1038,7 +1048,7 @@ def delete_kym_event_rect(plotly_dict: dict, event_uuid: str, row: int = 2) -> N
 def move_kym_event_rect(
     plotly_dict: dict,
     event: "VelocityEvent",
-    analysis_time_values: np.ndarray,
+    time_range: tuple[float, float],
     row: int = 2,
     span_sec_if_no_end: float = 0.20,
 ) -> None:
@@ -1047,9 +1057,12 @@ def move_kym_event_rect(
     Args:
         plotly_dict: Plotly figure dictionary to modify.
         event: VelocityEvent with updated coordinates.
-        analysis_time_values: Time array for coordinate calculation.
+        time_range: Tuple of (time_min, time_max) for coordinate calculation and clamping.
         row: Subplot row number (default: 2).
         span_sec_if_no_end: Fixed width when t_end is None.
+    
+    Raises:
+        ValueError: If time_range is None or invalid.
     """
     if 'layout' not in plotly_dict:
         logger.error("move_kym_event_rect: plotly_dict missing 'layout' key")
@@ -1071,7 +1084,7 @@ def move_kym_event_rect(
     shape_idx, shape_dict = result
     
     # Calculate new coordinates
-    x0, x1 = _calculate_event_rect_coords(event, analysis_time_values, span_sec_if_no_end)
+    x0, x1 = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end)
     
     # Update coordinates (preserve other properties)
     layout = plotly_dict['layout']

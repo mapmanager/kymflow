@@ -24,8 +24,17 @@ def image_line_viewer_view() -> ImageLineViewerView:
 
 
 def test_event_filter_initialization(image_line_viewer_view: ImageLineViewerView) -> None:
-    """Test that event filter is initialized as None."""
-    assert image_line_viewer_view._event_filter is None
+    """Test that event filter is initialized with default values."""
+    # Event filter is initialized with default dict, not None
+    assert image_line_viewer_view._event_filter is not None
+    assert isinstance(image_line_viewer_view._event_filter, dict)
+    assert image_line_viewer_view._event_filter == {
+        "baseline_drop": True,
+        "baseline_rise": True,
+        "nan_gap": False,
+        "zero_gap": True,
+        "User Added": True,
+    }
 
 
 def test_set_event_filter_stores_filter(image_line_viewer_view: ImageLineViewerView) -> None:
@@ -158,6 +167,7 @@ def test_set_event_filter_uses_crud(image_line_viewer_view: ImageLineViewerView)
     # Setup analysis mocks
     mock_analysis.has_analysis.return_value = True
     mock_analysis.get_analysis_value.return_value = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    mock_analysis.get_time_bounds.return_value = (0.0, 5.0)  # Return tuple of (time_min, time_max)
     mock_analysis.get_velocity_events_filtered.return_value = [event1]  # Only baseline_drop
     
     # Mock ui_plotly_update_figure
@@ -235,6 +245,7 @@ def test_set_event_filter_deselects_when_filtered_out(image_line_viewer_view: Im
     # Setup analysis mocks - no events returned (all filtered out)
     mock_analysis.has_analysis.return_value = True
     mock_analysis.get_analysis_value.return_value = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    mock_analysis.get_time_bounds.return_value = (0.0, 5.0)  # Return tuple of (time_min, time_max)
     mock_analysis.get_velocity_events_filtered.return_value = []  # All filtered out
     
     # Mock ui_plotly_update_figure

@@ -874,6 +874,38 @@ class KymAnalysis:
         
         return values
     
+    def get_time_bounds(self, roi_id: int) -> tuple[float, float] | None:
+        """Get time range for analyzed ROI in physical units.
+        
+        Returns the time bounds (min, max) in seconds for the specified ROI,
+        computed from ROI pixel bounds and voxel size. Only returns bounds
+        if analysis exists for the ROI.
+        
+        Args:
+            roi_id: ROI identifier.
+        
+        Returns:
+            Tuple of (time_min, time_max) in seconds, or None if:
+            - ROI not found
+            - No analysis exists for ROI
+            - Voxels not available
+        """
+        # Check if analysis exists
+        if not self.has_analysis(roi_id):
+            return None
+        
+        # Get ROI
+        roi = self.acq_image.rois.get(roi_id)
+        if roi is None:
+            return None
+        
+        # Get voxels from header
+        voxels = self.acq_image.header.voxels
+        if voxels is None:
+            return None
+        
+        # Call lower-level API on ROI
+        return roi.get_time_bounds(voxels)
 
     # DEPRECATED: Stall analysis is deprecated
     # def run_stall_analysis(self, roi_id: int, params: StallAnalysisParams) -> StallAnalysis:

@@ -254,12 +254,12 @@ def test_notification_dismissed_programmatic_vs_user(kym_event_view: KymEventVie
 
 
 def test_event_filter_initialization(kym_event_view: KymEventView) -> None:
-    """Test that event filter is initialized with all types enabled."""
-    # Verify default filter state
+    """Test that event filter is initialized with default values."""
+    # Verify default filter state (nan_gap is False by default)
     assert kym_event_view._event_filter == {
         "baseline_drop": True,
         "baseline_rise": True,
-        "nan_gap": True,
+        "nan_gap": False,  # False by default
         "zero_gap": True,
         "User Added": True,
     }
@@ -282,6 +282,9 @@ def test_on_event_type_filter_changed_updates_filter(kym_event_view: KymEventVie
         {"event_id": "3", "roi_id": 1, "event_type": "nan_gap", "t_start": 2.0},
     ]
 
+    # Enable nan_gap in filter so it's visible (default is False)
+    kym_event_view._event_filter["nan_gap"] = True
+
     # Mock grid
     mock_grid = MagicMock()
     kym_event_view._grid = mock_grid
@@ -292,6 +295,7 @@ def test_on_event_type_filter_changed_updates_filter(kym_event_view: KymEventVie
     # Verify filter was updated
     assert kym_event_view._event_filter["baseline_drop"] is False
     assert kym_event_view._event_filter["baseline_rise"] is True  # Unchanged
+    assert kym_event_view._event_filter["nan_gap"] is True  # Still enabled
 
     # Verify callback was called with updated filter
     assert len(callback_calls) == 1
