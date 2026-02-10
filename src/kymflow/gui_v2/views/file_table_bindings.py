@@ -130,37 +130,89 @@ class FileTableBindings:
                 safe_call(self._table.set_selected_paths, [], origin=SelectionOrigin.EXTERNAL)
 
     def _on_metadata_update(self, e: MetadataUpdate) -> None:
-        """Handle metadata update events by refreshing table rows.
+        """Handle metadata update events by updating affected table rows.
         
-        Simply refreshes the table data to show updated metadata (e.g., analysis status),
+        For updates that clearly apply to a single file and when the table is
+        already rendered, perform a targeted row-level update to avoid
+        reloading the entire dataset. Otherwise, fall back to a full refresh
         while preserving the currently selected file from AppState.
         """
-        # logger.debug(f'pyinstaller e={e}')
+        # Prefer row-level update when we have an explicit file and an active grid.
+        kym_file = e.file
+        if kym_file is not None and self._table._grid is not None:  # noqa: SLF001
+            path = getattr(kym_file, "path", None)
+            if path is not None:
+                str_path = str(path)
+                if str_path in self._table._files_by_path:  # noqa: SLF001
+                    safe_call(self._table.update_row_for_file, kym_file)
+                    return
+
+        # Fallback: refresh all rows and restore selection
         self._refresh_rows_preserve_selection()
 
     def _on_analysis_update(self, e: AnalysisUpdate) -> None:
-        """Handle analysis update events by refreshing table rows.
+        """Handle analysis update events by updating affected table rows.
         
-        Simply refreshes the table data to show updated analysis attributes (e.g., accepted),
+        For updates that clearly apply to a single file and when the table is
+        already rendered, perform a targeted row-level update to avoid
+        reloading the entire dataset. Otherwise, fall back to a full refresh
         while preserving the currently selected file from AppState.
         """
-        # logger.debug(f'pyinstaller e={e}')
+        # Prefer row-level update when we have an explicit file and an active grid.
+        kym_file = e.file
+        if kym_file is not None and self._table._grid is not None:  # noqa: SLF001
+            path = getattr(kym_file, "path", None)
+            if path is not None:
+                str_path = str(path)
+                if str_path in self._table._files_by_path:  # noqa: SLF001
+                    safe_call(self._table.update_row_for_file, kym_file)
+                    return
+
+        # Fallback: refresh all rows and restore selection
         self._refresh_rows_preserve_selection()
 
     def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
-        """Handle analysis completion by refreshing table rows."""
-        # logger.debug("analysis_completed file=%s roi_id=%s success=%s", e.file, e.roi_id, e.success)
+        """Handle analysis completion by updating affected table rows.
+        
+        For successful analysis completion that applies to a single file and when
+        the table is already rendered, perform a targeted row-level update to avoid
+        reloading the entire dataset. Otherwise, fall back to a full refresh
+        while preserving the currently selected file from AppState.
+        """
         if not e.success:
             return
+
+        # Prefer row-level update when we have an explicit file and an active grid.
+        kym_file = e.file
+        if kym_file is not None and self._table._grid is not None:  # noqa: SLF001
+            path = getattr(kym_file, "path", None)
+            if path is not None:
+                str_path = str(path)
+                if str_path in self._table._files_by_path:  # noqa: SLF001
+                    safe_call(self._table.update_row_for_file, kym_file)
+                    return
+
+        # Fallback: refresh all rows and restore selection
         self._refresh_rows_preserve_selection()
 
     def _on_detect_events(self, e: DetectEvents) -> None:
-        """Handle event detection completion by refreshing table rows.
+        """Handle event detection completion by updating affected table rows.
         
-        When events are detected, the number of velocity events changes,
-        so we need to refresh the table to update the "Total Num Velocity Events" column.
+        For single-file event detection, perform a targeted row-level update to
+        update the "Total Num Velocity Events" column without reloading the entire
+        dataset. For batch operations (e.path is None) or when the file is not
+        in the table, fall back to a full refresh while preserving the currently
+        selected file from AppState.
         """
-        # logger.debug("detect_events file=%s roi_id=%s", e.path, e.roi_id)
+        # Prefer row-level update for single-file detect-events when file is in table.
+        if e.path is not None and self._table._grid is not None:  # noqa: SLF001
+            str_path = str(e.path)
+            if str_path in self._table._files_by_path:  # noqa: SLF001
+                kym_file = self._table._files_by_path[str_path]  # noqa: SLF001
+                safe_call(self._table.update_row_for_file, kym_file)
+                return
+
+        # Fallback: batch detect-events (e.path is None) or file not in table
         self._refresh_rows_preserve_selection()
 
     def _on_task_state_changed(self, e: TaskStateChanged) -> None:

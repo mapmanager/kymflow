@@ -56,8 +56,6 @@ class MetadataController:
         Args:
             e: MetadataUpdate event (phase="intent") containing the file, metadata type, and fields.
         """
-        logger.info(f'e.metadata_type:{e.metadata_type}')
-        logger.info(f'e.fields:{e.fields}')
         
         if e.metadata_type == "experimental":
             e.file.update_experiment_metadata(**e.fields)

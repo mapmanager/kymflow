@@ -1530,6 +1530,50 @@ class KymAnalysis:
                 event_dicts.append(event_dict)
         return event_dicts
 
+    def get_velocity_event_row(self, event_id: str, *, blinded: bool = False) -> VelocityReportRow | None:
+        """Return a single velocity report row for the given event_id.
+        
+        Args:
+            event_id: UUID of the velocity event.
+            blinded: If True, replace file names with "Blinded" and grandparent folder with "Blinded".
+        
+        Returns:
+            Velocity report row dict, or None if event not found.
+        """
+        # Find the event using UUID mapping
+        roi_idx = self._velocity_event_uuid_map.get(event_id)
+        if roi_idx is None:
+            return None
+        
+        roi_id, idx = roi_idx
+        events = self.get_velocity_events(roi_id)
+        if not events or idx >= len(events):
+            return None
+        
+        event = events[idx]
+        event_dict = event.to_dict(round_decimals=3)
+        
+        # Ensure event object has _uuid matching the mapping
+        if not hasattr(event, '_uuid') or event._uuid != event_id:
+            object.__setattr__(event, '_uuid', event_id)
+        
+        path = str(self.acq_image.path) if self.acq_image.path is not None else None
+        _rowDict = self.acq_image.getRowDict(blinded=blinded)
+        grandparent_folder = _rowDict.get("Grandparent Folder")
+        if grandparent_folder is None:
+            grandparent_folder = ""
+        
+        event_dict["event_id"] = event_id
+        event_dict["roi_id"] = roi_id
+        event_dict["path"] = path
+        if blinded:
+            event_dict["file_name"] = "Blinded"
+        else:
+            event_dict["file_name"] = Path(path).stem if path else None
+        event_dict["grandparent_folder"] = grandparent_folder
+        
+        return event_dict
+
     def __str__(self) -> str:
         """String representation."""
         roi_ids = [roi.id for roi in self.acq_image.rois]

@@ -8,7 +8,9 @@ import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import AnalysisUpdate, SelectionOrigin
+from kymflow.gui_v2.events import AnalysisUpdate, DetectEvents, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged  # noqa: F401
+from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
 from kymflow.gui_v2.views.file_table_view import FileTableView
 
 
@@ -225,3 +227,278 @@ def test_file_table_view_blinded_false_displays_real_data(sample_kym_file: KymIm
     if sample_kym_file.path and len(sample_kym_file.path.parent.parts) > 0:
         # Grandparent folder might be None if path is shallow, but shouldn't be "Blinded"
         assert row["Grandparent Folder"] != "Blinded"
+
+
+def test_file_table_bindings_metadata_update_uses_row_level_update(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """MetadataUpdate(state) for a single file should prefer row-level update over full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Prepare a real KymImage and render the grid so that _grid is initialized
+    kym_file = sample_kym_file
+    mock_app_context.app_config.get_blinded.return_value = False
+
+    view.set_files([kym_file])
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    # Spy on view helpers
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = MetadataUpdate(
+        file=kym_file,
+        metadata_type="experimental",
+        fields={"note": "new note"},
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+
+    bindings._on_metadata_update(event)
+
+    # Row-level helper should be used; full refresh must not be called
+    view.update_row_for_file.assert_called_once_with(kym_file)
+    bindings._refresh_rows_preserve_selection.assert_not_called()
+
+
+def test_file_table_bindings_metadata_update_falls_back_when_file_missing(mock_app_context) -> None:
+    """If the file is not present in the table, bindings should fall back to full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Render without setting files so _files_by_path is empty
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    kym_file = MagicMock(spec=KymImage)
+    kym_file.path = "/tmp/other.tif"
+
+    event = MetadataUpdate(
+        file=kym_file,
+        metadata_type="experimental",
+        fields={"note": "new note"},
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+
+    bindings._on_metadata_update(event)
+
+    view.update_row_for_file.assert_not_called()
+    bindings._refresh_rows_preserve_selection.assert_called_once()
+
+
+def test_file_table_bindings_analysis_update_uses_row_level_update(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """AnalysisUpdate(state) for a single file should prefer row-level update over full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Prepare a real KymImage and render the grid so that _grid is initialized
+    kym_file = sample_kym_file
+    mock_app_context.app_config.get_blinded.return_value = False
+
+    view.set_files([kym_file])
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    # Spy on view helpers
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = AnalysisUpdate(
+        file=kym_file,
+        fields={"accepted": True},
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+
+    bindings._on_analysis_update(event)
+
+    # Row-level helper should be used; full refresh must not be called
+    view.update_row_for_file.assert_called_once_with(kym_file)
+    bindings._refresh_rows_preserve_selection.assert_not_called()
+
+
+def test_file_table_bindings_analysis_update_falls_back_when_grid_none(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """If the grid is not yet rendered, bindings should fall back to full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Set files but don't render, so _grid is None
+    view.set_files([sample_kym_file])
+    # view.render() is NOT called
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = AnalysisUpdate(
+        file=sample_kym_file,
+        fields={"accepted": True},
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+
+    bindings._on_analysis_update(event)
+
+    view.update_row_for_file.assert_not_called()
+    bindings._refresh_rows_preserve_selection.assert_called_once()
+
+
+def test_file_table_bindings_analysis_completed_uses_row_level_update(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """AnalysisCompleted(state) for a single file should prefer row-level update over full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Prepare a real KymImage and render the grid so that _grid is initialized
+    kym_file = sample_kym_file
+    mock_app_context.app_config.get_blinded.return_value = False
+
+    view.set_files([kym_file])
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    # Spy on view helpers
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = AnalysisCompleted(
+        file=kym_file,
+        roi_id=1,
+        success=True,
+    )
+
+    bindings._on_analysis_completed(event)
+
+    # Row-level helper should be used; full refresh must not be called
+    view.update_row_for_file.assert_called_once_with(kym_file)
+    bindings._refresh_rows_preserve_selection.assert_not_called()
+
+
+def test_file_table_bindings_analysis_completed_skips_on_failure(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """AnalysisCompleted with success=False should skip update entirely."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    view.set_files([sample_kym_file])
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = AnalysisCompleted(
+        file=sample_kym_file,
+        roi_id=1,
+        success=False,
+    )
+
+    bindings._on_analysis_completed(event)
+
+    # No update should be called when success=False
+    view.update_row_for_file.assert_not_called()
+    bindings._refresh_rows_preserve_selection.assert_not_called()
+
+
+def test_file_table_bindings_detect_events_single_file_row_level(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """DetectEvents(state) for a single file should prefer row-level update over full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Prepare a real KymImage and render the grid so that _grid is initialized
+    kym_file = sample_kym_file
+    mock_app_context.app_config.get_blinded.return_value = False
+
+    view.set_files([kym_file])
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    # Spy on view helpers
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = DetectEvents(
+        path=str(kym_file.path),
+        roi_id=1,
+        phase="state",
+    )
+
+    bindings._on_detect_events(event)
+
+    # Row-level helper should be used; full refresh must not be called
+    view.update_row_for_file.assert_called_once_with(kym_file)
+    bindings._refresh_rows_preserve_selection.assert_not_called()
+
+
+def test_file_table_bindings_detect_events_batch_fallback(mock_app_context) -> None:
+    """DetectEvents with path=None (batch operation) should fall back to full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    event = DetectEvents(
+        path=None,  # Batch operation
+        roi_id=None,
+        phase="state",
+    )
+
+    bindings._on_detect_events(event)
+
+    view.update_row_for_file.assert_not_called()
+    bindings._refresh_rows_preserve_selection.assert_called_once()
+
+
+def test_file_table_bindings_detect_events_path_not_in_table(
+    sample_kym_file: KymImage, mock_app_context
+) -> None:
+    """If the path is not in the table, bindings should fall back to full refresh."""
+    bus = EventBus("test-client")
+    view = FileTableView(mock_app_context, on_selected=lambda e: None)
+
+    # Set files with one file, but event has different path
+    view.set_files([sample_kym_file])
+    view.render()
+
+    bindings = FileTableBindings(bus, view, app_state=None)
+
+    view.update_row_for_file = MagicMock()
+    bindings._refresh_rows_preserve_selection = MagicMock()
+
+    # Event with path that doesn't match any file in the table
+    event = DetectEvents(
+        path="/tmp/nonexistent/path.tif",
+        roi_id=1,
+        phase="state",
+    )
+
+    bindings._on_detect_events(event)
+
+    view.update_row_for_file.assert_not_called()
+    bindings._refresh_rows_preserve_selection.assert_called_once()

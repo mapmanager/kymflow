@@ -465,3 +465,128 @@ def test_apply_filter_with_all_event_types_disabled(kym_event_view: KymEventView
     assert mock_grid.set_data.called
     filtered_rows = mock_grid.set_data.call_args[0][0]
     assert len(filtered_rows) == 0
+
+
+def test_update_row_for_event_updates_single_row(kym_event_view: KymEventView) -> None:
+    """Test that update_row_for_event updates only the specified event row."""
+    # Set up test rows
+    kym_event_view._all_rows = [
+        {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop", "t_start": 0.0, "user_type": "UNREVIEWED"},
+        {"event_id": "evt2", "roi_id": 1, "event_type": "baseline_rise", "t_start": 1.0, "user_type": "UNREVIEWED"},
+        {"event_id": "evt3", "roi_id": 1, "event_type": "zero_gap", "t_start": 2.0, "user_type": "UNREVIEWED"},
+    ]
+    kym_event_view._pending_rows = [
+        {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop", "t_start": 0.0, "user_type": "UNREVIEWED"},
+        {"event_id": "evt2", "roi_id": 1, "event_type": "baseline_rise", "t_start": 1.0, "user_type": "UNREVIEWED"},
+    ]  # Filtered subset (zero_gap filtered out)
+
+    # Mock grid
+    mock_grid = MagicMock()
+    mock_grid.update_row = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Update evt2
+    updated_row = {
+        "event_id": "evt2",
+        "roi_id": 1,
+        "event_type": "baseline_rise",
+        "t_start": 1.0,
+        "user_type": "REVIEWED",  # Changed
+    }
+    kym_event_view.update_row_for_event(updated_row)
+
+    # Verify _all_rows was updated
+    assert kym_event_view._all_rows[1]["user_type"] == "REVIEWED"
+    assert kym_event_view._all_rows[0]["user_type"] == "UNREVIEWED"  # Unchanged
+    assert kym_event_view._all_rows[2]["user_type"] == "UNREVIEWED"  # Unchanged
+
+    # Verify _pending_rows was updated (evt2 is in filtered subset)
+    assert kym_event_view._pending_rows[1]["user_type"] == "REVIEWED"
+    assert kym_event_view._pending_rows[0]["user_type"] == "UNREVIEWED"  # Unchanged
+
+    # Verify grid.update_row was called
+    mock_grid.update_row.assert_called_once_with("evt2", updated_row)
+
+
+def test_update_row_for_event_handles_missing_event_id(kym_event_view: KymEventView) -> None:
+    """Test that update_row_for_event handles missing event_id gracefully."""
+    kym_event_view._all_rows = [
+        {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop"},
+    ]
+    kym_event_view._pending_rows = kym_event_view._all_rows.copy()
+
+    mock_grid = MagicMock()
+    mock_grid.update_row = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Row without event_id
+    row_without_id = {"roi_id": 1, "event_type": "baseline_drop"}
+
+    # Should not crash and should not call grid.update_row
+    kym_event_view.update_row_for_event(row_without_id)
+    mock_grid.update_row.assert_not_called()
+
+
+def test_update_row_for_event_handles_grid_none(kym_event_view: KymEventView) -> None:
+    """Test that update_row_for_event handles grid=None gracefully."""
+    kym_event_view._all_rows = [
+        {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop", "user_type": "UNREVIEWED"},
+    ]
+    kym_event_view._pending_rows = kym_event_view._all_rows.copy()
+    kym_event_view._grid = None  # Grid not yet rendered
+
+    # Should not crash
+    updated_row = {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop", "user_type": "REVIEWED"}
+    kym_event_view.update_row_for_event(updated_row)
+
+    # When grid is None, the method returns early and does not update caches
+    # (caches will be populated when set_events is called after grid is rendered)
+    # Verify it doesn't crash and original row is unchanged
+    assert kym_event_view._all_rows[0]["user_type"] == "UNREVIEWED"
+
+
+def test_update_row_for_event_only_updates_visible_rows(kym_event_view: KymEventView) -> None:
+    """Test that update_row_for_event only calls grid.update_row for events in _pending_rows."""
+    # Set up: evt3 is filtered out (not in _pending_rows)
+    kym_event_view._all_rows = [
+        {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop"},
+        {"event_id": "evt2", "roi_id": 1, "event_type": "baseline_rise"},
+        {"event_id": "evt3", "roi_id": 1, "event_type": "nan_gap"},  # Filtered out
+    ]
+    kym_event_view._pending_rows = [
+        {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop"},
+        {"event_id": "evt2", "roi_id": 1, "event_type": "baseline_rise"},
+    ]  # evt3 not included (nan_gap filtered)
+
+    mock_grid = MagicMock()
+    mock_grid.update_row = MagicMock()
+    kym_event_view._grid = mock_grid
+
+    # Update evt3 (not in _pending_rows)
+    updated_row = {"event_id": "evt3", "roi_id": 1, "event_type": "nan_gap", "user_type": "REVIEWED"}
+    kym_event_view.update_row_for_event(updated_row)
+
+    # Should update _all_rows but NOT call grid.update_row (event not visible)
+    assert kym_event_view._all_rows[2]["user_type"] == "REVIEWED"
+    mock_grid.update_row.assert_not_called()
+
+    # Update evt1 (in _pending_rows)
+    updated_row = {"event_id": "evt1", "roi_id": 1, "event_type": "baseline_drop", "user_type": "REVIEWED"}
+    kym_event_view.update_row_for_event(updated_row)
+
+    # Should call grid.update_row for visible event
+    mock_grid.update_row.assert_called_once_with("evt1", updated_row)
+
+
+def test_all_files_mode_removed(kym_event_view: KymEventView) -> None:
+    """Test that all-files mode attributes and methods are removed."""
+    # Verify _show_all_files attribute does NOT exist
+    assert not hasattr(kym_event_view, "_show_all_files")
+    assert not hasattr(kym_event_view, "_all_files_checkbox")
+    assert not hasattr(kym_event_view, "_on_all_files_mode_changed")
+    assert not hasattr(kym_event_view, "_get_current_selected_file_path")
+    assert not hasattr(kym_event_view, "_pending_event_selection_after_file_change")
+    assert not hasattr(kym_event_view, "_file_selection_originated_from_view")
+    
+    # Verify set_all_files_mode method does NOT exist
+    assert not hasattr(kym_event_view, "set_all_files_mode")

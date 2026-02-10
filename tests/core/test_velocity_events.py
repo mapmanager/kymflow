@@ -1149,6 +1149,79 @@ class TestVelocityEventLifecycle:
             assert "t_start" in row
             assert "user_type" in row
 
+    def test_get_velocity_event_row_returns_correct_row(self) -> None:
+        """Test that get_velocity_event_row returns correct row dict for a single event."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=True)
+        kym_analysis = kym_image.get_kym_analysis()
+        
+        kym_image.header.voxels[0] = 0.1
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds)
+        
+        # Add events
+        event_id1 = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+        event_id2 = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=2.0, t_end=2.5)
+        
+        # Get single event row
+        row = kym_analysis.get_velocity_event_row(event_id1, blinded=False)
+        
+        # Verify row structure matches get_velocity_report
+        assert row is not None
+        assert row["event_id"] == event_id1
+        assert row["roi_id"] == roi.id
+        assert row["t_start"] == 1.0
+        assert row["t_end"] == 1.5
+        assert "event_type" in row
+        assert "user_type" in row
+        
+        # Verify it matches the row from get_velocity_report
+        report = kym_analysis.get_velocity_report(roi_id=roi.id)
+        report_row = next(r for r in report if r["event_id"] == event_id1)
+        assert row["event_id"] == report_row["event_id"]
+        assert row["roi_id"] == report_row["roi_id"]
+        assert row["t_start"] == report_row["t_start"]
+        assert row["t_end"] == report_row["t_end"]
+
+    def test_get_velocity_event_row_returns_none_for_missing_event(self) -> None:
+        """Test that get_velocity_event_row returns None for non-existent event_id."""
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        kym_image = KymImage(img_data=test_image, load_image=True)
+        kym_analysis = kym_image.get_kym_analysis()
+        
+        # Try to get row for non-existent event
+        row = kym_analysis.get_velocity_event_row("non-existent-id", blinded=False)
+        assert row is None
+
+    def test_get_velocity_event_row_respects_blinded(self) -> None:
+        """Test that get_velocity_event_row respects blinded parameter."""
+        from pathlib import Path
+        
+        test_image = np.zeros((100, 100), dtype=np.uint16)
+        test_path = Path("/a/b/c/test_file.tif")
+        kym_image = KymImage(path=test_path, img_data=test_image, load_image=False)
+        kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+        kym_analysis = kym_image.get_kym_analysis()
+        
+        bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds)
+        
+        # Add event
+        event_id = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=0.5, t_end=1.0)
+        
+        # Get row with blinded=True
+        row_blinded = kym_analysis.get_velocity_event_row(event_id, blinded=True)
+        assert row_blinded is not None
+        assert row_blinded["file_name"] == "Blinded"
+        assert row_blinded["grandparent_folder"] == "Blinded"
+        
+        # Get row with blinded=False
+        row_unblinded = kym_analysis.get_velocity_event_row(event_id, blinded=False)
+        assert row_unblinded is not None
+        assert row_unblinded["file_name"] == "test_file"  # Path.stem
+        # Grandparent folder should be real value (parent2 for /a/b/c/test_file.tif = "b")
+        assert row_unblinded["grandparent_folder"] == "b"
+
     def test_remove_velocity_event(self) -> None:
         """Test removing velocity events by type."""
         test_image = np.zeros((100, 100), dtype=np.uint16)

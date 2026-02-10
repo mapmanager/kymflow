@@ -235,6 +235,52 @@ class FileTableView:
         if self._grid is not None:
             self._grid.set_data(rows)
 
+    def update_row_for_file(self, file: KymImage) -> None:
+        """Update a single table row for the given KymImage in-place.
+
+        This recomputes the row dict for ``file`` and, if the grid is active
+        and the file is present in the current table, forwards the update to
+        the underlying CustomAgGrid_v2 instance. Internal caches such as
+        ``_pending_rows`` and ``_files_by_path`` are kept in sync.
+        """
+        if self._grid is None:
+            return
+        if getattr(file, "path", None) is None:
+            return
+
+        path = str(file.path)
+        if path not in self._files_by_path:
+            return
+
+        # Ensure our file cache points at the latest object
+        self._files_by_path[path] = file
+
+        blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
+        row = file.getRowDict(blinded=blinded)
+        self.update_row_for_path(path, row)
+
+    def update_row_for_path(self, path: str, row: dict[str, object]) -> None:
+        """Low-level helper to update a single row by its file path."""
+        if self._grid is None:
+            return
+
+        # Update pending_rows cache
+        updated = False
+        for i, existing in enumerate(self._pending_rows):
+            if str(existing.get("path")) == str(path):
+                self._pending_rows[i] = dict(row)
+                updated = True
+                break
+
+        if not updated:
+            # If the row is not currently present (e.g. table filtered or empty),
+            # do not attempt to update the grid.
+            return
+
+        # Forward to CustomAgGrid_v2 for in-place row update
+        if hasattr(self._grid, "update_row"):
+            self._grid.update_row(path, row)  # type: ignore[arg-type]
+
     def refresh_rows(self) -> None:
         """Refresh table rows from cached files (used after metadata updates).
         
