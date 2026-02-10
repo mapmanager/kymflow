@@ -218,6 +218,33 @@ class MetadataUpdate:
 
 
 @dataclass(frozen=True, slots=True)
+class FileChanged:
+    """File changed event (state phase only).
+
+    Purpose:
+        Emit when a file's properties change in ways that require UI refresh
+        but aren't metadata field edits (e.g., ROI count changes, analysis completion).
+    Triggered by:
+        - State: Controllers after ROI operations (AddRoi, EditRoi, DeleteRoi).
+        - State: Other operations that modify file properties but not metadata fields.
+    Consumed by:
+        - FileTableBindings (state → refresh table row).
+        - Any other bindings that need to refresh UI when file properties change.
+
+    Attributes:
+        file: KymImage instance that changed.
+        change_type: Type of change - "roi", "analysis", "general", etc.
+        origin: SelectionOrigin indicating where the change came from.
+        phase: Always "state".
+    """
+
+    file: "KymImage"
+    change_type: Literal["roi", "analysis", "general"]
+    origin: SelectionOrigin
+    phase: EventPhase = "state"
+
+
+@dataclass(frozen=True, slots=True)
 class AnalysisUpdate:
     """Analysis update event (intent or state phase).
 

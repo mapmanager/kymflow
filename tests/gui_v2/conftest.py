@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Generator
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -32,4 +33,14 @@ def app_state() -> Generator[AppState, None, None]:
     """
     state = AppState()
     yield state
+
+
+@pytest.fixture
+def mock_app_context():
+    """Create a mock AppContext for testing."""
+    mock_context = MagicMock()
+    mock_app_config = MagicMock()
+    mock_app_config.get_blinded.return_value = False
+    mock_context.app_config = mock_app_config
+    return mock_context
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import DeleteRoi, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events import DeleteRoi, FileChanged, SelectionOrigin
 from kymflow.gui_v2.state import AppState
 
 logger = get_logger(__name__)
@@ -60,12 +60,11 @@ class DeleteRoiController:
             )
         )
 
-        # Refresh file table metadata (ROI count changed)
+        # Refresh file table (ROI count changed)
         self._bus.emit(
-            MetadataUpdate(
+            FileChanged(
                 file=kym_file,
-                metadata_type="experimental",
-                fields={},
+                change_type="roi",
                 origin=SelectionOrigin.EXTERNAL,
                 phase="state",
             )

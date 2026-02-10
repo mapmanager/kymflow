@@ -5,7 +5,7 @@ from __future__ import annotations
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import EditRoi, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events import EditRoi, FileChanged, SelectionOrigin
 from kymflow.gui_v2.state import AppState
 
 logger = get_logger(__name__)
@@ -55,12 +55,11 @@ class EditRoiController:
                 )
             )
 
-            # Emit MetadataUpdate to refresh views
+            # Emit FileChanged to refresh views (ROI bounds changed)
             self._bus.emit(
-                MetadataUpdate(
+                FileChanged(
                     file=kym_file,
-                    metadata_type="experimental",
-                    fields={},
+                    change_type="roi",
                     origin=SelectionOrigin.EXTERNAL,
                     phase="state",
                 )

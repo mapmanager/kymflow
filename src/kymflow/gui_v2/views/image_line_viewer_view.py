@@ -465,17 +465,6 @@ class ImageLineViewerView:
         self._display_params = params
         self._update_contrast_partial()
 
-    def set_metadata(self, file: KymImage) -> None:
-        """Trigger refresh if file matches current.
-
-        Called by bindings when MetadataChanged event is received.
-        Only re-renders if the updated file is the currently selected file.
-
-        Args:
-            file: KymImage instance whose metadata was updated.
-        """
-        safe_call(self._set_metadata_impl, file)
-
     def zoom_to_event(self, e: EventSelection) -> None:
         """Zoom the x-axis to an event if options request it."""
         safe_call(self._zoom_to_event_impl, e)
@@ -556,11 +545,6 @@ class ImageLineViewerView:
                     raise
         
         # TODO: In next round, refactor filter changes and event data changes to use CRUD instead of full render
-
-    def _set_metadata_impl(self, file: KymImage) -> None:
-        """Internal implementation of set_metadata."""
-        if file == self._current_file:
-            self._render_combined()
 
     def set_event_filter(self, event_filter: dict[str, bool] | None) -> None:
         """Set event type filter using CRUD operations (no full render).

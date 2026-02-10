@@ -16,7 +16,6 @@ from kymflow.gui_v2.events import (
     FileSelection,
     ROISelection,
     ImageDisplayChange,
-    MetadataUpdate,
     SetKymEventRangeState,
     SetRoiBounds,
     SetRoiEditState,
@@ -31,7 +30,6 @@ from kymflow.core.plotting.line_plots import (
     move_kym_event_rect,
     select_kym_event_rect,
 )
-import numpy as np
 
 if TYPE_CHECKING:
     pass
@@ -49,7 +47,6 @@ class ImageLineViewerBindings:
         2. ROISelection(phase="state") → view.set_selected_roi()
         3. ThemeChanged → view.set_theme()
         4. ImageDisplayChange(phase="state") → view.set_image_display()
-        5. MetadataUpdate(phase="state") → view.set_metadata() (only if file matches current)
 
     Attributes:
         _bus: EventBus instance for subscribing to events.
@@ -78,10 +75,6 @@ class ImageLineViewerBindings:
         bus.subscribe_state(EventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
-        
-        # abb we have this so our plotly plots update after 'analyze flow'
-        bus.subscribe_state(MetadataUpdate, self._on_metadata_changed)
-        
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         bus.subscribe_state(DetectEvents, self._on_detect_events_done)
         bus.subscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
@@ -111,7 +104,6 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe_state(EventSelection, self._on_event_selected)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
-        self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_changed)
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._bus.unsubscribe_state(DetectEvents, self._on_detect_events_done)
         self._bus.unsubscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
@@ -183,17 +175,6 @@ class ImageLineViewerBindings:
             e: ImageDisplayChange event (phase="state") containing the new display parameters.
         """
         safe_call(self._view.set_image_display, e.params)
-
-    def _on_metadata_changed(self, e: MetadataUpdate) -> None:
-        """Handle metadata change event.
-
-        Refreshes viewer if the updated file matches the currently selected file.
-        Wrapped in safe_call to handle deleted client errors gracefully.
-
-        Args:
-            e: MetadataUpdate event (phase="state") containing the file whose metadata was updated.
-        """
-        safe_call(self._view.set_metadata, e.file)
 
     def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
         """Handle analysis completion by refreshing plot for current file."""
