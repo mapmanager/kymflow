@@ -821,8 +821,11 @@ class KymAnalysis:
         
         # Make a writeable copy to avoid "assignment destination is read-only" errors
         # when arrays are passed to detection functions that may modify them in-place
-        # values = roi_df[key].values.copy()
-        values = roi_df[key].values
+        
+        if remove_outliers or median_filter > 0:
+            values = roi_df[key].values.copy()
+        else:
+            values = roi_df[key].values
 
         # logger.warning(f"qqq {key} called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
         # from kymflow.core.utils.get_stack_trace import get_stack_trace
@@ -1004,7 +1007,7 @@ class KymAnalysis:
         
         _nAfter = self.num_velocity_events(roi_id)
         
-        logger.info(f"roi:{roi_id} _nBefore:{_nBefore} _nAfter:{_nAfter} removed:{_nBefore - _nAfter}")
+        # logger.info(f"roi:{roi_id} _nBefore:{_nBefore} _nAfter:{_nAfter} removed:{_nBefore - _nAfter}")
 
         # append detected event
         if roi_id not in self._velocity_events:
