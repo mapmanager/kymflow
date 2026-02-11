@@ -149,6 +149,11 @@ sources = ["src"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/kymflow"]
 
+[tool.uv.workspace]
+members = [
+    "sandbox/dropbox-fetch",
+]
+
 [project.urls]
 Homepage = "https://github.com/mapmanager/kymflow"
 Repository = "https://github.com/mapmanager/kymflow"
