@@ -1,0 +1,54 @@
+# flyctl launch added from .gitignore
+# Python-generated files
+**/__pycache__
+**/*.py[oc]
+**/build
+**/dist
+**/wheels
+**/*.egg-info
+
+# Virtual environments
+**/.venv
+
+# macOS
+**/.DS_Store
+
+# IDEs
+**/.vscode
+
+# Local files
+**/*.log
+
+# notebooks/quality_control.ipynb
+
+# Jupyter notebooks / checkpoints
+**/*.ipynb_checkpoints
+**/.ipynb_checkpoints
+**/**/.ipynb_checkpoints
+**/*checkpoint.ipynb
+**/.notebooks
+
+**/build
+**/dist
+
+**/kym_file_v0.py
+
+# code coverage
+**/.coverage
+**/coverage-core.xml
+**/coverage-gui_v2.xml
+
+# flyctl launch added from .pytest_cache/.gitignore
+# Created by pytest automatically.
+.pytest_cache/**/*
+
+# flyctl launch added from .ruff_cache/.gitignore
+# Automatically created by ruff.
+.ruff_cache/**/*
+
+# flyctl launch added from .venv/.gitignore
+.venv/**/*
+
+# flyctl launch added from pyinstaller/macos/.venv/.gitignore
+pyinstaller/macos/.venv/**/*
+fly.toml
