@@ -1,4 +1,5 @@
-__old__
+.nicegui/
+__old__/
 
 # Python-generated files
 __pycache__/
