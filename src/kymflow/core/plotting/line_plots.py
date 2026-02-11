@@ -361,7 +361,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
         return
     
     time_min, time_max = time_bounds
-    logger.error(f'=== time_min={time_min} time_max={time_max}')
+    # logger.error(f'=== time_min={time_min} time_max={time_max}')
 
     # Determine xref and yref for this row
     xref = f"x{row if row > 1 else ''}"
