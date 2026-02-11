@@ -61,59 +61,60 @@ class EventAnalysisController:
             e: DetectEvents event (phase="intent") containing roi_id and parameters.
         """
         # Handle all-files mode
-        if e.all_files:
-            # Verify app_state.files exists (do NOT check if it has images)
-            if self._app_state.files is None:
-                ui.notify("No folder loaded", color="warning")
-                return
-
-            # Log for debugging
-            # logger.info(
-            #     "Starting event detection for all files: int_param=%s, float_param=%s, text_param=%s",
-            #     e.int_param,
-            #     e.float_param,
-            #     e.text_param,
-            # )
-
-            try:
-                # Call detect_all_events() on AcqImageList
-                # This method handles empty lists and images without kym_analysis gracefully
-                self._app_state.files.detect_all_events(
-                    baseline_drop_params=e.baseline_drop_params,
-                    nan_gap_params=e.nan_gap_params,
-                    zero_gap_params=e.zero_gap_params,
-                )
-                
-                # Get total number of events across all files
-                total_events = self._app_state.files.total_number_of_event()
-                
-                logger.info(
-                    "Event detection completed for all files: total_events=%d",
-                    total_events,
-                )
-
-                # Emit state event to trigger UI refresh
-                self._bus.emit(
-                    DetectEvents(
-                        roi_id=None,
-                        path=None,
-                        all_files=True,
-                        # int_param=e.int_param,
-                        # float_param=e.float_param,
-                        # text_param=e.text_param,
-                        phase="state",
-                    )
-                )
-
-                ui.notify(
-                    f"Detected events for all files (total: {total_events} events)",
-                    color="positive",
-                )
-
-            except Exception as exc:
-                logger.exception("Unexpected error during all-files event detection")
-                ui.notify(f"Unexpected error: {exc}", color="negative")
-            return
+        # Commented out: Detect Events (all files) disabled
+        # if e.all_files:
+        #     # Verify app_state.files exists (do NOT check if it has images)
+        #     if self._app_state.files is None:
+        #         ui.notify("No folder loaded", color="warning")
+        #         return
+        #
+        #     # Log for debugging
+        #     # logger.info(
+        #     #     "Starting event detection for all files: int_param=%s, float_param=%s, text_param=%s",
+        #     #     e.int_param,
+        #     #     e.float_param,
+        #     #     e.text_param,
+        #     # )
+        #
+        #     try:
+        #         # Call detect_all_events() on AcqImageList
+        #         # This method handles empty lists and images without kym_analysis gracefully
+        #         self._app_state.files.detect_all_events(
+        #             baseline_drop_params=e.baseline_drop_params,
+        #             nan_gap_params=e.nan_gap_params,
+        #             zero_gap_params=e.zero_gap_params,
+        #         )
+        #         
+        #         # Get total number of events across all files
+        #         total_events = self._app_state.files.total_number_of_event()
+        #         
+        #         logger.info(
+        #             "Event detection completed for all files: total_events=%d",
+        #             total_events,
+        #         )
+        #
+        #         # Emit state event to trigger UI refresh
+        #         self._bus.emit(
+        #             DetectEvents(
+        #                 roi_id=None,
+        #                 path=None,
+        #                 all_files=True,
+        #                 # int_param=e.int_param,
+        #                 # float_param=e.float_param,
+        #                 # text_param=e.text_param,
+        #                 phase="state",
+        #             )
+        #         )
+        #
+        #         ui.notify(
+        #             f"Detected events for all files (total: {total_events} events)",
+        #             color="positive",
+        #         )
+        #
+        #     except Exception as exc:
+        #         logger.exception("Unexpected error during all-files event detection")
+        #         ui.notify(f"Unexpected error: {exc}", color="negative")
+        #     return
 
         # Single-file mode (existing behavior)
         kf = self._app_state.selected_file

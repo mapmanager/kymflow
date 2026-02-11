@@ -357,8 +357,20 @@ class KymEventView:
         self._apply_filter()
         
         # Select event after grid update if requested
+        # Defer selection to allow AG Grid to finish processing row nodes after set_data()
+        # This fixes race condition where run_row_method() is called before row nodes are ready
         if select_event_id is not None:
-            self.set_selected_event_ids([select_event_id], origin=SelectionOrigin.EXTERNAL)
+            def _deferred_select_event() -> None:
+                try:
+                    self.set_selected_event_ids([select_event_id], origin=SelectionOrigin.EXTERNAL)
+                except RuntimeError as e:
+                    # Grid may have been deleted - silently ignore
+                    if "deleted" not in str(e).lower() and "parent slot" not in str(e).lower():
+                        raise
+            # logger.error('crappy fix by adding ui.timer for aggrid v2 updates')
+            # ui.timer(0.2, _deferred_select_event, once=True)
+            # Call directly instead of using timer (original solution)
+            _deferred_select_event()
         else:
             # Update button state even if no event is selected (file path may have changed)
             self._update_add_delete_button_state()
@@ -414,31 +426,38 @@ class KymEventView:
             self._suppress_emit = False
         if len(event_ids) == 1:
             self._selected_event_id = event_ids[0]
-            # Find row data to emit EventSelection for plot highlighting
-            # Search _all_rows first (source of truth), then _pending_rows as fallback
-            row_data = None
-            for row in self._all_rows:
-                if row.get("event_id") == event_ids[0]:
-                    row_data = row
-                    break
-            if row_data is None:
-                # Not in all rows, search filtered rows as fallback
-                for row in self._pending_rows:
+            
+            # For EXTERNAL origin, skip row data lookup since EventSelection is never emitted
+            # This simplifies the code and avoids unnecessary work for programmatic selections
+            if origin == SelectionOrigin.EXTERNAL:
+                # Just set basic state - no need to find row data or create VelocityEvent
+                # since we're not emitting EventSelection for EXTERNAL origin
+                self._selected_event_roi_id = None
+                self._selected_event_path = None
+            else:
+                # For EVENT_TABLE origin, do full lookup to emit EventSelection
+                # Find row data to emit EventSelection for plot highlighting
+                # Search _all_rows first (source of truth), then _pending_rows as fallback
+                row_data = None
+                for row in self._all_rows:
                     if row.get("event_id") == event_ids[0]:
                         row_data = row
                         break
-            if row_data is not None:
-                roi_id = row_data.get("roi_id")
-                path = row_data.get("path")
-                event_id = row_data.get("event_id") or event_ids[0]
-                # Use from_dict_with_uuid to set runtime UUID (needed for CRUD operations)
-                event = VelocityEvent.from_dict_with_uuid(row_data, str(event_id))
-                self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
-                self._selected_event_path = str(path) if path else None
-                # Only emit EventSelection for user-initiated selections (EVENT_TABLE origin)
-                # EXTERNAL origin selections are programmatic and should NOT emit EventSelection
-                # to avoid infinite recursion: EXTERNAL → EventSelection → bindings → EXTERNAL
-                if origin == SelectionOrigin.EVENT_TABLE:
+                if row_data is None:
+                    # Not in all rows, search filtered rows as fallback
+                    for row in self._pending_rows:
+                        if row.get("event_id") == event_ids[0]:
+                            row_data = row
+                            break
+                if row_data is not None:
+                    roi_id = row_data.get("roi_id")
+                    path = row_data.get("path")
+                    event_id = row_data.get("event_id") or event_ids[0]
+                    # Use from_dict_with_uuid to set runtime UUID (needed for CRUD operations)
+                    event = VelocityEvent.from_dict_with_uuid(row_data, str(event_id))
+                    self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
+                    self._selected_event_path = str(path) if path else None
+                    # Emit EventSelection for user-initiated selections (EVENT_TABLE origin)
                     self._on_selected(
                         EventSelection(
                             event_id=str(event_id),

@@ -415,7 +415,9 @@ def test_velocity_event_update_preserves_selection(
 def test_image_line_viewer_bindings_handles_edit_physical_units(mock_view: MagicMock) -> None:
     """Test that ImageLineViewerBindings handles EditPhysicalUnits state events."""
     # Setup
+    from pathlib import Path
     mock_file = MagicMock()
+    mock_file.path = Path("/test/file.tif")
     mock_view._current_file = mock_file
     mock_view._render_combined = MagicMock()
     
@@ -423,7 +425,7 @@ def test_image_line_viewer_bindings_handles_edit_physical_units(mock_view: Magic
     mock_bus = MagicMock()
     bindings = ImageLineViewerBindings(mock_bus, mock_view)
     
-    # Create EditPhysicalUnits event for current file
+    # Create EditPhysicalUnits event for current file (same path)
     event = EditPhysicalUnits(
         file=mock_file,
         seconds_per_line=0.002,
@@ -442,8 +444,11 @@ def test_image_line_viewer_bindings_handles_edit_physical_units(mock_view: Magic
 def test_image_line_viewer_bindings_ignores_edit_physical_units_different_file(mock_view: MagicMock) -> None:
     """Test that ImageLineViewerBindings ignores EditPhysicalUnits for different file."""
     # Setup
+    from pathlib import Path
     mock_file1 = MagicMock()
+    mock_file1.path = Path("/test/file1.tif")
     mock_file2 = MagicMock()
+    mock_file2.path = Path("/test/file2.tif")  # Different path
     mock_view._current_file = mock_file1
     mock_view._render_combined = MagicMock()
     
@@ -451,9 +456,9 @@ def test_image_line_viewer_bindings_ignores_edit_physical_units_different_file(m
     mock_bus = MagicMock()
     bindings = ImageLineViewerBindings(mock_bus, mock_view)
     
-    # Create EditPhysicalUnits event for different file
+    # Create EditPhysicalUnits event for different file (different path)
     event = EditPhysicalUnits(
-        file=mock_file2,  # Different file
+        file=mock_file2,  # Different file with different path
         seconds_per_line=0.002,
         um_per_pixel=0.5,
         origin=SelectionOrigin.EXTERNAL,
@@ -463,7 +468,7 @@ def test_image_line_viewer_bindings_ignores_edit_physical_units_different_file(m
     # Call handler
     bindings._on_edit_physical_units(event)
     
-    # Verify plot was NOT refreshed
+    # Verify plot was NOT refreshed (path mismatch)
     mock_view._render_combined.assert_not_called()
 
 
@@ -492,3 +497,34 @@ def test_image_line_viewer_bindings_ignores_edit_physical_units_no_file(mock_vie
     
     # Verify plot was NOT refreshed
     mock_view._render_combined.assert_not_called()
+
+
+def test_image_line_viewer_bindings_handles_edit_physical_units_same_path_different_object(mock_view: MagicMock) -> None:
+    """Test that ImageLineViewerBindings handles EditPhysicalUnits when files have same path but are different objects."""
+    # Setup
+    from pathlib import Path
+    mock_file1 = MagicMock()
+    mock_file1.path = Path("/test/file.tif")
+    mock_file2 = MagicMock()  # Different object
+    mock_file2.path = Path("/test/file.tif")  # Same path
+    mock_view._current_file = mock_file1
+    mock_view._render_combined = MagicMock()
+    
+    # Create bindings
+    mock_bus = MagicMock()
+    bindings = ImageLineViewerBindings(mock_bus, mock_view)
+    
+    # Create EditPhysicalUnits event for file with same path (different object)
+    event = EditPhysicalUnits(
+        file=mock_file2,  # Different object but same path
+        seconds_per_line=0.002,
+        um_per_pixel=0.5,
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+    
+    # Call handler
+    bindings._on_edit_physical_units(event)
+    
+    # Verify plot WAS refreshed (path matches even though objects are different)
+    mock_view._render_combined.assert_called_once()

@@ -192,7 +192,7 @@ class AppState:
         # should always represent the actual selected path for UI consistency (e.g., cancellation revert)
         self.folder = selected_path
 
-        logger.info("load_path: calling file_list_changed handlers")
+        # logger.info("load_path: calling file_list_changed handlers")
         for handler in list(self._file_list_changed_handlers):
             try:
                 handler()
@@ -235,7 +235,7 @@ class AppState:
         # Note: Event selection clearing is now handled via FileSelection.kym_event_selection=None
         # emitted by AppStateBridge, so we no longer need to call select_velocity_event() here.
         
-        logger.info(f"select_file: calling selection_changed handlers for {kym_file}, selected_roi_id={self.selected_roi_id}")
+        # logger.info(f"select_file: calling selection_changed handlers for {kym_file}, selected_roi_id={self.selected_roi_id}")
         for handler in list[SelectionChangedHandler](self._selection_changed_handlers):
             try:
                 handler(kym_file, origin)

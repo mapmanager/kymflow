@@ -850,9 +850,10 @@ class KymAnalysis:
         
         # Make a writeable copy to avoid "assignment destination is read-only" errors
         # when arrays are passed to detection functions that may modify them in-place
-        values = roi_df[key].values.copy()
+        # values = roi_df[key].values.copy()
+        values = roi_df[key].values
 
-        logger.warning(f"qqq called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
+        logger.warning(f"qqq {key} called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
         from kymflow.core.utils.get_stack_trace import get_stack_trace
         print(get_stack_trace())
 
@@ -875,11 +876,12 @@ class KymAnalysis:
         return values
     
     def get_time_bounds(self, roi_id: int) -> tuple[float, float] | None:
-        """Get time range for analyzed ROI in physical units.
+        """Get time range for ROI in physical units.
         
         Returns the time bounds (min, max) in seconds for the specified ROI,
-        computed from ROI pixel bounds and voxel size. Only returns bounds
-        if analysis exists for the ROI.
+        computed from ROI pixel bounds and voxel size. This method works
+        without requiring analysis data - it calculates bounds directly from
+        ROI coordinates and seconds_per_line.
         
         Args:
             roi_id: ROI identifier.
@@ -887,13 +889,8 @@ class KymAnalysis:
         Returns:
             Tuple of (time_min, time_max) in seconds, or None if:
             - ROI not found
-            - No analysis exists for ROI
             - Voxels not available
         """
-        # Check if analysis exists
-        if not self.has_analysis(roi_id):
-            return None
-        
         # Get ROI
         roi = self.acq_image.rois.get(roi_id)
         if roi is None:

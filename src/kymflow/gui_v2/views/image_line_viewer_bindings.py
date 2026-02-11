@@ -27,6 +27,7 @@ from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.plotting.line_plots import (
     add_kym_event_rect,
+    clear_kym_event_rects,
     delete_kym_event_rect,
     move_kym_event_rect,
     select_kym_event_rect,
@@ -258,9 +259,10 @@ class ImageLineViewerBindings:
             return
         
         # For all-files mode, always refresh (events could be in any file)
-        if e.all_files:
-            safe_call(self._view.refresh_velocity_events)
-            return
+        # Commented out: Detect Events (all files) disabled
+        # if e.all_files:
+        #     safe_call(self._view.refresh_velocity_events)
+        #     return
         
         # For single-file mode, only refresh if path matches current file
         if e.path is not None and current_file.path is not None:
@@ -452,15 +454,31 @@ class ImageLineViewerBindings:
             )
             return
         
-        # Use CRUD to add event rect
+        # Use CRUD to refresh all event rects (ensures sync with kymanalysis after add)
         try:
-            add_kym_event_rect(
-                self._view._current_figure_dict,  # noqa: SLF001
-                event,
-                time_range,
-                row=2,
-            )
-            # Select the newly added event
+            # Clear all kym event rects
+            clear_kym_event_rects(self._view._current_figure_dict, row=2)  # noqa: SLF001
+            
+            # Get event filter from view (if available)
+            event_filter = getattr(self._view, '_event_filter', None)  # noqa: SLF001
+            
+            # Get all events (filtered or unfiltered)
+            if event_filter is None:
+                velocity_events = kym_analysis.get_velocity_events(roi_id)
+            else:
+                velocity_events = kym_analysis.get_velocity_events_filtered(roi_id, event_filter)
+            
+            # Add all events back
+            if velocity_events is not None:
+                for evt in velocity_events:
+                    add_kym_event_rect(
+                        self._view._current_figure_dict,  # noqa: SLF001
+                        evt,
+                        time_range,
+                        row=2,
+                    )
+            
+            # Select the newly added event (highlight it)
             select_kym_event_rect(
                 self._view._current_figure_dict,  # noqa: SLF001
                 event,

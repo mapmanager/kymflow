@@ -174,7 +174,7 @@ def _add_single_roi_line_plot(  # pragma: no cover
     fg_color: str,
     bg_color: str,
     font_dict: dict,
-) -> None:
+) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Add a line plot with stall overlays for a single ROI to a specific subplot row.
     
     Args:
@@ -189,6 +189,9 @@ def _add_single_roi_line_plot(  # pragma: no cover
         fg_color: Color for foreground text.
         bg_color: Background color for legend box.
         font_dict: Font dictionary for annotations.
+    
+    Returns:
+        Tuple of (time_values, y_values) arrays, or (None, None) if no analysis data.
     """
     if not kym_analysis.has_analysis(roi_id):
         # No analysis data - show message
@@ -203,7 +206,7 @@ def _add_single_roi_line_plot(  # pragma: no cover
             row=row,
             col=1,
         )
-        return
+        return (None, None)
     
     analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
     y_values = kym_analysis.get_analysis_value(roi_id, yStat, remove_outliers, median_filter)
@@ -304,6 +307,8 @@ def _add_single_roi_line_plot(  # pragma: no cover
                         line_width=0,
                         layer="below",
                     )
+        # Return the arrays for reuse by callers
+        return (analysis_time_values, y_values)
     else:
         # No analysis data - show message
         fig.add_annotation(
@@ -317,13 +322,14 @@ def _add_single_roi_line_plot(  # pragma: no cover
             row=row,
             col=1,
         )
+        return (None, None)
 
 
 def _add_velocity_event_overlays(  # pragma: no cover
     fig: go.Figure,
     kym_analysis,
     roi_id: int,
-    analysis_time_values,
+    time_bounds: tuple[float, float] | None,
     row: int,
     span_sec_if_no_end: float = 0.20,
     selected_event_id: Optional[str] = None,
@@ -335,7 +341,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
         fig: Plotly figure to add shapes to.
         kym_analysis: KymAnalysis instance to get velocity events from.
         roi_id: ROI identifier to get events for.
-        analysis_time_values: Time array for validation (numpy array).
+        time_bounds: Time bounds (time_min, time_max) in seconds for validation.
         row: Subplot row number (1-based).
         span_sec_if_no_end: Fixed width in seconds when t_end is None (default: 0.20).
         selected_event_id: Optional event_id to highlight with a border (default: None).
@@ -347,16 +353,16 @@ def _add_velocity_event_overlays(  # pragma: no cover
         velocity_events = kym_analysis.get_velocity_events_filtered(roi_id, event_filter)
     # logger.warning(f'adding velocity events for roi {roi_id}: {len(velocity_events)}')
     if velocity_events is None or len(velocity_events) == 0:
-        logger.warning(f'no velocity events for roi {roi_id}')
+        # logger.warning(f'no velocity events for roi {roi_id}')
         return
     
     # Get time range for validation
-    if analysis_time_values is None or len(analysis_time_values) == 0:
+    if time_bounds is None:
         return
     
-    time_min = float(np.min(analysis_time_values))
-    time_max = float(np.max(analysis_time_values))
-    
+    time_min, time_max = time_bounds
+    logger.error(f'=== time_min={time_min} time_max={time_max}')
+
     # Determine xref and yref for this row
     xref = f"x{row if row > 1 else ''}"
     yref = f"y{row if row > 1 else ''}"
@@ -661,20 +667,19 @@ def plot_image_line_plotly_v3(
             )
             
             # Add velocity event overlays after stall overlays (so they render on top)
-            # Get analysis_time_values for validation
-            if kym_analysis.has_analysis(roi_id):
-                analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
-                if analysis_time_values is not None:
-                    _add_velocity_event_overlays(
-                        fig,
-                        kym_analysis,
-                        roi_id,
-                        np.array(analysis_time_values),
-                        row_num,
-                        span_sec_if_no_end,
-                        selected_event_id=selected_event_id,
-                        event_filter=event_filter,
-                    )
+            # Get time bounds for validation (computed from ROI coordinates, no analysis needed)
+            time_bounds = kym_analysis.get_time_bounds(roi_id)
+            if time_bounds is not None:
+                _add_velocity_event_overlays(
+                    fig,
+                    kym_analysis,
+                    roi_id,
+                    time_bounds,
+                    row_num,
+                    span_sec_if_no_end,
+                    selected_event_id=selected_event_id,
+                    event_filter=event_filter,
+                )
 
     # Build complete layout configuration once
     layout_dict = {
@@ -841,6 +846,30 @@ def update_xaxis_range_v2(plotly_dict: dict, x_range: list[float]) -> None:  # p
         layout['xaxis2']['range'] = x_range
 
     # return plotly_dict
+
+
+def update_yaxis_range_v2(plotly_dict: dict, y_range: list[float], row: int = 1) -> None:  # pragma: no cover
+    """Update the y-axis range for a specific subplot row in a plotly figure dict representation.
+    
+    Args:
+        plotly_dict: Plotly figure dictionary (from fig.to_dict()).
+        y_range: List of two floats [min, max] for the y-axis range.
+        row: Subplot row number (1-based). Default is 1 (image subplot).
+    """
+    if 'layout' not in plotly_dict:
+        return
+    
+    layout = plotly_dict['layout']
+    
+    # Determine yaxis key based on row number
+    if row == 1:
+        yaxis_key = 'yaxis'
+    else:
+        yaxis_key = f'yaxis{row}'
+    
+    # Update yaxis for the specified row
+    if yaxis_key in layout:
+        layout[yaxis_key]['range'] = y_range
 
 
 # ============================================================================
@@ -1152,9 +1181,6 @@ def select_kym_event_rect(
     
     # Get target UUID from event._uuid
     target_uuid = event._uuid if event is not None and hasattr(event, '_uuid') and event._uuid else None
-    
-    logger.debug(f'event is:{event}')
-    logger.debug(f' target_uuid:{target_uuid}')
 
     # Determine dash style for selected event
     use_dash = False
@@ -1165,6 +1191,8 @@ def select_kym_event_rect(
     # Iterate all shapes and update selection state
     # IMPORTANT: Modify layout['shapes'][idx] directly, not through an intermediate variable
     # This ensures changes are made to the actual plotly_dict structure
+    _foundTarget = False
+    shape_uuids_found = []
     for idx, shape in enumerate(layout['shapes']):
         # Only process UUID-named rects for this row
         if shape.get('type') != 'rect':
@@ -1174,13 +1202,16 @@ def select_kym_event_rect(
         if shape.get('yref') != f"{yref} domain":
             continue
         if 'name' not in shape or not shape.get('name'):
+            # logger.error(f'no name found for shape: {shape}')
             continue  # Not a UUID-named rect
         
         shape_uuid = shape.get('name')
+        shape_uuids_found.append(shape_uuid)
 
         if target_uuid is not None and shape_uuid == target_uuid:
             # Selected: set yellow outline
             # Modify directly in plotly_dict structure
+            _foundTarget = True
             layout['shapes'][idx]['line'] = {
                 "color": "yellow",
                 "width": 2,
@@ -1190,6 +1221,9 @@ def select_kym_event_rect(
             # Non-selected: remove outline (set width to 0)
             # Modify directly in plotly_dict structure
             layout['shapes'][idx]['line'] = {"width": 0}
+
+    if not _foundTarget:
+        logger.error(f'select_kym_event_rect: no target found for event: {event} target_uuid={target_uuid}')
 
 
 def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:  # pragma: no cover
@@ -1226,23 +1260,27 @@ def update_contrast(  # pragma: no cover
         )
 
 
-def reset_image_zoom(fig: go.Figure, kf: Optional[KymImage]) -> None:  # pragma: no cover
-    """Reset the zoom to full scale for the kymograph image subplot."""
-    if kf is None:
-        return
-
-    duration_seconds = None
-    if kf.header.physical_size and len(kf.header.physical_size) > 0:
-        duration_seconds = kf.header.physical_size[0]
-    if duration_seconds is None:
-        return
-    pixels_per_line = kf.pixels_per_line
-
-    # logger.info(f"reset_image_zoom: duration_seconds: {duration_seconds} pixels_per_line: {pixels_per_line}")
-
-    # Reset x-axis (time) for both subplots (they're shared)
-    fig.update_xaxes(range=[0, duration_seconds], row=1, col=1)
-    fig.update_xaxes(range=[0, duration_seconds], row=2, col=1)
-
-    # Reset y-axis (position) for image subplot only
-    fig.update_yaxes(range=[0, pixels_per_line - 1], row=1, col=1)
+# DEPRECATED: This function is no longer used. Use dict-based updates instead:
+# - update_xaxis_range_v2(plotly_dict, x_range) for x-axis
+# - update_yaxis_range_v2(plotly_dict, y_range, row=1) for y-axis
+# See ImageLineViewerView._reset_zoom() for example usage.
+# def reset_image_zoom(fig: go.Figure, kf: Optional[KymImage]) -> None:  # pragma: no cover
+#     """Reset the zoom to full scale for the kymograph image subplot."""
+#     if kf is None:
+#         return
+#
+#     duration_seconds = None
+#     if kf.header.physical_size and len(kf.header.physical_size) > 0:
+#         duration_seconds = kf.header.physical_size[0]
+#     if duration_seconds is None:
+#         return
+#     pixels_per_line = kf.pixels_per_line
+#
+#     # logger.info(f"reset_image_zoom: duration_seconds: {duration_seconds} pixels_per_line: {pixels_per_line}")
+#
+#     # Reset x-axis (time) for both subplots (they're shared)
+#     fig.update_xaxes(range=[0, duration_seconds], row=1, col=1)
+#     fig.update_xaxes(range=[0, duration_seconds], row=2, col=1)
+#
+#     # Reset y-axis (position) for image subplot only
+#     fig.update_yaxes(range=[0, pixels_per_line - 1], row=1, col=1)

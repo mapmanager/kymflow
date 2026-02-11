@@ -211,6 +211,148 @@ def test_metadata_controller_updates_file(bus: EventBus, app_state: AppState) ->
     assert calls[0] == mock_file
 
 
+def test_metadata_controller_handles_edit_physical_units(bus: EventBus, app_state: AppState) -> None:
+    """Test that MetadataController handles EditPhysicalUnits intent and emits state event."""
+    controller = MetadataController(app_state, bus)
+    
+    # Create a mock file with header
+    mock_file = MagicMock()
+    mock_file.header = AcqImgHeader()
+    mock_file.header.voxels = [0.001, 0.284]  # Initial 2D voxels
+    mock_file.header.compute_physical_size = MagicMock(return_value=[1.0, 2.0])
+    mock_file.header._validate_consistency = MagicMock()
+    mock_file.mark_metadata_dirty = MagicMock()
+    
+    # Track calls to app_state.update_metadata
+    calls = []
+    original_update = app_state.update_metadata
+    
+    def track_update(file) -> None:
+        calls.append(file)
+        original_update(file)
+    
+    app_state.update_metadata = track_update
+    
+    # Track emitted events
+    emitted_events = []
+    original_emit = bus.emit
+    
+    def track_emit(event) -> None:
+        emitted_events.append(event)
+        # Call original emit
+        original_emit(event)
+    
+    bus.emit = track_emit
+    
+    # Emit EditPhysicalUnits intent event
+    bus.emit(
+        EditPhysicalUnits(
+            file=mock_file,
+            seconds_per_line=0.002,
+            um_per_pixel=0.5,
+            origin=SelectionOrigin.EXTERNAL,
+            phase="intent",
+        )
+    )
+    
+    # Verify header was updated
+    assert mock_file.header.voxels == [0.002, 0.5]
+    
+    # Verify physical_size was recomputed
+    mock_file.header.compute_physical_size.assert_called_once()
+    mock_file.header.physical_size = mock_file.header.compute_physical_size.return_value
+    
+    # Verify consistency was validated
+    mock_file.header._validate_consistency.assert_called_once()
+    
+    # Verify metadata was marked dirty
+    mock_file.mark_metadata_dirty.assert_called_once()
+    
+    # Verify app_state.update_metadata was called
+    assert len(calls) == 1
+    assert calls[0] == mock_file
+    
+    # Verify EditPhysicalUnits state event was emitted
+    state_events = [e for e in emitted_events if isinstance(e, EditPhysicalUnits) and e.phase == "state"]
+    assert len(state_events) == 1
+    state_event = state_events[0]
+    assert state_event.file == mock_file
+    assert state_event.seconds_per_line == 0.002
+    assert state_event.um_per_pixel == 0.5
+    assert state_event.origin == SelectionOrigin.EXTERNAL
+    assert state_event.phase == "state"
+
+
+def test_metadata_controller_rejects_edit_physical_units_invalid_file(bus: EventBus, app_state: AppState) -> None:
+    """Test that MetadataController rejects EditPhysicalUnits for invalid files."""
+    controller = MetadataController(app_state, bus)
+    
+    # Track emitted events
+    emitted_events = []
+    original_emit = bus.emit
+    
+    def track_emit(event) -> None:
+        emitted_events.append(event)
+        # Call original emit
+        original_emit(event)
+    
+    bus.emit = track_emit
+    
+    # Test 1: File without header property
+    mock_file_no_header = MagicMock(spec=[])
+    bus.emit(
+        EditPhysicalUnits(
+            file=mock_file_no_header,
+            seconds_per_line=0.002,
+            um_per_pixel=0.5,
+            origin=SelectionOrigin.EXTERNAL,
+            phase="intent",
+        )
+    )
+    
+    # Verify no state event was emitted
+    state_events = [e for e in emitted_events if isinstance(e, EditPhysicalUnits) and e.phase == "state"]
+    assert len(state_events) == 0
+    
+    # Test 2: File with header but None voxels
+    mock_file_none_voxels = MagicMock()
+    mock_file_none_voxels.header = AcqImgHeader()
+    mock_file_none_voxels.header.voxels = None
+    
+    bus.emit(
+        EditPhysicalUnits(
+            file=mock_file_none_voxels,
+            seconds_per_line=0.002,
+            um_per_pixel=0.5,
+            origin=SelectionOrigin.EXTERNAL,
+            phase="intent",
+        )
+    )
+    
+    # Verify no state event was emitted
+    state_events = [e for e in emitted_events if isinstance(e, EditPhysicalUnits) and e.phase == "state"]
+    assert len(state_events) == 0
+    
+    # Test 3: File with header but wrong voxels length (1D)
+    mock_file_1d = MagicMock()
+    mock_file_1d.header = AcqImgHeader()
+    mock_file_1d.header.voxels = [1.0]  # Only 1D
+    
+    bus.emit(
+        EditPhysicalUnits(
+            file=mock_file_1d,
+            seconds_per_line=0.002,
+            um_per_pixel=0.5,
+            origin=SelectionOrigin.EXTERNAL,
+            phase="intent",
+        )
+    )
+    
+    # Verify no state event was emitted
+    state_events = [e for e in emitted_events if isinstance(e, EditPhysicalUnits) and e.phase == "state"]
+    assert len(state_events) == 0
+
+
 def test_metadata_header_view_physical_units_validation() -> None:
     """Test that MetadataHeaderView validates physical units correctly."""
     view = MetadataHeaderView(on_metadata_update=lambda e: None)

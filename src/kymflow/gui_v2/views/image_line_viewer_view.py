@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Dict, Any
 
-import numpy as np
 import plotly.graph_objects as go
 from nicegui import ui
 from nicegui.events import GenericEventArguments  # for _on_relayout()
@@ -21,9 +20,10 @@ from kymflow.core.plotting import (
     plot_image_line_plotly_v3,
     update_colorscale,
     update_contrast,
-    reset_image_zoom,
+    # reset_image_zoom,  # DEPRECATED: Use dict-based updates instead (update_xaxis_range_v2, update_yaxis_range_v2)
     # update_xaxis_range,  # OLD: kept for reference during transition (replaced by update_xaxis_range_v2)
     update_xaxis_range_v2,
+    update_yaxis_range_v2,
     select_kym_event_rect,
 )
 from kymflow.core.plotting.line_plots import (
@@ -65,8 +65,6 @@ class ImageLineViewerView:
         _theme: Current theme mode.
         _display_params: Current image display parameters.
         _current_figure: Current figure reference (for partial updates).
-        _original_y_values: Original unfiltered y-values (for filter updates).
-        _original_time_values: Original time values (for filter updates).
         _uirevision: Counter to control Plotly's uirevision for forced resets.
     """
 
@@ -98,8 +96,6 @@ class ImageLineViewerView:
         self._display_params: Optional[ImageDisplayParams] = None
         self._current_figure: Optional[go.Figure] = None
         self._current_figure_dict: Optional[dict] = None
-        self._original_y_values: Optional[np.ndarray] = None
-        self._original_time_values: Optional[np.ndarray] = None
         self._uirevision: int = 0
         
         # Filter state (stored instead of reading from checkboxes)
@@ -413,7 +409,7 @@ class ImageLineViewerView:
         self._current_roi_id = None
         self._render_combined()
         # Reset to full zoom when selection changes
-        logger.warning('qqq turned off reset zoom')
+        # logger.warning('qqq turned off reset zoom')
         self._reset_zoom(force_new_uirevision=True)
 
     def set_selected_roi(self, roi_id: Optional[int]) -> None:
@@ -526,9 +522,20 @@ class ImageLineViewerView:
             pad = float(e.options.zoom_pad_sec)
             x_min = t_start - pad
             x_max = t_start + pad
-            if self._original_time_values is not None and len(self._original_time_values) > 0:
-                x_min = max(x_min, float(self._original_time_values[0]))
-                x_max = min(x_max, float(self._original_time_values[-1]))
+            # Clamp zoom bounds to ROI time range using get_time_bounds()
+            if self._current_file is not None and self._current_roi_id is not None:
+                kym_analysis = self._current_file.get_kym_analysis()
+                time_bounds = kym_analysis.get_time_bounds(self._current_roi_id)
+                if time_bounds is not None:
+                    time_min, time_max = time_bounds
+                    x_min = max(x_min, time_min)
+                    x_max = min(x_max, time_max)
+                else:
+                    # Fallback to image duration if time bounds not available
+                    duration = self._current_file.image_dur
+                    if duration is not None:
+                        x_min = max(x_min, 0.0)
+                        x_max = min(x_max, float(duration))
             elif self._current_file is not None:
                 duration = self._current_file.image_dur
                 if duration is not None:
@@ -683,40 +690,11 @@ class ImageLineViewerView:
             selected_event_id=self._selected_event_id,
             event_filter=self._event_filter,
         )
-        # Store original unfiltered y-values for partial updates
-        if kf is not None and roi_id is not None:
-            kym_analysis = kf.get_kym_analysis()
-            if kym_analysis.has_analysis(roi_id):
-                time_values = kym_analysis.get_analysis_value(roi_id, "time")
-                y_values = kym_analysis.get_analysis_value(roi_id, "velocity")
-            else:
-                time_values = None
-                y_values = None
-            if time_values is not None and y_values is not None:
-                self._original_time_values = np.array(time_values).copy()
-                self._original_y_values = np.array(y_values).copy()
-            else:
-                self._original_time_values = None
-                self._original_y_values = None
 
         # Store figure reference
         self._set_uirevision(fig)
         self._current_figure = fig
         self._current_figure_dict = fig.to_dict()  # abb 20260209
-
-        # abb - debug _current_figure_dict
-        # logger.info(f'_current_figure_dict:')
-        # logger.info(f'  {self._current_figure_dict.keys()}')  # always has 'List[data]' and 'Dict[layout]'
-        # logger.info(f"  len(self._current_figure_dict['data']): {len(self._current_figure_dict['data'])}")
-        # # ['template', 'xaxis', 'yaxis', 'xaxis2', 'yaxis2', 'font', 'paper_bgcolor', 'plot_bgcolor', 'uirevision']
-        # print(f"  layout keys are:{self._current_figure_dict['layout'].keys()}")
-        # print(f"  layout['xaxis'] is: {self._current_figure_dict['layout']['xaxis']}")
-        # print(f"  layout['xaxis2'] is: {self._current_figure_dict['layout']['xaxis2']}")
-
-        # abb just try and set range
-        # from kymflow.core.plotting.line_plots import update_x_axis
-        # x_range = [10, 20]
-        # update_x_axis(self._current_figure_dict, x_range)
 
         # Detect grid changes (1 row vs 2 rows) and rebuild plot if needed
         num_rows = 2 if getattr(fig.layout, "yaxis2", None) is not None else 1
@@ -738,20 +716,38 @@ class ImageLineViewerView:
         fig.layout.uirevision = f"kymflow-plot-{self._uirevision}"
 
     def _reset_zoom(self, force_new_uirevision: bool = False) -> None:
-        """Reset zoom while optionally forcing Plotly to drop preserved UI state."""
-        fig = self._current_figure
+        """Reset zoom while optionally forcing Plotly to drop preserved UI state.
+        
+        Uses dict-based updates for consistency with other partial updates.
+        """
         kf = self._current_file
-        if fig is None or kf is None or self._plot is None:
+        if kf is None or self._plot is None or self._current_figure_dict is None:
             return
 
+        # Calculate ranges from KymImage properties
+        duration_seconds = kf.image_dur
+        if duration_seconds is None:
+            return
+        pixels_per_line = kf.pixels_per_line
+        if pixels_per_line is None:
+            return
+
+        # Update uirevision in dict if requested (forces Plotly to accept new ranges)
         if force_new_uirevision:
             self._uirevision += 1
-            self._set_uirevision(fig)
+            if 'layout' in self._current_figure_dict:
+                self._current_figure_dict['layout']['uirevision'] = f"kymflow-plot-{self._uirevision}"
 
-        reset_image_zoom(fig, kf)
+        # Reset x-axis (time) for both subplots (they're shared)
+        x_range = [0.0, float(duration_seconds)]
+        update_xaxis_range_v2(self._current_figure_dict, x_range)
+
+        # Reset y-axis (position) for image subplot only (row 1)
+        y_range = [0.0, float(pixels_per_line - 1)]
+        update_yaxis_range_v2(self._current_figure_dict, y_range, row=1)
+
         try:
-            # self._plot.update_figure(fig)
-            self.ui_plotly_update_figure(fig)
+            self.ui_plotly_update_figure()
         except RuntimeError as e:
             logger.error(f"Error updating figure: {e}")
             if "deleted" not in str(e).lower():

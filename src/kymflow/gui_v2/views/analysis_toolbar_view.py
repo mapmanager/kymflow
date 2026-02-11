@@ -115,7 +115,7 @@ class AnalysisToolbarView:
         self._progress_bar: Optional[ui.linear_progress] = None
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
-        self._detect_all_events_button: Optional[ui.button] = None
+        # self._detect_all_events_button: Optional[ui.button] = None  # Commented out: Detect Events (all files) disabled
         self._win_cmp_sec_input: Optional[ui.number] = None
         self._smooth_sec_input: Optional[ui.number] = None
         self._mad_k_input: Optional[ui.number] = None
@@ -149,7 +149,7 @@ class AnalysisToolbarView:
         self._progress_bar = None
         # self._progress_label = None
         self._detect_events_button = None
-        self._detect_all_events_button = None
+        # self._detect_all_events_button = None  # Commented out: Detect Events (all files) disabled
         self._win_cmp_sec_input = None
         self._smooth_sec_input = None
         self._mad_k_input = None
@@ -359,11 +359,12 @@ class AnalysisToolbarView:
         
         # Detect Events (all files) button: enabled when not running a task
         # (Controller will validate that files exist)
-        if self._detect_all_events_button is not None:
-            if running:
-                self._detect_all_events_button.disable()
-            else:
-                self._detect_all_events_button.enable()
+        # Commented out: Detect Events (all files) disabled
+        # if self._detect_all_events_button is not None:
+        #     if running:
+        #         self._detect_all_events_button.disable()
+        #     else:
+        #         self._detect_all_events_button.enable()
         
         # Update progress bar and label
         # if self._progress_bar is None or self._progress_label is None:
@@ -715,10 +716,11 @@ class AnalysisToolbarView:
                         "Detect Events",
                         on_click=self._on_detect_events_click
                     )
-                    self._detect_all_events_button = ui.button(
-                        "Detect Events (all files)",
-                        on_click=self._on_detect_all_events_click
-                    )
+                    # Commented out: Detect Events (all files) disabled
+                    # self._detect_all_events_button = ui.button(
+                    #     "Detect Events (all files)",
+                    #     on_click=self._on_detect_all_events_click
+                    # )
                 
                 # Parameter inputs (each on its own row)
                 self._win_cmp_sec_input = ui.number(
@@ -815,55 +817,56 @@ class AnalysisToolbarView:
             )
         )
 
-    def _on_detect_all_events_click(self) -> None:
-        """Handle Detect Events (all files) button click."""
-        # Collect parameter values from inputs (same as single-file)
-        default_params = BaselineDropParams()
-        win_cmp_sec = default_params.win_cmp_sec
-        smooth_sec = default_params.smooth_sec
-        mad_k = default_params.mad_k
-        abs_score_floor = default_params.abs_score_floor
-        
-        if self._win_cmp_sec_input is not None:
-            try:
-                win_cmp_sec = float(self._win_cmp_sec_input.value) if self._win_cmp_sec_input.value is not None else default_params.win_cmp_sec
-            except (ValueError, TypeError):
-                win_cmp_sec = default_params.win_cmp_sec
-        
-        if self._smooth_sec_input is not None:
-            try:
-                smooth_sec = float(self._smooth_sec_input.value) if self._smooth_sec_input.value is not None else default_params.smooth_sec
-            except (ValueError, TypeError):
-                smooth_sec = default_params.smooth_sec
-        
-        if self._mad_k_input is not None:
-            try:
-                mad_k = float(self._mad_k_input.value) if self._mad_k_input.value is not None else default_params.mad_k
-            except (ValueError, TypeError):
-                mad_k = default_params.mad_k
-        
-        if self._abs_score_floor_input is not None:
-            try:
-                abs_score_floor = float(self._abs_score_floor_input.value) if self._abs_score_floor_input.value is not None else default_params.abs_score_floor
-            except (ValueError, TypeError):
-                abs_score_floor = default_params.abs_score_floor
-
-        # Create BaselineDropParams with collected values (other params use defaults)
-        baseline_drop_params = BaselineDropParams(
-            win_cmp_sec=win_cmp_sec,
-            smooth_sec=smooth_sec,
-            mad_k=mad_k,
-            abs_score_floor=abs_score_floor,
-        )
-
-        # Emit DetectEvents intent event with all_files=True
-        # Note: roi_id and path are None for all-files mode
-        self._on_detect_events(
-            DetectEvents(
-                roi_id=None,
-                path=None,
-                all_files=True,
-                baseline_drop_params=baseline_drop_params,
-                phase="intent",
-            )
-        )
+    # Commented out: Detect Events (all files) disabled
+    # def _on_detect_all_events_click(self) -> None:
+    #     """Handle Detect Events (all files) button click."""
+    #     # Collect parameter values from inputs (same as single-file)
+    #     default_params = BaselineDropParams()
+    #     win_cmp_sec = default_params.win_cmp_sec
+    #     smooth_sec = default_params.smooth_sec
+    #     mad_k = default_params.mad_k
+    #     abs_score_floor = default_params.abs_score_floor
+    #     
+    #     if self._win_cmp_sec_input is not None:
+    #         try:
+    #             win_cmp_sec = float(self._win_cmp_sec_input.value) if self._win_cmp_sec_input.value is not None else default_params.win_cmp_sec
+    #         except (ValueError, TypeError):
+    #             win_cmp_sec = default_params.win_cmp_sec
+    #     
+    #     if self._smooth_sec_input is not None:
+    #         try:
+    #             smooth_sec = float(self._smooth_sec_input.value) if self._smooth_sec_input.value is not None else default_params.smooth_sec
+    #         except (ValueError, TypeError):
+    #             smooth_sec = default_params.smooth_sec
+    #     
+    #     if self._mad_k_input is not None:
+    #         try:
+    #             mad_k = float(self._mad_k_input.value) if self._mad_k_input.value is not None else default_params.mad_k
+    #         except (ValueError, TypeError):
+    #             mad_k = default_params.mad_k
+    #     
+    #     if self._abs_score_floor_input is not None:
+    #         try:
+    #             abs_score_floor = float(self._abs_score_floor_input.value) if self._abs_score_floor_input.value is not None else default_params.abs_score_floor
+    #         except (ValueError, TypeError):
+    #             abs_score_floor = default_params.abs_score_floor
+    #
+    #     # Create BaselineDropParams with collected values (other params use defaults)
+    #     baseline_drop_params = BaselineDropParams(
+    #         win_cmp_sec=win_cmp_sec,
+    #         smooth_sec=smooth_sec,
+    #         mad_k=mad_k,
+    #         abs_score_floor=abs_score_floor,
+    #     )
+    #
+    #     # Emit DetectEvents intent event with all_files=True
+    #     # Note: roi_id and path are None for all-files mode
+    #     self._on_detect_events(
+    #         DetectEvents(
+    #             roi_id=None,
+    #             path=None,
+    #             all_files=True,
+    #             baseline_drop_params=baseline_drop_params,
+    #             phase="intent",
+    #         )
+    #     )
