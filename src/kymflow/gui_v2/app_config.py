@@ -34,12 +34,13 @@ from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Increment when you make a breaking change to the on-disk JSON schema.
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
 
 # Defaults
 DEFAULT_TEXT_SIZE: str = "text-sm"
 DEFAULT_BLINDED: bool = False
 DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
+DEFAULT_FOLDER_DEPTH: int = 4
 
 
 @dataclass
@@ -77,6 +78,16 @@ class AppConfigData:
         metadata={
             "widget_type": "display",
             "label": "Window Rect",
+            "requires_restart": False,
+        },
+    )
+
+    folder_depth: int = field(
+        default=DEFAULT_FOLDER_DEPTH,
+        metadata={
+            "widget_type": "number",
+            "label": "Folder Depth",
+            "min": 1,
             "requires_restart": False,
         },
     )
@@ -131,11 +142,30 @@ class AppConfigData:
             except Exception:
                 window_rect = list(DEFAULT_WINDOW_RECT)
 
+        # folder_depth
+        folder_depth_raw = d.get("folder_depth", DEFAULT_FOLDER_DEPTH)
+        folder_depth = DEFAULT_FOLDER_DEPTH
+        if isinstance(folder_depth_raw, (int, float)):
+            try:
+                folder_depth = int(folder_depth_raw)
+                if folder_depth < 1:
+                    folder_depth = DEFAULT_FOLDER_DEPTH
+            except Exception:
+                folder_depth = DEFAULT_FOLDER_DEPTH
+        elif isinstance(folder_depth_raw, str):
+            try:
+                folder_depth = int(folder_depth_raw)
+                if folder_depth < 1:
+                    folder_depth = DEFAULT_FOLDER_DEPTH
+            except Exception:
+                folder_depth = DEFAULT_FOLDER_DEPTH
+
         return cls(
             schema_version=schema_version,
             text_size=text_size,
             blinded=blinded,
             window_rect=window_rect,
+            folder_depth=folder_depth,
         )
 
 
@@ -247,6 +277,11 @@ class AppConfig:
         # Validate window_rect
         if not (isinstance(data.window_rect, list) and len(data.window_rect) == 4):
             data.window_rect = list(DEFAULT_WINDOW_RECT)
+
+        # Validate folder_depth
+        if not isinstance(data.folder_depth, int) or data.folder_depth < 1:
+            logger.warning(f"Invalid folder_depth '{data.folder_depth}', using default '{DEFAULT_FOLDER_DEPTH}'")
+            data.folder_depth = DEFAULT_FOLDER_DEPTH
 
     def save(self) -> None:
         """Write config to disk."""

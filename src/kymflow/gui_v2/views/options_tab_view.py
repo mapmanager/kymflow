@@ -181,6 +181,11 @@ class OptionsTabView:
         try:
             success = _save_all_configs(self._context)
             if success:
+                # Sync folder_depth from app_config to app_state (runtime sync, no restart needed)
+                if hasattr(self._context, "app_state") and hasattr(self._context, "app_config"):
+                    self._context.app_state.folder_depth = self._context.app_config.data.folder_depth
+                    logger.info(f"Synced app_state.folder_depth = {self._context.app_state.folder_depth}")
+                
                 ui.notify("Settings saved successfully", type="positive")
             else:
                 ui.notify("Some settings failed to save. Check logs for details.", type="warning")

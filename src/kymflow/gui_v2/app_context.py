@@ -167,6 +167,9 @@ class AppContext:
             self.app_config = AppConfig.load()
         logger.info(f"App config loaded from: {self.app_config.path}")
         
+        # Initialize app_state.folder_depth from app_config
+        self.app_state.folder_depth = self.app_config.data.folder_depth
+        
         #
         # configure default classes (after app_config is loaded)
         _setUpGuiDefaults(self.app_config)

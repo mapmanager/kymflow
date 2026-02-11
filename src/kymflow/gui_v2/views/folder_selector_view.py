@@ -119,7 +119,6 @@ class FolderSelectorView:
         self._choose_button: Optional[ui.button] = None
         self._open_file_button: Optional[ui.button] = None
         self._open_csv_button: Optional[ui.button] = None
-        self._depth_input: Optional[ui.number] = None
         self._task_state: Optional[TaskStateChanged] = None
         self._suppress_path_selection_emit: bool = False
         
@@ -244,7 +243,7 @@ class FolderSelectorView:
             Depth value for folders, or None for files/CSV (controller will use 0).
         """
         if path_type == PathType.FOLDER:
-            return self._depth_input.value if self._depth_input is not None else self._app_state.folder_depth
+            return self._app_state.folder_depth
         else:
             # Files and CSV don't use depth (controller will use 0)
             return None
@@ -325,7 +324,6 @@ class FolderSelectorView:
         self._choose_button = None
         self._open_file_button = None
         self._open_csv_button = None
-        self._depth_input = None
         self._save_selected_button = None
         self._save_all_button = None
 
@@ -354,10 +352,6 @@ class FolderSelectorView:
             self._open_file_button = ui.button("Open file", on_click=lambda: self._on_open_path(PathType.FILE)).props("dense").classes("text-sm")
             self._open_csv_button = ui.button("Open CSV", on_click=lambda: self._on_open_path(PathType.CSV)).props("dense").classes("text-sm")
 
-            ui.label("Depth:").classes("ml-2")
-            self._depth_input = ui.number(value=self._app_state.folder_depth, min=1, format="%d").classes("w-10")
-            self._depth_input.bind_value(self._app_state, "folder_depth")
-            
             # Spacer to push save buttons to the right
             ui.element("div").classes("grow")
             
@@ -478,11 +472,6 @@ class FolderSelectorView:
                 self._open_csv_button.disable()
             else:
                 self._open_csv_button.enable()
-        if self._depth_input is not None:
-            if running:
-                self._depth_input.disable()
-            else:
-                self._depth_input.enable()
     
     def _update_save_button_states(self) -> None:
         """Update save button states based on current file and task state."""

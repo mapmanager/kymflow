@@ -8,6 +8,7 @@ from pathlib import Path
 
 from kymflow.gui_v2.app_config import (
     DEFAULT_BLINDED,
+    DEFAULT_FOLDER_DEPTH,
     DEFAULT_TEXT_SIZE,
     DEFAULT_WINDOW_RECT,
     SCHEMA_VERSION,
@@ -542,7 +543,7 @@ def test_blinded_in_get_all_fields_with_metadata(tmp_path: Path) -> None:
 
 
 def test_save_and_load_roundtrip_with_all_fields(tmp_path: Path) -> None:
-    """Test that save/load roundtrip preserves all fields including blinded and window_rect."""
+    """Test that save/load roundtrip preserves all fields including blinded, window_rect, and folder_depth."""
     cfg_path = tmp_path / "app_config.json"
     cfg = AppConfig.load(config_path=cfg_path)
     
@@ -550,6 +551,7 @@ def test_save_and_load_roundtrip_with_all_fields(tmp_path: Path) -> None:
     cfg.set_attribute("text_size", "text-lg")
     cfg.set_blinded(True)
     cfg.set_window_rect(100, 200, 1200, 900)
+    cfg.set_attribute("folder_depth", 5)
     cfg.save()
     
     # Reload and verify all fields
@@ -557,3 +559,219 @@ def test_save_and_load_roundtrip_with_all_fields(tmp_path: Path) -> None:
     assert cfg2.get_attribute("text_size") == "text-lg"
     assert cfg2.get_blinded() is True
     assert cfg2.get_window_rect() == (100, 200, 1200, 900)
+    assert cfg2.get_attribute("folder_depth") == 5
+
+
+# ============================================================================
+# Tests for folder_depth field
+# ============================================================================
+
+def test_folder_depth_defaults_to_four(tmp_path: Path) -> None:
+    """Test that folder_depth defaults to 4 when not set."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    assert cfg.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+    assert cfg.data.folder_depth == DEFAULT_FOLDER_DEPTH
+    assert DEFAULT_FOLDER_DEPTH == 4
+
+
+def test_folder_depth_getter_setter(tmp_path: Path) -> None:
+    """Test folder_depth getter and setter methods."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Default should be 4
+    assert cfg.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+    
+    # Set to different value
+    cfg.set_attribute("folder_depth", 7)
+    assert cfg.get_attribute("folder_depth") == 7
+    assert cfg.data.folder_depth == 7
+    
+    # Set back to default
+    cfg.set_attribute("folder_depth", DEFAULT_FOLDER_DEPTH)
+    assert cfg.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+    assert cfg.data.folder_depth == DEFAULT_FOLDER_DEPTH
+
+
+def test_folder_depth_persists(tmp_path: Path) -> None:
+    """Test that folder_depth setting persists across save/load."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Set folder_depth to 6
+    cfg.set_attribute("folder_depth", 6)
+    cfg.save()
+    
+    # Reload and verify
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    assert cfg2.get_attribute("folder_depth") == 6
+    assert cfg2.data.folder_depth == 6
+    
+    # Set to different value and verify
+    cfg2.set_attribute("folder_depth", 3)
+    cfg2.save()
+    
+    cfg3 = AppConfig.load(config_path=cfg_path)
+    assert cfg3.get_attribute("folder_depth") == 3
+    assert cfg3.data.folder_depth == 3
+
+
+def test_folder_depth_backward_compatible(tmp_path: Path) -> None:
+    """Test that old config files without folder_depth field default to 4."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Create a config file with schema v2 (no folder_depth field)
+    old_config = {
+        "schema_version": 2,
+        "text_size": "text-sm",
+    }
+    cfg_path.write_text(json.dumps(old_config), encoding="utf-8")
+    
+    # Load should default folder_depth to 4
+    cfg = AppConfig.load(config_path=cfg_path, schema_version=SCHEMA_VERSION, reset_on_version_mismatch=False)
+    assert cfg.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+
+
+def test_folder_depth_from_json_dict_tolerates_various_types(tmp_path: Path) -> None:
+    """Test that from_json_dict handles various folder_depth value types."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Test with integer
+    payload1 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "folder_depth": 5,
+    }
+    cfg_path.write_text(json.dumps(payload1), encoding="utf-8")
+    cfg1 = AppConfig.load(config_path=cfg_path)
+    assert cfg1.get_attribute("folder_depth") == 5
+    
+    # Test with float (should convert to int)
+    payload2 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "folder_depth": 7.0,
+    }
+    cfg_path.write_text(json.dumps(payload2), encoding="utf-8")
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    assert cfg2.get_attribute("folder_depth") == 7
+    
+    # Test with string (should convert to int)
+    payload3 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "folder_depth": "3",
+    }
+    cfg_path.write_text(json.dumps(payload3), encoding="utf-8")
+    cfg3 = AppConfig.load(config_path=cfg_path)
+    assert cfg3.get_attribute("folder_depth") == 3
+    
+    # Test with invalid value (negative) - should default
+    payload4 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "folder_depth": -1,
+    }
+    cfg_path.write_text(json.dumps(payload4), encoding="utf-8")
+    cfg4 = AppConfig.load(config_path=cfg_path)
+    assert cfg4.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+    
+    # Test with zero - should default (min is 1)
+    payload5 = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+        "folder_depth": 0,
+    }
+    cfg_path.write_text(json.dumps(payload5), encoding="utf-8")
+    cfg5 = AppConfig.load(config_path=cfg_path)
+    assert cfg5.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+
+
+def test_folder_depth_metadata(tmp_path: Path) -> None:
+    """Test that folder_depth field has correct metadata for GUI."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    metadata = cfg.get_field_metadata("folder_depth")
+    assert metadata["widget_type"] == "number"
+    assert metadata["label"] == "Folder Depth"
+    assert metadata["min"] == 1
+    assert metadata["requires_restart"] is False
+
+
+def test_folder_depth_in_get_all_fields_with_metadata(tmp_path: Path) -> None:
+    """Test that folder_depth appears in get_all_fields_with_metadata."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    fields_info = cfg.get_all_fields_with_metadata()
+    assert "folder_depth" in fields_info
+    assert fields_info["folder_depth"]["value"] == DEFAULT_FOLDER_DEPTH
+    assert fields_info["folder_depth"]["metadata"]["widget_type"] == "number"
+    assert fields_info["folder_depth"]["type"] == "int"
+
+
+def test_folder_depth_normalization(tmp_path: Path) -> None:
+    """Test that _normalize_loaded_data validates folder_depth."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Create config with invalid folder_depth (negative)
+    cfg = AppConfig.load(config_path=cfg_path)
+    cfg.data.folder_depth = -1
+    
+    # Normalize should fix it
+    AppConfig._normalize_loaded_data(cfg.data)
+    assert cfg.data.folder_depth == DEFAULT_FOLDER_DEPTH
+    
+    # Test with zero
+    cfg2 = AppConfig.load(config_path=cfg_path)
+    cfg2.data.folder_depth = 0
+    AppConfig._normalize_loaded_data(cfg2.data)
+    assert cfg2.data.folder_depth == DEFAULT_FOLDER_DEPTH
+    
+    # Test with non-integer type
+    cfg3 = AppConfig.load(config_path=cfg_path)
+    cfg3.data.folder_depth = "invalid"  # type: ignore
+    AppConfig._normalize_loaded_data(cfg3.data)
+    assert cfg3.data.folder_depth == DEFAULT_FOLDER_DEPTH
+
+
+def test_folder_depth_set_attribute_validates_min(tmp_path: Path) -> None:
+    """Test that set_attribute validates folder_depth minimum value."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    
+    # Valid value should work
+    cfg.set_attribute("folder_depth", 5)
+    assert cfg.get_attribute("folder_depth") == 5
+    
+    # Value less than min should raise ValueError
+    try:
+        cfg.set_attribute("folder_depth", 0)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "less than minimum" in str(e)
+    
+    # Negative value should raise ValueError
+    try:
+        cfg.set_attribute("folder_depth", -1)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "less than minimum" in str(e)
+
+
+def test_folder_depth_from_json_dict_tolerates_missing_field(tmp_path: Path) -> None:
+    """Test that from_json_dict handles missing folder_depth field gracefully."""
+    cfg_path = tmp_path / "app_config.json"
+    
+    # Missing folder_depth should use default
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "text_size": DEFAULT_TEXT_SIZE,
+    }
+    cfg_path.write_text(json.dumps(payload), encoding="utf-8")
+    
+    cfg = AppConfig.load(config_path=cfg_path)
+    assert cfg.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH

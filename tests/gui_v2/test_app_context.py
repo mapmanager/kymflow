@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2 import app_context
 from kymflow.gui_v2.app_context import AppContext, THEME_STORAGE_KEY
-from kymflow.gui_v2.app_config import AppConfig, DEFAULT_TEXT_SIZE
+from kymflow.gui_v2.app_config import AppConfig, DEFAULT_FOLDER_DEPTH, DEFAULT_TEXT_SIZE
 
 
 class DummyAppState:
@@ -192,3 +192,105 @@ def test_app_context_app_config_none_in_worker_process(monkeypatch) -> None:
     assert context.app_config is None
     assert context.app_state is None
     assert context.user_config is None
+
+
+def test_app_context_syncs_folder_depth_from_app_config(tmp_path: Path, monkeypatch) -> None:
+    """Test that AppContext syncs app_state.folder_depth from app_config on initialization."""
+    # Reset singleton to ensure fresh initialization
+    AppContext._instance = None
+
+    # Create a test app_config file with custom folder_depth
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    cfg.set_attribute("folder_depth", 7)
+    cfg.save()
+
+    # Mock multiprocessing to ensure we're in main process
+    class MockProcess:
+        name = "MainProcess"
+
+    monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+
+    # Mock ui with all elements that _setUpGuiDefaults() uses
+    def create_mock_ui_element():
+        return SimpleNamespace(default_classes=lambda x: None, default_props=lambda x: None)
+
+    mock_ui = SimpleNamespace(
+        label=create_mock_ui_element(),
+        button=create_mock_ui_element(),
+        checkbox=create_mock_ui_element(),
+        select=create_mock_ui_element(),
+        input=create_mock_ui_element(),
+        number=create_mock_ui_element(),
+        expansion=create_mock_ui_element(),
+        slider=create_mock_ui_element(),
+        linear_progress=create_mock_ui_element(),
+        menu=create_mock_ui_element(),
+        menu_item=create_mock_ui_element(),
+    )
+
+    monkeypatch.setattr(app_context, "ui", mock_ui)
+
+    # Set environment variable to use our test config
+    import os
+    monkeypatch.setenv("KYMFLOW_APP_CONFIG_PATH", str(cfg_path))
+
+    # Initialize AppContext
+    context = AppContext()
+
+    # Verify app_state.folder_depth was synced from app_config
+    assert context.app_state is not None
+    assert context.app_config is not None
+    assert context.app_config.get_attribute("folder_depth") == 7
+    assert context.app_state.folder_depth == 7
+
+
+def test_app_context_syncs_folder_depth_default(tmp_path: Path, monkeypatch) -> None:
+    """Test that AppContext syncs app_state.folder_depth to default (4) when app_config has default."""
+    # Reset singleton to ensure fresh initialization
+    AppContext._instance = None
+
+    # Create a test app_config file with default folder_depth (not explicitly set)
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    # Don't set folder_depth - should use default
+    cfg.save()
+
+    # Mock multiprocessing to ensure we're in main process
+    class MockProcess:
+        name = "MainProcess"
+
+    monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+
+    # Mock ui with all elements that _setUpGuiDefaults() uses
+    def create_mock_ui_element():
+        return SimpleNamespace(default_classes=lambda x: None, default_props=lambda x: None)
+
+    mock_ui = SimpleNamespace(
+        label=create_mock_ui_element(),
+        button=create_mock_ui_element(),
+        checkbox=create_mock_ui_element(),
+        select=create_mock_ui_element(),
+        input=create_mock_ui_element(),
+        number=create_mock_ui_element(),
+        expansion=create_mock_ui_element(),
+        slider=create_mock_ui_element(),
+        linear_progress=create_mock_ui_element(),
+        menu=create_mock_ui_element(),
+        menu_item=create_mock_ui_element(),
+    )
+
+    monkeypatch.setattr(app_context, "ui", mock_ui)
+
+    # Set environment variable to use our test config
+    import os
+    monkeypatch.setenv("KYMFLOW_APP_CONFIG_PATH", str(cfg_path))
+
+    # Initialize AppContext
+    context = AppContext()
+
+    # Verify app_state.folder_depth was synced to default
+    assert context.app_state is not None
+    assert context.app_config is not None
+    assert context.app_config.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
+    assert context.app_state.folder_depth == DEFAULT_FOLDER_DEPTH
