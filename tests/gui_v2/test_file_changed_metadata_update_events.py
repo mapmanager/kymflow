@@ -24,6 +24,7 @@ from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.events import (
     AddRoi,
     DeleteRoi,
+    EditPhysicalUnits,
     EditRoi,
     FileChanged,
     FileSelection,
@@ -499,6 +500,39 @@ def test_file_table_bindings_handles_file_changed(bus: EventBus, mock_app_contex
         FileChanged(
             file=mock_file,
             change_type="roi",
+            origin=SelectionOrigin.EXTERNAL,
+            phase="state",
+        )
+    )
+    
+    table.update_row_for_file.assert_called_once_with(mock_file)
+    
+    bindings.teardown()
+
+
+def test_file_table_bindings_handles_edit_physical_units(bus: EventBus, mock_app_context) -> None:
+    """Test that FileTableBindings handles EditPhysicalUnits state events."""
+    table = FileTableView(
+        mock_app_context,
+        on_selected=lambda e: None,
+        on_metadata_update=lambda e: None,
+        on_analysis_update=lambda e: None,
+    )
+    bindings = FileTableBindings(bus, table)
+    
+    table.update_row_for_file = MagicMock()
+    table._grid = MagicMock()  # noqa: SLF001
+    table._files_by_path = {"/test.tif": MagicMock()}  # noqa: SLF001
+    
+    mock_file = MagicMock()
+    mock_file.path = "/test.tif"
+    
+    # Emit EditPhysicalUnits state event
+    bus.emit(
+        EditPhysicalUnits(
+            file=mock_file,
+            seconds_per_line=0.002,
+            um_per_pixel=0.5,
             origin=SelectionOrigin.EXTERNAL,
             phase="state",
         )

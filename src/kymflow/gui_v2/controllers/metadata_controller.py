@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import MetadataUpdate
+from kymflow.gui_v2.events import EditPhysicalUnits, MetadataUpdate
 
 from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
@@ -39,14 +39,16 @@ class MetadataController:
     def __init__(self, app_state: AppState, bus: EventBus) -> None:
         """Initialize metadata controller.
 
-        Subscribes to MetadataUpdate (phase="intent") events from the bus.
+        Subscribes to MetadataUpdate and EditPhysicalUnits (phase="intent") events from the bus.
 
         Args:
             app_state: AppState instance to update.
             bus: EventBus instance to subscribe to.
         """
         self._app_state: AppState = app_state
+        self._bus: EventBus = bus
         bus.subscribe_intent(MetadataUpdate, self._on_metadata_update)
+        bus.subscribe_intent(EditPhysicalUnits, self._on_edit_physical_units)
 
     def _on_metadata_update(self, e: MetadataUpdate) -> None:
         """Handle MetadataUpdate intent event.
@@ -67,3 +69,47 @@ class MetadataController:
 
         # Notify AppState that metadata was updated
         self._app_state.update_metadata(e.file)
+    
+    def _on_edit_physical_units(self, e: EditPhysicalUnits) -> None:
+        """Handle EditPhysicalUnits intent event.
+
+        Updates the file's header.voxels and recomputes physical_size.
+
+        Args:
+            e: EditPhysicalUnits event (phase="intent") containing the file and new values.
+        """
+        # Validate file is KymImage with 2D voxels
+        if not hasattr(e.file, "header"):
+            logger.warning("File does not have header attribute")
+            return
+        
+        header = e.file.header
+        if header is None or header.voxels is None or len(header.voxels) != 2:
+            logger.warning("File does not have 2D voxels (voxels=%s)", header.voxels if header else None)
+            return
+        
+        # Update voxels
+        header.voxels = [e.seconds_per_line, e.um_per_pixel]
+        
+        # Recompute physical_size
+        header.physical_size = header.compute_physical_size()
+        
+        # Validate consistency
+        header._validate_consistency()
+        
+        # Mark metadata as dirty
+        e.file.mark_metadata_dirty()
+        
+        # Notify AppState that metadata was updated (emits MetadataUpdate phase="state")
+        self._app_state.update_metadata(e.file)
+        
+        # Emit EditPhysicalUnits state event for explicit consumers
+        self._bus.emit(
+            EditPhysicalUnits(
+                file=e.file,
+                seconds_per_line=e.seconds_per_line,
+                um_per_pixel=e.um_per_pixel,
+                origin=e.origin,
+                phase="state",
+            )
+        )

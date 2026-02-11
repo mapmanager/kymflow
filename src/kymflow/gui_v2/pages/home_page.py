@@ -172,7 +172,10 @@ class HomePage(BasePage):
         )
         # Splitter pane metadata views
         self._drawer_metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
-        self._drawer_metadata_header_view = MetadataHeaderView(on_metadata_update=bus.emit)
+        self._drawer_metadata_header_view = MetadataHeaderView(
+            on_metadata_update=bus.emit,
+            on_edit_physical_units=bus.emit,
+        )
         self._drawer_metadata_tab_view = MetadataTabView(
             self._drawer_metadata_experimental_view,
             self._drawer_metadata_header_view,

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from kymflow.gui_v2.events import AddKymEvent, DeleteKymEvent, VelocityEventUpdate, SelectionOrigin
+from kymflow.gui_v2.events import AddKymEvent, DeleteKymEvent, EditPhysicalUnits, VelocityEventUpdate, SelectionOrigin
 from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
 from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent, MachineType, UserType
 
@@ -410,3 +410,85 @@ def test_velocity_event_update_preserves_selection(
     shape = mock_view._current_figure_dict["layout"]["shapes"][0]
     assert "line" in shape
     assert shape["line"]["color"] == "yellow"
+
+
+def test_image_line_viewer_bindings_handles_edit_physical_units(mock_view: MagicMock) -> None:
+    """Test that ImageLineViewerBindings handles EditPhysicalUnits state events."""
+    # Setup
+    mock_file = MagicMock()
+    mock_view._current_file = mock_file
+    mock_view._render_combined = MagicMock()
+    
+    # Create bindings
+    mock_bus = MagicMock()
+    bindings = ImageLineViewerBindings(mock_bus, mock_view)
+    
+    # Create EditPhysicalUnits event for current file
+    event = EditPhysicalUnits(
+        file=mock_file,
+        seconds_per_line=0.002,
+        um_per_pixel=0.5,
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+    
+    # Call handler
+    bindings._on_edit_physical_units(event)
+    
+    # Verify plot was refreshed
+    mock_view._render_combined.assert_called_once()
+
+
+def test_image_line_viewer_bindings_ignores_edit_physical_units_different_file(mock_view: MagicMock) -> None:
+    """Test that ImageLineViewerBindings ignores EditPhysicalUnits for different file."""
+    # Setup
+    mock_file1 = MagicMock()
+    mock_file2 = MagicMock()
+    mock_view._current_file = mock_file1
+    mock_view._render_combined = MagicMock()
+    
+    # Create bindings
+    mock_bus = MagicMock()
+    bindings = ImageLineViewerBindings(mock_bus, mock_view)
+    
+    # Create EditPhysicalUnits event for different file
+    event = EditPhysicalUnits(
+        file=mock_file2,  # Different file
+        seconds_per_line=0.002,
+        um_per_pixel=0.5,
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+    
+    # Call handler
+    bindings._on_edit_physical_units(event)
+    
+    # Verify plot was NOT refreshed
+    mock_view._render_combined.assert_not_called()
+
+
+def test_image_line_viewer_bindings_ignores_edit_physical_units_no_file(mock_view: MagicMock) -> None:
+    """Test that ImageLineViewerBindings ignores EditPhysicalUnits when no file is selected."""
+    # Setup
+    mock_view._current_file = None
+    mock_view._render_combined = MagicMock()
+    
+    # Create bindings
+    mock_bus = MagicMock()
+    bindings = ImageLineViewerBindings(mock_bus, mock_view)
+    
+    # Create EditPhysicalUnits event
+    mock_file = MagicMock()
+    event = EditPhysicalUnits(
+        file=mock_file,
+        seconds_per_line=0.002,
+        um_per_pixel=0.5,
+        origin=SelectionOrigin.EXTERNAL,
+        phase="state",
+    )
+    
+    # Call handler
+    bindings._on_edit_physical_units(event)
+    
+    # Verify plot was NOT refreshed
+    mock_view._render_combined.assert_not_called()

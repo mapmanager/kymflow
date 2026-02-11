@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import AnalysisUpdate, DetectEvents, FileChanged, FileSelection, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events import AnalysisUpdate, DetectEvents, EditPhysicalUnits, FileChanged, FileSelection, MetadataUpdate, SelectionOrigin
 from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged, TaskStateChanged
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.core.utils.logging import get_logger
@@ -60,6 +60,7 @@ class FileTableBindings:
         bus.subscribe(FileListChanged, self._on_file_list_changed)
         bus.subscribe_state(FileSelection, self._on_selected_file_changed)
         bus.subscribe_state(MetadataUpdate, self._on_metadata_update)
+        bus.subscribe_state(EditPhysicalUnits, self._on_edit_physical_units)
         bus.subscribe_state(FileChanged, self._on_file_changed)
         bus.subscribe_state(AnalysisUpdate, self._on_analysis_update)
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
@@ -80,6 +81,7 @@ class FileTableBindings:
         self._bus.unsubscribe(FileListChanged, self._on_file_list_changed)
         self._bus.unsubscribe_state(FileSelection, self._on_selected_file_changed)
         self._bus.unsubscribe_state(MetadataUpdate, self._on_metadata_update)
+        self._bus.unsubscribe_state(EditPhysicalUnits, self._on_edit_physical_units)
         self._bus.unsubscribe_state(FileChanged, self._on_file_changed)
         self._bus.unsubscribe_state(AnalysisUpdate, self._on_analysis_update)
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
@@ -133,6 +135,27 @@ class FileTableBindings:
 
     def _on_metadata_update(self, e: MetadataUpdate) -> None:
         """Handle metadata update events by updating affected table rows.
+        
+        For updates that clearly apply to a single file and when the table is
+        already rendered, perform a targeted row-level update to avoid
+        reloading the entire dataset. Otherwise, fall back to a full refresh
+        while preserving the currently selected file from AppState.
+        """
+        # Prefer row-level update when we have an explicit file and an active grid.
+        kym_file = e.file
+        if kym_file is not None and self._table._grid is not None:  # noqa: SLF001
+            path = getattr(kym_file, "path", None)
+            if path is not None:
+                str_path = str(path)
+                if str_path in self._table._files_by_path:  # noqa: SLF001
+                    safe_call(self._table.update_row_for_file, kym_file)
+                    return
+
+        # Fallback: refresh all rows and restore selection
+        self._refresh_rows_preserve_selection()
+
+    def _on_edit_physical_units(self, e: EditPhysicalUnits) -> None:
+        """Handle EditPhysicalUnits events by updating affected table rows.
         
         For updates that clearly apply to a single file and when the table is
         already rendered, perform a targeted row-level update to avoid

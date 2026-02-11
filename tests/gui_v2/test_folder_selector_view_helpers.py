@@ -147,12 +147,9 @@ def test_validate_native_mode_for_dialog_all_path_types() -> None:
 
 def test_calculate_depth_for_path_folder(bus: EventBus, app_state: AppState) -> None:
     """Test _calculate_depth_for_path for FOLDER type."""
+    app_state.folder_depth = 5
     view = FolderSelectorView(bus, app_state, user_config=None)
     view.render()
-    
-    # Set depth input value
-    if view._depth_input is not None:
-        view._depth_input.value = 5
     
     depth = view._calculate_depth_for_path(PathType.FOLDER)
     assert depth == 5

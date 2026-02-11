@@ -218,6 +218,37 @@ class MetadataUpdate:
 
 
 @dataclass(frozen=True, slots=True)
+class EditPhysicalUnits:
+    """Edit physical units event (intent or state phase).
+
+    Purpose: Update voxels[0] (seconds_per_line) and voxels[1] (um_per_pixel) for KymImage.
+    Triggered by: Intent from MetadataHeaderView "OK" button.
+    Consumed by: MetadataController (intent) → updates file → emits state.
+
+    For intent phase:
+        - Emitted by MetadataHeaderView when user clicks "OK" button after editing physical units
+        - Handled by MetadataController which updates the file's header.voxels
+
+    For state phase:
+        - Emitted by MetadataController after successfully updating the file
+        - Subscribed to by bindings to refresh views (file table, image line viewer)
+
+    Attributes:
+        file: KymImage instance whose physical units are being updated or were updated.
+        seconds_per_line: New seconds per line value (voxels[0]).
+        um_per_pixel: New micrometers per pixel value (voxels[1]).
+        origin: SelectionOrigin indicating where the edit came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    file: "KymImage"
+    seconds_per_line: float
+    um_per_pixel: float
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
 class FileChanged:
     """File changed event (state phase only).
 

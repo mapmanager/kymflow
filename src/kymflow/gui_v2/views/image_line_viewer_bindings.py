@@ -11,6 +11,7 @@ from kymflow.gui_v2.events import (
     DeleteKymEvent,
     DeleteRoi,
     DetectEvents,
+    EditPhysicalUnits,
     EditRoi,
     EventSelection,
     FileSelection,
@@ -75,6 +76,7 @@ class ImageLineViewerBindings:
         bus.subscribe_state(EventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        bus.subscribe_state(EditPhysicalUnits, self._on_edit_physical_units)
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         bus.subscribe_state(DetectEvents, self._on_detect_events_done)
         bus.subscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
@@ -104,6 +106,7 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe_state(EventSelection, self._on_event_selected)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        self._bus.unsubscribe_state(EditPhysicalUnits, self._on_edit_physical_units)
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._bus.unsubscribe_state(DetectEvents, self._on_detect_events_done)
         self._bus.unsubscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
@@ -176,10 +179,69 @@ class ImageLineViewerBindings:
         """
         safe_call(self._view.set_image_display, e.params)
 
+    def _on_edit_physical_units(self, e: EditPhysicalUnits) -> None:
+        """Handle EditPhysicalUnits event by refreshing plot if it matches current file.
+        
+        Physical units changes affect the plot axes and scaling, so we need to refresh
+        the entire plot when they change.
+        
+        Args:
+            e: EditPhysicalUnits event (phase="state") containing the file whose physical units were updated.
+        """
+        self._logger.debug(
+            "EditPhysicalUnits(state) received: file.path=%s, seconds_per_line=%s, um_per_pixel=%s",
+            e.file.path if e.file and hasattr(e.file, "path") else None,
+            e.seconds_per_line,
+            e.um_per_pixel,
+        )
+        
+        # Only refresh if this event is for the currently displayed file
+        current_file = self._view._current_file  # noqa: SLF001
+        if current_file is None:
+            self._logger.debug("EditPhysicalUnits: current_file is None, ignoring")
+            return
+        
+        self._logger.debug(
+            "EditPhysicalUnits: current_file.path=%s, event.file.path=%s",
+            current_file.path if hasattr(current_file, "path") else None,
+            e.file.path if e.file and hasattr(e.file, "path") else None,
+        )
+        
+        # Check if the event's file matches the currently displayed file by path
+        # Use path comparison for reliability (file objects may be different instances)
+        if e.file.path is not None and current_file.path is not None:
+            if str(e.file.path) != str(current_file.path):
+                # Event is for a different file, ignore
+                self._logger.debug(
+                    "EditPhysicalUnits: path mismatch (event=%s, current=%s), ignoring",
+                    e.file.path,
+                    current_file.path,
+                )
+                return
+        
+        # Refresh the plot to reflect new physical units (full refresh)
+        self._logger.debug("EditPhysicalUnits: calling _render_combined() to refresh plot")
+        safe_call(self._view._render_combined)  # noqa: SLF001
+
     def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
         """Handle analysis completion by refreshing plot for current file."""
-        if e.success and e.file == self._view._current_file:  # noqa: SLF001
-            safe_call(self._view._render_combined)
+        if not e.success:
+            return
+        
+        # Only refresh if this event is for the currently displayed file
+        current_file = self._view._current_file  # noqa: SLF001
+        if current_file is None:
+            return
+        
+        # Check if the event's file matches the currently displayed file by path
+        # Use path comparison for reliability (file objects may be different instances)
+        if e.file.path is not None and current_file.path is not None:
+            if str(e.file.path) != str(current_file.path):
+                # Event is for a different file, ignore
+                return
+        
+        # Refresh the plot to reflect completed analysis
+        safe_call(self._view._render_combined)  # noqa: SLF001
 
     def _on_detect_events_done(self, e: DetectEvents) -> None:
         """Handle DetectEvents completion by refreshing velocity event overlays.
