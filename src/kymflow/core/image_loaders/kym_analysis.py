@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypedDict
 from uuid import uuid4
 
 import numpy as np
@@ -157,30 +157,12 @@ class KymAnalysis:
         # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
         self._velocity_events: Dict[int, List[VelocityEvent]] = {}
         # Velocity events are computed on-demand from stored analysis values (e.g., velocity).
-        
-        # Runtime-only UUID mapping for stable event_id (not serialized)
-        # Maps: uuid -> (roi_id, index_in_list)
-        self._velocity_event_uuid_map: Dict[str, Tuple[int, int]] = {}
-        # Reverse mapping for O(1) lookup: (roi_id, index) -> uuid
-        self._velocity_event_uuid_reverse: Dict[Tuple[int, int], str] = {}
+        #
+        # NOTE: VelocityEvent._uuid is the single source of truth for event IDs.
+        # We no longer maintain separate UUID → (roi_id, index) mappings.
         
         # Always try to load analysis (handles path=None gracefully)
         self.load_analysis()
-    
-    # abb 20260209 -- NOT WORKING
-    def get_velocity_event_uuid(self, roi_id: int, event: VelocityEvent) -> Optional[str]:
-        """Get UUID for a VelocityEvent."""
-        logger.info(f'getting velocity event uuid for roi {roi_id}:')
-        logger.info(f'  event:{event}')
-
-        events = self.get_velocity_events(roi_id)
-        if events is None:
-            return None
-        try:
-            idx = events.index(event)
-            return self._velocity_event_uuid_reverse.get((roi_id, idx))
-        except ValueError:
-            return None
 
     def _filter_df_by_roi(self, df: pd.DataFrame, roi_id: int) -> pd.DataFrame:
         """Filter DataFrame to rows for a specific ROI.
@@ -530,7 +512,7 @@ class KymAnalysis:
         
         # Check if path is available
         if self.acq_image.path is None:
-            logger.warning(f'path is none -> happens when loaded with synth data in pytest')
+            logger.warning('path is none -> happens when loaded with synth data in pytest')
             return
     
         # old velocity is in folder <parent folder>-analysis,like "20251014-analysis"
@@ -752,22 +734,17 @@ class KymAnalysis:
 
         # Load velocity events (optional; may be absent in older analysis JSON).
         self._velocity_events.clear()
-        self._velocity_event_uuid_map.clear()
-        self._velocity_event_uuid_reverse.clear()
         for roi_id_str, events_list in json_data.get("velocity_events", {}).items():
             try:
                 roi_id = int(roi_id_str)
                 events = [
                     VelocityEvent.from_dict(ev_dict) for ev_dict in events_list
                 ]
+                # Assign a fresh UUID to every loaded event
+                for event in events:
+                    event_uuid = str(uuid4())
+                    object.__setattr__(event, "_uuid", event_uuid)
                 self._velocity_events[roi_id] = events
-                # Generate stable UUIDs for each event on load and assign to event object
-                for idx, event in enumerate(events):
-                    uuid = str(uuid4())
-                    # Assign UUID to frozen dataclass using object.__setattr__
-                    object.__setattr__(event, '_uuid', uuid)
-                    self._velocity_event_uuid_map[uuid] = (roi_id, idx)
-                    self._velocity_event_uuid_reverse[(roi_id, idx)] = uuid
             except Exception as e:
                 logger.warning(f"Skipping invalid velocity_events entry {roi_id_str}: {e}")
 
@@ -780,16 +757,10 @@ class KymAnalysis:
         # self._stall_analysis = {
         #     rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
         # }
-        # Remove events for deleted ROIs and clean up UUID mappings
+        # Remove events for deleted ROIs
         removed_roi_ids = set(self._velocity_events.keys()) - current_roi_ids
         for removed_roi_id in removed_roi_ids:
-            events = self._velocity_events.get(removed_roi_id, [])
-            for idx in range(len(events)):
-                uuid_key = (removed_roi_id, idx)
-                if uuid_key in self._velocity_event_uuid_reverse:
-                    uuid = self._velocity_event_uuid_reverse.pop(uuid_key)
-                    if uuid in self._velocity_event_uuid_map:
-                        del self._velocity_event_uuid_map[uuid]
+            del self._velocity_events[removed_roi_id]
         self._velocity_events = {
             rid: evs for rid, evs in self._velocity_events.items() if rid in current_roi_ids
         }
@@ -853,9 +824,9 @@ class KymAnalysis:
         # values = roi_df[key].values.copy()
         values = roi_df[key].values
 
-        logger.warning(f"qqq {key} called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
-        from kymflow.core.utils.get_stack_trace import get_stack_trace
-        print(get_stack_trace())
+        # logger.warning(f"qqq {key} called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
+        # from kymflow.core.utils.get_stack_trace import get_stack_trace
+        # print(get_stack_trace())
 
         # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
         # print(values)
@@ -1044,26 +1015,13 @@ class KymAnalysis:
             self._velocity_events[roi_id].sort(key=lambda e: e.t_start)
         
         # Assign UUIDs to all events in the list (including newly detected ones)
-        # Rebuild UUID mappings for this ROI after sorting
         events_list = self._velocity_events[roi_id]
-        # Remove old UUID mappings for this ROI
-        keys_to_remove = [(roi_id, idx) for idx in range(len(events_list) + 100) if (roi_id, idx) in self._velocity_event_uuid_reverse]
-        for key in keys_to_remove:
-            uuid = self._velocity_event_uuid_reverse.pop(key, None)
-            if uuid and uuid in self._velocity_event_uuid_map:
-                del self._velocity_event_uuid_map[uuid]
+        for event in events_list:
+            # Ensure each event has a UUID
+            if event._uuid is None:
+                event_uuid = str(uuid4())
+                object.__setattr__(event, "_uuid", event_uuid)
         
-        # Assign UUIDs to all events
-        for idx, event in enumerate(events_list):
-            # Only assign UUID if event doesn't already have one
-            if not hasattr(event, '_uuid') or event._uuid is None:
-                uuid = str(uuid4())
-                object.__setattr__(event, '_uuid', uuid)
-            else:
-                uuid = event._uuid
-            self._velocity_event_uuid_map[uuid] = (roi_id, idx)
-            self._velocity_event_uuid_reverse[(roi_id, idx)] = uuid
-
         # Mark dirty so callers know there are unsaved results.
         self._dirty = True
         # Return events_list (all events with UUIDs assigned), not just newly detected events
@@ -1141,12 +1099,7 @@ class KymAnalysis:
         if events is None:
             return None
         
-        # Ensure all events have _uuid matching the mapping (mapping is source of truth)
-        for idx, event in enumerate(events):
-            event_id = self._velocity_event_uuid_reverse.get((roi_id, idx))
-            if event_id and (not hasattr(event, '_uuid') or event._uuid != event_id):
-                object.__setattr__(event, '_uuid', event_id)
-        
+        # Invariant: every event in _velocity_events has a non-None _uuid
         return events
 
     def get_velocity_events_filtered(
@@ -1165,12 +1118,6 @@ class KymAnalysis:
         events = self._velocity_events.get(roi_id)
         if events is None:
             return None
-        
-        # Ensure all events have _uuid matching the mapping (mapping is source of truth)
-        for idx, event in enumerate(events):
-            event_id = self._velocity_event_uuid_reverse.get((roi_id, idx))
-            if event_id and (not hasattr(event, '_uuid') or event._uuid != event_id):
-                object.__setattr__(event, '_uuid', event_id)
         
         # Filter events where event_filter.get(event.event_type, True) is True
         # Default to True if event_type not in filter (show by default)
@@ -1194,22 +1141,11 @@ class KymAnalysis:
         Returns:
             Tuple of (roi_id, index, event) if found, None otherwise.
         """
-        if event_id not in self._velocity_event_uuid_map:
-            return None
-        roi_id, index = self._velocity_event_uuid_map[event_id]
-        events = self._velocity_events.get(roi_id)
-        if events is None or index >= len(events):
-            # Clean up stale mapping
-            del self._velocity_event_uuid_map[event_id]
-            if (roi_id, index) in self._velocity_event_uuid_reverse:
-                del self._velocity_event_uuid_reverse[(roi_id, index)]
-            return None
-        event = events[index]
-        # Ensure event has UUID set (defensive check - should always be true)
-        if not hasattr(event, '_uuid') or event._uuid is None:
-            # Restore UUID from mapping (shouldn't happen, but be defensive)
-            object.__setattr__(event, '_uuid', event_id)
-        return (roi_id, index, event)
+        for roi_id, events in self._velocity_events.items():
+            for idx, event in enumerate(events):
+                if event._uuid == event_id:
+                    return (roi_id, idx, event)
+        return None
 
     def find_event_by_uuid(self, event_id: str) -> tuple[int, int, VelocityEvent] | None:
         """Find event by UUID event_id (public API).
@@ -1396,7 +1332,6 @@ class KymAnalysis:
 
         # Create new event with defaults
         new_event = VelocityEvent(
-            # event_type="baseline_drop",  # Default event type
             event_type="User Added",  # Default event type
             i_start=i_start,
             t_start=t_start,
@@ -1405,7 +1340,10 @@ class KymAnalysis:
             duration_sec=duration_sec,
             user_type=UserType.UNREVIEWED,  # Default user type
         )
-
+        # Assign UUID to frozen dataclass using object.__setattr__
+        event_uuid = str(uuid4())
+        object.__setattr__(new_event, "_uuid", event_uuid)
+        
         # Append to the ROI's event list
         if roi_id not in self._velocity_events:
             self._velocity_events[roi_id] = []
@@ -1414,19 +1352,9 @@ class KymAnalysis:
         # Sort events by t_start (same as run_velocity_event_analysis)
         self._velocity_events[roi_id].sort(key=lambda e: e.t_start)
         
-        # Find the new index of the event after sorting
-        idx = self._velocity_events[roi_id].index(new_event)
-        
-        # Generate UUID for the new event and add to mappings
-        event_uuid = str(uuid4())
-        # Assign UUID to frozen dataclass using object.__setattr__
-        object.__setattr__(new_event, '_uuid', event_uuid)
-        self._velocity_event_uuid_map[event_uuid] = (roi_id, idx)
-        self._velocity_event_uuid_reverse[(roi_id, idx)] = event_uuid
-
         # Mark dirty
         self._dirty = True
-
+        
         # Return UUID event_id (not the old format)
         return event_uuid
 
@@ -1450,22 +1378,6 @@ class KymAnalysis:
         # Remove the event from the list
         events.pop(idx)
         self._velocity_events[roi_id] = events
-        
-        # Clean up UUID mappings
-        if event_id in self._velocity_event_uuid_map:
-            del self._velocity_event_uuid_map[event_id]
-        if (roi_id, idx) in self._velocity_event_uuid_reverse:
-            del self._velocity_event_uuid_reverse[(roi_id, idx)]
-        
-        # Update UUID mappings for events after the deleted one (indices shifted)
-        # Rebuild reverse mapping for this ROI to fix indices
-        for new_idx in range(idx, len(events)):
-            old_key = (roi_id, new_idx + 1)
-            if old_key in self._velocity_event_uuid_reverse:
-                uuid = self._velocity_event_uuid_reverse.pop(old_key)
-                new_key = (roi_id, new_idx)
-                self._velocity_event_uuid_reverse[new_key] = uuid
-                self._velocity_event_uuid_map[uuid] = new_key
         
         # Mark dirty
         self._dirty = True
@@ -1494,7 +1406,7 @@ class KymAnalysis:
         _rowDict = self.acq_image.getRowDict(blinded=blinded)
         grandparent_folder = _rowDict.get("Grandparent Folder")
         if grandparent_folder is None:
-            logger.warning(f'grandparent_folder is none -> happend when loaded with synth data in pytest')
+            logger.warning('grandparent_folder is none -> happend when loaded with synth data in pytest')
             grandparent_folder = ""
 
         for rid in roi_ids:
@@ -1503,19 +1415,12 @@ class KymAnalysis:
                 continue
             for idx, event in enumerate(events):
                 event_dict = event.to_dict(round_decimals=3)
-                # Use UUID as event_id (stable, doesn't change when event is updated)
-                event_id = self._velocity_event_uuid_reverse.get((rid, idx))
-                if event_id is None:
-                    # Fallback: generate UUID if not found (shouldn't happen)
-                    event_id = str(uuid4())
-                    self._velocity_event_uuid_map[event_id] = (rid, idx)
-                    self._velocity_event_uuid_reverse[(rid, idx)] = event_id
-                
-                # CRITICAL: Ensure event object has _uuid matching the mapping
-                # This is the authoritative source - sync event object to match
-                if not hasattr(event, '_uuid') or event._uuid != event_id:
-                    object.__setattr__(event, '_uuid', event_id)
-                
+                # Use event._uuid as event_id (stable, doesn't change when event is updated)
+                if event._uuid is None:
+                    # Defensive: assign a UUID if somehow missing
+                    event_uuid = str(uuid4())
+                    object.__setattr__(event, "_uuid", event_uuid)
+                event_id = event._uuid
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path
@@ -1537,12 +1442,11 @@ class KymAnalysis:
         Returns:
             Velocity report row dict, or None if event not found.
         """
-        # Find the event using UUID mapping
-        roi_idx = self._velocity_event_uuid_map.get(event_id)
-        if roi_idx is None:
+        # Find the event by UUID
+        result = self._find_event_by_uuid(event_id)
+        if result is None:
             return None
-        
-        roi_id, idx = roi_idx
+        roi_id, idx, event = result
         events = self.get_velocity_events(roi_id)
         if not events or idx >= len(events):
             return None

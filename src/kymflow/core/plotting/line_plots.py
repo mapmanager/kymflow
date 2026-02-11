@@ -1155,6 +1155,63 @@ def clear_kym_event_rects(plotly_dict: dict, row: int = 2) -> None:
     layout['shapes'] = filtered_shapes
 
 
+def refresh_kym_event_rects(
+    plotly_dict: dict,
+    kym_analysis,
+    roi_id: int,
+    time_range: tuple[float, float],
+    row: int = 2,
+    event_filter: Optional[dict[str, bool]] = None,
+    selected_event_id: Optional[str] = None,
+) -> None:
+    """Clear and re-add all kym event rects from kymanalysis to plotly dict.
+
+    This is used for CRUD-style updates when the event filter changes.
+
+    Args:
+        plotly_dict: Plotly figure dictionary to modify.
+        kym_analysis: KymAnalysis instance to get events from.
+        roi_id: ROI identifier to get events for.
+        time_range: Tuple of (time_min, time_max) for coordinate calculation and clamping.
+        row: Subplot row number (default: 2 for line plot).
+        event_filter: Optional dict mapping event_type (str) to bool (True = include, False = exclude).
+        selected_event_id: Optional UUID string of currently selected event; if not
+            visible after filtering, selection will be cleared.
+    """
+    # Clear existing event rects
+    clear_kym_event_rects(plotly_dict, row=row)
+
+    # Get filtered or unfiltered events
+    if event_filter is None:
+        velocity_events = kym_analysis.get_velocity_events(roi_id)
+    else:
+        velocity_events = kym_analysis.get_velocity_events_filtered(roi_id, event_filter)
+
+    if velocity_events is None:
+        # Nothing to draw; also clear selection
+        select_kym_event_rect(plotly_dict, None, row=row)
+        return
+
+    # Add back visible events
+    for event in velocity_events:
+        add_kym_event_rect(
+            plotly_dict,
+            event,
+            time_range,
+            row=row,
+        )
+
+    # Restore selection if selected_event_id is still visible; otherwise deselect all.
+    selected_event = None
+    if selected_event_id is not None:
+        for event in velocity_events:
+            if event._uuid == selected_event_id:
+                selected_event = event
+                break
+
+    select_kym_event_rect(plotly_dict, selected_event, row=row)
+
+
 def select_kym_event_rect(
     plotly_dict: dict,
     event: Optional["VelocityEvent"],

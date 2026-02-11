@@ -26,10 +26,7 @@ from kymflow.core.plotting import (
     update_yaxis_range_v2,
     select_kym_event_rect,
 )
-from kymflow.core.plotting.line_plots import (
-    clear_kym_event_rects,
-    add_kym_event_rect,
-)
+from kymflow.core.plotting.line_plots import refresh_kym_event_rects
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
@@ -282,7 +279,7 @@ class ImageLineViewerView:
                 except (TypeError, ValueError):
                     logger.debug("invalid xaxis range; skipping pending zoom")
         logger.debug("emitting SetKymEventXRange x0=%s x1=%s", x_min, x_max)
-        logger.debug(f'  self._pending_range_zoom:{self._pending_range_zoom}')
+        # logger.debug(f'  self._pending_range_zoom:{self._pending_range_zoom}')
         self._on_kym_event_x_range(
             SetKymEventXRange(
                 event_id=self._range_event_id,
@@ -594,48 +591,16 @@ class ImageLineViewerView:
             )
             return
         
-        # Clear all event rects
-        clear_kym_event_rects(self._current_figure_dict, row=2)
-        
-        # Get filtered events
-        if event_filter is None:
-            velocity_events = kym_analysis.get_velocity_events(self._current_roi_id)
-        else:
-            velocity_events = kym_analysis.get_velocity_events_filtered(
-                self._current_roi_id, event_filter
-            )
-        
-        # Add back visible events
-        if velocity_events is not None:
-            for event in velocity_events:
-                add_kym_event_rect(
-                    self._current_figure_dict,
-                    event,
-                    time_range,
-                    row=2,
-                )
-        
-        # Restore selection if selected event is still visible
-        if self._selected_event_id is not None:
-            # Check if selected event is in the visible events
-            selected_event = None
-            if velocity_events is not None:
-                for event in velocity_events:
-                    if (
-                        hasattr(event, "_uuid")
-                        and event._uuid is not None
-                        and event._uuid == self._selected_event_id
-                    ):
-                        selected_event = event
-                        break
-            
-            if selected_event is not None:
-                # Selected event is still visible, restore selection
-                select_kym_event_rect(self._current_figure_dict, selected_event, row=2)
-            else:
-                # Selected event was filtered out, deselect all
-                select_kym_event_rect(self._current_figure_dict, None, row=2)
-        
+        # Use shared helper to clear and re-add event rects, restoring selection where possible
+        refresh_kym_event_rects(
+            self._current_figure_dict,
+            kym_analysis,
+            self._current_roi_id,
+            time_range,
+            row=2,
+            event_filter=event_filter,
+            selected_event_id=self._selected_event_id,
+        )
         # Update the plot
         try:
             self.ui_plotly_update_figure()

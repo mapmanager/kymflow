@@ -22,7 +22,7 @@ class AddKymEventController:
         """Handle AddKymEvent intent event."""
         if e.origin != SelectionOrigin.EVENT_TABLE:
             return
-        logger.debug("AddKymEvent intent roi_id=%s t_start=%s t_end=%s", e.roi_id, e.t_start, e.t_end)
+        # logger.debug("AddKymEvent intent roi_id=%s t_start=%s t_end=%s", e.roi_id, e.t_start, e.t_end)
 
         kym_file = self._app_state.get_file_by_path_or_selected(e.path)
         if kym_file is None:
@@ -35,7 +35,7 @@ class AddKymEventController:
                 t_start=e.t_start,
                 t_end=e.t_end,
             )
-            logger.debug("AddKymEvent: created event_id=%s", event_id)
+            # logger.debug("AddKymEvent: created event_id=%s", event_id)
 
             self._bus.emit(
                 AddKymEvent(

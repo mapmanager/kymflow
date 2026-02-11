@@ -1,5 +1,11 @@
 # Dockerfile
 # Render deployment: run NiceGUI in web mode (native=False), bind to $HOST:$PORT
+#
+# install locally (takes a long time)
+# docker build -t kymflow:latest .
+#
+# run in container
+# docker run --rm -p 8080:8080 kymflow:latest
 
 FROM python:3.11-slim
 

@@ -215,7 +215,7 @@ class KymEventView:
                     ui.checkbox("Zoom (+/- s)", value=self._zoom_enabled).on_value_change(
                         lambda e: self._set_zoom_enabled(bool(e.value))
                     ).props("dense").classes('text-sm')
-                    ui.number("", value=self._zoom_pad_sec, step=0.1).on_value_change(
+                    ui.number(label=None, value=self._zoom_pad_sec, step=0.1).on_value_change(
                         lambda e: self._set_zoom_pad_sec(float(e.value))
                     ).props("dense").classes("w-10 text-sm")
 

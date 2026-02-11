@@ -134,11 +134,11 @@ def home() -> None:
 
         default_path = os.getenv("KYMFLOW_DEFAULT_PATH") if is_web else None
 
-        raw_default_depth = os.getenv("KYMFLOW_DEFAULT_DEPTH", "3")
+        raw_default_depth = os.getenv("KYMFLOW_DEFAULT_DEPTH", "4")
         try:
             default_depth = int(raw_default_depth) if is_web else None
         except ValueError:
-            default_depth = 3 if is_web else None
+            default_depth = 4 if is_web else None
 
         # In web mode, prefer default_path; in native mode, prefer last_path
         if is_web:
@@ -283,7 +283,9 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     # Render sets PORT; if absent use 8080.
     # from nicegui import native as native_module
     # port = _env_int("PORT", native_module.find_open_port())
-    port = _env_int("PORT", 8080)
+    # port = _env_int("PORT", 8080)
+    from nicegui import native as native_module    
+    port = _env_int("PORT", native_module.find_open_port())
 
     # For web deployments you MUST bind 0.0.0.0; for native local dev, 127.0.0.1 is fine.
     default_host = "127.0.0.1" if native_bool else "0.0.0.0"

@@ -16,7 +16,7 @@ class KymEventRangeStateController:
 
     def _on_set_kym_event_range_state(self, e: SetKymEventRangeState) -> None:
         """Emit a state-phase SetKymEventRangeState event for bindings."""
-        logger.debug('== why here')
+        # logger.debug('== why here')
         self._bus.emit(
             SetKymEventRangeState(
                 enabled=e.enabled,

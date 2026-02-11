@@ -184,6 +184,43 @@ def test_velocity_event_uuid_after_replace_preserves_uuid_implicit() -> None:
     assert new_event.user_type == "true_stall"
 
 
+def test_find_event_by_uuid_after_reorder() -> None:
+    """Ensure find_event_by_uuid works correctly after events are reordered by t_start."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+
+    kym_analysis = kym_image.get_kym_analysis()
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+
+    # Add two events with different t_start (order will be normalized by sort)
+    event_id1 = kym_analysis.add_velocity_event(roi.id, t_start=5.0, t_end=6.0)
+    event_id2 = kym_analysis.add_velocity_event(roi.id, t_start=1.0, t_end=2.0)
+
+    # After sorting by t_start, event2 should come before event1 in the list,
+    # but find_event_by_uuid must still find the correct event by UUID.
+    result1 = kym_analysis.find_event_by_uuid(event_id1)
+    result2 = kym_analysis.find_event_by_uuid(event_id2)
+
+    assert result1 is not None
+    assert result2 is not None
+
+    roi_id1, idx1, ev1 = result1
+    roi_id2, idx2, ev2 = result2
+
+    assert roi_id1 == roi.id
+    assert roi_id2 == roi.id
+    assert ev1._uuid == event_id1
+    assert ev2._uuid == event_id2
+
+    # Ensure ordering by t_start is as expected
+    events = kym_analysis.get_velocity_events(roi.id)
+    assert events is not None
+    assert [e.t_start for e in events] == sorted(e.t_start for e in events)
+
+
 def test_velocity_event_uuid_after_load_analysis() -> None:
     """Test that events loaded from disk via load_analysis() have _uuid set correctly.
     
@@ -237,7 +274,4 @@ def test_velocity_event_uuid_after_load_analysis() -> None:
             assert event._uuid is not None, f"Loaded event has _uuid=None: {event}"
             assert isinstance(event._uuid, str), f"Loaded event._uuid is not a string: {type(event._uuid)}"
         
-        # Verify UUIDs are in the mapping
-        for idx, event in enumerate(events):
-            assert event._uuid in kym_analysis2._velocity_event_uuid_map
-            assert kym_analysis2._velocity_event_uuid_reverse.get((roi2_id, idx)) == event._uuid
+        # No separate UUID mapping anymore; event._uuid is the single source of truth

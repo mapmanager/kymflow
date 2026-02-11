@@ -105,7 +105,7 @@ class KymEventBindings:
             )
 
     def _on_kym_event_x_range(self, e: SetKymEventXRange) -> None:
-        self._logger.debug("received SetKymEventXRange event_id=%s", e.event_id)
+        # self._logger.debug("received SetKymEventXRange event_id=%s", e.event_id)
         safe_call(self._view.handle_set_kym_event_x_range, e)
 
     def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:

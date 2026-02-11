@@ -391,47 +391,11 @@ def test_detect_all_events_click_uses_same_params(
     kym_file_with_analysis: KymImage,
     mock_app_context,
 ) -> None:
-    """Test that _on_detect_all_events_click() collects and uses the same UI inputs."""
-    received_events: list[DetectEvents] = []
+    """Detect Events (all files) feature is currently disabled in the UI.
 
-    def on_detect_events(event: DetectEvents) -> None:
-        received_events.append(event)
+    This test is retained for documentation but skipped while the corresponding
+    button and callback are commented out in AnalysisToolbarView.
+    """
+    import pytest
 
-    view = AnalysisToolbarView(
-        app_context=mock_app_context,
-        on_analysis_start=lambda e: None,
-        on_analysis_cancel=lambda e: None,
-        on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
-        on_detect_events=on_detect_events,
-    )
-
-    # Render view
-    view.render()
-
-    # Mock UI inputs with specific values
-    from unittest.mock import MagicMock
-    view._win_cmp_sec_input = MagicMock()
-    view._win_cmp_sec_input.value = 0.4
-    view._smooth_sec_input = MagicMock()
-    view._smooth_sec_input.value = 0.06
-    view._mad_k_input = MagicMock()
-    view._mad_k_input.value = 4.0
-    view._abs_score_floor_input = MagicMock()
-    view._abs_score_floor_input.value = 0.3
-
-    # Call the all-files click handler
-    view._on_detect_all_events_click()
-
-    # Verify DetectEvents was emitted with correct BaselineDropParams and all_files=True
-    assert len(received_events) == 1
-    event = received_events[0]
-    assert event.all_files is True
-    assert event.roi_id is None
-    assert event.baseline_drop_params is not None
-    assert event.baseline_drop_params.win_cmp_sec == 0.4
-    assert event.baseline_drop_params.smooth_sec == 0.06
-    assert event.baseline_drop_params.mad_k == 4.0
-    assert event.baseline_drop_params.abs_score_floor == 0.3
+    pytest.skip("Detect Events (all files) UI and callback are disabled in AnalysisToolbarView")
