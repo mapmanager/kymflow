@@ -1,8 +1,6 @@
 # app.py
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Optional
 
 from pprint import pprint
@@ -14,148 +12,16 @@ from nicegui.events import GenericEventArguments
 
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.gui_v2.app_context import _setUpGuiDefaults
+from kymflow.core.plotting.pool.plot_state import PlotType, PlotState
+from kymflow.core.plotting.pool.plot_helpers import (
+    numeric_columns,
+    categorical_candidates,
+    _ensure_aggrid_compact_css,
+)
+from kymflow.core.plotting.pool.dataframe_processor import DataFrameProcessor
 
 logger = get_logger(__name__)
 setup_logging(level="INFO")
-
-# CSS for compact aggrid styling (injected once)
-_AGGRID_COMPACT_CSS_INJECTED = False
-
-
-def _ensure_aggrid_compact_css() -> None:
-    """Inject CSS for compact aggrid styling (smaller font, tighter spacing)."""
-    global _AGGRID_COMPACT_CSS_INJECTED
-    if not _AGGRID_COMPACT_CSS_INJECTED:
-        ui.add_head_html("""
-        <style>
-        .aggrid-compact .ag-cell,
-        .aggrid-compact .ag-header-cell {
-            padding: 2px 6px;
-            font-size: 0.75rem;
-            line-height: 1.2;
-        }
-        </style>
-        """)
-        _AGGRID_COMPACT_CSS_INJECTED = True
-
-# ----------------------------
-# State
-# ----------------------------
-
-class PlotType(Enum):
-    """Enumeration of available plot types."""
-    SCATTER = "scatter"
-    SPLIT_SCATTER = "split_scatter"
-    SWARM = "swarm"
-    GROUPED = "grouped"
-    CUMULATIVE_HISTOGRAM = "cumulative_histogram"
-
-
-@dataclass
-class PlotState:
-    roi_id: int
-    xcol: str
-    ycol: str
-    plot_type: PlotType = PlotType.SCATTER
-    group_col: Optional[str] = None    # used by grouped/split_scatter/swarm
-    ystat: str = "mean"                # used by grouped only
-    use_absolute_value: bool = False   # apply abs() to y values before plotting
-    show_mean: bool = False            # show mean line for split_scatter/swarm
-    show_std_sem: bool = False         # show std/sem error bars for split_scatter/swarm
-    std_sem_type: str = "std"          # "std" or "sem" for error bars
-    mean_line_width: int = 2           # line width for mean line
-    error_line_width: int = 2          # line width for error (std/sem) line
-    show_raw: bool = True              # show raw data points
-    point_size: int = 6                # size of scatter/swarm plot points
-    show_legend: bool = True           # show plot legend
-    
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize PlotState to dictionary.
-        
-        Returns:
-            Dictionary representation of PlotState with all fields.
-        """
-        return {
-            "roi_id": self.roi_id,
-            "xcol": self.xcol,
-            "ycol": self.ycol,
-            "plot_type": self.plot_type.value,  # Convert enum to string
-            "group_col": self.group_col,
-            "ystat": self.ystat,
-            "use_absolute_value": self.use_absolute_value,
-            "show_mean": self.show_mean,
-            "show_std_sem": self.show_std_sem,
-            "std_sem_type": self.std_sem_type,
-            "mean_line_width": self.mean_line_width,
-            "error_line_width": self.error_line_width,
-            "show_raw": self.show_raw,
-            "point_size": self.point_size,
-            "show_legend": self.show_legend,
-        }
-    
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PlotState":
-        """Deserialize PlotState from dictionary.
-        
-        Args:
-            data: Dictionary containing PlotState fields.
-            
-        Returns:
-            PlotState instance created from dictionary data.
-        """
-        # Convert plot_type string back to enum
-        plot_type = PlotType(data.get("plot_type", PlotType.SCATTER.value))
-        
-        return cls(
-            roi_id=int(data.get("roi_id", 0)),
-            xcol=str(data.get("xcol", "")),
-            ycol=str(data.get("ycol", "")),
-            plot_type=plot_type,
-            group_col=data.get("group_col"),  # Can be None
-            ystat=str(data.get("ystat", "mean")),
-            use_absolute_value=bool(data.get("use_absolute_value", False)),
-            show_mean=bool(data.get("show_mean", False)),
-            show_std_sem=bool(data.get("show_std_sem", False)),
-            std_sem_type=str(data.get("std_sem_type", "std")),
-            mean_line_width=int(data.get("mean_line_width", 2)),
-            error_line_width=int(data.get("error_line_width", 2)),
-            show_raw=bool(data.get("show_raw", True)),
-            point_size=int(data.get("point_size", 6)),
-            show_legend=bool(data.get("show_legend", True)),
-        )
-
-
-# ----------------------------
-# Helpers
-# ----------------------------
-
-_NUMERIC_KINDS = {"i", "u", "f"}  # int, unsigned, float (pandas dtype.kind)
-
-
-def numeric_columns(df: pd.DataFrame) -> list[str]:
-    """Extract list of numeric column names from dataframe."""
-    out: list[str] = []
-    for c in df.columns:
-        s = df[c]
-        if getattr(s.dtype, "kind", None) in _NUMERIC_KINDS:
-            out.append(str(c))
-    return out
-
-
-def categorical_candidates(df: pd.DataFrame) -> list[str]:
-    """Heuristic: object/category/bool, or low-ish cardinality."""
-    out: list[str] = []
-    n = len(df)
-    for c in df.columns:
-        s = df[c]
-        kind = getattr(s.dtype, "kind", None)
-        if kind in {"O", "b"} or str(s.dtype) == "category":
-            out.append(str(c))
-            continue
-        nunique = s.nunique(dropna=True)
-        if n > 0 and nunique <= max(20, int(0.05 * n)):
-            out.append(str(c))
-    return out
 
 
 # ----------------------------
@@ -181,14 +47,12 @@ class PlotController:
         self.roi_id_col = roi_id_col
         self.row_id_col = row_id_col
 
-        if self.roi_id_col not in df.columns:
-            raise ValueError(f"df must contain required column {roi_id_col!r}")
-        if self.row_id_col not in df.columns:
-            raise ValueError(f"df must contain required unique id column {row_id_col!r}")
-
-        roi_values = self._roi_values()
-        if not roi_values:
-            raise ValueError(f"No ROI values found in column {roi_id_col!r}")
+        # Initialize DataFrameProcessor for data operations
+        self.data_processor = DataFrameProcessor(
+            df,
+            roi_id_col=roi_id_col,
+            row_id_col=row_id_col,
+        )
 
         # reasonable defaults
         num_cols = numeric_columns(df)
@@ -196,6 +60,8 @@ class PlotController:
             raise ValueError("Need at least one numeric column for y.")
         x_default = num_cols[0]
         y_default = num_cols[1] if len(num_cols) >= 2 else num_cols[0]
+        
+        roi_values = self.data_processor.get_roi_values()
 
         # Initialize with 2 plot states (extensible to 4)
         default_state = PlotState(
@@ -230,46 +96,7 @@ class PlotController:
     # ----------------------------
     # Data
     # ----------------------------
-
-    def _roi_values(self) -> list[int]:
-        """Get sorted list of unique ROI IDs from the dataframe."""
-        s = pd.to_numeric(self.df[self.roi_id_col], errors="coerce").dropna().astype(int)
-        vals = sorted(set(s.tolist()))
-        return vals
-
-    def _df_filtered(self, state: PlotState) -> pd.DataFrame:
-        """Filter dataframe to rows matching the ROI ID from state.
-        
-        Args:
-            state: PlotState containing roi_id to filter by.
-            
-        Returns:
-            Filtered dataframe.
-        """
-        df_f = self.df[self.df[self.roi_id_col].astype(int) == int(state.roi_id)]
-        df_f = df_f.dropna(subset=[self.row_id_col])
-        return df_f
-
-    def _rebuild_filtered_index(self, df_f: pd.DataFrame) -> None:
-        """Rebuild the mapping from row_id to iloc index in the filtered dataframe."""
-        row_ids = df_f[self.row_id_col].astype(str).tolist()
-        # map row_id -> iloc within df_f
-        self._id_to_index_filtered = {rid: i for i, rid in enumerate(row_ids)}
-
-    def _get_y_values(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
-        """Get y column values, optionally applying absolute value.
-        
-        Args:
-            df_f: Filtered dataframe.
-            state: PlotState to use for configuration.
-            
-        Returns:
-            Series of y values, with abs() applied if use_absolute_value is True.
-        """
-        y = pd.to_numeric(df_f[state.ycol], errors="coerce")
-        if state.use_absolute_value:
-            y = y.abs()
-        return y
+    # Note: DataFrame operations are now handled by self.data_processor
     
     def _state_to_widgets(self, state: PlotState) -> None:
         """Populate all UI widgets from a PlotState.
@@ -363,60 +190,6 @@ class PlotController:
             show_legend=bool(self._show_legend_checkbox.value),
         )
 
-    def _calculate_group_stats(self, df_f: pd.DataFrame, state: PlotState, include_x: bool = False) -> dict[str, dict[str, float]]:
-        """Calculate mean, std, and sem for y values (and optionally x values) within each group.
-        
-        Args:
-            df_f: Filtered dataframe with group column and y values.
-            state: PlotState to use for configuration.
-            include_x: If True, also calculate stats for x values (for split_scatter).
-            
-        Returns:
-            Dictionary mapping group_value to stats dict with keys: "mean", "std", "sem"
-            (and "x_mean", "x_std", "x_sem" if include_x=True).
-        """
-        if not state.group_col:
-            return {}
-        
-        y = self._get_y_values(df_f, state)
-        g = df_f[state.group_col].astype(str)
-        
-        if include_x:
-            x = pd.to_numeric(df_f[state.xcol], errors="coerce")
-            tmp = pd.DataFrame({"x": x, "y": y, "g": g}).dropna(subset=["y", "g", "x"])
-        else:
-            tmp = pd.DataFrame({"y": y, "g": g}).dropna(subset=["y", "g"])
-        
-        stats = {}
-        for group_value, sub in tmp.groupby("g", sort=True):
-            y_values = sub["y"].values
-            if len(y_values) > 0:
-                mean_val = float(np.mean(y_values))
-                std_val = float(np.std(y_values, ddof=1))  # Sample std
-                sem_val = std_val / np.sqrt(len(y_values)) if len(y_values) > 1 else 0.0
-                
-                group_stats = {
-                    "mean": mean_val,
-                    "std": std_val,
-                    "sem": sem_val,
-                }
-                
-                # Add x-axis stats if requested
-                if include_x:
-                    x_values = sub["x"].values
-                    if len(x_values) > 0:
-                        x_mean_val = float(np.mean(x_values))
-                        x_std_val = float(np.std(x_values, ddof=1))
-                        x_sem_val = x_std_val / np.sqrt(len(x_values)) if len(x_values) > 1 else 0.0
-                        group_stats.update({
-                            "x_mean": x_mean_val,
-                            "x_std": x_std_val,
-                            "x_sem": x_sem_val,
-                        })
-                
-                stats[str(group_value)] = group_stats
-        
-        return stats
 
     def _add_mean_std_traces(
         self, 
@@ -430,7 +203,7 @@ class PlotController:
         
         Args:
             fig: Plotly figure to add traces to.
-            group_stats: Dictionary from _calculate_group_stats().
+            group_stats: Dictionary from DataFrameProcessor.calculate_group_stats().
             x_ranges: Dictionary mapping group_value to (x_min, x_max) tuple.
             state: PlotState to use for configuration.
             include_x_axis: If True, also add x-axis mean/std/sem (for split_scatter).
@@ -586,7 +359,7 @@ class PlotController:
             ).classes("w-full")
             
             self._roi_select = ui.select(
-                options=self._roi_values(),
+                options=self.data_processor.get_roi_values(),
                 value=self.plot_states[self.current_plot_index].roi_id,
                 label="ROI",
                 on_change=self._on_any_change,
@@ -1024,7 +797,7 @@ class PlotController:
 
             logger.info(f"Plotly click on plot {plot_index + 1}: plot_type={state.plot_type.value}, row_id={row_id}")
 
-            df_f = self._df_filtered(state)
+            df_f = self.data_processor.filter_by_roi(state.roi_id)
             idx = self._id_to_index_filtered.get(row_id)
             if idx is None:
                 logger.warning(f"Row ID {row_id} not found in filtered index")
@@ -1076,8 +849,8 @@ class PlotController:
         Returns:
             Plotly figure dictionary.
         """
-        df_f = self._df_filtered(state)
-        self._rebuild_filtered_index(df_f)
+        df_f = self.data_processor.filter_by_roi(state.roi_id)
+        self._id_to_index_filtered = self.data_processor.build_row_id_index(df_f)
 
         logger.debug(f"Making figure: plot_type={state.plot_type.value}, filtered_rows={len(df_f)}")
 
@@ -1099,7 +872,7 @@ class PlotController:
             state: PlotState to use for configuration.
         """
         x = df_f[state.xcol]
-        y = self._get_y_values(df_f, state)
+        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         row_ids = df_f[self.row_id_col].astype(str)
 
         fig = go.Figure()
@@ -1137,7 +910,7 @@ class PlotController:
             return self._figure_scatter(df_f, state)
 
         x = df_f[state.xcol]
-        y = self._get_y_values(df_f, state)
+        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         g = df_f[state.group_col].astype(str)
         row_ids = df_f[self.row_id_col].astype(str)
 
@@ -1185,7 +958,10 @@ class PlotController:
 
         # Add mean and std/sem traces if enabled (include x-axis stats for split_scatter)
         if state.show_mean or state.show_std_sem:
-            group_stats = self._calculate_group_stats(df_f, state, include_x=True)
+            group_stats = self.data_processor.calculate_group_stats(
+                df_f, state.group_col, state.ycol, state.use_absolute_value,
+                state.xcol, include_x=True
+            )
             self._add_mean_std_traces(fig, group_stats, x_ranges, state, include_x_axis=True)
 
         # Preserve y-axis range when show_raw is off
@@ -1223,7 +999,7 @@ class PlotController:
         """
         # x is categorical bins, y is per-row; optional color split via group_col
         x_cat = df_f[state.xcol].astype(str)
-        y = self._get_y_values(df_f, state)
+        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         row_ids = df_f[self.row_id_col].astype(str)
 
         # Get unique categorical values and create mapping to numeric positions
@@ -1287,7 +1063,10 @@ class PlotController:
             
             # Add mean and std/sem traces if enabled (only y-axis for swarm)
             if state.show_mean or state.show_std_sem:
-                group_stats = self._calculate_group_stats(df_f, state)
+                group_stats = self.data_processor.calculate_group_stats(
+                    df_f, state.group_col, state.ycol, state.use_absolute_value,
+                    None, include_x=False
+                )
                 self._add_mean_std_traces(fig, group_stats, x_ranges, state, include_x_axis=False)
         else:
             tmp = pd.DataFrame({"x": x_cat, "y": y, "row_id": row_ids}).dropna(subset=["x"])
@@ -1370,14 +1149,14 @@ class PlotController:
             return self._figure_scatter(df_f, state)
 
         g = df_f[state.group_col].astype(str)
-        y = self._get_y_values(df_f, state)
+        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         tmp = pd.DataFrame({"group": g, "y": y}).dropna(subset=["group"])
 
         stat = state.ystat
         if stat == "count":
             agg = tmp.groupby("group", dropna=False)["y"].count()
         else:
-            # y is already numeric from _get_y_values, but ensure it's numeric for aggregation
+            # y is already numeric from get_y_values, but ensure it's numeric for aggregation
             tmp["y"] = pd.to_numeric(tmp["y"], errors="coerce")
             agg = getattr(tmp.groupby("group", dropna=False)["y"], stat)()
 
