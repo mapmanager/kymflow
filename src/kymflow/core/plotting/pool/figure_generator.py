@@ -18,6 +18,10 @@ from kymflow.core.plotting.pool.dataframe_processor import DataFrameProcessor
 
 logger = get_logger(__name__)
 
+# Selected (linked) points color — change here to switch:
+SELECTED_POINTS_COLOR = "rgba(0, 200, 255, 0.9)"   # cyan
+# SELECTED_POINTS_COLOR = "rgba(255, 220, 0, 0.9)"  # yellow (alternative)
+
 
 class FigureGenerator:
     """Generates Plotly figure dictionaries from data and plot state.
@@ -266,7 +270,7 @@ class FigureGenerator:
             selectedpoints = [i for i, r in enumerate(row_ids) if r in selected_row_ids]
             if selectedpoints:
                 selected = dict(
-                    marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                    marker=dict(size=state.point_size * 1.3, color=SELECTED_POINTS_COLOR),
                 )
 
         fig = go.Figure()
@@ -348,7 +352,7 @@ class FigureGenerator:
                     sp = [i for i, r in enumerate(sub["row_id"]) if r in selected_row_ids]
                     if sp:
                         sel = dict(
-                            marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                            marker=dict(size=state.point_size * 1.3, color=SELECTED_POINTS_COLOR),
                         )
                 fig.add_trace(go.Scatter(
                     x=sub["x"],
@@ -469,7 +473,7 @@ class FigureGenerator:
                         sp = [i for i, r in enumerate(row_id_values) if r in selected_row_ids]
                         if sp:
                             sel = dict(
-                                marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                                marker=dict(size=state.point_size * 1.3, color=SELECTED_POINTS_COLOR),
                             )
                     fig.add_trace(go.Scatter(
                         x=x_jittered,
@@ -521,7 +525,7 @@ class FigureGenerator:
                     sp = [i for i, r in enumerate(row_id_values) if r in selected_row_ids]
                     if sp:
                         sel = dict(
-                            marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                            marker=dict(size=state.point_size * 1.3, color=SELECTED_POINTS_COLOR),
                         )
                 fig.add_trace(go.Scatter(
                     x=x_jittered,

@@ -103,6 +103,10 @@ class PlotController:
         self._id_to_index_filtered: dict[str, int] = {}
         # Linked selection: set of row_ids selected in any plot; applied to all compatible plots
         self._selected_row_ids: set[str] = set()
+        # When True, next rect/lasso selection will be added to current selection (Cmd/Ctrl + select)
+        self._extend_selection_modifier: bool = False
+        # UI: label showing selection count (updated when selection changes)
+        self._selection_label: Optional[ui.label] = None
 
     # ----------------------------
     # Data
@@ -212,7 +216,12 @@ class PlotController:
         # Header area at the top
         with ui.column().classes("w-full"):
             ui.label("Radon Analysis Pool Plot").classes("text-2xl font-bold mb-2")
-            self._clicked_label = ui.label("Click a point to show the filtered df row...").classes("text-sm text-gray-600")
+            with ui.row().classes("w-full items-center gap-3 flex-wrap"):
+                self._clicked_label = ui.label("Click a point to show the filtered df row...").classes("text-sm text-gray-600")
+                self._selection_label = ui.label("No selection").classes("text-sm font-medium")
+                ui.button("Clear selection", on_click=self._clear_selection).classes("text-sm")
+            # Global Esc to clear selection (NiceGUI keyboard element)
+            ui.keyboard(on_key=self._on_keyboard_key)
         
         # Main splitter: horizontal layout with controls on left, plot on right
         self._mainSplitter = ui.splitter(value=25, limits=(15, 50)).classes("w-full h-screen")
@@ -231,6 +240,7 @@ class PlotController:
         self._sync_controls()
         # Initial state is already loaded into widgets, just sync
         self._state_to_widgets(self.plot_states[self.current_plot_index])
+        self._update_selection_label()
 
     def _build_control_panel(self) -> None:
         """Build the left control panel with all plot configuration widgets.
@@ -670,6 +680,38 @@ class PlotController:
         }
         return plot_type in SELECTION_COMPATIBLE_TYPES
 
+    def _update_selection_label(self) -> None:
+        """Update the header label to show number of selected points or 'No selection'."""
+        if self._selection_label is None:
+            return
+        n = len(self._selected_row_ids)
+        self._selection_label.text = f"{n} points selected" if n else "No selection"
+
+    def _clear_selection(self) -> None:
+        """Clear linked selection and refresh all compatible plots."""
+        if not self._selected_row_ids:
+            return
+        self._selected_row_ids = set()
+        self._apply_selection_to_all_plots()
+        self._update_selection_label()
+        logger.info("Selection cleared (Clear selection button)")
+
+    def _on_keyboard_key(self, e) -> None:
+        """Escape: clear selection. Cmd/Ctrl: set extend-selection flag for next rect/lasso."""
+        key_name = getattr(getattr(e, "key", None), "name", None) if e else None
+        if key_name == "Escape":
+            if self._selected_row_ids:
+                self._clear_selection()
+                logger.info("Selection cleared (Esc)")
+            return
+        # Track Cmd (Meta) or Ctrl for extend selection: hold modifier, then draw rect/lasso to add to selection
+        if key_name in ("Meta", "Control"):
+            action = getattr(e, "action", None)
+            if action and getattr(action, "keydown", False):
+                self._extend_selection_modifier = True
+            elif action and getattr(action, "keyup", False):
+                self._extend_selection_modifier = False
+
     def _on_plotly_relayout(self, e: GenericEventArguments, plot_index: int = 0) -> None:
         """Handle plotly_relayout: get x/y range (rect) or path (lasso) from selections and compute selected rows.
 
@@ -692,6 +734,7 @@ class PlotController:
             if self._selected_row_ids:
                 self._selected_row_ids = set()
                 self._apply_selection_to_all_plots()
+                self._update_selection_label()
             return
 
         state = self.plot_states[plot_index]
@@ -746,12 +789,22 @@ class PlotController:
 
         if not selected_row_ids:
             return
-        self._selected_row_ids = selected_row_ids
+        # Extend selection: Cmd/Ctrl + rect or lasso adds to current (union); no double-count
+        if self._extend_selection_modifier and self._selected_row_ids:
+            self._selected_row_ids = self._selected_row_ids | selected_row_ids
+            self._extend_selection_modifier = False  # one-shot: next selection without modifier replaces
+            logger.info(
+                f"Extend selection on plot {plot_index + 1}: source={source}, "
+                f"added {len(selected_row_ids)}, total selected={len(self._selected_row_ids)}"
+            )
+        else:
+            self._selected_row_ids = selected_row_ids
+            logger.info(
+                f"Selection on plot {plot_index + 1}: source={source}, "
+                f"plot_type={state.plot_type.value}, selected_count={len(selected_row_ids)}, roi_id={state.roi_id}"
+            )
         self._apply_selection_to_all_plots()
-        logger.info(
-            f"Selection on plot {plot_index + 1}: source={source}, "
-            f"plot_type={state.plot_type.value}, selected_count={len(selected_row_ids)}, roi_id={state.roi_id}"
-        )
+        self._update_selection_label()
         logger.debug(
             f"Selected row_ids: {sorted(list(selected_row_ids)[:10])}{'...' if len(selected_row_ids) > 10 else ''}"
         )
