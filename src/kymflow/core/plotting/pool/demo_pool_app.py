@@ -224,7 +224,13 @@ class PlotController:
             ui.keyboard(on_key=self._on_keyboard_key)
         
         # Main splitter: horizontal layout with controls on left, plot on right
-        self._mainSplitter = ui.splitter(value=25, limits=(15, 50)).classes("w-full h-screen")
+        # on_change: when user resizes splitter, re-build plot panel so 1x2/2x1 layout is not lost
+        # (NiceGUI/Quasar can re-render the 'after' slot and show only one plot; rebuild restores correct count)
+        self._mainSplitter = ui.splitter(
+            value=25,
+            limits=(15, 50),
+            on_change=lambda _: self._on_splitter_change(),
+        ).classes("w-full h-screen")
         
         # LEFT: Control panel (modular, can be reused elsewhere)
         with self._mainSplitter.before:
@@ -567,6 +573,10 @@ class PlotController:
     # ----------------------------
     # Events
     # ----------------------------
+
+    def _on_splitter_change(self) -> None:
+        """Restore plot panel after splitter resize (avoids 1x2/2x1 collapsing to single plot)."""
+        self._rebuild_plot_panel()
 
     def _on_layout_change(self, layout_str: str) -> None:
         """Handle layout change (1x1, 1x2, 2x1).
