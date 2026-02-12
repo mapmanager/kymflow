@@ -17,6 +17,7 @@ primary_region = "iad"
   KYMFLOW_DEFAULT_DEPTH = "4"
   KYMFLOW_GUI_NATIVE = "0"
   KYMFLOW_GUI_RELOAD = "0"
+  KYMFLOW_REMOTE = "1"
 
 [http_service]
   internal_port = 8080

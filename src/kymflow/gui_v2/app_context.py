@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +28,51 @@ logger = get_logger(__name__)
 # Storage key for theme persistence across page navigation
 # Using app.storage.user (not browser) because it can be written during callbacks
 THEME_STORAGE_KEY = "kymflow_dark_mode"
+
+
+@dataclass
+class RuntimeEnvironment:
+    """Runtime environment detection for UI feature gating.
+    
+    Attributes:
+        native_mode: True if running in native mode (pywebview).
+        is_remote: True if running in remote deployment (Docker/cloud).
+        has_file_system_access: True if file dialogs and save operations are available.
+    """
+    native_mode: bool
+    is_remote: bool
+    has_file_system_access: bool
+    
+    @classmethod
+    def detect(cls) -> "RuntimeEnvironment":
+        """Detect runtime environment from env vars.
+        
+        Logic:
+        - native_mode: from KYMFLOW_GUI_NATIVE (default: True)
+        - is_remote: from KYMFLOW_REMOTE (default: False)
+        - has_file_system_access: True if native_mode OR not is_remote
+        """
+        def _env_bool(name: str, default: bool) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            v = raw.strip().lower()
+            if v in {"1", "true", "yes", "on"}:
+                return True
+            if v in {"0", "false", "no", "off"}:
+                return False
+            # Invalid value - fall back to default
+            return default
+        
+        native_mode = _env_bool("KYMFLOW_GUI_NATIVE", True)
+        is_remote = _env_bool("KYMFLOW_REMOTE", False)
+        has_file_system_access = native_mode or not is_remote
+        
+        return cls(
+            native_mode=native_mode,
+            is_remote=is_remote,
+            has_file_system_access=has_file_system_access,
+        )
 
 
 def _setUpGuiDefaults(app_config: AppConfig | None = None):
@@ -105,6 +151,7 @@ class AppContext:
         app_state: Shared AppState instance for file management and selection
         user_config: UserConfig instance for persistent user preferences
         app_config: AppConfig instance for app-wide settings
+        runtime_env: RuntimeEnvironment instance for runtime detection
         home_task: TaskState for home page analysis tasks
         batch_task: TaskState for batch analysis tasks
         batch_overall_task: TaskState for overall batch progress
@@ -145,10 +192,21 @@ class AppContext:
 
             # abb 20260207: always present
             self.native_ui_gate = NativeUiGate()
+            
+            # Detect runtime environment (safe to detect even in workers)
+            self.runtime_env = RuntimeEnvironment.detect()
 
             return
             
         logger.info("Initializing AppContext singleton (should happen once)")
+        
+        # Detect runtime environment (must happen early, before other initialization)
+        self.runtime_env = RuntimeEnvironment.detect()
+        logger.info(
+            f"Runtime environment: native={self.runtime_env.native_mode}, "
+            f"remote={self.runtime_env.is_remote}, "
+            f"file_access={self.runtime_env.has_file_system_access}"
+        )
         
         # Shared state instances
         self.app_state = AppState()

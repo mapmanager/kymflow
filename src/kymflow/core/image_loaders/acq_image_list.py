@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, 
 import pandas as pd
 
 from kymflow.core.image_loaders.acq_image import AcqImage
+from kymflow.core.image_loaders.radon_report import RadonReport
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
@@ -741,6 +742,107 @@ class AcqImageList(Generic[T]):
                         nan_gap_params=nan_gap_params,
                         zero_gap_params=zero_gap_params,
                     )
+    
+    def get_radon_report(self) -> List[RadonReport]:
+        """Generate aggregated radon velocity analysis summary report for all KymImage files.
+        
+        Iterates through all images in the list and calls get_radon_report() on each
+        KymImage's KymAnalysis. Combines all reports into a single master list.
+        Images without KymAnalysis (i.e., non-KymImage instances) are silently skipped.
+        
+        Returns:
+            List of RadonReport instances, one per ROI across all images. Each report
+            contains velocity statistics, ROI image statistics, and file metadata including
+            parent_folder and grandparent_folder.
+            
+        Note:
+            This method does not require image data to be loaded - it works on AcqImage
+            instances that have analysis data available. However, ROI image statistics
+            (img_min, img_max, etc.) may be None if not calculated.
+        """
+        master_report: List[RadonReport] = []
+        
+        for image in self.images:
+            # Only process images that have KymAnalysis (i.e., KymImage instances)
+            if not hasattr(image, "get_kym_analysis"):
+                # Skip non-KymImage instances silently
+                continue
+            
+            try:
+                # Get KymAnalysis instance for this image
+                kym_analysis = image.get_kym_analysis()
+                
+                # Get radon report for all ROIs in this image
+                roi_reports = kym_analysis.get_radon_report()
+                
+                # Calculate parent and grandparent folder information
+                if image.path is not None:
+                    parent_folder = image.path.parent.name if image.path.parent else None
+                    grandparent_folder = (
+                        image.path.parent.parent.name 
+                        if image.path.parent and image.path.parent.parent 
+                        else None
+                    )
+                else:
+                    parent_folder = None
+                    grandparent_folder = None
+                
+                # Update each RadonReport with folder metadata
+                # Since RadonReport is frozen, we need to create new instances
+                for roi_report in roi_reports:
+                    # Create new RadonReport with updated folder information
+                    updated_report = RadonReport(
+                        roi_id=roi_report.roi_id,
+                        vel_min=roi_report.vel_min,
+                        vel_max=roi_report.vel_max,
+                        vel_mean=roi_report.vel_mean,
+                        vel_std=roi_report.vel_std,
+                        vel_se=roi_report.vel_se,
+                        img_min=roi_report.img_min,
+                        img_max=roi_report.img_max,
+                        img_mean=roi_report.img_mean,
+                        img_std=roi_report.img_std,
+                        path=roi_report.path,
+                        file_name=roi_report.file_name,
+                        parent_folder=parent_folder,
+                        grandparent_folder=grandparent_folder,
+                    )
+                    master_report.append(updated_report)
+                
+            except Exception as e:
+                # Log error but continue processing other images
+                logger.warning(
+                    f"Failed to generate radon report for image {image.path}: {e}"
+                )
+                continue
+        
+        return master_report
+    
+    def get_radon_report_df(self) -> pd.DataFrame:
+        """Get radon velocity analysis summary report as a pandas DataFrame.
+        
+        Convenience method that calls get_radon_report() and converts the result
+        to a pandas DataFrame. Each row represents one ROI with all its statistics
+        and metadata.
+        
+        Returns:
+            pandas DataFrame with columns corresponding to RadonReport fields:
+            - roi_id, vel_min, vel_max, vel_mean, vel_std, vel_se
+            - img_min, img_max, img_mean, img_std
+            - path, file_name, parent_folder, grandparent_folder
+            
+        Note:
+            Requires pandas to be installed. None values in the reports are preserved
+            as NaN in the DataFrame.
+        """
+        reports = self.get_radon_report()
+        
+        # Convert list of RadonReport instances to list of dicts, then to DataFrame
+        # Using to_dict() method for proper serialization
+        report_dicts = [report.to_dict() for report in reports]
+        
+        df = pd.DataFrame(report_dicts)
+        return df
     
     def find_by_path(self, path: str | Path) -> Optional[T]:
         """Find an image in the list by its path.

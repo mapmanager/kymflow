@@ -25,7 +25,7 @@ def getVersionInfo() -> dict:
     # retDict['PyQt version'] = QtCore.__version__  # when using import qtpy
     # retDict['Bundle folder'] = sanpy._util.getBundledDir()
     # retDict['Log file'] = sanpy.sanpyLogger.getLoggerFile()
-    retDict["GitHub"] = "https://github.com/mapmanager/kymflow"
+    # retDict["GitHub"] = "https://github.com/mapmanager/kymflow"
     # retDict['Documentation'] = 'https://cudmore.github.io/SanPy/'
     retDict["email"] = "robert.cudmore@gmail.com"
 

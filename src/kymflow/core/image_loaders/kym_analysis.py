@@ -25,6 +25,7 @@ from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers_sd, _removeOutliers_analyzeflow
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.image_loaders.roi import ROI
+from kymflow.core.image_loaders.radon_report import RadonReport
 
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
@@ -1477,6 +1478,112 @@ class KymAnalysis:
         event_dict["grandparent_folder"] = grandparent_folder
         
         return event_dict
+
+    def get_radon_report(self) -> List[RadonReport]:
+        """Generate radon velocity analysis summary report for all ROIs.
+        
+        Iterates through each ROI and collects velocity statistics (min, max, mean, std, se)
+        from the analysis data, along with ROI image statistics (min, max, mean, std) from
+        the ROI object. Logs warnings if ROI image statistics are not calculated.
+        
+        Returns:
+            List of RadonReport instances, one per ROI. Each report contains:
+            - roi_id: int - ROI identifier
+            - vel_min, vel_max, vel_mean, vel_std, vel_se: float | None - Velocity statistics
+            - img_min, img_max, img_mean, img_std: int | float | None - ROI image statistics
+            - path: str | None - Full file path
+            - file_name: str | None - File name without extension
+            
+        Note:
+            ROI image statistics (img_min, img_max, etc.) may be None if not calculated.
+            Use roi.calculate_image_stats(acq_image) to fill these values after loading image data.
+        """
+        report: List[RadonReport] = []
+        
+        # Get all ROI IDs from the parent AcqImage
+        roi_ids = self.acq_image.rois.get_roi_ids()
+        
+        # Get file metadata once (used for all ROIs in this image)
+        path = str(self.acq_image.path) if self.acq_image.path is not None else None
+        file_name = self.acq_image.path.stem if self.acq_image.path is not None else None
+        
+        for roi_id in roi_ids:
+            # Fetch velocity data for this ROI
+            velocity = self.get_analysis_value(roi_id, 'velocity')
+            
+            # Initialize velocity statistics to None
+            vel_min: Optional[float] = None
+            vel_max: Optional[float] = None
+            vel_mean: Optional[float] = None
+            vel_std: Optional[float] = None
+            vel_se: Optional[float] = None
+            
+            if velocity is None:
+                # No analysis data for this ROI
+                logger.warning(f"ROI {roi_id} has no velocity analysis data")
+            elif len(velocity) == 0:
+                # Empty velocity array
+                pass  # All stats remain None
+            else:
+                # Calculate velocity statistics using numpy functions that handle NaN
+                # Use nanmean/nanstd to ignore NaN values in the velocity array
+                if not np.all(np.isnan(velocity)):
+                    vel_min = float(np.nanmin(velocity))
+                    vel_max = float(np.nanmax(velocity))
+                    vel_mean = float(np.nanmean(velocity))
+                    vel_std = float(np.nanstd(velocity))
+                    
+                    # Calculate standard error: SE = std / sqrt(n)
+                    # Count only non-NaN values for n
+                    n_valid = np.sum(~np.isnan(velocity))
+                    if vel_std is not None and n_valid > 0:
+                        vel_se = vel_std / np.sqrt(n_valid)
+            
+            # Fetch ROI image statistics from the ROI object
+            roi = self.acq_image.rois.get(roi_id)
+            if roi is None:
+                logger.warning(f"ROI {roi_id} not found in rois collection")
+                img_min = None
+                img_max = None
+                img_mean = None
+                img_std = None
+            else:
+                # Get image statistics (may be None for old ROIs)
+                img_min = roi.img_min
+                img_max = roi.img_max
+                img_mean = float(roi.img_mean) if roi.img_mean is not None else None
+                img_std = float(roi.img_std) if roi.img_std is not None else None
+                
+                # Log warning if any image stats are None (indicates they need to be calculated)
+                if any(stat is None for stat in [img_min, img_max, img_mean, img_std]):
+                    logger.warning(
+                        f"ROI {roi_id} image statistics not calculated "
+                        f"(img_min={img_min}, img_max={img_max}, img_mean={img_mean}, img_std={img_std}). "
+                        f"Call roi.calculate_image_stats(acq_image) after loading image data to fill these values."
+                    )
+            
+            # Create RadonReport instance
+            radon_report = RadonReport(
+                roi_id=roi_id,
+                vel_min=vel_min,
+                vel_max=vel_max,
+                vel_mean=vel_mean,
+                vel_std=vel_std,
+                vel_se=vel_se,
+                img_min=img_min,
+                img_max=img_max,
+                img_mean=img_mean,
+                img_std=img_std,
+                path=path,
+                file_name=file_name,
+                # parent_folder and grandparent_folder are added by AcqImageList.get_radon_report()
+                parent_folder=None,
+                grandparent_folder=None,
+            )
+            
+            report.append(radon_report)
+        
+        return report
 
     def __str__(self) -> str:
         """String representation."""

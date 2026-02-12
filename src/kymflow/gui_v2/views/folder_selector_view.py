@@ -22,6 +22,7 @@ from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.user_config import UserConfig
 from kymflow.gui_v2._pywebview import _prompt_for_path
+from kymflow.gui_v2.app_context import RuntimeEnvironment
 
 logger = get_logger(__name__)
 
@@ -105,6 +106,7 @@ class FolderSelectorView:
         bus: EventBus,
         app_state: AppState,
         user_config: UserConfig | None = None,
+        runtime_env: RuntimeEnvironment | None = None,
         *,
         on_save_selected: OnSaveSelected | None = None,
         on_save_all: OnSaveAll | None = None,
@@ -112,6 +114,7 @@ class FolderSelectorView:
         self._bus = bus
         self._app_state = app_state
         self._user_config = user_config
+        self._runtime_env = runtime_env
         self._current_folder: Path | None = None
         self._recent_menu: Optional[ui.menu] = None
         self._recent_menu_button: Optional[ui.button] = None
@@ -368,6 +371,7 @@ class FolderSelectorView:
                 ).props("dense").classes("text-sm")
         self._update_controls_state()
         self._update_save_button_states()
+        
         self.set_folder_from_state()
     
     def _build_recent_menu(self) -> None:
@@ -446,8 +450,10 @@ class FolderSelectorView:
         self._update_controls_state()
 
     def _update_controls_state(self) -> None:
-        """Enable/disable folder controls based on task running state."""
+        """Enable/disable folder controls based on task running state and file system access."""
         running = self._task_state.running if self._task_state else False
+        has_file_access = self._runtime_env.has_file_system_access if self._runtime_env else True
+        
         if self._recent_menu_button is not None:
             if running:
                 self._recent_menu_button.disable()
@@ -458,41 +464,42 @@ class FolderSelectorView:
                 else:
                     self._recent_menu_button.disable()
         if self._choose_button is not None:
-            if running:
+            if running or not has_file_access:
                 self._choose_button.disable()
             else:
                 self._choose_button.enable()
         if self._open_file_button is not None:
-            if running:
+            if running or not has_file_access:
                 self._open_file_button.disable()
             else:
                 self._open_file_button.enable()
         if self._open_csv_button is not None:
-            if running:
+            if running or not has_file_access:
                 self._open_csv_button.disable()
             else:
                 self._open_csv_button.enable()
     
     def _update_save_button_states(self) -> None:
-        """Update save button states based on current file and task state."""
+        """Update save button states based on current file, task state, and file system access."""
         if self._save_selected_button is None or self._save_all_button is None:
             return
         
         running = self._task_state.running if self._task_state else False
+        has_file_access = self._runtime_env.has_file_system_access if self._runtime_env else True
         
-        # Disable buttons when task is running
-        if running:
+        # Disable buttons when task is running or no file system access
+        if running or not has_file_access:
             self._save_selected_button.disable()
             self._save_all_button.disable()
         else:
-            # Save Selected: enabled when file is selected (and not running)
+            # Save Selected: enabled when file is selected (and not running and has file access)
             has_file = self._current_file is not None
             if has_file:
                 self._save_selected_button.enable()
             else:
                 self._save_selected_button.disable()
             
-            # Save All: always enabled when not running (will check files in controller)
+            # Save All: always enabled when not running and has file access (will check files in controller)
             self._save_all_button.enable()
     
     def _on_file_selection_changed(self, e: FileSelection) -> None:

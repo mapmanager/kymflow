@@ -285,7 +285,11 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     # port = _env_int("PORT", native_module.find_open_port())
     # port = _env_int("PORT", 8080)
     from nicegui import native as native_module    
-    port = _env_int("PORT", native_module.find_open_port())
+    # port = _env_int("PORT", native_module.find_open_port())
+    if native_bool:
+        port = _env_int("PORT", native_module.find_open_port())
+    else:
+        port = _env_int("PORT", 8080)
 
     # For web deployments you MUST bind 0.0.0.0; for native local dev, 127.0.0.1 is fine.
     default_host = "127.0.0.1" if native_bool else "0.0.0.0"
@@ -309,6 +313,7 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
         native=native_bool,
         storage_secret=STORAGE_SECRET,
         title="KymFlow",
+        # on_air=True,
     )
 
 

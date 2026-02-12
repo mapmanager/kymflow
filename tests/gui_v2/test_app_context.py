@@ -294,3 +294,217 @@ def test_app_context_syncs_folder_depth_default(tmp_path: Path, monkeypatch) -> 
     assert context.app_config is not None
     assert context.app_config.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
     assert context.app_state.folder_depth == DEFAULT_FOLDER_DEPTH
+
+
+# ============================================================================
+# RuntimeEnvironment Tests
+# ============================================================================
+
+def test_runtime_environment_defaults(monkeypatch) -> None:
+    """Test RuntimeEnvironment.detect() with no env vars (defaults)."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    # Clear env vars
+    monkeypatch.delenv("KYMFLOW_GUI_NATIVE", raising=False)
+    monkeypatch.delenv("KYMFLOW_REMOTE", raising=False)
+    
+    env = RuntimeEnvironment.detect()
+    
+    assert env.native_mode is True  # Default
+    assert env.is_remote is False  # Default
+    assert env.has_file_system_access is True  # native=True OR not remote=True
+
+
+def test_runtime_environment_native_true_remote_false(monkeypatch) -> None:
+    """Test RuntimeEnvironment with native=True, remote=False (local dev)."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "1")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "0")
+    
+    env = RuntimeEnvironment.detect()
+    
+    assert env.native_mode is True
+    assert env.is_remote is False
+    assert env.has_file_system_access is True
+
+
+def test_runtime_environment_native_false_remote_false(monkeypatch) -> None:
+    """Test RuntimeEnvironment with native=False, remote=False (local browser mode)."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "0")
+    
+    env = RuntimeEnvironment.detect()
+    
+    assert env.native_mode is False
+    assert env.is_remote is False
+    assert env.has_file_system_access is True  # Not remote, so has access
+
+
+def test_runtime_environment_native_false_remote_true(monkeypatch) -> None:
+    """Test RuntimeEnvironment with native=False, remote=True (Docker/cloud)."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "1")
+    
+    env = RuntimeEnvironment.detect()
+    
+    assert env.native_mode is False
+    assert env.is_remote is True
+    assert env.has_file_system_access is False  # Not native AND remote
+
+
+def test_runtime_environment_native_true_remote_true(monkeypatch) -> None:
+    """Test RuntimeEnvironment with native=True, remote=True (edge case)."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "1")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "1")
+    
+    env = RuntimeEnvironment.detect()
+    
+    assert env.native_mode is True
+    assert env.is_remote is True
+    assert env.has_file_system_access is True  # Native mode always has access
+
+
+def test_runtime_environment_env_var_formats(monkeypatch) -> None:
+    """Test RuntimeEnvironment accepts various env var formats."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    # Test various "true" formats
+    for true_val in ["1", "true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON"]:
+        monkeypatch.setenv("KYMFLOW_GUI_NATIVE", true_val)
+        monkeypatch.setenv("KYMFLOW_REMOTE", true_val)
+        env = RuntimeEnvironment.detect()
+        assert env.native_mode is True, f"Failed for value: {true_val}"
+        assert env.is_remote is True, f"Failed for value: {true_val}"
+    
+    # Test various "false" formats
+    for false_val in ["0", "false", "False", "FALSE", "no", "No", "NO", "off", "Off", "OFF"]:
+        monkeypatch.setenv("KYMFLOW_GUI_NATIVE", false_val)
+        monkeypatch.setenv("KYMFLOW_REMOTE", false_val)
+        env = RuntimeEnvironment.detect()
+        assert env.native_mode is False, f"Failed for value: {false_val}"
+        assert env.is_remote is False, f"Failed for value: {false_val}"
+
+
+def test_runtime_environment_invalid_env_var_defaults(monkeypatch) -> None:
+    """Test RuntimeEnvironment falls back to defaults for invalid env var values."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    # Invalid values should fall back to defaults
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "invalid")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "invalid")
+    
+    env = RuntimeEnvironment.detect()
+    
+    # Should use defaults (True for native, False for remote)
+    assert env.native_mode is True  # Default
+    assert env.is_remote is False  # Default
+
+
+def test_app_context_initializes_runtime_env_main_process(tmp_path: Path, monkeypatch) -> None:
+    """Test that AppContext initializes runtime_env in main process."""
+    # Reset singleton
+    AppContext._instance = None
+    
+    # Mock multiprocessing to ensure we're in main process
+    class MockProcess:
+        name = "MainProcess"
+    
+    monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    
+    # Mock ui
+    def create_mock_ui_element():
+        return SimpleNamespace(default_classes=lambda x: None, default_props=lambda x: None)
+    
+    mock_ui = SimpleNamespace(
+        label=create_mock_ui_element(),
+        button=create_mock_ui_element(),
+        checkbox=create_mock_ui_element(),
+        select=create_mock_ui_element(),
+        input=create_mock_ui_element(),
+        number=create_mock_ui_element(),
+        expansion=create_mock_ui_element(),
+        slider=create_mock_ui_element(),
+        linear_progress=create_mock_ui_element(),
+        menu=create_mock_ui_element(),
+        menu_item=create_mock_ui_element(),
+    )
+    
+    monkeypatch.setattr(app_context, "ui", mock_ui)
+    
+    # Set env vars for testing
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "1")
+    
+    # Initialize AppContext
+    context = AppContext()
+    
+    # Verify runtime_env is initialized
+    assert context.runtime_env is not None
+    assert context.runtime_env.native_mode is False
+    assert context.runtime_env.is_remote is True
+    assert context.runtime_env.has_file_system_access is False
+
+
+def test_app_context_initializes_runtime_env_worker_process(monkeypatch) -> None:
+    """Test that AppContext initializes runtime_env in worker process."""
+    # Reset singleton
+    AppContext._instance = None
+    
+    # Mock multiprocessing to simulate worker process
+    class MockProcess:
+        name = "Worker-1"  # Not MainProcess
+    
+    monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    
+    # Set env vars for testing
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
+    monkeypatch.setenv("KYMFLOW_REMOTE", "1")
+    
+    # Initialize AppContext
+    context = AppContext()
+    
+    # Verify runtime_env is initialized even in worker process
+    assert context.runtime_env is not None
+    assert context.runtime_env.native_mode is False
+    assert context.runtime_env.is_remote is True
+    assert context.runtime_env.has_file_system_access is False
+    
+    # Verify other attributes are None in worker process
+    assert context.app_config is None
+    assert context.app_state is None
+
+
+def test_runtime_environment_file_system_access_logic(monkeypatch) -> None:
+    """Test has_file_system_access logic for all combinations."""
+    from kymflow.gui_v2.app_context import RuntimeEnvironment
+    
+    test_cases = [
+        # (native_mode, is_remote, expected_has_file_system_access)
+        (True, False, True),   # Local native - has access
+        (True, True, True),   # Native even if remote - has access
+        (False, False, True), # Local browser - has access
+        (False, True, False), # Remote browser - no access
+    ]
+    
+    for native, remote, expected_access in test_cases:
+        native_val = "1" if native else "0"
+        remote_val = "1" if remote else "0"
+        
+        monkeypatch.setenv("KYMFLOW_GUI_NATIVE", native_val)
+        monkeypatch.setenv("KYMFLOW_REMOTE", remote_val)
+        
+        env = RuntimeEnvironment.detect()
+        
+        assert env.native_mode == native, f"Failed for native={native}, remote={remote}"
+        assert env.is_remote == remote, f"Failed for native={native}, remote={remote}"
+        assert env.has_file_system_access == expected_access, (
+            f"Failed for native={native}, remote={remote}: "
+            f"expected {expected_access}, got {env.has_file_system_access}"
+        )
