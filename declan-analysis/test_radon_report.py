@@ -14,7 +14,6 @@ import logging
 from typing import List
 
 from kymflow.core.image_loaders.kym_image_list import KymImageList
-from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.radon_report import RadonReport
 from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger, setup_logging
@@ -24,45 +23,72 @@ setup_logging(level=logging.INFO)
 logger = get_logger(__name__)
 
 
-def ensure_roi_img_stats(acq_image: AcqImage) -> None:
+# ROI image stats keys to check for undefined defaults (None)
+_ROI_IMG_STAT_KEYS = ("img_min", "img_max", "img_mean", "img_std")
+
+
+def _roi_has_undefined_img_stats(roi) -> bool:
+    """Return True if ROI has any undefined (None) image stats."""
+    return any(getattr(roi, key) is None for key in _ROI_IMG_STAT_KEYS)
+
+
+def ensure_roi_img_stats(acq_image: AcqImage, *, _preflight: bool = True) -> bool:
     """Ensure ROI image statistics are calculated for all ROIs in an AcqImage.
     
-    This function loads image data (if not already loaded) and calculates
-    image statistics (img_min, img_max, img_mean, img_std) for all ROIs.
-    The function mutates the AcqImage and its ROIs in place.
+    When _preflight=True (default): Only checks if any ROI has undefined image stats
+    (img_min, img_max, img_mean, img_std are None). Returns True if at least one ROI
+    needs updating, False otherwise. Does not load image data.
+    
+    When _preflight=False: Loads image data, calculates stats for each ROI via
+    roi.calculate_image_stats(), marks the acq_image as dirty (needs saving).
+    Does NOT save; caller is responsible for calling acq_image.save_metadata().
     
     Args:
-        acq_image: AcqImage instance to process. Must have ROIs defined.
+        acq_image: AcqImage instance to process.
+        _preflight: If True, only check and return needs_update flag. If False,
+            load image, calculate stats, mark dirty (no save).
+        
+    Returns:
+        True if at least one ROI has undefined stats (needs updating), False otherwise.
+        When _preflight=False, also returns True if stats were calculated and image
+        was marked dirty.
         
     Note:
         - Tries to load channel 1 first, then other available channels if needed
         - Logs warnings for ROIs that fail to calculate stats
-        - Does nothing if image has no ROIs
-        - Idempotent: safe to call multiple times (recalculates stats each time)
+        - Returns False if image has no ROIs (nothing to update)
     """
-    # Get all ROI IDs for this image
     roi_ids = acq_image.rois.get_roi_ids()
     
     if len(roi_ids) == 0:
-        # No ROIs in this image, nothing to do
-        return
+        return False
     
-    # Load image data if needed
-    # Try to load channel 1 first (most common channel for kymographs)
-    # If channel 1 doesn't exist, try other available channels
+    if _preflight:
+        # Check only: any ROI with undefined img stats?
+        for roi_id in roi_ids:
+            roi = acq_image.rois.get(roi_id)
+            if roi is not None and _roi_has_undefined_img_stats(roi):
+                return True
+        return False
+    
+    # _preflight=False: if any ROI has undefined stats, load image, calculate, mark dirty (no save)
+    has_undefined = any(
+        _roi_has_undefined_img_stats(roi)
+        for roi_id in roi_ids
+        if (roi := acq_image.rois.get(roi_id)) is not None
+    )
+    if not has_undefined:
+        return False
+
     channel_loaded = False
-    channels_to_try = [1]  # Start with channel 1
-    
-    # Get available channels if we can
+    channels_to_try = [1]
     try:
         available_channels = acq_image.getChannelKeys()
         if available_channels:
-            # Prefer channel 1, but include all available channels
             channels_to_try = [1] + [ch for ch in available_channels if ch != 1]
     except Exception:
-        pass  # Fall back to just channel 1
+        pass
     
-    # Try to load a channel
     for channel in channels_to_try:
         if acq_image.load_channel(channel):
             channel_loaded = True
@@ -73,28 +99,77 @@ def ensure_roi_img_stats(acq_image: AcqImage) -> None:
             f"Could not load image data for {acq_image.path} - "
             f"skipping ROI image stats calculation"
         )
-        return
+        return False
     
-    # Calculate image statistics for each ROI
+    needs_saving = False
     for roi_id in roi_ids:
         roi = acq_image.rois.get(roi_id)
         if roi is None:
             continue
-        
         try:
-            # Calculate image stats for this ROI
-            # This updates roi.img_min, roi.img_max, roi.img_mean, roi.img_std in place
             roi.calculate_image_stats(acq_image)
+            needs_saving = True
         except ValueError as e:
-            # Image data not available or channel doesn't exist
             logger.warning(
                 f"Could not calculate image stats for ROI {roi_id} in {acq_image.path}: {e}"
             )
         except Exception as e:
-            # Other unexpected errors
             logger.warning(
                 f"Unexpected error calculating image stats for ROI {roi_id} in {acq_image.path}: {e}"
             )
+    
+    if needs_saving:
+        acq_image.mark_metadata_dirty()
+    return needs_saving
+
+
+def get_acq_images_needing_roi_stats_update(
+    folder_path: Path,
+    *,
+    file_extension: str = ".tif",
+    depth: int = 4,
+    ignore_file_stub: str | None = None,
+    _preflight: bool = True,
+) -> List[Path]:
+    """Load a KymImageList and return paths of acq images that need ROI img stats updated.
+    
+    For each KymImage, checks if any ROI has undefined img stats (img_min, img_max,
+    img_mean, img_std are None). Returns a list of acq image paths where at least
+    one ROI needs stats calculated.
+    
+    Uses _preflight=True: loads metadata only (ROIs from JSON), no image pixel loading.
+    Does NOT calculate stats or save - this is a check-only pass.
+    
+    Args:
+        folder_path: Directory to scan for kymograph files.
+        file_extension: File extension to match. Defaults to ".tif".
+        depth: Recursive scan depth. Defaults to 4.
+        ignore_file_stub: Optional stub string to ignore in filenames.
+        
+    Returns:
+        List of Path to acq images (e.g. .tif files) that need ROI img stats updating.
+    """
+    kym_image_list = KymImageList(
+        path=folder_path,
+        file_extension=file_extension,
+        depth=depth,
+        ignore_file_stub=ignore_file_stub,
+    )
+    needs_update: List[Path] = []
+    for image in kym_image_list:
+        if ensure_roi_img_stats(image, _preflight=_preflight):
+            path = image.path
+            if path is not None:
+                needs_update.append(path)
+            
+            # do the save here if _preflight=False
+            if not _preflight:
+                # image.save_metadata()
+                logger.info(f"Saving analysis for")
+                print(f"  {image.path}")
+                image.get_kym_analysis().save_analysis()
+
+    return needs_update
 
 
 def main() -> List[RadonReport]:
@@ -105,7 +180,8 @@ def main() -> List[RadonReport]:
     """
     # Specify path to folder containing kymograph files
     # Modify this path to point to your data folder
-    _path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v1-analysis"
+    _path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis"
+    
     folder_path = Path(_path)
     
     # Example paths (uncomment and modify as needed):
@@ -145,7 +221,7 @@ def main() -> List[RadonReport]:
     for image in kym_image_list:
         # Only process images that have ROIs (typically KymImage instances)
         try:
-            ensure_roi_img_stats(image)
+            ensure_roi_img_stats(image, _preflight=False)
             images_processed += 1
         except Exception as e:
             logger.warning(f"Error processing image {image.path}: {e}")
@@ -231,11 +307,22 @@ def main() -> List[RadonReport]:
 
 
 if __name__ == "__main__":
-    # Run the main function
-    report = main()
-    
-    # Exit with appropriate code
-    if len(report) == 0:
-        exit(1)  # Exit with error if no report generated
-    else:
-        exit(0)  # Exit successfully
+
+    if 0:
+
+        # Run the main function
+        report = main()
+        
+        # Exit with appropriate code
+        if len(report) == 0:
+            exit(1)  # Exit with error if no report generated
+        else:
+            exit(0)  # Exit successfully
+
+
+    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis/radon_report.csv'
+    _preflight = False
+    paths = get_acq_images_needing_roi_stats_update(Path(path).parent,_preflight=False)
+    # print(f"Images needing ROI stats update: {len(paths)}")
+    # for p in paths:
+    #     print(f"  {p}")

@@ -346,55 +346,65 @@ class UserConfig:
         # Normalize recent_folders (validate existence, dedupe, limit)
         norm_recent_folders: List[RecentFolder] = []
         seen_folders: set[str] = set()
-        removed_folders: List[str] = []
         for rf in data.recent_folders:
             p = _normalize_folder_path(rf.path)
             if p in seen_folders:
                 continue
             seen_folders.add(p)
-            # Check if path exists
             try:
                 path_obj = Path(p).expanduser()
                 if not path_obj.exists() or not path_obj.is_dir():
-                    removed_folders.append(p)
+                    logger.warning("Removed from recent path (folder): %s", p)
                     continue
             except Exception:
-                removed_folders.append(p)
+                logger.warning("Removed from recent path (folder): %s", p)
                 continue
             norm_recent_folders.append(RecentFolder(path=p, depth=int(rf.depth)))
-        if removed_folders:
-            logger.info(f"Removed {len(removed_folders)} missing folder paths from recent_folders")
         data.recent_folders = norm_recent_folders
 
         # Normalize recent_files (validate existence, dedupe, limit)
         norm_recent_files: List[RecentFile] = []
         seen_files: set[str] = set()
-        removed_files: List[str] = []
         for rf in data.recent_files:
             p = _normalize_folder_path(rf.path)
             if p in seen_files:
                 continue
             seen_files.add(p)
-            # Check if path exists
             try:
                 path_obj = Path(p).expanduser()
                 if not path_obj.exists() or not path_obj.is_file():
-                    removed_files.append(p)
+                    logger.warning("Removed from recent path (file tif): %s", p)
                     continue
             except Exception:
-                removed_files.append(p)
+                logger.warning("Removed from recent path (file tif): %s", p)
                 continue
             norm_recent_files.append(RecentFile(path=p))
-        if removed_files:
-            logger.info(f"Removed {len(removed_files)} missing file paths from recent_files")
         data.recent_files = norm_recent_files
 
+        # Normalize recent_csvs (validate existence, dedupe, limit)
+        norm_recent_csvs: List[RecentCsv] = []
+        seen_csvs: set[str] = set()
+        for rc in data.recent_csvs:
+            p = _normalize_folder_path(rc.path)
+            if p in seen_csvs:
+                continue
+            seen_csvs.add(p)
+            try:
+                path_obj = Path(p).expanduser()
+                if not path_obj.exists() or not path_obj.is_file() or path_obj.suffix.lower() != ".csv":
+                    logger.warning("Removed from recent path (csv): %s", p)
+                    continue
+            except Exception:
+                logger.warning("Removed from recent path (csv): %s", p)
+                continue
+            norm_recent_csvs.append(RecentCsv(path=p))
+        data.recent_csvs = norm_recent_csvs
+
         # Apply MAX_RECENTS limit to combined total
-        combined = len(data.recent_folders) + len(data.recent_files)
+        combined = len(data.recent_folders) + len(data.recent_files) + len(data.recent_csvs)
         if combined > MAX_RECENTS:
             # Trim from oldest (end of lists)
             excess = combined - MAX_RECENTS
-            # Remove from folders first, then files
             if len(data.recent_folders) > 0:
                 folders_to_remove = min(excess, len(data.recent_folders))
                 data.recent_folders = data.recent_folders[:-folders_to_remove]
@@ -402,15 +412,18 @@ class UserConfig:
             if excess > 0 and len(data.recent_files) > 0:
                 files_to_remove = min(excess, len(data.recent_files))
                 data.recent_files = data.recent_files[:-files_to_remove]
+                excess -= files_to_remove
+            if excess > 0 and len(data.recent_csvs) > 0:
+                csvs_to_remove = min(excess, len(data.recent_csvs))
+                data.recent_csvs = data.recent_csvs[:-csvs_to_remove]
 
         # Normalize last_path
         if data.last_path.path.strip():
             p = _normalize_folder_path(data.last_path.path)
-            # Check if path exists
             try:
                 path_obj = Path(p).expanduser()
                 if not path_obj.exists():
-                    logger.info(f"Removed missing last_path: {p}")
+                    logger.warning("Removed missing last_path: %s", p)
                     data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
                 else:
                     data.last_path.path = p
@@ -419,7 +432,7 @@ class UserConfig:
                     except Exception:
                         data.last_path.depth = DEFAULT_FOLDER_DEPTH
             except Exception:
-                logger.info(f"Removed invalid last_path: {p}")
+                logger.warning("Removed invalid last_path: %s", p)
                 data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
 
         # Normalize home splitter positions
