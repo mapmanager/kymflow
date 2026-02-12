@@ -1,6 +1,5 @@
 # DEPRECATED: plot_image_line_plotly() has been removed. Use plot_image_line_plotly_v3() instead.
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
-from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.plotting import (
     plot_image_line_plotly,  # DEPRECATED: This function no longer exists. Use plot_image_line_plotly_v3() instead.
     update_contrast,
@@ -27,11 +26,10 @@ def run(folder_path: str, filename: str):
     print("Testing Plotly uirevision for preserving zoom/pan state")
     print("=" * 80)
 
-    # Step 1: Load folder with AcqImageList
+    # Step 1: Load folder with KymImageList
     print(f"\n1. Loading folder: {folder_path}")
-    image_list = AcqImageList(
+    image_list = KymImageList(
         path=folder_path,
-        image_cls=KymImage,
         file_extension=".tif",
         depth=1
     )

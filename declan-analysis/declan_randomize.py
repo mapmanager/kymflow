@@ -24,8 +24,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
-from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.utils.logging import get_logger, setup_logging
 logger = get_logger(__name__)
 
@@ -56,11 +55,11 @@ def _get_versioned_folder_name(base_folder_name: str) -> str:
     
     return f"{base_folder_name}_v{version}"
 
-def makeRandomAcqImageList(_random_path: str) -> AcqImageList:
+def makeRandomAcqImageList(_random_path: str) -> KymImageList:
     """
-    Load randomized CSV file and create an AcqImageList.
+    Load randomized CSV file and create a KymImageList.
     
-    Uses AcqImageList.file_path_list parameter to load images from a CSV file
+    Uses KymImageList.file_path_list parameter to load images from a CSV file
     containing a 'path' column with full file paths.
     
     Args:
@@ -68,12 +67,12 @@ def makeRandomAcqImageList(_random_path: str) -> AcqImageList:
             Path to CSV file with 'path' column containing full file paths
     
     Returns:
-        AcqImageList[KymImage]
-            AcqImageList instance loaded from CSV paths
+        KymImageList
+            KymImageList instance loaded from CSV paths
     
     Note:
-        This function demonstrates using AcqImageList with file_path_list parameter.
-        Future API extension: AcqImageList.load_from_csv() could simplify this pattern.
+        This function demonstrates using KymImageList with file_path_list parameter.
+        Future API extension: KymImageList.load_from_csv() could simplify this pattern.
     """
     df = pd.read_csv(_random_path)
     
@@ -81,9 +80,9 @@ def makeRandomAcqImageList(_random_path: str) -> AcqImageList:
 
     path_list = df['path'].tolist()
     
-    # Load from a list of paths using AcqImageList API
-    # Future API extension: AcqImageList.load_from_csv(csv_path) could wrap this
-    acqImageList = AcqImageList(file_path_list=path_list, image_cls=KymImage, file_extension=".tif")
+    # Load from a list of paths using KymImageList API
+    # Future API extension: KymImageList.load_from_csv(csv_path) could wrap this
+    acqImageList = KymImageList(file_path_list=path_list, file_extension=".tif")
 
     print(acqImageList)
 
@@ -195,10 +194,10 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
     logger.info('loading from raw data path:')
     print(path)
     
-    # Load images using AcqImageList API
+    # Load images using KymImageList API
     # depth=3 scans base folder and 2 levels of subfolders
     depth = 3
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+    kymList = KymImageList(path, file_extension=".tif", depth=depth)
 
     # Collect metadata using AcqImageList API
     # This returns a list of dictionaries, one per image

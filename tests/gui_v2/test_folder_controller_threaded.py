@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import threading
 from unittest.mock import MagicMock, patch
 
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.bus import BusConfig, EventBus
 from kymflow.gui_v2.controllers.folder_controller import FolderController
@@ -92,7 +92,7 @@ def test_start_threaded_load_done_applies_state_and_emits(monkeypatch) -> None:
     controller = FolderController(app_state, bus, user_config=user_config)
 
     path = Path("/fake/folder")
-    files = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+    files = KymImageList(path=None, file_extension=".tif", depth=1)
 
     with patch.object(app_state, "_build_files_for_path", return_value=(files, path)) as mock_build:
         with patch.object(app_state, "_apply_loaded_files") as mock_apply:
@@ -134,7 +134,7 @@ def test_start_threaded_load_csv_persists_recent_csv(monkeypatch) -> None:
     controller = FolderController(app_state, bus, user_config=user_config)
 
     path = Path("/fake/files.csv")
-    files = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+    files = KymImageList(path=None, file_extension=".tif", depth=1)
 
     with patch.object(app_state, "_build_files_for_path", return_value=(files, path)):
         with patch.object(app_state, "_apply_loaded_files"):

@@ -13,7 +13,7 @@ from pathlib import Path
 import logging
 from typing import List
 
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.radon_report import RadonReport
 from kymflow.core.image_loaders.acq_image import AcqImage
@@ -120,18 +120,17 @@ def main() -> List[RadonReport]:
         logger.info("Please modify the folder_path variable in this script to point to a valid folder.")
         return []
     
-    # Load AcqImageList with KymImage
+    # Load KymImageList
     # depth=2 means scan base folder and immediate subfolders
-    acq_image_list = AcqImageList(
+    kym_image_list = KymImageList(
         path=folder_path,
-        image_cls=KymImage,
         file_extension=".tif",
         depth=4,  # Adjust depth as needed (1 = base folder only, 2 = base + subfolders)
     )
     
-    logger.info(f"Loaded {len(acq_image_list)} images")
+    logger.info(f"Loaded {len(kym_image_list)} images")
     
-    if len(acq_image_list) == 0:
+    if len(kym_image_list) == 0:
         logger.warning("No images found. Check that:")
         logger.warning("  1. The folder_path is correct")
         logger.warning("  2. Files have .tif extension")
@@ -143,7 +142,7 @@ def main() -> List[RadonReport]:
     logger.info("Loading image data and calculating ROI image statistics...")
     images_processed = 0
     
-    for image in acq_image_list:
+    for image in kym_image_list:
         # Only process images that have ROIs (typically KymImage instances)
         try:
             ensure_roi_img_stats(image)
@@ -154,11 +153,11 @@ def main() -> List[RadonReport]:
     
     logger.info(f"Processed {images_processed} images")
     
-    # Generate report using AcqImageList.get_radon_report()
+    # Generate report using KymImageList.get_radon_report()
     # This aggregates reports from all KymImage files in the list
     # Returns List[RadonReport] instances
     # Now the ROI image statistics should be populated
-    report = acq_image_list.get_radon_report()
+    report = kym_image_list.get_radon_report()
     
     logger.info(f"Generated report with {len(report)} ROI entries")
     
@@ -204,7 +203,7 @@ def main() -> List[RadonReport]:
     try:
         # Get report as DataFrame (convenience method)
         # This requires pandas, which is imported inside the try block
-        df = acq_image_list.get_radon_report_df()
+        df = kym_image_list.get_radon_report_df()
         csv_path = folder_path / "radon_report.csv"
         df.to_csv(csv_path, index=False)
         logger.info(f"Saved report to: {csv_path}")

@@ -11,7 +11,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.gui_v2.state import AppState
 
@@ -27,8 +27,8 @@ def app_state_with_file() -> tuple[AppState, KymImage]:
         kym_file = KymImage(test_file, load_image=True)
 
         app_state = AppState()
-        # Replace default empty list with a test AcqImageList containing our file
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        # Replace default empty list with a test KymImageList containing our file
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file]
         app_state.files = image_list
         app_state.selected_file = kym_file
@@ -50,7 +50,7 @@ def app_state_with_multiple_files() -> tuple[AppState, KymImage, KymImage]:
         kym_file2 = KymImage(test_file2, load_image=True)
 
         app_state = AppState()
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file1, kym_file2]
         app_state.files = image_list
         app_state.selected_file = kym_file1  # First file is selected
@@ -62,7 +62,7 @@ def app_state_with_multiple_files() -> tuple[AppState, KymImage, KymImage]:
 def app_state_with_empty_list() -> AppState:
     """Create an AppState with empty file list."""
     app_state = AppState()
-    image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+    image_list = KymImageList(path=None, file_extension=".tif", depth=1)
     image_list.images = []
     app_state.files = image_list
     app_state.selected_file = None
@@ -243,7 +243,7 @@ def test_refresh_file_rows_preserves_selection_when_file_exists(
 
             # Restore the file list and selection manually (since load_path is mocked)
             # This simulates what would happen after a real refresh
-            image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+            image_list = KymImageList(path=None, file_extension=".tif", depth=1)
             image_list.images = [kym_file]
             app_state.files = image_list
 
@@ -276,7 +276,7 @@ def test_refresh_file_rows_handles_file_deleted(
         with patch.object(app_state.files, "find_by_path", return_value=None):
             # After load_path, files list would be different
             # Simulate by creating a new file list without the original file
-            new_file_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+            new_file_list = KymImageList(path=None, file_extension=".tif", depth=1)
             app_state.files = new_file_list
 
             app_state.refresh_file_rows()
@@ -334,7 +334,7 @@ def test_refresh_file_rows_handles_roi_deleted(
             selected_roi_id = roi1.id  # This ROI was deleted
 
             # Restore file list
-            image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+            image_list = KymImageList(path=None, file_extension=".tif", depth=1)
             image_list.images = [kym_file]
             app_state.files = image_list
 

@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import tifffile
 
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.progress import CancelledError, ProgressMessage
@@ -136,9 +137,8 @@ def test_load_from_path_emits_progress_for_csv(tmp_path: Path) -> None:
     def progress_cb(msg: ProgressMessage) -> None:
         phases.append(msg.phase)
 
-    files = AcqImageList.load_from_path(
+    files = KymImageList.load_from_path(
         csv_path,
-        image_cls=KymImage,
         progress_cb=progress_cb,
     )
 
@@ -160,9 +160,8 @@ def test_load_from_path_cancel_during_wrap(tmp_path: Path) -> None:
             cancel_event.set()
 
     with pytest.raises(CancelledError):
-        AcqImageList.load_from_path(
+        KymImageList.load_from_path(
             tmp_path,
-            image_cls=KymImage,
             depth=1,
             cancel_event=cancel_event,
             progress_cb=progress_cb,

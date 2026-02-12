@@ -11,7 +11,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.folder_controller import FolderController
 from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
@@ -31,7 +31,7 @@ def app_state_with_dirty_file() -> tuple[AppState, KymImage]:
         kym_file.update_experiment_metadata(species="mouse")
 
         app_state = AppState()
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file]
         app_state.files = image_list
 

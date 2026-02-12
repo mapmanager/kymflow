@@ -104,6 +104,7 @@ def test_app_context_loads_app_config(tmp_path: Path, monkeypatch) -> None:
         linear_progress=create_mock_ui_element(),
         menu=create_mock_ui_element(),
         menu_item=create_mock_ui_element(),
+        radio=create_mock_ui_element(),
     )
 
     monkeypatch.setattr(app_context, "ui", mock_ui)
@@ -155,6 +156,7 @@ def test_app_context_uses_app_config_text_size(tmp_path: Path, monkeypatch) -> N
     mock_ui.linear_progress = SimpleNamespace(default_classes=mock_default_classes, default_props=lambda x: None)
     mock_ui.menu = SimpleNamespace(default_classes=mock_default_classes, default_props=lambda x: None)
     mock_ui.menu_item = SimpleNamespace(default_classes=mock_default_classes, default_props=lambda x: None)
+    mock_ui.radio = SimpleNamespace(default_classes=mock_default_classes, default_props=lambda x: None)
 
     monkeypatch.setattr(app_context, "ui", mock_ui)
 
@@ -227,6 +229,7 @@ def test_app_context_syncs_folder_depth_from_app_config(tmp_path: Path, monkeypa
         linear_progress=create_mock_ui_element(),
         menu=create_mock_ui_element(),
         menu_item=create_mock_ui_element(),
+        radio=create_mock_ui_element(),
     )
 
     monkeypatch.setattr(app_context, "ui", mock_ui)
@@ -278,6 +281,7 @@ def test_app_context_syncs_folder_depth_default(tmp_path: Path, monkeypatch) -> 
         linear_progress=create_mock_ui_element(),
         menu=create_mock_ui_element(),
         menu_item=create_mock_ui_element(),
+        radio=create_mock_ui_element(),
     )
 
     monkeypatch.setattr(app_context, "ui", mock_ui)
@@ -434,6 +438,7 @@ def test_app_context_initializes_runtime_env_main_process(tmp_path: Path, monkey
         linear_progress=create_mock_ui_element(),
         menu=create_mock_ui_element(),
         menu_item=create_mock_ui_element(),
+        radio=create_mock_ui_element(),
     )
     
     monkeypatch.setattr(app_context, "ui", mock_ui)

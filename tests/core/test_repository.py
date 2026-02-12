@@ -7,16 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
-from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 
 
 @pytest.mark.requires_data
 def test_acqimagelist_scan_folder(test_data_dir: Path) -> None:
     """Test scanning a folder for TIFF files using AcqImageList."""
-    image_list = AcqImageList(
+    image_list = KymImageList(
         path=test_data_dir,
-        image_cls=KymImage,
         file_extension=".tif",
         depth=1
     )
@@ -64,7 +62,7 @@ def test_acqimagelist_with_depth() -> None:
         (base / "sub1" / "sub2" / "sub3" / "file3.tif").touch()
         
         # Test depth=1: should include only base (code depth 0)
-        image_list = AcqImageList(path=base, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=base, file_extension=".tif", depth=1)
         file_names = {f.path.name for f in image_list.images if f.path}
         assert "file0.tif" in file_names, "depth=1 should include base folder files (code depth 0)"
         assert "file1.tif" not in file_names, "depth=1 should NOT include sub1 files (code depth 1)"
@@ -72,7 +70,7 @@ def test_acqimagelist_with_depth() -> None:
         assert "file3.tif" not in file_names, "depth=1 should NOT include sub3 files (code depth 3)"
         
         # Test depth=2: should include base (code depth 0) and sub1 (code depth 1)
-        image_list = AcqImageList(path=base, image_cls=KymImage, file_extension=".tif", depth=2)
+        image_list = KymImageList(path=base, file_extension=".tif", depth=2)
         file_names = {f.path.name for f in image_list.images if f.path}
         assert "file0.tif" in file_names, "depth=2 should include base folder files (code depth 0)"
         assert "file1.tif" in file_names, "depth=2 should include sub1 files (code depth 1)"
@@ -80,7 +78,7 @@ def test_acqimagelist_with_depth() -> None:
         assert "file3.tif" not in file_names, "depth=2 should NOT include sub3 files (code depth 3)"
         
         # Test depth=3: should include base (code depth 0), sub1 (code depth 1), and sub2 (code depth 2)
-        image_list = AcqImageList(path=base, image_cls=KymImage, file_extension=".tif", depth=3)
+        image_list = KymImageList(path=base, file_extension=".tif", depth=3)
         file_names = {f.path.name for f in image_list.images if f.path}
         assert "file0.tif" in file_names, "depth=3 should include base folder files (code depth 0)"
         assert "file1.tif" in file_names, "depth=3 should include sub1 files (code depth 1)"
@@ -88,7 +86,7 @@ def test_acqimagelist_with_depth() -> None:
         assert "file3.tif" not in file_names, "depth=3 should NOT include sub3 files (code depth 3)"
         
         # Test default depth=1 (should match explicit depth=1)
-        image_list_default = AcqImageList(path=base, image_cls=KymImage, file_extension=".tif", depth=1)
-        image_list_explicit = AcqImageList(path=base, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list_default = KymImageList(path=base, file_extension=".tif", depth=1)
+        image_list_explicit = KymImageList(path=base, file_extension=".tif", depth=1)
         assert len(image_list_default.images) == len(image_list_explicit.images)
         assert {f.path.name for f in image_list_default.images if f.path} == {f.path.name for f in image_list_explicit.images if f.path}

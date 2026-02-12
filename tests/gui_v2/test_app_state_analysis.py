@@ -10,7 +10,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.gui_v2.state import AppState
 
@@ -27,7 +27,7 @@ def app_state_with_file() -> tuple[AppState, KymImage]:
 
         app_state = AppState()
         # Replace default empty list with a test AcqImageList containing our file
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file]
         app_state.files = image_list
         app_state.selected_file = kym_file
@@ -149,7 +149,7 @@ def test_save_buttons_all_files(
         kym_file2 = KymImage(test_file2, load_image=True)
 
         # Add both files to app_state using an AcqImageList
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file, kym_file2]
         app_state.files = image_list
 

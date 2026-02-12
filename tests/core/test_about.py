@@ -23,7 +23,6 @@ def test_getversioninfo_has_required_keys() -> None:
         "NiceGUI version",
         "User Config",
         "Log file",
-        "GitHub",
         "email",
     ]
     
@@ -40,9 +39,10 @@ def test_getversioninfo_values_are_strings() -> None:
 
 
 def test_getversioninfo_github_url() -> None:
-    """Test that GitHub URL is correct."""
+    """Test that GitHub URL is not present (removed from API)."""
     info = getVersionInfo()
-    assert info["GitHub"] == "https://github.com/mapmanager/kymflow"
+    # GitHub key was removed from getVersionInfo()
+    assert "GitHub" not in info
 
 
 def test_getversioninfo_email() -> None:

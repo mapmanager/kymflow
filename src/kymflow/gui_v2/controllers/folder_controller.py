@@ -23,8 +23,7 @@ from kymflow.core.utils.progress import ProgressMessage
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from kymflow.core.image_loaders.acq_image_list import AcqImageList
-    from kymflow.core.image_loaders.kym_image import KymImage
+    from kymflow.core.image_loaders.kym_image_list import KymImageList
 
 
 class FolderController:
@@ -62,7 +61,7 @@ class FolderController:
         self._app_state: AppState = app_state
         self._user_config: UserConfig | None = user_config
         self._bus: EventBus = bus
-        self._thread_runner: ThreadJobRunner[tuple["AcqImageList[KymImage]", Path]] = ThreadJobRunner()
+        self._thread_runner: ThreadJobRunner[tuple["KymImageList", Path]] = ThreadJobRunner()
         bus.subscribe_intent(SelectPathEvent, self._on_select_path_event)
     
     def _detect_path_type(self, path: Path) -> tuple[bool, bool, bool]:
@@ -265,7 +264,7 @@ class FolderController:
                 else:
                     progress_bar.value = 0.0
 
-        def on_done(result: tuple["AcqImageList[KymImage]", Path]) -> None:
+        def on_done(result: tuple["KymImageList", Path]) -> None:
             dialog.close()
             files, selected_path = result
             self._app_state._apply_loaded_files(files, selected_path)

@@ -1,5 +1,4 @@
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
-from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.utils.logging import get_logger, setup_logging
 logger = get_logger(__name__)
 
@@ -7,7 +6,7 @@ def declan_report(path: str) -> None:
     logger.info(f"Generating declan report for {path}")
 
     depth = 2
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+    kymList = KymImageList(path, file_extension=".tif", depth=depth)
     for kymImage in kymList:
         logger.info(kymImage.path)
         ka = kymImage.get_kym_analysis()

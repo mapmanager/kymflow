@@ -11,7 +11,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.state import TaskState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.save_controller import SaveController
@@ -30,7 +30,7 @@ def app_state_with_file() -> tuple[AppState, KymImage]:
         kym_file = KymImage(test_file, load_image=True)
 
         app_state = AppState()
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file]
         app_state.files = image_list
         app_state.selected_file = kym_file
@@ -100,7 +100,7 @@ def test_save_all_metadata_only_dirty(
         kym_file2 = KymImage(test_file2, load_image=True)
 
         # Add both files to app_state
-        image_list = AcqImageList(path=None, image_cls=KymImage, file_extension=".tif", depth=1)
+        image_list = KymImageList(path=None, file_extension=".tif", depth=1)
         image_list.images = [kym_file, kym_file2]
         app_state.files = image_list
 

@@ -12,7 +12,7 @@ import threading
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.utils.progress import ProgressCallback
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin, SelectionOrigin
 from kymflow.core.plotting.theme import ThemeMode
@@ -68,10 +68,9 @@ class AppState:
         self.folder: Optional[Path] = None
         
         # Initialize with no folder - will be replaced when load_path() is called
-        # AcqImageList(path=None, ...) creates an empty, iterable container without scanning.
-        self.files: AcqImageList[KymImage] = AcqImageList(
+        # KymImageList(path=None, ...) creates an empty, iterable container without scanning.
+        self.files: KymImageList = KymImageList(
             path=None,
-            image_cls=KymImage,
             file_extension=".tif",
             depth=1,
         )
@@ -158,7 +157,7 @@ class AppState:
         *,
         cancel_event: threading.Event | None = None,
         progress_cb: ProgressCallback | None = None,
-    ) -> Optional[tuple[AcqImageList[KymImage], Path]]:
+    ) -> Optional[tuple[KymImageList, Path]]:
         """Build files for a path without mutating UI state (worker-safe)."""
         if depth is None:
             depth = self.folder_depth
@@ -173,9 +172,8 @@ class AppState:
         if path.is_file():
             depth = 0
 
-        files = AcqImageList.load_from_path(
+        files = KymImageList.load_from_path(
             path,
-            image_cls=KymImage,
             file_extension=".tif",
             depth=depth,
             cancel_event=cancel_event,
@@ -183,7 +181,7 @@ class AppState:
         )
         return files, path
 
-    def _apply_loaded_files(self, files: AcqImageList[KymImage], selected_path: Path) -> None:
+    def _apply_loaded_files(self, files: KymImageList, selected_path: Path) -> None:
         """Apply loaded files to UI state and fire handlers (UI-thread only)."""
         self.files = files
 

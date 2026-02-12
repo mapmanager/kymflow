@@ -1,5 +1,4 @@
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
-from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.plotting.line_plots import plot_image_line_plotly_v3
 from kymflow.core.analysis.stall_analysis import StallAnalysisParams
 
@@ -8,7 +7,7 @@ logger = get_logger(__name__)
 
 def plot_analysis(path: str) -> None:
     depth = 2
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+    kymList = KymImageList(path, file_extension=".tif", depth=depth)
     for kymImage in kymList:
         roi_ids = kymImage.rois.get_roi_ids()
         # logger.info(kymImage.path)
@@ -76,7 +75,7 @@ def analyze_stalls(path: str) -> None:
     """depreciated 20260130.
     """
     depth = 2
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+    kymList = KymImageList(path, file_extension=".tif", depth=depth)
 
     # analyze stalls
     sap = StallAnalysisParams(
@@ -100,7 +99,7 @@ def analyze_stalls(path: str) -> None:
         logger.info(f'saved analysis: {success}')
 
 def getKymFileList(path:str, depth:int):
-    kymList = AcqImageList(path, image_cls=KymImage, file_extension=".tif", depth=depth)
+    kymList = KymImageList(path, file_extension=".tif", depth=depth)
     return kymList
 
 def analyze_flow(path: str, depth:int) -> None:
