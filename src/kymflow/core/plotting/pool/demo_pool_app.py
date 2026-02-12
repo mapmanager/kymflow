@@ -38,6 +38,7 @@ class PlotController:
         *,
         roi_id_col: str = "roi_id",
         row_id_col: str = "path",
+        plot_state: Optional[PlotState] = None,
     ) -> None:
         """Initialize plot controller with dataframe and column configuration.
         
@@ -73,17 +74,50 @@ class PlotController:
         roi_values = self.data_processor.get_roi_values()
 
         # Initialize with 2 plot states (extensible to 4)
-        default_state = PlotState(
-            roi_id=roi_values[0],
-            xcol=x_default,
-            ycol=y_default,
-        )
-        self.plot_states: list[PlotState] = [
-            PlotState.from_dict(default_state.to_dict()),
-            PlotState.from_dict(default_state.to_dict()),
-        ]
+        if plot_state is None:
+            default_state = PlotState(
+                roi_id=roi_values[0],
+                xcol=x_default,
+                ycol=y_default,
+            )
+        else:
+            default_state = plot_state
+        
+        # Store default plot state for reset functionality
+        self.default_plot_state: PlotState = PlotState.from_dict(default_state.to_dict())
+        
+        # Try to load saved config, otherwise use provided/default plot_state
+        from kymflow.core.plotting.pool.pool_plot_config import PoolPlotConfig
+        config = PoolPlotConfig.load()
+        loaded_plot_states = config.get_plot_states()
+        loaded_layout = config.get_layout()
+        
+        if loaded_plot_states:
+            logger.info(f"Loaded {len(loaded_plot_states)} plot state(s) and layout '{loaded_layout}' from pool_plot_config.json")
+            # Use loaded layout
+            self.layout = loaded_layout
+            # Use loaded plot states, pad with default_state if needed
+            num_plots_needed = self._get_num_plots_for_layout(loaded_layout)
+            self.plot_states = []
+            for i in range(num_plots_needed):
+                if i < len(loaded_plot_states):
+                    self.plot_states.append(loaded_plot_states[i])
+                else:
+                    self.plot_states.append(PlotState.from_dict(default_state.to_dict()))
+            # Update stored default to match first loaded state
+            self.default_plot_state = PlotState.from_dict(self.plot_states[0].to_dict())
+        else:
+            logger.info("No saved plot config found, using provided/default plot state")
+            self.layout = "1x1"
+            # Initialize with 4 plot states to support 2x2 layout
+            self.plot_states = [
+                PlotState.from_dict(default_state.to_dict()),
+                PlotState.from_dict(default_state.to_dict()),
+                PlotState.from_dict(default_state.to_dict()),
+                PlotState.from_dict(default_state.to_dict()),
+            ]
+        
         self.current_plot_index: int = 0
-        self.layout: str = "1x1"
 
         # UI handles
         self._plots: list[ui.plotly] = []
@@ -101,6 +135,7 @@ class PlotController:
         self._ystat_select: Optional[ui.select] = None
         self._abs_value_checkbox: Optional[ui.checkbox] = None
         self._swarm_jitter_amount_input: Optional[ui.number] = None
+        self._swarm_group_offset_input: Optional[ui.number] = None
         self._use_remove_values_checkbox: Optional[ui.checkbox] = None
         self._remove_values_threshold_input: Optional[ui.number] = None
 
@@ -127,8 +162,8 @@ class PlotController:
         assert (
             self._roi_select and self._type_select and self._group_select 
             and self._color_grouping_select and self._ystat_select and self._abs_value_checkbox
-            and self._swarm_jitter_amount_input and self._use_remove_values_checkbox
-            and self._remove_values_threshold_input
+            and self._swarm_jitter_amount_input and self._swarm_group_offset_input
+            and self._use_remove_values_checkbox and self._remove_values_threshold_input
             and self._show_mean_checkbox and self._show_std_sem_checkbox and self._std_sem_select
             and self._mean_line_width_input and self._error_line_width_input and self._show_raw_checkbox
             and self._point_size_input and self._show_legend_checkbox
@@ -143,6 +178,7 @@ class PlotController:
         self._color_grouping_select.value = state.color_grouping if state.color_grouping else "(none)"
         self._abs_value_checkbox.value = state.use_absolute_value
         self._swarm_jitter_amount_input.value = state.swarm_jitter_amount
+        self._swarm_group_offset_input.value = state.swarm_group_offset
         self._use_remove_values_checkbox.value = state.use_remove_values
         self._remove_values_threshold_input.value = state.remove_values_threshold
         
@@ -180,8 +216,8 @@ class PlotController:
         assert (
             self._roi_select and self._type_select and self._group_select 
             and self._color_grouping_select and self._ystat_select and self._abs_value_checkbox
-            and self._swarm_jitter_amount_input and self._use_remove_values_checkbox
-            and self._remove_values_threshold_input
+            and self._swarm_jitter_amount_input and self._swarm_group_offset_input
+            and self._use_remove_values_checkbox and self._remove_values_threshold_input
             and self._show_mean_checkbox and self._show_std_sem_checkbox and self._std_sem_select
             and self._mean_line_width_input and self._error_line_width_input and self._show_raw_checkbox
             and self._point_size_input and self._show_legend_checkbox
@@ -215,6 +251,7 @@ class PlotController:
             ystat=str(self._ystat_select.value),
             use_absolute_value=bool(self._abs_value_checkbox.value),
             swarm_jitter_amount=float(self._swarm_jitter_amount_input.value) if self._swarm_jitter_amount_input.value is not None else 0.35,
+            swarm_group_offset=float(self._swarm_group_offset_input.value) if self._swarm_group_offset_input.value is not None else 0.3,
             use_remove_values=bool(self._use_remove_values_checkbox.value),
             remove_values_threshold=float(self._remove_values_threshold_input.value) if self._remove_values_threshold_input.value is not None else None,
             show_mean=bool(self._show_mean_checkbox.value),
@@ -251,7 +288,7 @@ class PlotController:
         # on_change: when user resizes splitter, re-build plot panel so 1x2/2x1 layout is not lost
         # (NiceGUI/Quasar can re-render the 'after' slot and show only one plot; rebuild restores correct count)
         self._mainSplitter = ui.splitter(
-            value=25,
+            value=30,  # Increased from 25 to give more horizontal room to toolbar
             limits=(15, 50),
             on_change=lambda _: self._on_splitter_change(),
         ).classes("w-full h-screen")
@@ -279,36 +316,76 @@ class PlotController:
         All widgets are stored as instance attributes for later access.
         """
         with ui.column().classes("w-full h-full p-4 gap-4 overflow-y-auto"):
-            # Layout selection
-            self._layout_select = ui.select(
-                options={"1x1": "1x1", "1x2": "1x2", "2x1": "2x1"},
-                value=self.layout,
-                label="Layout",
-                on_change=lambda e: self._on_layout_change(str(e.value)),
-            ).classes("w-full")
+            # Layout selection and Save Config in a row
+            with ui.row().classes("w-full gap-2"):
+                self._layout_select = ui.select(
+                    options={"1x1": "1x1", "1x2": "1x2", "2x1": "2x1", "2x2": "2x2"},
+                    value=self.layout,
+                    label="Layout",
+                    on_change=lambda e: self._on_layout_change(str(e.value)),
+                ).classes("flex-1")
+                self._save_config_button = ui.button(
+                    "Save Config",
+                    on_click=self._save_config,
+                ).classes("flex-1")
             
             # Plot selection (radio buttons) - label and radios in same row
+            # Always show all 4 options, validation happens in callback
             with ui.row().classes("w-full gap-2 items-center"):
                 ui.label("Edit Plot").classes("text-sm font-semibold")
+                # Always create with all 4 options
                 self._plot_radio = ui.radio(
-                    ["1", "2"],
-                    value="1",
-                    on_change=lambda e: self._on_plot_selection_change(int(e.value) - 1),
+                    ["1", "2", "3", "4"],
+                    value=str(self.current_plot_index + 1),
+                    on_change=self._on_plot_radio_change,
                 ).props("inline")
             
-            # Apply to other button
-            self._apply_to_other_button = ui.button(
-                "Apply to Other",
-                on_click=self._apply_current_to_others,
-            ).classes("w-full")
+            # Apply to other, Replot, and Reset buttons in a row
+            with ui.row().classes("w-full gap-2"):
+                self._apply_to_other_button = ui.button(
+                    "Apply to Other",
+                    on_click=self._apply_current_to_others,
+                ).classes("flex-1")
+                self._replot_button = ui.button(
+                    "Replot",
+                    on_click=self._replot_current,
+                ).classes("flex-1")
+                self._reset_button = ui.button(
+                    "Reset Plots",
+                    on_click=self._reset_to_default,
+                ).classes("flex-1")
             
-            roi_options = ["(none)"] + [str(r) for r in self.data_processor.get_roi_values()]
-            self._roi_select = ui.select(
-                options=roi_options,
-                value=str(self.plot_states[self.current_plot_index].roi_id) if self.plot_states[self.current_plot_index].roi_id else "(none)",
-                label="ROI",
-                on_change=self._on_any_change,
-            ).classes("w-full")
+            # Pre Filter card
+            with ui.card().classes("w-full"):
+                ui.label("Pre Filter").classes("text-sm font-semibold mb-2")
+                roi_options = ["(none)"] + [str(r) for r in self.data_processor.get_roi_values()]
+                self._roi_select = ui.select(
+                    options=roi_options,
+                    value=str(self.plot_states[self.current_plot_index].roi_id) if self.plot_states[self.current_plot_index].roi_id else "(none)",
+                    label="ROI",
+                    on_change=self._on_any_change,
+                ).classes("w-full")
+                
+                self._abs_value_checkbox = ui.checkbox(
+                    "Absolute Value",
+                    value=self.plot_states[self.current_plot_index].use_absolute_value,
+                    on_change=self._on_any_change,
+                ).classes("w-full")
+                
+                # Remove Values checkbox and threshold (in same row)
+                with ui.row().classes("w-full gap-2 items-center"):
+                    self._use_remove_values_checkbox = ui.checkbox(
+                        "Remove Values",
+                        value=self.plot_states[self.current_plot_index].use_remove_values,
+                        on_change=self._on_any_change,
+                    )
+                    self._remove_values_threshold_input = ui.number(
+                        label="Remove +/-",
+                        value=self.plot_states[self.current_plot_index].remove_values_threshold,
+                        min=0.0,
+                        step=0.1,
+                        on_change=self._on_any_change,
+                    ).classes("flex-1")
 
             # Plot type dropdown: value is enum value, label is UX string
             _plot_type_labels = {
@@ -351,36 +428,24 @@ class PlotController:
                 on_change=self._on_any_change,
             ).classes("w-full")
 
-            self._abs_value_checkbox = ui.checkbox(
-                "Absolute Value",
-                value=self.plot_states[self.current_plot_index].use_absolute_value,
-                on_change=self._on_any_change,
-            ).classes("w-full")
-
-            # Remove Values checkbox and threshold (similar to absolute value pattern)
+            # Swarm Jitter and Offset (only for swarm plots) - in same row
             with ui.row().classes("w-full gap-2 items-center"):
-                self._use_remove_values_checkbox = ui.checkbox(
-                    "Remove Values",
-                    value=self.plot_states[self.current_plot_index].use_remove_values,
-                    on_change=self._on_any_change,
-                )
-                self._remove_values_threshold_input = ui.number(
-                    label="Remove +/-",
-                    value=self.plot_states[self.current_plot_index].remove_values_threshold,
+                self._swarm_jitter_amount_input = ui.number(
+                    label="Swarm Jitter",
+                    value=self.plot_states[self.current_plot_index].swarm_jitter_amount,
                     min=0.0,
-                    step=0.1,
+                    max=1.0,
+                    step=0.05,
                     on_change=self._on_any_change,
                 ).classes("flex-1")
-
-            # Swarm Jitter Amount (only for swarm plots)
-            self._swarm_jitter_amount_input = ui.number(
-                label="Swarm Jitter Amount",
-                value=self.plot_states[self.current_plot_index].swarm_jitter_amount,
-                min=0.0,
-                max=1.0,
-                step=0.05,
-                on_change=self._on_any_change,
-            ).classes("w-full")
+                self._swarm_group_offset_input = ui.number(
+                    label="Swarm Offset",
+                    value=self.plot_states[self.current_plot_index].swarm_group_offset,
+                    min=0.0,
+                    max=1.0,
+                    step=0.05,
+                    on_change=self._on_any_change,
+                ).classes("flex-1")
 
             # Mean/Std/Sem controls (only for scatter and swarm)
             with ui.row().classes("w-full gap-2 items-center"):
@@ -412,8 +477,6 @@ class PlotController:
                 # Y column aggrid
                 with ui.column().classes("flex-1"):
                     self._y_aggrid = self._create_column_aggrid("Y column", self.plot_states[self.current_plot_index].ycol, self._on_y_column_selected)
-
-            ui.button("Replot", on_click=self._replot_current).classes("w-full")
 
             # Plot Options widget (modular and reusable)
             self._build_plot_options()
@@ -505,11 +568,11 @@ class PlotController:
                     self._plots.append(plot)
         
         elif rows == 1 and cols == 2:
-            # 2x1: Two plots side by side
+            # 1x2: Two plots side by side
             with self._plot_container:
-                with ui.row().classes("w-full h-full gap-2"):
+                with ui.row().classes("w-full h-full gap-2 no-wrap"):
                     for i in range(2):
-                        with ui.column().classes("flex-1 h-full min-h-0 p-4"):
+                        with ui.column().classes("flex-1 w-0 h-full min-h-0 p-4"):
                             plot = ui.plotly(
                                 self._make_figure_dict(self.plot_states[i], selected_row_ids=None)
                             ).classes("w-full h-full")
@@ -519,7 +582,7 @@ class PlotController:
                             self._plots.append(plot)
         
         elif rows == 2 and cols == 1:
-            # 1x2: Two plots stacked vertically
+            # 2x1: Two plots stacked vertically
             with self._plot_container:
                 with ui.column().classes("w-full h-full gap-2"):
                     for i in range(2):
@@ -531,6 +594,23 @@ class PlotController:
                             if self._is_selection_compatible(self.plot_states[i].plot_type):
                                 plot.on("plotly_relayout", lambda e, idx=i: self._on_plotly_relayout(e, plot_index=idx))
                             self._plots.append(plot)
+        
+        elif rows == 2 and cols == 2:
+            # 2x2: Four plots in a 2x2 grid
+            with self._plot_container:
+                with ui.column().classes("w-full h-full gap-2"):
+                    for row_idx in range(2):
+                        with ui.row().classes("w-full flex-1 gap-2 min-h-0 no-wrap"):
+                            for col_idx in range(2):
+                                plot_idx = row_idx * 2 + col_idx
+                                with ui.column().classes("flex-1 w-0 h-full min-h-0 p-4"):
+                                    plot = ui.plotly(
+                                        self._make_figure_dict(self.plot_states[plot_idx], selected_row_ids=None)
+                                    ).classes("w-full h-full")
+                                    plot.on("plotly_click", lambda e, idx=plot_idx: self._on_plotly_click(e, plot_index=idx))
+                                    if self._is_selection_compatible(self.plot_states[plot_idx].plot_type):
+                                        plot.on("plotly_relayout", lambda e, idx=plot_idx: self._on_plotly_relayout(e, plot_index=idx))
+                                    self._plots.append(plot)
         
         # Initialize last plot type tracking after plots are created
         if self._plots and self._last_plot_type is None:
@@ -649,16 +729,76 @@ class PlotController:
         """Restore plot panel after splitter resize (avoids 1x2/2x1 collapsing to single plot)."""
         self._rebuild_plot_panel()
 
-    def _on_layout_change(self, layout_str: str) -> None:
-        """Handle layout change (1x1, 1x2, 2x1).
+    def _get_num_plots_for_layout(self, layout_str: str) -> int:
+        """Get number of plots needed for a layout string.
         
         Args:
-            layout_str: Layout string like "1x1", "1x2", "2x1".
+            layout_str: Layout string like "1x1", "1x2", "2x1", "2x2".
+            
+        Returns:
+            Number of plots needed.
+        """
+        rows, cols = map(int, layout_str.split('x'))
+        return rows * cols
+    
+    def _on_plot_radio_change(self, e) -> None:
+        """Handle plot radio button change with validation.
+        
+        Validates that the selected plot index is valid for the current layout.
+        If invalid, reverts to a valid selection.
+        """
+        try:
+            selected_plot_num = int(e.value)
+            plot_index = selected_plot_num - 1
+            
+            # Validate that this plot index is available for current layout
+            num_plots = self._get_num_plots_for_layout(self.layout)
+            if plot_index < 0 or plot_index >= num_plots:
+                # Invalid selection - revert to current valid selection
+                logger.warning(f"Invalid plot selection {selected_plot_num} for layout {self.layout} (max {num_plots} plots)")
+                self._plot_radio.value = str(self.current_plot_index + 1)
+                ui.notify(f"Plot {selected_plot_num} is not available for layout {self.layout}", type="warning")
+                return
+            
+            # Valid selection - proceed with normal plot selection change
+            self._on_plot_selection_change(plot_index)
+        except (ValueError, TypeError) as ex:
+            logger.error(f"Error parsing plot radio selection: {ex}")
+            # Revert to current selection
+            self._plot_radio.value = str(self.current_plot_index + 1)
+    
+    def _on_layout_change(self, layout_str: str) -> None:
+        """Handle layout change (1x1, 1x2, 2x1, 2x2).
+        
+        Args:
+            layout_str: Layout string like "1x1", "1x2", "2x1", "2x2".
         """
         logger.info(f"Layout changed to: {layout_str}")
         # Save current plot state before changing layout
         self.plot_states[self.current_plot_index] = self._widgets_to_state()
+        
+        # Ensure we have enough plot states for the new layout
+        num_plots_needed = self._get_num_plots_for_layout(layout_str)
+        current_state = self.plot_states[self.current_plot_index]
+        
+        # Pad plot_states if needed
+        while len(self.plot_states) < num_plots_needed:
+            self.plot_states.append(PlotState.from_dict(current_state.to_dict()))
+        
+        # Clamp current_plot_index if needed
+        if self.current_plot_index >= num_plots_needed:
+            self.current_plot_index = num_plots_needed - 1
+        
         self.layout = layout_str
+        
+        # Ensure current selection is valid
+        num_plots = self._get_num_plots_for_layout(layout_str)
+        if self.current_plot_index >= num_plots:
+            self.current_plot_index = num_plots - 1
+        
+        # Update radio button value to match current selection
+        self._plot_radio.value = str(self.current_plot_index + 1)
+        
         self._rebuild_plot_panel()
     
     def _on_plot_selection_change(self, plot_index: int) -> None:
@@ -690,6 +830,35 @@ class PlotController:
         
         # Replot all visible plots
         self._replot_all()
+
+    def _save_config(self) -> None:
+        """Save current layout and all plot states to config file."""
+        from kymflow.core.plotting.pool.pool_plot_config import PoolPlotConfig
+        
+        # Save current plot state before saving
+        self.plot_states[self.current_plot_index] = self._widgets_to_state()
+        
+        # Load existing config and update layout and plot_states
+        config = PoolPlotConfig.load()
+        config.set_layout(self.layout)
+        config.set_plot_states(self.plot_states)
+        config.save()
+        
+        ui.notify(f"Plot configuration saved (layout: {self.layout}, {len(self.plot_states)} plot(s))", type="positive")
+
+    def _reset_to_default(self) -> None:
+        """Reset all plots to the default plot state."""
+        logger.info("Resetting all plots to default state")
+        # Apply default state to all plots
+        for i in range(len(self.plot_states)):
+            self.plot_states[i] = PlotState.from_dict(self.default_plot_state.to_dict())
+        
+        # Update widgets to reflect default state
+        self._state_to_widgets(self.plot_states[self.current_plot_index])
+        
+        # Replot all visible plots
+        self._replot_all()
+        ui.notify("Plots reset to default configuration", type="info")
 
     def _on_x_column_selected(self, row_dict: dict[str, Any]) -> None:
         """Callback when X column is selected in aggrid."""
@@ -926,6 +1095,48 @@ class PlotController:
             f"Selected row_ids: {sorted(list(selected_row_ids)[:10])}{'...' if len(selected_row_ids) > 10 else ''}"
         )
 
+    def select_points_by_row_id(self, row_id: str) -> None:
+        """Programmatically select points by row_id.
+        
+        This method selects points corresponding to the specified row_id in scatter plots,
+        reusing the same selection mechanism as visual rect/lasso selection.
+        
+        Args:
+            row_id: Unique row identifier (value from row_id_col) to select.
+        """
+        # Find the first scatter plot to use for selection
+        scatter_plot_index = None
+        for i, state in enumerate(self.plot_states):
+            if state.plot_type == PlotType.SCATTER:
+                scatter_plot_index = i
+                break
+        
+        if scatter_plot_index is None:
+            logger.warning("No scatter plot found for programmatic selection")
+            return
+        
+        # Filter dataframe
+        state = self.plot_states[scatter_plot_index]
+        if state.roi_id and state.roi_id != 0:
+            df_f = self.data_processor.filter_by_roi(state.roi_id)
+        else:
+            df_f = self.data_processor.df.dropna(subset=[self.data_processor.row_id_col])
+        
+        # Find all row_ids that match (should be just one, but handle multiple)
+        matching_rows = df_f[df_f[self.row_id_col] == row_id]
+        if len(matching_rows) == 0:
+            logger.warning(f"Row ID '{row_id}' not found in filtered dataframe")
+            return
+        
+        # Get the row_ids (should be the same value, but collect them)
+        selected_row_ids = set(matching_rows[self.row_id_col].astype(str).unique())
+        
+        # Apply selection using the same mechanism as visual selection
+        self._selected_row_ids = selected_row_ids
+        self._apply_selection_to_all_plots()
+        self._update_selection_label()
+        logger.info(f"Programmatically selected {len(selected_row_ids)} point(s) by row_id: {row_id}")
+
     def _apply_selection_to_all_plots(self) -> None:
         """Update all selection-compatible plots to show the current linked selection (_selected_row_ids)."""
         for i in range(len(self._plots)):
@@ -954,7 +1165,7 @@ class PlotController:
         }
         is_grouped_agg = state.plot_type == PlotType.GROUPED
         show_mean_std = state.plot_type in {PlotType.SCATTER, PlotType.SWARM}
-        supports_color_grouping = state.plot_type in {PlotType.BOX_PLOT, PlotType.VIOLIN, PlotType.SWARM}
+        supports_color_grouping = state.plot_type in {PlotType.BOX_PLOT, PlotType.VIOLIN, PlotType.SWARM, PlotType.SCATTER}
         
         self._group_select.set_enabled(needs_group)
         self._color_grouping_select.set_enabled(supports_color_grouping)
@@ -963,6 +1174,7 @@ class PlotController:
         self._show_std_sem_checkbox.set_enabled(show_mean_std)
         self._std_sem_select.set_enabled(show_mean_std and state.show_std_sem)
         self._swarm_jitter_amount_input.set_enabled(state.plot_type == PlotType.SWARM)
+        self._swarm_group_offset_input.set_enabled(state.plot_type == PlotType.SWARM)
         
         logger.debug(
             f"Controls synced: group_select enabled={needs_group}, "
@@ -1184,14 +1396,33 @@ def main() -> None:
     ui.page_title("NiceGUI + Plotly (ROI filter + click row)")
     # ui.label("Filter by ROI, replot, and click points to print the filtered df row.").classes("text-lg font-medium")
 
-    ctrl = PlotController(df, roi_id_col="roi_id", row_id_col="path")
+    # Create default plot state
+    default_plot_state = PlotState(
+        roi_id=0,  # (none) - show all ROIs
+        xcol="img_mean",
+        ycol="vel_mean",
+        plot_type=PlotType.SCATTER,
+        group_col="grandparent_folder",
+        color_grouping="roi_id",
+        use_absolute_value=True,
+        use_remove_values=True,
+        remove_values_threshold=10000.0,
+    )
+
+    default_plot_state = None
+    ctrl = PlotController(df, roi_id_col="roi_id", row_id_col="path", plot_state=default_plot_state)
     ctrl.build()
+    
+    # Example: programmatically select a point by row_id
+    # TODO: Replace with actual row_id value from your data
+    # _select_path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v1-analysis/14d Saline/20251014/20251014_A98_0002.tif'
+    # ctrl.select_points_by_row_id(_select_path)
 
     native_bool = True
     reload_bool = True
     ui.run(reload=reload_bool,
             native=native_bool,
-            window_size=(1000, 800)
+            window_size=(1400, 800)
             )
 
 

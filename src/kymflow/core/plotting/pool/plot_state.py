@@ -39,6 +39,7 @@ class PlotState:
     ystat: str = "mean"                # used by grouped only
     use_absolute_value: bool = False   # apply abs() to x and y values before plotting (numeric only)
     swarm_jitter_amount: float = 0.35  # jitter amount for swarm plots (user-controllable)
+    swarm_group_offset: float = 0.3    # offset amount for separating color groups in swarm plots
     use_remove_values: bool = False    # enable remove values pre-filter
     remove_values_threshold: Optional[float] = None  # threshold for remove values pre-filter
     show_mean: bool = False            # show mean line for scatter/swarm
@@ -66,6 +67,7 @@ class PlotState:
             "ystat": self.ystat,
             "use_absolute_value": self.use_absolute_value,
             "swarm_jitter_amount": self.swarm_jitter_amount,
+            "swarm_group_offset": self.swarm_group_offset,
             "use_remove_values": self.use_remove_values,
             "remove_values_threshold": self.remove_values_threshold,
             "show_mean": self.show_mean,
@@ -104,6 +106,7 @@ class PlotState:
             ystat=str(data.get("ystat", "mean")),
             use_absolute_value=bool(data.get("use_absolute_value", False)),
             swarm_jitter_amount=float(data.get("swarm_jitter_amount", 0.35)),
+            swarm_group_offset=float(data.get("swarm_group_offset", 0.3)),
             use_remove_values=bool(data.get("use_remove_values", False)),
             remove_values_threshold=data.get("remove_values_threshold"),  # Can be None
             show_mean=bool(data.get("show_mean", False)),
