@@ -1114,11 +1114,11 @@ def main() -> None:
     ctrl = PlotController(df, roi_id_col="roi_id", row_id_col="path")
     ctrl.build()
 
-    native_bool = False
+    native_bool = True
     reload_bool = True
     ui.run(reload=reload_bool,
             native=native_bool,
-            # window_size=(1000, 800)
+            window_size=(1000, 800)
             )
 
 
