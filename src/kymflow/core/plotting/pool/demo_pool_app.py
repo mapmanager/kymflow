@@ -357,7 +357,7 @@ class PlotController:
             
             # Pre Filter card
             with ui.card().classes("w-full"):
-                ui.label("Pre Filter").classes("text-sm font-semibold mb-2")
+                ui.label("Pre Filter").classes("text-sm font-semibold")
                 roi_options = ["(none)"] + [str(r) for r in self.data_processor.get_roi_values()]
                 self._roi_select = ui.select(
                     options=roi_options,
@@ -488,7 +488,7 @@ class PlotController:
         that can be easily extracted and used in other projects.
         """
         with ui.card().classes("w-full mt-4"):
-            ui.label("Plot Options").classes("text-lg font-semibold mb-2")
+            ui.label("Plot Options").classes("text-sm font-semibold")
             
             with ui.column().classes("w-full gap-3"):
                 # Mean and Error line widths in same row
