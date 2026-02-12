@@ -140,6 +140,9 @@ def _setUpGuiDefaults(app_config: AppConfig | None = None):
     ui.menu_item.default_classes(text_size)
     ui.menu_item.default_props("dense")
 
+    ui.radio.default_classes(text_size)
+    ui.radio.default_props("dense")
+
 class AppContext:
     """Singleton managing shared application state across all pages.
     
