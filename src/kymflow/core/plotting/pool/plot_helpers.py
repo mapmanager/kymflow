@@ -122,14 +122,14 @@ def numeric_columns(df: pd.DataFrame) -> list[str]:
 
 def categorical_candidates(df: pd.DataFrame) -> list[str]:
     """Heuristic: object/category/bool, or low-ish cardinality.
-    
+
     Identifies columns that are good candidates for categorical grouping:
     - Object, category, or boolean dtype columns
     - Numeric columns with low cardinality (<= 20 or <= 5% of rows)
-    
+
     Args:
         df: DataFrame to analyze.
-        
+
     Returns:
         List of column names that are categorical candidates.
     """
@@ -145,3 +145,10 @@ def categorical_candidates(df: pd.DataFrame) -> list[str]:
         if n > 0 and nunique <= max(20, int(0.05 * n)):
             out.append(str(c))
     return out
+
+
+def is_categorical_column(df: pd.DataFrame, col: str) -> bool:
+    """Return True if col is a categorical candidate (suitable for box plot x-axis, etc.)."""
+    if col not in df.columns:
+        return False
+    return col in categorical_candidates(df)

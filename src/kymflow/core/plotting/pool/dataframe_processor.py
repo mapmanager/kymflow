@@ -131,7 +131,7 @@ class DataFrameProcessor:
             ycol: Column name for y values.
             use_absolute: If True, apply abs() to y values before calculation.
             xcol: Column name for x values (required if include_x=True).
-            include_x: If True, also calculate stats for x values (for split_scatter).
+            include_x: If True, also calculate stats for x values (for scatter).
             
         Returns:
             Dictionary mapping group_value (as string) to stats dict with keys:

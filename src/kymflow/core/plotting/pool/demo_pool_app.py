@@ -15,6 +15,7 @@ from kymflow.core.plotting.pool.plot_state import PlotType, PlotState
 from kymflow.core.plotting.pool.plot_helpers import (
     numeric_columns,
     categorical_candidates,
+    is_categorical_column,
     _ensure_aggrid_compact_css,
     points_in_polygon,
     parse_plotly_path_to_xy,
@@ -215,7 +216,9 @@ class PlotController:
         """Build the main UI layout with header, splitter, controls, and plot."""
         # Header area at the top
         with ui.column().classes("w-full"):
-            ui.label("Radon Analysis Pool Plot").classes("text-2xl font-bold mb-2")
+            with ui.row().classes("w-full items-center gap-3 flex-wrap"):
+                ui.label("Radon Analysis Pool Plot").classes("text-2xl font-bold mb-2")
+                ui.button("Open CSV", on_click=self._on_open_csv).classes("text-sm")
             with ui.row().classes("w-full items-center gap-3 flex-wrap"):
                 self._clicked_label = ui.label("Click a point to show the filtered df row...").classes("text-sm text-gray-600")
                 self._selection_label = ui.label("No selection").classes("text-sm font-medium")
@@ -285,8 +288,18 @@ class PlotController:
                 on_change=self._on_any_change,
             ).classes("w-full")
 
+            # Plot type dropdown: value is enum value, label is UX string
+            _plot_type_labels = {
+                "scatter": "Scatter",
+                "swarm": "Swarm",
+                "box_plot": "Box Plot",
+                "violin": "Violin",
+                "histogram": "Histogram",
+                "cumulative_histogram": "Cumulative Histogram",
+                "grouped": "Grouped",
+            }
             self._type_select = ui.select(
-                options={pt.value: pt.value for pt in PlotType},
+                options={pt.value: _plot_type_labels.get(pt.value, pt.value) for pt in PlotType},
                 value=self.plot_states[self.current_plot_index].plot_type.value,
                 label="Plot type",
                 on_change=self._on_any_change,
@@ -314,7 +327,7 @@ class PlotController:
                 on_change=self._on_any_change,
             ).classes("w-full")
 
-            # Mean/Std/Sem controls (only for split_scatter and swarm)
+            # Mean/Std/Sem controls (only for scatter and swarm)
             with ui.row().classes("w-full gap-2 items-center"):
                 self._show_mean_checkbox = ui.checkbox(
                     "Mean",
@@ -507,6 +520,8 @@ class PlotController:
                 "field": "column",
                 "sortable": True,
                 "resizable": True,
+                'flex': 2,
+                'minWidth': 300,
             }
         ]
         
@@ -523,6 +538,7 @@ class PlotController:
                 "sortable": True,
                 "resizable": True,
             },
+            'autoSizeStrategy': {'type': 'fitGridWidth'},
         }
         
         # Add getRowId for programmatic selection by column name
@@ -623,12 +639,27 @@ class PlotController:
     def _on_x_column_selected(self, row_dict: dict[str, Any]) -> None:
         """Callback when X column is selected in aggrid."""
         column_name = row_dict.get("column")
-        if column_name:
-            logger.info(f"X column selected: {column_name}")
-            self.plot_states[self.current_plot_index].xcol = str(column_name)
-            self._on_any_change()
-        else:
+        if not column_name:
             logger.warning(f"X column selection callback received invalid row_dict: {row_dict}")
+            return
+        column_name = str(column_name)
+        state = self.plot_states[self.current_plot_index]
+        # Box/Violin require categorical X: reject non-categorical choice
+        if state.plot_type in (PlotType.BOX_PLOT, PlotType.VIOLIN) and not is_categorical_column(self.df, column_name):
+            name = "Box plot" if state.plot_type == PlotType.BOX_PLOT else "Violin plot"
+            ui.notify(
+                f"{name} requires a categorical X column. Choose a categorical column for X.",
+                type="warning",
+            )
+            # Revert aggrid selection to current xcol
+            try:
+                self._x_aggrid.run_row_method(state.xcol, "setSelected", True, True)
+            except Exception:
+                pass
+            return
+        logger.info(f"X column selected: {column_name}")
+        self.plot_states[self.current_plot_index].xcol = column_name
+        self._on_any_change()
 
     def _on_y_column_selected(self, row_dict: dict[str, Any]) -> None:
         """Callback when Y column is selected in aggrid."""
@@ -651,13 +682,23 @@ class PlotController:
         )
 
         logger.info("Control change detected, updating state and replotting")
-        
+
         # Update state from widgets (preserve xcol/ycol from aggrid)
         new_state = self._widgets_to_state()
         # Preserve xcol/ycol from current state (aggrid updates are async)
         new_state.xcol = self.plot_states[self.current_plot_index].xcol
         new_state.ycol = self.plot_states[self.current_plot_index].ycol
-        
+
+        # Box/Violin require categorical X: reject invalid plot type choice
+        if new_state.plot_type in (PlotType.BOX_PLOT, PlotType.VIOLIN) and not is_categorical_column(self.df, new_state.xcol):
+            name = "Box plot" if new_state.plot_type == PlotType.BOX_PLOT else "Violin plot"
+            ui.notify(
+                f"{name} requires a categorical X column. Choose a categorical column for X or pick another plot type.",
+                type="warning",
+            )
+            new_state.plot_type = self.plot_states[self.current_plot_index].plot_type
+            self._type_select.value = new_state.plot_type.value
+
         # Save to current plot state
         self.plot_states[self.current_plot_index] = new_state
 
@@ -685,7 +726,6 @@ class PlotController:
         """
         SELECTION_COMPATIBLE_TYPES = {
             PlotType.SCATTER,
-            PlotType.SPLIT_SCATTER,
             PlotType.SWARM,
         }
         return plot_type in SELECTION_COMPATIBLE_TYPES
@@ -705,6 +745,11 @@ class PlotController:
         self._apply_selection_to_all_plots()
         self._update_selection_label()
         logger.info("Selection cleared (Clear selection button)")
+
+    def _on_open_csv(self) -> None:
+        """Open a CSV file via native dialog. Replace with pywebview callback when available."""
+        # Dummy for now: wire pywebview native file-open callback here
+        ui.notify("Open CSV: connect pywebview file dialog callback here", type="info")
 
     def _on_keyboard_key(self, e) -> None:
         """Escape: clear selection. Cmd/Ctrl: set extend-selection flag for next rect/lasso."""
@@ -837,13 +882,16 @@ class PlotController:
         
         state = self.plot_states[self.current_plot_index]
         needs_group = state.plot_type in {
-            PlotType.GROUPED, 
-            PlotType.SPLIT_SCATTER, 
+            PlotType.GROUPED,
+            PlotType.SCATTER,
             PlotType.SWARM,
+            PlotType.BOX_PLOT,
+            PlotType.VIOLIN,
+            PlotType.HISTOGRAM,
             PlotType.CUMULATIVE_HISTOGRAM,
         }
         is_grouped_agg = state.plot_type == PlotType.GROUPED
-        show_mean_std = state.plot_type in {PlotType.SPLIT_SCATTER, PlotType.SWARM}
+        show_mean_std = state.plot_type in {PlotType.SCATTER, PlotType.SWARM}
         
         self._group_select.set_enabled(needs_group)
         self._ystat_select.set_enabled(is_grouped_agg)
@@ -874,7 +922,7 @@ class PlotController:
         state = self.plot_states[plot_index]
 
         # per-row plots: click -> row_id -> filtered df row
-        if state.plot_type in {PlotType.SCATTER, PlotType.SPLIT_SCATTER, PlotType.SWARM}:
+        if state.plot_type in {PlotType.SCATTER, PlotType.SWARM}:
             row_id: Optional[str] = None
             if isinstance(custom, (str, int, float)):
                 row_id = str(custom)

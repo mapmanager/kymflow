@@ -14,10 +14,12 @@ from typing import Any, Optional
 class PlotType(Enum):
     """Enumeration of available plot types."""
     SCATTER = "scatter"
-    SPLIT_SCATTER = "split_scatter"
     SWARM = "swarm"
-    GROUPED = "grouped"
+    BOX_PLOT = "box_plot"
+    VIOLIN = "violin"
+    HISTOGRAM = "histogram"
     CUMULATIVE_HISTOGRAM = "cumulative_histogram"
+    GROUPED = "grouped"
 
 
 @dataclass
@@ -32,11 +34,11 @@ class PlotState:
     xcol: str
     ycol: str
     plot_type: PlotType = PlotType.SCATTER
-    group_col: Optional[str] = None    # used by grouped/split_scatter/swarm
+    group_col: Optional[str] = None    # used by grouped/scatter/swarm
     ystat: str = "mean"                # used by grouped only
     use_absolute_value: bool = False   # apply abs() to y values before plotting
-    show_mean: bool = False            # show mean line for split_scatter/swarm
-    show_std_sem: bool = False         # show std/sem error bars for split_scatter/swarm
+    show_mean: bool = False            # show mean line for scatter/swarm
+    show_std_sem: bool = False         # show std/sem error bars for scatter/swarm
     std_sem_type: str = "std"          # "std" or "sem" for error bars
     mean_line_width: int = 2           # line width for mean line
     error_line_width: int = 2          # line width for error (std/sem) line
@@ -78,8 +80,11 @@ class PlotState:
         Returns:
             PlotState instance created from dictionary data.
         """
-        # Convert plot_type string back to enum
-        plot_type = PlotType(data.get("plot_type", PlotType.SCATTER.value))
+        # Convert plot_type string back to enum (legacy "split_scatter" -> scatter)
+        pt_val = data.get("plot_type", PlotType.SCATTER.value)
+        if pt_val == "split_scatter":
+            pt_val = "scatter"
+        plot_type = PlotType(pt_val)
         
         return cls(
             roi_id=int(data.get("roi_id", 0)),
