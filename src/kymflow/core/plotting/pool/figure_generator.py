@@ -6,6 +6,8 @@ from data and plot state, separating figure generation logic from UI/controller 
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -43,12 +45,19 @@ class FigureGenerator:
         self.data_processor = data_processor
         self.row_id_col = row_id_col
 
-    def make_figure(self, df_f: pd.DataFrame, state: PlotState) -> dict:
+    def make_figure(
+        self,
+        df_f: pd.DataFrame,
+        state: PlotState,
+        *,
+        selected_row_ids: Optional[set[str]] = None,
+    ) -> dict:
         """Generate Plotly figure dictionary based on plot state.
         
         Args:
             df_f: Filtered dataframe (already filtered by ROI).
             state: PlotState to use for generating the figure.
+            selected_row_ids: If set, these row_ids are shown as selected (linked selection).
             
         Returns:
             Plotly figure dictionary.
@@ -62,16 +71,68 @@ class FigureGenerator:
         if state.plot_type == PlotType.GROUPED:
             result = self._figure_grouped(df_f, state)
         elif state.plot_type == PlotType.SPLIT_SCATTER:
-            result = self._figure_split_scatter(df_f, state)
+            result = self._figure_split_scatter(df_f, state, selected_row_ids=selected_row_ids)
         elif state.plot_type == PlotType.SWARM:
-            result = self._figure_swarm(df_f, state)
+            result = self._figure_swarm(df_f, state, selected_row_ids=selected_row_ids)
         elif state.plot_type == PlotType.CUMULATIVE_HISTOGRAM:
             result = self._figure_cumulative_histogram(df_f, state)
         else:
-            result = self._figure_scatter(df_f, state)
+            result = self._figure_scatter(df_f, state, selected_row_ids=selected_row_ids)
         
         logger.debug(f"Figure generated: {len(result.get('data', []))} traces")
         return result
+
+    def _is_numeric_axis(self, df_f: pd.DataFrame, col: str) -> bool:
+        """Return True if the column is numeric (int/float) for axis range interpretation."""
+        if col not in df_f.columns:
+            return False
+        kind = getattr(df_f[col].dtype, "kind", None)
+        return kind in {"i", "u", "f"}
+
+    def get_axis_x_for_selection(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
+        """Return x values in the same coordinate system as the plot axis (for range/lasso selection).
+
+        - Scatter / Split scatter, numeric x: data values as float.
+        - Scatter / Split scatter, categorical x: category indices 0, 1, 2, ... (sorted order).
+        - Swarm: category index + deterministic jitter (same as in _figure_swarm).
+
+        Caller must use this series with the same df_f index when masking.
+        """
+        if state.plot_type == PlotType.SWARM:
+            return self._swarm_axis_x(df_f, state)
+        if state.plot_type in (PlotType.SCATTER, PlotType.SPLIT_SCATTER):
+            return self._scatter_axis_x(df_f, state)
+        # Fallback for other types (e.g. GROUPED) - return numeric 0-based index
+        return pd.Series(range(len(df_f)), index=df_f.index, dtype=float)
+
+    def _scatter_axis_x(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
+        """X axis values for scatter/split_scatter: numeric as float, categorical as 0,1,2,..."""
+        x_series = df_f[state.xcol]
+        if self._is_numeric_axis(df_f, state.xcol):
+            return pd.to_numeric(x_series, errors="coerce")
+        unique_cats = sorted(x_series.dropna().astype(str).unique())
+        cat_to_pos = {c: i for i, c in enumerate(unique_cats)}
+        return x_series.astype(str).map(cat_to_pos).astype(float)
+
+    def _swarm_axis_x(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
+        """X axis values for swarm: category index + deterministic jitter (match _figure_swarm)."""
+        x_cat = df_f[state.xcol].astype(str)
+        unique_cats = sorted(x_cat.unique())
+        cat_to_pos = {cat: i for i, cat in enumerate(unique_cats)}
+        jitter_amount = 0.35
+        if state.group_col and state.group_col in df_f.columns:
+            parts = []
+            for gv, sub in df_f.groupby(state.group_col, sort=True):
+                x_positions = sub[state.xcol].astype(str).map(cat_to_pos).values
+                seed = hash(str(gv)) % (2**31)
+                rng = np.random.default_rng(seed=seed)
+                jitter = rng.uniform(-jitter_amount / 2, jitter_amount / 2, size=len(x_positions))
+                parts.append(pd.Series(x_positions + jitter, index=sub.index))
+            return pd.concat(parts).sort_index()
+        x_positions = x_cat.map(cat_to_pos).values
+        rng = np.random.default_rng(seed=42)
+        jitter = rng.uniform(-jitter_amount / 2, jitter_amount / 2, size=len(x_positions))
+        return pd.Series(x_positions + jitter, index=df_f.index)
 
     def _add_mean_std_traces(
         self, 
@@ -181,16 +242,32 @@ class FigureGenerator:
                         ),
                     ))
 
-    def _figure_scatter(self, df_f: pd.DataFrame, state: PlotState) -> dict:
+    def _figure_scatter(
+        self,
+        df_f: pd.DataFrame,
+        state: PlotState,
+        *,
+        selected_row_ids: Optional[set[str]] = None,
+    ) -> dict:
         """Create scatter plot figure.
         
         Args:
             df_f: Filtered dataframe.
             state: PlotState to use for configuration.
+            selected_row_ids: If set, indices of these row_ids are passed as selectedpoints.
         """
         x = df_f[state.xcol]
         y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         row_ids = df_f[self.row_id_col].astype(str)
+
+        selectedpoints = None
+        selected = None
+        if selected_row_ids:
+            selectedpoints = [i for i, r in enumerate(row_ids) if r in selected_row_ids]
+            if selectedpoints:
+                selected = dict(
+                    marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                )
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -200,6 +277,8 @@ class FigureGenerator:
             name=f"ROI {state.roi_id}",
             customdata=row_ids,
             marker=dict(size=state.point_size),
+            selectedpoints=selectedpoints,
+            selected=selected,
             hovertemplate=(
                 # f"roi_id={state.roi_id}<br>"
                 f"{state.xcol}=%{{x}}<br>"
@@ -216,15 +295,22 @@ class FigureGenerator:
         )
         return fig.to_dict()
 
-    def _figure_split_scatter(self, df_f: pd.DataFrame, state: PlotState) -> dict:
+    def _figure_split_scatter(
+        self,
+        df_f: pd.DataFrame,
+        state: PlotState,
+        *,
+        selected_row_ids: Optional[set[str]] = None,
+    ) -> dict:
         """Create split scatter plot with color coding by group column.
         
         Args:
             df_f: Filtered dataframe.
             state: PlotState to use for configuration.
+            selected_row_ids: If set, indices of these row_ids are passed as selectedpoints per trace.
         """
         if not state.group_col:
-            return self._figure_scatter(df_f, state)
+            return self._figure_scatter(df_f, state, selected_row_ids=selected_row_ids)
 
         x = df_f[state.xcol]
         y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
@@ -257,6 +343,13 @@ class FigureGenerator:
             x_ranges[str(group_value)] = (x_min_val, x_max_val)
             # Only add raw data trace if show_raw is True
             if state.show_raw:
+                sp, sel = None, None
+                if selected_row_ids:
+                    sp = [i for i, r in enumerate(sub["row_id"]) if r in selected_row_ids]
+                    if sp:
+                        sel = dict(
+                            marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                        )
                 fig.add_trace(go.Scatter(
                     x=sub["x"],
                     y=sub["y"],
@@ -264,6 +357,8 @@ class FigureGenerator:
                     name=str(group_value),
                     customdata=sub["row_id"],
                     marker=dict(size=state.point_size),
+                    selectedpoints=sp,
+                    selected=sel,
                     hovertemplate=(
                         # f"roi_id={state.roi_id}<br>"
                         f"{state.group_col}={group_value}<br>"
@@ -304,7 +399,13 @@ class FigureGenerator:
         fig.update_layout(**layout_updates)
         return fig.to_dict()
 
-    def _figure_swarm(self, df_f: pd.DataFrame, state: PlotState) -> dict:
+    def _figure_swarm(
+        self,
+        df_f: pd.DataFrame,
+        state: PlotState,
+        *,
+        selected_row_ids: Optional[set[str]] = None,
+    ) -> dict:
         """Create swarm/strip plot with optional group coloring.
         
         Uses manual jitter by converting categorical x values to numeric positions
@@ -313,6 +414,7 @@ class FigureGenerator:
         Args:
             df_f: Filtered dataframe.
             state: PlotState to use for configuration.
+            selected_row_ids: If set, indices of these row_ids are passed as selectedpoints per trace.
         """
         # x is categorical bins, y is per-row; optional color split via group_col
         x_cat = df_f[state.xcol].astype(str)
@@ -362,6 +464,13 @@ class FigureGenerator:
                 
                 # Only add raw data trace if show_raw is True
                 if state.show_raw:
+                    sp, sel = None, None
+                    if selected_row_ids:
+                        sp = [i for i, r in enumerate(row_id_values) if r in selected_row_ids]
+                        if sp:
+                            sel = dict(
+                                marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                            )
                     fig.add_trace(go.Scatter(
                         x=x_jittered,
                         y=sub["y"].values,
@@ -369,6 +478,8 @@ class FigureGenerator:
                         name=str(gv),
                         customdata=np.column_stack([x_cat_values, row_id_values]),
                         marker=dict(size=state.point_size),
+                        selectedpoints=sp,
+                        selected=sel,
                         hovertemplate=(
                             # f"roi_id={state.roi_id}<br>"
                             f"{state.xcol}=%{{customdata[0]}}<br>"
@@ -405,6 +516,13 @@ class FigureGenerator:
             
             # Only add raw data trace if show_raw is True
             if state.show_raw:
+                sp, sel = None, None
+                if selected_row_ids:
+                    sp = [i for i, r in enumerate(row_id_values) if r in selected_row_ids]
+                    if sp:
+                        sel = dict(
+                            marker=dict(size=state.point_size * 1.3, color="rgba(255, 80, 80, 0.9)"),
+                        )
                 fig.add_trace(go.Scatter(
                     x=x_jittered,
                     y=tmp["y"].values,
@@ -412,6 +530,8 @@ class FigureGenerator:
                     name=f"ROI {state.roi_id}",
                     customdata=np.column_stack([x_cat_values, row_id_values]),
                     marker=dict(size=state.point_size),
+                    selectedpoints=sp,
+                    selected=sel,
                     hovertemplate=(
                         # f"roi_id={state.roi_id}<br>"
                         f"{state.xcol}=%{{customdata[0]}}<br>"

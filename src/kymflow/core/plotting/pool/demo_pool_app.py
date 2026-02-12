@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from pprint import pprint
+import numpy as np
 import pandas as pd
 from nicegui import ui
 from nicegui.events import GenericEventArguments
@@ -15,6 +16,8 @@ from kymflow.core.plotting.pool.plot_helpers import (
     numeric_columns,
     categorical_candidates,
     _ensure_aggrid_compact_css,
+    points_in_polygon,
+    parse_plotly_path_to_xy,
 )
 from kymflow.core.plotting.pool.dataframe_processor import DataFrameProcessor
 from kymflow.core.plotting.pool.figure_generator import FigureGenerator
@@ -98,6 +101,8 @@ class PlotController:
 
         # row_id -> iloc index within CURRENT filtered df (rebuilt each replot)
         self._id_to_index_filtered: dict[str, int] = {}
+        # Linked selection: set of row_ids selected in any plot; applied to all compatible plots
+        self._selected_row_ids: set[str] = set()
 
     # ----------------------------
     # Data
@@ -408,9 +413,11 @@ class PlotController:
             with self._plot_container:
                 with ui.column().classes("w-full h-full min-h-0 p-4"):
                     plot = ui.plotly(
-                        self._make_figure_dict(self.plot_states[0])
+                        self._make_figure_dict(self.plot_states[0], selected_row_ids=None)
                     ).classes("w-full h-full")
                     plot.on("plotly_click", lambda e, idx=0: self._on_plotly_click(e, plot_index=idx))
+                    if self._is_selection_compatible(self.plot_states[0].plot_type):
+                        plot.on("plotly_relayout", lambda e, idx=0: self._on_plotly_relayout(e, plot_index=idx))
                     self._plots.append(plot)
         
         elif rows == 1 and cols == 2:
@@ -420,9 +427,11 @@ class PlotController:
                     for i in range(2):
                         with ui.column().classes("flex-1 h-full min-h-0 p-4"):
                             plot = ui.plotly(
-                                self._make_figure_dict(self.plot_states[i])
+                                self._make_figure_dict(self.plot_states[i], selected_row_ids=None)
                             ).classes("w-full h-full")
                             plot.on("plotly_click", lambda e, idx=i: self._on_plotly_click(e, plot_index=idx))
+                            if self._is_selection_compatible(self.plot_states[i].plot_type):
+                                plot.on("plotly_relayout", lambda e, idx=i: self._on_plotly_relayout(e, plot_index=idx))
                             self._plots.append(plot)
         
         elif rows == 2 and cols == 1:
@@ -432,9 +441,11 @@ class PlotController:
                     for i in range(2):
                         with ui.column().classes("w-full flex-1 min-h-0 p-4"):
                             plot = ui.plotly(
-                                self._make_figure_dict(self.plot_states[i])
+                                self._make_figure_dict(self.plot_states[i], selected_row_ids=None)
                             ).classes("w-full h-full")
                             plot.on("plotly_click", lambda e, idx=i: self._on_plotly_click(e, plot_index=idx))
+                            if self._is_selection_compatible(self.plot_states[i].plot_type):
+                                plot.on("plotly_relayout", lambda e, idx=i: self._on_plotly_relayout(e, plot_index=idx))
                             self._plots.append(plot)
         
         # Initialize last plot type tracking after plots are created
@@ -643,6 +654,119 @@ class PlotController:
         self._sync_controls()
         self._replot_current()
 
+    def _is_selection_compatible(self, plot_type: PlotType) -> bool:
+        """Check if plot type supports point selection (rect/lasso).
+        
+        Args:
+            plot_type: PlotType to check.
+            
+        Returns:
+            True if plot type supports selection, False otherwise.
+        """
+        SELECTION_COMPATIBLE_TYPES = {
+            PlotType.SCATTER,
+            PlotType.SPLIT_SCATTER,
+            PlotType.SWARM,
+        }
+        return plot_type in SELECTION_COMPATIBLE_TYPES
+
+    def _on_plotly_relayout(self, e: GenericEventArguments, plot_index: int = 0) -> None:
+        """Handle plotly_relayout: get x/y range (rect) or path (lasso) from selections and compute selected rows.
+
+        Relayout payload is small (no points array). We only process when payload contains
+        layout.selections (user drew a rect or lasso). Rect: points in range. Lasso: path parsed to polygon.
+        """
+        raw = e.args
+        if isinstance(raw, list) and len(raw) == 1 and isinstance(raw[0], dict):
+            payload = raw[0]
+        elif isinstance(raw, dict):
+            payload = raw
+        else:
+            payload = {}
+
+        if "selections" not in payload:
+            return
+        selections = payload.get("selections") or []
+        if not selections:
+            # User cleared selection (e.g. double-click) — clear linked selection and refresh all plots
+            if self._selected_row_ids:
+                self._selected_row_ids = set()
+                self._apply_selection_to_all_plots()
+            return
+
+        state = self.plot_states[plot_index]
+        if not self._is_selection_compatible(state.plot_type):
+            return
+        df_f = self.data_processor.filter_by_roi(state.roi_id)
+        selected_row_ids: set[str] = set()
+        source = "none"
+
+        # Flattened keys (Plotly sometimes sends selections[0].x0 etc.)
+        x0 = payload.get("selections[0].x0")
+        x1 = payload.get("selections[0].x1")
+        y0 = payload.get("selections[0].y0")
+        y1 = payload.get("selections[0].y1")
+        if x0 is not None and x1 is not None and y0 is not None and y1 is not None:
+            try:
+                x_range = (float(min(x0, x1)), float(max(x0, x1)))
+                y_range = (float(min(y0, y1)), float(max(y0, y1)))
+                selected_row_ids = self._compute_selected_points_from_range(
+                    df_f, state, x_range=x_range, y_range=y_range
+                )
+                source = "rect"
+            except (TypeError, ValueError):
+                pass
+
+        # Nested selections[0] with type 'rect' or 'path'
+        if not selected_row_ids and selections:
+            sel = selections[0] if isinstance(selections[0], dict) else None
+            if sel:
+                stype = sel.get("type")
+                if stype == "rect":
+                    try:
+                        x0, x1 = sel.get("x0"), sel.get("x1")
+                        y0, y1 = sel.get("y0"), sel.get("y1")
+                        if x0 is not None and x1 is not None and y0 is not None and y1 is not None:
+                            x_range = (float(min(x0, x1)), float(max(x0, x1)))
+                            y_range = (float(min(y0, y1)), float(max(y0, y1)))
+                            selected_row_ids = self._compute_selected_points_from_range(
+                                df_f, state, x_range=x_range, y_range=y_range
+                            )
+                            source = "rect"
+                    except (TypeError, ValueError):
+                        pass
+                elif stype == "path":
+                    path_str = sel.get("path")
+                    lasso_x, lasso_y = parse_plotly_path_to_xy(path_str or "")
+                    if lasso_x and lasso_y and len(lasso_x) == len(lasso_y):
+                        selected_row_ids = self._compute_selected_points_from_lasso(
+                            df_f, state, lasso_x=lasso_x, lasso_y=lasso_y
+                        )
+                        source = "lasso"
+
+        if not selected_row_ids:
+            return
+        self._selected_row_ids = selected_row_ids
+        self._apply_selection_to_all_plots()
+        logger.info(
+            f"Selection on plot {plot_index + 1}: source={source}, "
+            f"plot_type={state.plot_type.value}, selected_count={len(selected_row_ids)}, roi_id={state.roi_id}"
+        )
+        logger.debug(
+            f"Selected row_ids: {sorted(list(selected_row_ids)[:10])}{'...' if len(selected_row_ids) > 10 else ''}"
+        )
+
+    def _apply_selection_to_all_plots(self) -> None:
+        """Update all selection-compatible plots to show the current linked selection (_selected_row_ids)."""
+        for i in range(len(self._plots)):
+            if i >= len(self.plot_states):
+                break
+            if not self._is_selection_compatible(self.plot_states[i].plot_type):
+                continue
+            fig_dict = self._make_figure_dict(self.plot_states[i], selected_row_ids=self._selected_row_ids)
+            self._plots[i].update_figure(fig_dict)
+            self._plots[i].update()
+
     def _sync_controls(self) -> None:
         """Enable/disable controls based on current plot type."""
         assert self._group_select and self._ystat_select
@@ -722,6 +846,53 @@ class PlotController:
                 self._clicked_label.text = f"Plot {plot_index + 1}: ROI={state.roi_id} clicked group={x}, y={y} (aggregated)"
             return
 
+    def _compute_selected_points_from_range(
+        self,
+        df_f: pd.DataFrame,
+        state: PlotState,
+        x_range: Optional[tuple[float, float]] = None,
+        y_range: Optional[tuple[float, float]] = None,
+    ) -> set[str]:
+        """Compute selected row_ids from selection range/bbox (box select).
+
+        Works for numeric and categorical x: uses FigureGenerator.get_axis_x_for_selection
+        so that x is in the same axis space as the plot (category indices for categorical).
+        """
+        if not len(df_f):
+            return set()
+        x_axis = self.figure_generator.get_axis_x_for_selection(df_f, state)
+        y_vals = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        row_ids = df_f[self.row_id_col].astype(str)
+        
+        # Build mask: points inside bounding box [x_min, x_max] x [y_min, y_max]
+        mask = pd.Series(True, index=df_f.index)
+        if x_range is not None:
+            x_min, x_max = x_range
+            mask = mask & (x_axis >= x_min) & (x_axis <= x_max)
+        if y_range is not None:
+            y_min, y_max = y_range
+            mask = mask & (y_vals >= y_min) & (y_vals <= y_max)
+        
+        return set(row_ids[mask].tolist())
+
+    def _compute_selected_points_from_lasso(
+        self,
+        df_f: pd.DataFrame,
+        state: PlotState,
+        lasso_x: list[float],
+        lasso_y: list[float],
+    ) -> set[str]:
+        """Compute selected row_ids from lasso polygon (point-in-polygon)."""
+        if not len(df_f) or not lasso_x or not lasso_y or len(lasso_x) != len(lasso_y):
+            return set()
+        x_axis = self.figure_generator.get_axis_x_for_selection(df_f, state)
+        y_vals = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        points = np.column_stack([x_axis.values, y_vals.values])
+        polygon_xy = np.column_stack([lasso_x, lasso_y])
+        mask = points_in_polygon(points, polygon_xy)
+        row_ids = df_f[self.row_id_col].astype(str)
+        return set(row_ids.loc[mask].tolist())
+
     # ----------------------------
     # Plotting
     # ----------------------------
@@ -782,13 +953,21 @@ class PlotController:
         
         for i in range(min(num_plots, len(self._plots), len(self.plot_states))):
             state = self.plot_states[i]
-            self._plots[i].update_figure(self._make_figure_dict(state))
+            self._plots[i].update_figure(
+                self._make_figure_dict(state, selected_row_ids=self._selected_row_ids or None)
+            )
 
-    def _make_figure_dict(self, state: PlotState) -> dict:
+    def _make_figure_dict(
+        self,
+        state: PlotState,
+        *,
+        selected_row_ids: Optional[set[str]] = None,
+    ) -> dict:
         """Generate Plotly figure dictionary based on plot state.
         
         Args:
             state: PlotState to use for generating the figure.
+            selected_row_ids: If set, these row_ids are shown as selected (linked selection).
             
         Returns:
             Plotly figure dictionary.
@@ -797,7 +976,9 @@ class PlotController:
         self._id_to_index_filtered = self.data_processor.build_row_id_index(df_f)
         
         logger.debug(f"Making figure: plot_type={state.plot_type.value}, filtered_rows={len(df_f)}")
-        figure_dict = self.figure_generator.make_figure(df_f, state)
+        figure_dict = self.figure_generator.make_figure(
+            df_f, state, selected_row_ids=selected_row_ids or self._selected_row_ids or None
+        )
         logger.debug(f"Figure generated: {len(figure_dict.get('data', []))} traces")
         return figure_dict
 
