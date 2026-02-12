@@ -4,9 +4,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from pprint import pprint
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 from nicegui import ui
 from nicegui.events import GenericEventArguments
 
@@ -19,6 +17,7 @@ from kymflow.core.plotting.pool.plot_helpers import (
     _ensure_aggrid_compact_css,
 )
 from kymflow.core.plotting.pool.dataframe_processor import DataFrameProcessor
+from kymflow.core.plotting.pool.figure_generator import FigureGenerator
 
 logger = get_logger(__name__)
 setup_logging(level="INFO")
@@ -54,6 +53,12 @@ class PlotController:
             row_id_col=row_id_col,
         )
 
+        # Initialize FigureGenerator for plot generation
+        self.figure_generator = FigureGenerator(
+            self.data_processor,
+            row_id_col=row_id_col,
+        )
+
         # reasonable defaults
         num_cols = numeric_columns(df)
         if not num_cols:
@@ -80,6 +85,7 @@ class PlotController:
         self._plots: list[ui.plotly] = []
         self._clicked_label: Optional[ui.label] = None
         self._mainSplitter: Optional[ui.splitter] = None
+        self._last_plot_type: Optional[PlotType] = None  # Track plot type changes for forced rebuild
         self._plot_container: Optional[ui.column] = None  # Container inside splitter slot for clearing
 
         self._roi_select: Optional[ui.select] = None
@@ -191,113 +197,6 @@ class PlotController:
         )
 
 
-    def _add_mean_std_traces(
-        self, 
-        fig: go.Figure, 
-        group_stats: dict[str, dict[str, float]], 
-        x_ranges: dict[str, tuple[float, float]],
-        state: PlotState,
-        include_x_axis: bool = False,
-    ) -> None:
-        """Add mean and std/sem traces to figure.
-        
-        Args:
-            fig: Plotly figure to add traces to.
-            group_stats: Dictionary from DataFrameProcessor.calculate_group_stats().
-            x_ranges: Dictionary mapping group_value to (x_min, x_max) tuple.
-            state: PlotState to use for configuration.
-            include_x_axis: If True, also add x-axis mean/std/sem (for split_scatter).
-        """
-        if not group_stats or not x_ranges:
-            return
-        
-        for group_value, stats in group_stats.items():
-            if group_value not in x_ranges:
-                continue
-            
-            x_min, x_max = x_ranges[group_value]
-            mean_val = stats["mean"]
-            
-            # Add horizontal line for y-mean (hide from legend - only show primary traces)
-            if state.show_mean:
-                fig.add_trace(go.Scatter(
-                    x=[x_min, x_max],
-                    y=[mean_val, mean_val],
-                    mode="lines",
-                    name=f"{group_value} (y-mean)",
-                    line=dict(color="gray", width=state.mean_line_width),
-                    showlegend=False,  # Hide mean/std/sem traces from legend
-                    hovertemplate=f"Y Mean: {mean_val:.3f}<extra></extra>",
-                ))
-            
-            # Add vertical line for y-std/sem (hide from legend)
-            if state.show_std_sem:
-                error_val = stats[state.std_sem_type]
-                y_min = mean_val - error_val
-                y_max = mean_val + error_val
-                x_center = (x_min + x_max) / 2
-                
-                fig.add_trace(go.Scatter(
-                    x=[x_center, x_center],
-                    y=[y_min, y_max],
-                    mode="lines",
-                    name=f"{group_value} (y-{state.std_sem_type})",
-                    line=dict(color="red", width=state.error_line_width),
-                    showlegend=False,  # Hide mean/std/sem traces from legend
-                    hovertemplate=(
-                        f"Y Mean: {mean_val:.3f}<br>"
-                        f"Y {state.std_sem_type.upper()}: ±{error_val:.3f}<br>"
-                        f"Y Range: [{y_min:.3f}, {y_max:.3f}]<extra></extra>"
-                    ),
-                ))
-            
-            # Add x-axis mean and std/sem for split_scatter (hide from legend)
-            if include_x_axis and "x_mean" in stats:
-                x_mean_val = stats["x_mean"]
-                x_error_val = stats[f"x_{state.std_sem_type}"]
-                
-                # Calculate y range for x-mean vertical line
-                # Use y-std/sem range if available, otherwise use a range around y-mean
-                if state.show_std_sem:
-                    y_line_min = y_min
-                    y_line_max = y_max
-                else:
-                    # Use a reasonable range around y-mean (10% of mean or fixed range)
-                    y_range = abs(mean_val) * 0.1 if mean_val != 0 else 1.0
-                    y_line_min = mean_val - y_range
-                    y_line_max = mean_val + y_range
-                
-                # Add vertical line for x-mean
-                if state.show_mean:
-                    fig.add_trace(go.Scatter(
-                        x=[x_mean_val, x_mean_val],
-                        y=[y_line_min, y_line_max],
-                        mode="lines",
-                        name=f"{group_value} (x-mean)",
-                        line=dict(color="blue", width=state.mean_line_width),
-                        showlegend=False,  # Hide mean/std/sem traces from legend
-                        hovertemplate=f"X Mean: {x_mean_val:.3f}<extra></extra>",
-                    ))
-                
-                # Add horizontal line for x-std/sem
-                if state.show_std_sem:
-                    x_min_error = x_mean_val - x_error_val
-                    x_max_error = x_mean_val + x_error_val
-                    y_center = mean_val
-                    
-                    fig.add_trace(go.Scatter(
-                        x=[x_min_error, x_max_error],
-                        y=[y_center, y_center],
-                        mode="lines",
-                        name=f"{group_value} (x-{state.std_sem_type})",
-                        line=dict(color="orange", width=state.error_line_width),
-                        showlegend=False,  # Hide mean/std/sem traces from legend
-                        hovertemplate=(
-                            f"X Mean: {x_mean_val:.3f}<br>"
-                            f"X {state.std_sem_type.upper()}: ±{x_error_val:.3f}<br>"
-                            f"X Range: [{x_min_error:.3f}, {x_max_error:.3f}]<extra></extra>"
-                        ),
-                    ))
 
     # ----------------------------
     # UI
@@ -537,6 +436,10 @@ class PlotController:
                             ).classes("w-full h-full")
                             plot.on("plotly_click", lambda e, idx=i: self._on_plotly_click(e, plot_index=idx))
                             self._plots.append(plot)
+        
+        # Initialize last plot type tracking after plots are created
+        if self._plots and self._last_plot_type is None:
+            self._last_plot_type = self.plot_states[self.current_plot_index].plot_type
 
     # ----------------------------
     # UI Helpers
@@ -716,7 +619,7 @@ class PlotController:
             and self._point_size_input and self._show_legend_checkbox
         )
 
-        logger.debug("Control change detected, updating state and replotting")
+        logger.info("Control change detected, updating state and replotting")
         
         # Update state from widgets (preserve xcol/ycol from aggrid)
         new_state = self._widgets_to_state()
@@ -825,11 +728,52 @@ class PlotController:
 
     def _replot_current(self) -> None:
         """Update the current plot with its state and data."""
-        if not self._plots or self.current_plot_index >= len(self._plots):
+        if not self._plots:
+            logger.warning("Cannot replot: no plots available")
             return
-        logger.debug(f"Replotting plot {self.current_plot_index + 1}")
+        
+        # Clamp current_plot_index to valid range based on actual number of plots
+        if self.current_plot_index >= len(self._plots):
+            logger.debug(f"Clamping current_plot_index from {self.current_plot_index} to {len(self._plots) - 1}")
+            self.current_plot_index = len(self._plots) - 1
+        
         state = self.plot_states[self.current_plot_index]
-        self._plots[self.current_plot_index].update_figure(self._make_figure_dict(state))
+        
+        # Check if plot type changed - if so, force a full rebuild
+        plot_type_changed = (
+            self._last_plot_type is not None and 
+            self._last_plot_type != state.plot_type
+        )
+        
+        logger.info(
+            f"Replotting plot {self.current_plot_index + 1} - "
+            f"plot_type={state.plot_type.value}, roi_id={state.roi_id}, "
+            f"xcol={state.xcol}, ycol={state.ycol}, group_col={state.group_col}, "
+            f"show_raw={state.show_raw}, show_legend={state.show_legend}, "
+            f"plot_type_changed={plot_type_changed}"
+        )
+        
+        try:
+            figure_dict = self._make_figure_dict(state)
+            logger.info(f"Figure dict created successfully with {len(figure_dict.get('data', []))} traces")
+            
+            # If plot type changed, force a full rebuild of the plot panel
+            # This is necessary because update_figure() can be unreliable when plot structure changes significantly
+            if plot_type_changed:
+                logger.info(f"Plot type changed from {self._last_plot_type.value} to {state.plot_type.value}, forcing full rebuild")
+                self._rebuild_plot_panel()
+            else:
+                # Normal update - just update the figure
+                self._plots[self.current_plot_index].update_figure(figure_dict)
+                # Explicitly call update() to ensure the change is applied
+                self._plots[self.current_plot_index].update()
+            
+            # Update last plot type
+            self._last_plot_type = state.plot_type
+            
+            logger.info(f"Plot {self.current_plot_index + 1} updated successfully")
+        except Exception as ex:
+            logger.exception(f"Error replotting plot {self.current_plot_index + 1}: {ex}")
     
     def _replot_all(self) -> None:
         """Replot all visible plots based on current layout."""
@@ -851,411 +795,11 @@ class PlotController:
         """
         df_f = self.data_processor.filter_by_roi(state.roi_id)
         self._id_to_index_filtered = self.data_processor.build_row_id_index(df_f)
-
+        
         logger.debug(f"Making figure: plot_type={state.plot_type.value}, filtered_rows={len(df_f)}")
-
-        if state.plot_type == PlotType.GROUPED:
-            return self._figure_grouped(df_f, state)
-        if state.plot_type == PlotType.SPLIT_SCATTER:
-            return self._figure_split_scatter(df_f, state)
-        if state.plot_type == PlotType.SWARM:
-            return self._figure_swarm(df_f, state)
-        if state.plot_type == PlotType.CUMULATIVE_HISTOGRAM:
-            return self._figure_cumulative_histogram(df_f, state)
-        return self._figure_scatter(df_f, state)
-
-    def _figure_scatter(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create scatter plot figure.
-        
-        Args:
-            df_f: Filtered dataframe.
-            state: PlotState to use for configuration.
-        """
-        x = df_f[state.xcol]
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
-        row_ids = df_f[self.row_id_col].astype(str)
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=x,
-            y=y,
-            mode="markers",
-            name=f"ROI {state.roi_id}",
-            customdata=row_ids,
-            marker=dict(size=state.point_size),
-            hovertemplate=(
-                # f"roi_id={state.roi_id}<br>"
-                f"{state.xcol}=%{{x}}<br>"
-                f"{state.ycol}=%{{y}}<br>"
-                # f"{self.row_id_col}=%{{customdata}}<extra></extra>"
-            ),
-        ))
-        fig.update_layout(
-            margin=dict(l=40, r=20, t=40, b=40),
-            xaxis_title=state.xcol,
-            yaxis_title=state.ycol,
-            showlegend=state.show_legend,
-            uirevision="keep",
-        )
-        return fig.to_dict()
-
-    def _figure_split_scatter(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create split scatter plot with color coding by group column.
-        
-        Args:
-            df_f: Filtered dataframe.
-            state: PlotState to use for configuration.
-        """
-        if not state.group_col:
-            return self._figure_scatter(df_f, state)
-
-        x = df_f[state.xcol]
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
-        g = df_f[state.group_col].astype(str)
-        row_ids = df_f[self.row_id_col].astype(str)
-
-        tmp = pd.DataFrame({"x": x, "y": y, "g": g, "row_id": row_ids}).dropna(subset=["g"])
-        fig = go.Figure()
-
-        # Calculate y-axis range from raw data (for preserving range when show_raw is off)
-        y_min_raw = float(tmp["y"].min()) if len(tmp) > 0 else None
-        y_max_raw = float(tmp["y"].max()) if len(tmp) > 0 else None
-
-        # Calculate x ranges for each group (for mean/std positioning)
-        # Handle both numeric and string x columns
-        x_ranges = {}
-        for group_value, sub in tmp.groupby("g", sort=True):
-            x_min = sub["x"].min()
-            x_max = sub["x"].max()
-            # Try to convert to float, but allow strings for categorical x columns
-            try:
-                x_min_val = float(x_min)
-                x_max_val = float(x_max)
-            except (ValueError, TypeError):
-                # For string columns, use 0-based positions or string comparison
-                # For mean/std positioning, we'll use a simple range
-                # In practice, mean/std won't be meaningful for string x, but we need a range
-                x_min_val = 0.0
-                x_max_val = 1.0
-            x_ranges[str(group_value)] = (x_min_val, x_max_val)
-            # Only add raw data trace if show_raw is True
-            if state.show_raw:
-                fig.add_trace(go.Scatter(
-                    x=sub["x"],
-                    y=sub["y"],
-                    mode="markers",
-                    name=str(group_value),
-                    customdata=sub["row_id"],
-                    marker=dict(size=state.point_size),
-                    hovertemplate=(
-                        # f"roi_id={state.roi_id}<br>"
-                        f"{state.group_col}={group_value}<br>"
-                        f"{state.xcol}=%{{x}}<br>"
-                        f"{state.ycol}=%{{y}}<br>"
-                        # f"{self.row_id_col}=%{{customdata}}<extra></extra>"
-                    ),
-                ))
-
-        # Add mean and std/sem traces if enabled (include x-axis stats for split_scatter)
-        if state.show_mean or state.show_std_sem:
-            group_stats = self.data_processor.calculate_group_stats(
-                df_f, state.group_col, state.ycol, state.use_absolute_value,
-                state.xcol, include_x=True
-            )
-            self._add_mean_std_traces(fig, group_stats, x_ranges, state, include_x_axis=True)
-
-        # Preserve y-axis range when show_raw is off
-        layout_updates = {
-            "margin": dict(l=40, r=20, t=40, b=40),
-            "xaxis_title": state.xcol,
-            "yaxis_title": state.ycol,
-            "legend_title_text": state.group_col,
-            "showlegend": state.show_legend,
-            "uirevision": "keep",
-        }
-        
-        # If show_raw is off, preserve y-axis range from raw data
-        # If show_raw is on, auto-scale y-axis (remove any fixed range)
-        if not state.show_raw and y_min_raw is not None and y_max_raw is not None:
-            # Add some padding
-            y_padding = (y_max_raw - y_min_raw) * 0.1 if y_max_raw != y_min_raw else abs(y_max_raw) * 0.1 if y_max_raw != 0 else 1.0
-            layout_updates["yaxis"] = dict(range=[y_min_raw - y_padding, y_max_raw + y_padding])
-        else:
-            # When show_raw is True, explicitly set yaxis to auto-scale
-            layout_updates["yaxis"] = dict(autorange=True)
-        
-        fig.update_layout(**layout_updates)
-        return fig.to_dict()
-
-    def _figure_swarm(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create swarm/strip plot with optional group coloring.
-        
-        Uses manual jitter by converting categorical x values to numeric positions
-        and adding random horizontal offsets, similar to the demo_jitter.py pattern.
-        
-        Args:
-            df_f: Filtered dataframe.
-            state: PlotState to use for configuration.
-        """
-        # x is categorical bins, y is per-row; optional color split via group_col
-        x_cat = df_f[state.xcol].astype(str)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
-        row_ids = df_f[self.row_id_col].astype(str)
-
-        # Get unique categorical values and create mapping to numeric positions
-        unique_cats = sorted(x_cat.unique())
-        cat_to_pos = {cat: i for i, cat in enumerate(unique_cats)}
-        
-        # Jitter parameters
-        jitter_amount = 0.35  # Horizontal spread within each category
-        
-        fig = go.Figure()
-
-        if state.group_col:
-            g = df_f[state.group_col].astype(str)
-            tmp = pd.DataFrame({"x": x_cat, "y": y, "g": g, "row_id": row_ids}).dropna(subset=["x"])
-            
-            # Calculate y-axis range from raw data (for preserving range when show_raw is off)
-            y_min_raw = float(tmp["y"].min()) if len(tmp) > 0 else None
-            y_max_raw = float(tmp["y"].max()) if len(tmp) > 0 else None
-            
-            # Calculate x ranges for each group (for mean/std positioning)
-            # For swarm plots, x is categorical, so we use the category position
-            x_ranges = {}
-            
-            for gv, sub in tmp.groupby("g", sort=True):
-                # Convert categorical x to numeric positions
-                x_positions = sub["x"].map(cat_to_pos).values
-                # Add jitter: random offset between -jitter_amount/2 and +jitter_amount/2
-                # Use hash of group value for seed to get different jitter per group
-                seed = hash(str(gv)) % (2**31)
-                rng = np.random.default_rng(seed=seed)
-                jitter = rng.uniform(-jitter_amount/2, jitter_amount/2, size=len(x_positions))
-                x_jittered = x_positions + jitter
-                
-                # Store x range for this group (center position ± jitter range)
-                # For swarm, we need to calculate per category, but for simplicity,
-                # we'll use the mean x position across all categories for this group
-                x_center = float(np.mean(x_positions))
-                x_ranges[str(gv)] = (x_center - jitter_amount/2, x_center + jitter_amount/2)
-                
-                # Store original categorical x and row_id for hover
-                x_cat_values = sub["x"].values
-                row_id_values = sub["row_id"].values
-                
-                # Only add raw data trace if show_raw is True
-                if state.show_raw:
-                    fig.add_trace(go.Scatter(
-                        x=x_jittered,
-                        y=sub["y"].values,
-                        mode="markers",
-                        name=str(gv),
-                        customdata=np.column_stack([x_cat_values, row_id_values]),
-                        marker=dict(size=state.point_size),
-                        hovertemplate=(
-                            # f"roi_id={state.roi_id}<br>"
-                            f"{state.xcol}=%{{customdata[0]}}<br>"
-                            f"{state.ycol}=%{{y}}<br>"
-                            f"{state.group_col}={gv}<br>"
-                            # f"{self.row_id_col}=%{{customdata[1]}}<extra></extra>"
-                        ),
-                    ))
-            
-            # Add mean and std/sem traces if enabled (only y-axis for swarm)
-            if state.show_mean or state.show_std_sem:
-                group_stats = self.data_processor.calculate_group_stats(
-                    df_f, state.group_col, state.ycol, state.use_absolute_value,
-                    None, include_x=False
-                )
-                self._add_mean_std_traces(fig, group_stats, x_ranges, state, include_x_axis=False)
-        else:
-            tmp = pd.DataFrame({"x": x_cat, "y": y, "row_id": row_ids}).dropna(subset=["x"])
-            
-            # Calculate y-axis range from raw data (for preserving range when show_raw is off)
-            y_min_raw = float(tmp["y"].min()) if len(tmp) > 0 else None
-            y_max_raw = float(tmp["y"].max()) if len(tmp) > 0 else None
-            
-            # Convert categorical x to numeric positions
-            x_positions = tmp["x"].map(cat_to_pos).values
-            # Add jitter: random offset between -jitter_amount/2 and +jitter_amount/2
-            rng = np.random.default_rng(seed=42)  # Fixed seed for reproducibility
-            jitter = rng.uniform(-jitter_amount/2, jitter_amount/2, size=len(x_positions))
-            x_jittered = x_positions + jitter
-            
-            # Store original categorical x and row_id for hover
-            x_cat_values = tmp["x"].values
-            row_id_values = tmp["row_id"].values
-            
-            # Only add raw data trace if show_raw is True
-            if state.show_raw:
-                fig.add_trace(go.Scatter(
-                    x=x_jittered,
-                    y=tmp["y"].values,
-                    mode="markers",
-                    name=f"ROI {state.roi_id}",
-                    customdata=np.column_stack([x_cat_values, row_id_values]),
-                    marker=dict(size=state.point_size),
-                    hovertemplate=(
-                        # f"roi_id={state.roi_id}<br>"
-                        f"{state.xcol}=%{{customdata[0]}}<br>"
-                        f"{state.ycol}=%{{y}}<br>"
-                        # f"{self.row_id_col}=%{{customdata[1]}}<extra></extra>"
-                    ),
-                ))
-
-        # Set up x-axis with categorical labels at integer positions
-        layout_updates = {
-            "margin": dict(l=40, r=20, t=40, b=90),
-            "xaxis_title": state.xcol,
-            "yaxis_title": state.ycol,
-            "showlegend": state.show_legend,
-            "xaxis": dict(
-                tickmode="array",
-                tickvals=list(range(len(unique_cats))),
-                ticktext=unique_cats,
-                tickangle=-30,
-            ),
-            "uirevision": "keep",
-        }
-        
-        # Preserve y-axis range when show_raw is off (for both grouped and ungrouped swarm)
-        # If show_raw is on, auto-scale y-axis (remove any fixed range)
-        if not state.show_raw:
-            if state.group_col:
-                # Use the y_min_raw and y_max_raw calculated above
-                if y_min_raw is not None and y_max_raw is not None:
-                    y_padding = (y_max_raw - y_min_raw) * 0.1 if y_max_raw != y_min_raw else abs(y_max_raw) * 0.1 if y_max_raw != 0 else 1.0
-                    layout_updates["yaxis"] = dict(range=[y_min_raw - y_padding, y_max_raw + y_padding])
-            else:
-                # Ungrouped case
-                if y_min_raw is not None and y_max_raw is not None:
-                    y_padding = (y_max_raw - y_min_raw) * 0.1 if y_max_raw != y_min_raw else abs(y_max_raw) * 0.1 if y_max_raw != 0 else 1.0
-                    layout_updates["yaxis"] = dict(range=[y_min_raw - y_padding, y_max_raw + y_padding])
-        else:
-            # When show_raw is True, explicitly set yaxis to auto-scale
-            layout_updates["yaxis"] = dict(autorange=True)
-        
-        fig.update_layout(**layout_updates)
-        return fig.to_dict()
-
-    def _figure_grouped(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create grouped aggregation plot showing statistics by group.
-        
-        Args:
-            df_f: Filtered dataframe.
-            state: PlotState to use for configuration.
-        """
-        if not state.group_col:
-            return self._figure_scatter(df_f, state)
-
-        g = df_f[state.group_col].astype(str)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
-        tmp = pd.DataFrame({"group": g, "y": y}).dropna(subset=["group"])
-
-        stat = state.ystat
-        if stat == "count":
-            agg = tmp.groupby("group", dropna=False)["y"].count()
-        else:
-            # y is already numeric from get_y_values, but ensure it's numeric for aggregation
-            tmp["y"] = pd.to_numeric(tmp["y"], errors="coerce")
-            agg = getattr(tmp.groupby("group", dropna=False)["y"], stat)()
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=agg.index.astype(str).tolist(),
-            y=agg.values.tolist(),
-            mode="markers+lines",
-            name=f"ROI {state.roi_id}",
-        ))
-        fig.update_layout(
-            margin=dict(l=40, r=20, t=40, b=80),
-            xaxis_title=state.group_col,
-            yaxis_title=f"{stat}({state.ycol})",
-            xaxis_tickangle=-30,
-            showlegend=state.show_legend,
-            uirevision="keep",
-        )
-        return fig.to_dict()
-
-    def _figure_cumulative_histogram(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create cumulative histogram plot with one curve per group.
-        
-        For each unique value in group_col, computes a cumulative histogram
-        of x values, normalized to 0-1 range within each category.
-        
-        Args:
-            df_f: Filtered dataframe.
-            state: PlotState to use for configuration.
-        """
-        if not state.group_col:
-            logger.warning("Cumulative histogram requires a group/color column. Falling back to scatter plot.")
-            return self._figure_scatter(df_f, state)
-
-        x = pd.to_numeric(df_f[state.xcol], errors="coerce")
-        g = df_f[state.group_col].astype(str)
-        
-        # Drop rows with missing x or group values
-        tmp = pd.DataFrame({"x": x, "g": g}).dropna(subset=["x", "g"])
-        
-        if len(tmp) == 0:
-            logger.warning("No valid data for cumulative histogram. Falling back to scatter plot.")
-            return self._figure_scatter(df_f)
-
-        logger.warning(
-            "Cumulative histogram: normalizing each category's cumulative distribution to 0-1 range. "
-            "This means the y-axis represents the cumulative proportion within each category, not absolute counts."
-        )
-
-        fig = go.Figure()
-
-        # Number of bins for histogram
-        n_bins = 50
-        
-        for group_value, sub in tmp.groupby("g", sort=True):
-            x_values = sub["x"].values
-            
-            if len(x_values) == 0:
-                continue
-            
-            # Compute histogram
-            counts, bin_edges = np.histogram(x_values, bins=n_bins)
-            
-            # Compute cumulative sum
-            cumsum = np.cumsum(counts)
-            
-            # Normalize to 0-1 range
-            if cumsum[-1] > 0:
-                cumsum_normalized = cumsum / cumsum[-1]
-            else:
-                cumsum_normalized = cumsum
-            
-            # Add step line trace for cumulative histogram
-            # We need to add the first point at the start of the first bin
-            x_plot = np.concatenate([[bin_edges[0]], bin_edges[1:]])
-            y_plot = np.concatenate([[0], cumsum_normalized])
-            
-            fig.add_trace(go.Scatter(
-                x=x_plot,
-                y=y_plot,
-                mode="lines",
-                name=str(group_value),
-                line=dict(shape="hv"),  # Step line (horizontal-vertical)
-                hovertemplate=(
-                    f"{state.group_col}={group_value}<br>"
-                    f"{state.xcol}=%{{x}}<br>"
-                    f"Cumulative proportion=%{{y:.3f}}<extra></extra>"
-                ),
-            ))
-
-        fig.update_layout(
-            margin=dict(l=40, r=20, t=40, b=40),
-            xaxis_title=state.xcol,
-            yaxis_title="Cumulative Proportion (normalized 0-1)",
-            legend_title_text=state.group_col,
-            showlegend=state.show_legend,
-            uirevision="keep",
-        )
-        return fig.to_dict()
+        figure_dict = self.figure_generator.make_figure(df_f, state)
+        logger.debug(f"Figure generated: {len(figure_dict.get('data', []))} traces")
+        return figure_dict
 
 
 # ----------------------------
