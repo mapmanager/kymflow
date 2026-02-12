@@ -114,6 +114,33 @@ class DataFrameProcessor:
             y = y.abs()
         return y
 
+    def get_x_values(
+        self,
+        df_f: pd.DataFrame,
+        xcol: str,
+        use_absolute: bool = False,
+    ) -> pd.Series:
+        """Get x column values for plotting; optionally apply absolute value when column is numeric.
+
+        Args:
+            df_f: Filtered dataframe.
+            xcol: Column name for x values.
+            use_absolute: If True and column is numeric, apply abs() to values.
+
+        Returns:
+            Series of x values; for numeric columns abs() is applied when use_absolute is True.
+        """
+        if xcol not in df_f.columns:
+            return pd.Series(dtype=float)
+        col = df_f[xcol]
+        kind = getattr(col.dtype, "kind", None)
+        if kind in ("i", "u", "f"):
+            x = pd.to_numeric(col, errors="coerce")
+            if use_absolute:
+                x = x.abs()
+            return x
+        return col
+
     def calculate_group_stats(
         self,
         df_f: pd.DataFrame,
@@ -122,7 +149,7 @@ class DataFrameProcessor:
         use_absolute: bool = False,
         xcol: Optional[str] = None,
         include_x: bool = False,
-    ) -> dict[str, dict[str, float]]:
+        ) -> dict[str, dict[str, float]]:
         """Calculate mean, std, and sem for y values (and optionally x values) within each group.
         
         Args:
@@ -147,7 +174,7 @@ class DataFrameProcessor:
         if include_x:
             if not xcol:
                 raise ValueError("xcol is required when include_x=True")
-            x = pd.to_numeric(df_f[xcol], errors="coerce")
+            x = self.get_x_values(df_f, xcol, use_absolute)
             tmp = pd.DataFrame({"x": x, "y": y, "g": g}).dropna(subset=["y", "g", "x"])
         else:
             tmp = pd.DataFrame({"y": y, "g": g}).dropna(subset=["y", "g"])

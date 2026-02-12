@@ -134,10 +134,10 @@ class FigureGenerator:
         return pd.Series(range(len(df_f)), index=df_f.index, dtype=float)
 
     def _scatter_axis_x(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
-        """X axis values for scatter: numeric as float, categorical as 0,1,2,..."""
-        x_series = df_f[state.xcol]
+        """X axis values for scatter: numeric as float (with optional abs), categorical as 0,1,2,..."""
         if self._is_numeric_axis(df_f, state.xcol):
-            return pd.to_numeric(x_series, errors="coerce")
+            return self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value)
+        x_series = df_f[state.xcol]
         unique_cats = sorted(x_series.dropna().astype(str).unique())
         cat_to_pos = {c: i for i, c in enumerate(unique_cats)}
         return x_series.astype(str).map(cat_to_pos).astype(float)
@@ -284,7 +284,7 @@ class FigureGenerator:
             state: PlotState to use for configuration.
             selected_row_ids: If set, indices of these row_ids are passed as selectedpoints.
         """
-        x = df_f[state.xcol]
+        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value)
         y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         row_ids = df_f[self.row_id_col].astype(str)
 
@@ -340,7 +340,7 @@ class FigureGenerator:
         if not state.group_col:
             return self._figure_scatter(df_f, state, selected_row_ids=selected_row_ids)
 
-        x = df_f[state.xcol]
+        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value)
         y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
         g = df_f[state.group_col].astype(str)
         row_ids = df_f[self.row_id_col].astype(str)
@@ -741,9 +741,9 @@ class FigureGenerator:
     def _figure_cumulative_histogram(self, df_f: pd.DataFrame, state: PlotState) -> dict:
         """Create cumulative histogram: one curve when group is (none), else one curve per group.
 
-        Uses x column; each curve is normalized to 0-1 within its group (or overall if no group).
+        Uses x column (with optional abs); each curve is normalized to 0-1 within its group (or overall if no group).
         """
-        x = pd.to_numeric(df_f[state.xcol], errors="coerce").dropna()
+        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value).dropna()
         if len(x) == 0:
             logger.warning("No valid data for cumulative histogram. Falling back to scatter plot.")
             return self._figure_scatter(df_f, state)
@@ -808,8 +808,8 @@ class FigureGenerator:
         return fig.to_dict()
 
     def _figure_histogram(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create histogram of x column: one hist when group is (none), else one trace per group."""
-        x = pd.to_numeric(df_f[state.xcol], errors="coerce").dropna()
+        """Create histogram of x column (with optional abs): one hist when group is (none), else one trace per group."""
+        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value).dropna()
         if len(x) == 0:
             logger.warning("No valid data for histogram. Falling back to scatter plot.")
             return self._figure_scatter(df_f, state)

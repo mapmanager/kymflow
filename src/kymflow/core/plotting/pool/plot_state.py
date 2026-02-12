@@ -36,7 +36,7 @@ class PlotState:
     plot_type: PlotType = PlotType.SCATTER
     group_col: Optional[str] = None    # used by grouped/scatter/swarm
     ystat: str = "mean"                # used by grouped only
-    use_absolute_value: bool = False   # apply abs() to y values before plotting
+    use_absolute_value: bool = False   # apply abs() to x and y values before plotting (numeric only)
     show_mean: bool = False            # show mean line for scatter/swarm
     show_std_sem: bool = False         # show std/sem error bars for scatter/swarm
     std_sem_type: str = "std"          # "std" or "sem" for error bars
