@@ -34,9 +34,13 @@ class PlotState:
     xcol: str
     ycol: str
     plot_type: PlotType = PlotType.SCATTER
-    group_col: Optional[str] = None    # used by grouped/scatter/swarm
+    group_col: Optional[str] = None    # used by grouped/scatter/swarm; becomes x-axis for box/violin/swarm
+    color_grouping: Optional[str] = None  # nested grouping (color parameter) for box/violin/swarm
     ystat: str = "mean"                # used by grouped only
     use_absolute_value: bool = False   # apply abs() to x and y values before plotting (numeric only)
+    swarm_jitter_amount: float = 0.35  # jitter amount for swarm plots (user-controllable)
+    use_remove_values: bool = False    # enable remove values pre-filter
+    remove_values_threshold: Optional[float] = None  # threshold for remove values pre-filter
     show_mean: bool = False            # show mean line for scatter/swarm
     show_std_sem: bool = False         # show std/sem error bars for scatter/swarm
     std_sem_type: str = "std"          # "std" or "sem" for error bars
@@ -58,8 +62,12 @@ class PlotState:
             "ycol": self.ycol,
             "plot_type": self.plot_type.value,  # Convert enum to string
             "group_col": self.group_col,
+            "color_grouping": self.color_grouping,
             "ystat": self.ystat,
             "use_absolute_value": self.use_absolute_value,
+            "swarm_jitter_amount": self.swarm_jitter_amount,
+            "use_remove_values": self.use_remove_values,
+            "remove_values_threshold": self.remove_values_threshold,
             "show_mean": self.show_mean,
             "show_std_sem": self.show_std_sem,
             "std_sem_type": self.std_sem_type,
@@ -92,8 +100,12 @@ class PlotState:
             ycol=str(data.get("ycol", "")),
             plot_type=plot_type,
             group_col=data.get("group_col"),  # Can be None
+            color_grouping=data.get("color_grouping"),  # Can be None
             ystat=str(data.get("ystat", "mean")),
             use_absolute_value=bool(data.get("use_absolute_value", False)),
+            swarm_jitter_amount=float(data.get("swarm_jitter_amount", 0.35)),
+            use_remove_values=bool(data.get("use_remove_values", False)),
+            remove_values_threshold=data.get("remove_values_threshold"),  # Can be None
             show_mean=bool(data.get("show_mean", False)),
             show_std_sem=bool(data.get("show_std_sem", False)),
             std_sem_type=str(data.get("std_sem_type", "std")),

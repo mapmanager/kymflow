@@ -97,21 +97,27 @@ class DataFrameProcessor:
         self, 
         df_f: pd.DataFrame, 
         ycol: str, 
-        use_absolute: bool = False
+        use_absolute: bool = False,
+        use_remove_values: bool = False,
+        remove_values_threshold: Optional[float] = None,
     ) -> pd.Series:
-        """Get y column values, optionally applying absolute value.
+        """Get y column values, optionally applying absolute value and remove values pre-filter.
         
         Args:
             df_f: Filtered dataframe.
             ycol: Column name for y values.
             use_absolute: If True, apply abs() to values.
+            use_remove_values: If True, remove values outside [-threshold, +threshold].
+            remove_values_threshold: Threshold for remove values (required if use_remove_values=True).
             
         Returns:
-            Series of y values, with abs() applied if use_absolute is True.
+            Series of y values, with transformations applied.
         """
         y = pd.to_numeric(df_f[ycol], errors="coerce")
         if use_absolute:
             y = y.abs()
+        if use_remove_values and remove_values_threshold is not None:
+            y[(y < -remove_values_threshold) | (y > remove_values_threshold)] = np.nan
         return y
 
     def get_x_values(
@@ -119,16 +125,20 @@ class DataFrameProcessor:
         df_f: pd.DataFrame,
         xcol: str,
         use_absolute: bool = False,
+        use_remove_values: bool = False,
+        remove_values_threshold: Optional[float] = None,
     ) -> pd.Series:
-        """Get x column values for plotting; optionally apply absolute value when column is numeric.
+        """Get x column values for plotting; optionally apply absolute value and remove values pre-filter when column is numeric.
 
         Args:
             df_f: Filtered dataframe.
             xcol: Column name for x values.
             use_absolute: If True and column is numeric, apply abs() to values.
+            use_remove_values: If True, remove values outside [-threshold, +threshold].
+            remove_values_threshold: Threshold for remove values (required if use_remove_values=True).
 
         Returns:
-            Series of x values; for numeric columns abs() is applied when use_absolute is True.
+            Series of x values; for numeric columns transformations are applied when enabled.
         """
         if xcol not in df_f.columns:
             return pd.Series(dtype=float)
@@ -138,6 +148,8 @@ class DataFrameProcessor:
             x = pd.to_numeric(col, errors="coerce")
             if use_absolute:
                 x = x.abs()
+            if use_remove_values and remove_values_threshold is not None:
+                x[(x < -remove_values_threshold) | (x > remove_values_threshold)] = np.nan
             return x
         return col
 
@@ -149,7 +161,9 @@ class DataFrameProcessor:
         use_absolute: bool = False,
         xcol: Optional[str] = None,
         include_x: bool = False,
-        ) -> dict[str, dict[str, float]]:
+        use_remove_values: bool = False,
+        remove_values_threshold: Optional[float] = None,
+    ) -> dict[str, dict[str, float]]:
         """Calculate mean, std, and sem for y values (and optionally x values) within each group.
         
         Args:
@@ -168,13 +182,13 @@ class DataFrameProcessor:
         if not group_col:
             return {}
         
-        y = self.get_y_values(df_f, ycol, use_absolute)
+        y = self.get_y_values(df_f, ycol, use_absolute, use_remove_values, remove_values_threshold)
         g = df_f[group_col].astype(str)
         
         if include_x:
             if not xcol:
                 raise ValueError("xcol is required when include_x=True")
-            x = self.get_x_values(df_f, xcol, use_absolute)
+            x = self.get_x_values(df_f, xcol, use_absolute, use_remove_values, remove_values_threshold)
             tmp = pd.DataFrame({"x": x, "y": y, "g": g}).dropna(subset=["y", "g", "x"])
         else:
             tmp = pd.DataFrame({"y": y, "g": g}).dropna(subset=["y", "g"])

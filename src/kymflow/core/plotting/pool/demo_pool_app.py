@@ -97,8 +97,12 @@ class PlotController:
         self._x_aggrid: Optional[ui.aggrid] = None
         self._y_aggrid: Optional[ui.aggrid] = None
         self._group_select: Optional[ui.select] = None
+        self._color_grouping_select: Optional[ui.select] = None
         self._ystat_select: Optional[ui.select] = None
         self._abs_value_checkbox: Optional[ui.checkbox] = None
+        self._swarm_jitter_amount_input: Optional[ui.number] = None
+        self._use_remove_values_checkbox: Optional[ui.checkbox] = None
+        self._remove_values_threshold_input: Optional[ui.number] = None
 
         # row_id -> iloc index within CURRENT filtered df (rebuilt each replot)
         self._id_to_index_filtered: dict[str, int] = {}
@@ -122,7 +126,9 @@ class PlotController:
         """
         assert (
             self._roi_select and self._type_select and self._group_select 
-            and self._ystat_select and self._abs_value_checkbox
+            and self._color_grouping_select and self._ystat_select and self._abs_value_checkbox
+            and self._swarm_jitter_amount_input and self._use_remove_values_checkbox
+            and self._remove_values_threshold_input
             and self._show_mean_checkbox and self._show_std_sem_checkbox and self._std_sem_select
             and self._mean_line_width_input and self._error_line_width_input and self._show_raw_checkbox
             and self._point_size_input and self._show_legend_checkbox
@@ -130,11 +136,15 @@ class PlotController:
         )
         
         # Basic controls
-        self._roi_select.value = state.roi_id
+        self._roi_select.value = str(state.roi_id) if state.roi_id else "(none)"
         self._type_select.value = state.plot_type.value
         self._ystat_select.value = state.ystat
         self._group_select.value = state.group_col if state.group_col else "(none)"
+        self._color_grouping_select.value = state.color_grouping if state.color_grouping else "(none)"
         self._abs_value_checkbox.value = state.use_absolute_value
+        self._swarm_jitter_amount_input.value = state.swarm_jitter_amount
+        self._use_remove_values_checkbox.value = state.use_remove_values
+        self._remove_values_threshold_input.value = state.remove_values_threshold
         
         # Mean/Std/Sem controls
         self._show_mean_checkbox.value = state.show_mean
@@ -169,13 +179,17 @@ class PlotController:
         """
         assert (
             self._roi_select and self._type_select and self._group_select 
-            and self._ystat_select and self._abs_value_checkbox
+            and self._color_grouping_select and self._ystat_select and self._abs_value_checkbox
+            and self._swarm_jitter_amount_input and self._use_remove_values_checkbox
+            and self._remove_values_threshold_input
             and self._show_mean_checkbox and self._show_std_sem_checkbox and self._std_sem_select
             and self._mean_line_width_input and self._error_line_width_input and self._show_raw_checkbox
             and self._point_size_input and self._show_legend_checkbox
         )
         
-        roi_id = int(self._roi_select.value)
+        roi_value = str(self._roi_select.value)
+        roi_id = int(roi_value) if roi_value != "(none)" else 0
+        
         plot_type_str = str(self._type_select.value)
         try:
             plot_type = PlotType(plot_type_str)
@@ -186,6 +200,9 @@ class PlotController:
         gv = str(self._group_select.value)
         group_col = None if gv == "(none)" else gv
         
+        cgv = str(self._color_grouping_select.value)
+        color_grouping = None if cgv == "(none)" else cgv
+        
         # Get xcol/ycol from current state (they're updated via aggrid callbacks)
         current_state = self.plot_states[self.current_plot_index]
         return PlotState(
@@ -194,8 +211,12 @@ class PlotController:
             ycol=current_state.ycol,  # Preserve ycol (updated via aggrid callback)
             plot_type=plot_type,
             group_col=group_col,
+            color_grouping=color_grouping,
             ystat=str(self._ystat_select.value),
             use_absolute_value=bool(self._abs_value_checkbox.value),
+            swarm_jitter_amount=float(self._swarm_jitter_amount_input.value) if self._swarm_jitter_amount_input.value is not None else 0.35,
+            use_remove_values=bool(self._use_remove_values_checkbox.value),
+            remove_values_threshold=float(self._remove_values_threshold_input.value) if self._remove_values_threshold_input.value is not None else None,
             show_mean=bool(self._show_mean_checkbox.value),
             show_std_sem=bool(self._show_std_sem_checkbox.value),
             std_sem_type=str(self._std_sem_select.value),
@@ -281,9 +302,10 @@ class PlotController:
                 on_click=self._apply_current_to_others,
             ).classes("w-full")
             
+            roi_options = ["(none)"] + [str(r) for r in self.data_processor.get_roi_values()]
             self._roi_select = ui.select(
-                options=self.data_processor.get_roi_values(),
-                value=self.plot_states[self.current_plot_index].roi_id,
+                options=roi_options,
+                value=str(self.plot_states[self.current_plot_index].roi_id) if self.plot_states[self.current_plot_index].roi_id else "(none)",
                 label="ROI",
                 on_change=self._on_any_change,
             ).classes("w-full")
@@ -314,6 +336,14 @@ class PlotController:
                 on_change=self._on_any_change,
             ).classes("w-full")
 
+            color_grouping_options = ["(none)"] + categorical_candidates(self.df)
+            self._color_grouping_select = ui.select(
+                options=color_grouping_options,
+                value="(none)",
+                label="Group/Nesting",
+                on_change=self._on_any_change,
+            ).classes("w-full")
+
             self._ystat_select = ui.select(
                 options=["mean", "median", "sum", "count", "std", "min", "max"],
                 value=self.plot_states[self.current_plot_index].ystat,
@@ -324,6 +354,31 @@ class PlotController:
             self._abs_value_checkbox = ui.checkbox(
                 "Absolute Value",
                 value=self.plot_states[self.current_plot_index].use_absolute_value,
+                on_change=self._on_any_change,
+            ).classes("w-full")
+
+            # Remove Values checkbox and threshold (similar to absolute value pattern)
+            with ui.row().classes("w-full gap-2 items-center"):
+                self._use_remove_values_checkbox = ui.checkbox(
+                    "Remove Values",
+                    value=self.plot_states[self.current_plot_index].use_remove_values,
+                    on_change=self._on_any_change,
+                )
+                self._remove_values_threshold_input = ui.number(
+                    label="Remove +/-",
+                    value=self.plot_states[self.current_plot_index].remove_values_threshold,
+                    min=0.0,
+                    step=0.1,
+                    on_change=self._on_any_change,
+                ).classes("flex-1")
+
+            # Swarm Jitter Amount (only for swarm plots)
+            self._swarm_jitter_amount_input = ui.number(
+                label="Swarm Jitter Amount",
+                value=self.plot_states[self.current_plot_index].swarm_jitter_amount,
+                min=0.0,
+                max=1.0,
+                step=0.05,
                 on_change=self._on_any_change,
             ).classes("w-full")
 
@@ -643,20 +698,8 @@ class PlotController:
             logger.warning(f"X column selection callback received invalid row_dict: {row_dict}")
             return
         column_name = str(column_name)
-        state = self.plot_states[self.current_plot_index]
-        # Box/Violin require categorical X: reject non-categorical choice
-        if state.plot_type in (PlotType.BOX_PLOT, PlotType.VIOLIN) and not is_categorical_column(self.df, column_name):
-            name = "Box plot" if state.plot_type == PlotType.BOX_PLOT else "Violin plot"
-            ui.notify(
-                f"{name} requires a categorical X column. Choose a categorical column for X.",
-                type="warning",
-            )
-            # Revert aggrid selection to current xcol
-            try:
-                self._x_aggrid.run_row_method(state.xcol, "setSelected", True, True)
-            except Exception:
-                pass
-            return
+        # Box/Violin/Swarm don't use xcol for x-axis (they use group_col), so no validation needed here
+        # X column selection is still allowed but won't affect these plot types
         logger.info(f"X column selected: {column_name}")
         self.plot_states[self.current_plot_index].xcol = column_name
         self._on_any_change()
@@ -689,15 +732,30 @@ class PlotController:
         new_state.xcol = self.plot_states[self.current_plot_index].xcol
         new_state.ycol = self.plot_states[self.current_plot_index].ycol
 
-        # Box/Violin require categorical X: reject invalid plot type choice
-        if new_state.plot_type in (PlotType.BOX_PLOT, PlotType.VIOLIN) and not is_categorical_column(self.df, new_state.xcol):
-            name = "Box plot" if new_state.plot_type == PlotType.BOX_PLOT else "Violin plot"
-            ui.notify(
-                f"{name} requires a categorical X column. Choose a categorical column for X or pick another plot type.",
-                type="warning",
-            )
-            new_state.plot_type = self.plot_states[self.current_plot_index].plot_type
-            self._type_select.value = new_state.plot_type.value
+        # Box/Violin/Swarm require categorical group_col for x-axis: reject invalid plot type choice
+        if new_state.plot_type in (PlotType.BOX_PLOT, PlotType.VIOLIN, PlotType.SWARM):
+            if not new_state.group_col or new_state.group_col == "(none)":
+                ui.notify(
+                    "Box/Violin/Swarm plots require a Group/Color column for x-axis. Select a categorical column.",
+                    type="warning",
+                )
+                new_state.group_col = self.plot_states[self.current_plot_index].group_col
+                self._group_select.value = new_state.group_col if new_state.group_col else "(none)"
+            elif not is_categorical_column(self.df, new_state.group_col):
+                ui.notify(
+                    "Group/Color column must be categorical for Box/Violin/Swarm plots.",
+                    type="warning",
+                )
+                new_state.group_col = self.plot_states[self.current_plot_index].group_col
+                self._group_select.value = new_state.group_col if new_state.group_col else "(none)"
+            # Validate color_grouping if set
+            if new_state.color_grouping and not is_categorical_column(self.df, new_state.color_grouping):
+                ui.notify(
+                    "Group/Nesting column must be categorical.",
+                    type="warning",
+                )
+                new_state.color_grouping = self.plot_states[self.current_plot_index].color_grouping
+                self._color_grouping_select.value = new_state.color_grouping if new_state.color_grouping else "(none)"
 
         # Save to current plot state
         self.plot_states[self.current_plot_index] = new_state
@@ -795,7 +853,11 @@ class PlotController:
         state = self.plot_states[plot_index]
         if not self._is_selection_compatible(state.plot_type):
             return
-        df_f = self.data_processor.filter_by_roi(state.roi_id)
+        # Filter by ROI if roi_id is set (not 0/None from "(none)" selection)
+        if state.roi_id and state.roi_id != 0:
+            df_f = self.data_processor.filter_by_roi(state.roi_id)
+        else:
+            df_f = self.data_processor.df.dropna(subset=[self.data_processor.row_id_col])
         selected_row_ids: set[str] = set()
         source = "none"
 
@@ -892,12 +954,15 @@ class PlotController:
         }
         is_grouped_agg = state.plot_type == PlotType.GROUPED
         show_mean_std = state.plot_type in {PlotType.SCATTER, PlotType.SWARM}
+        supports_color_grouping = state.plot_type in {PlotType.BOX_PLOT, PlotType.VIOLIN, PlotType.SWARM}
         
         self._group_select.set_enabled(needs_group)
+        self._color_grouping_select.set_enabled(supports_color_grouping)
         self._ystat_select.set_enabled(is_grouped_agg)
         self._show_mean_checkbox.set_enabled(show_mean_std)
         self._show_std_sem_checkbox.set_enabled(show_mean_std)
         self._std_sem_select.set_enabled(show_mean_std and state.show_std_sem)
+        self._swarm_jitter_amount_input.set_enabled(state.plot_type == PlotType.SWARM)
         
         logger.debug(
             f"Controls synced: group_select enabled={needs_group}, "
@@ -935,7 +1000,11 @@ class PlotController:
 
             logger.info(f"Plotly click on plot {plot_index + 1}: plot_type={state.plot_type.value}, row_id={row_id}")
 
-            df_f = self.data_processor.filter_by_roi(state.roi_id)
+            # Filter by ROI if roi_id is set (not 0/None from "(none)" selection)
+            if state.roi_id and state.roi_id != 0:
+                df_f = self.data_processor.filter_by_roi(state.roi_id)
+            else:
+                df_f = self.data_processor.df.dropna(subset=[self.data_processor.row_id_col])
             idx = self._id_to_index_filtered.get(row_id)
             if idx is None:
                 logger.warning(f"Row ID {row_id} not found in filtered index")
@@ -1083,7 +1152,11 @@ class PlotController:
         Returns:
             Plotly figure dictionary.
         """
-        df_f = self.data_processor.filter_by_roi(state.roi_id)
+        # Filter by ROI if roi_id is set (not 0/None from "(none)" selection)
+        if state.roi_id and state.roi_id != 0:
+            df_f = self.data_processor.filter_by_roi(state.roi_id)
+        else:
+            df_f = self.data_processor.df.dropna(subset=[self.data_processor.row_id_col])
         self._id_to_index_filtered = self.data_processor.build_row_id_index(df_f)
         
         logger.debug(f"Making figure: plot_type={state.plot_type.value}, filtered_rows={len(df_f)}")

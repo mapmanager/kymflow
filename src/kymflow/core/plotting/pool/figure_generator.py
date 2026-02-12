@@ -77,26 +77,33 @@ class FigureGenerator:
             result = self._figure_grouped(df_f, state)
         elif state.plot_type == PlotType.SCATTER:
             result = self._figure_split_scatter(df_f, state, selected_row_ids=selected_row_ids)
-        elif state.plot_type == PlotType.SWARM:
-            result = self._figure_swarm(df_f, state, selected_row_ids=selected_row_ids)
         elif state.plot_type == PlotType.BOX_PLOT:
-            if not is_categorical_column(df_f, state.xcol):
+            if not state.group_col or not is_categorical_column(df_f, state.group_col):
                 logger.warning(
-                    f"Box plot requires categorical X column; xcol={state.xcol} is not categorical. "
+                    f"Box plot requires categorical group_col for x-axis; group_col={state.group_col} is not categorical. "
                     "Falling back to scatter."
                 )
                 result = self._figure_split_scatter(df_f, state, selected_row_ids=selected_row_ids)
             else:
                 result = self._figure_box(df_f, state)
         elif state.plot_type == PlotType.VIOLIN:
-            if not is_categorical_column(df_f, state.xcol):
+            if not state.group_col or not is_categorical_column(df_f, state.group_col):
                 logger.warning(
-                    f"Violin plot requires categorical X column; xcol={state.xcol} is not categorical. "
+                    f"Violin plot requires categorical group_col for x-axis; group_col={state.group_col} is not categorical. "
                     "Falling back to scatter."
                 )
                 result = self._figure_split_scatter(df_f, state, selected_row_ids=selected_row_ids)
             else:
                 result = self._figure_violin(df_f, state)
+        elif state.plot_type == PlotType.SWARM:
+            if not state.group_col or not is_categorical_column(df_f, state.group_col):
+                logger.warning(
+                    f"Swarm plot requires categorical group_col for x-axis; group_col={state.group_col} is not categorical. "
+                    "Falling back to scatter."
+                )
+                result = self._figure_split_scatter(df_f, state, selected_row_ids=selected_row_ids)
+            else:
+                result = self._figure_swarm(df_f, state, selected_row_ids=selected_row_ids)
         elif state.plot_type == PlotType.HISTOGRAM:
             result = self._figure_histogram(df_f, state)
         elif state.plot_type == PlotType.CUMULATIVE_HISTOGRAM:
@@ -121,6 +128,7 @@ class FigureGenerator:
         - Scatter / Split scatter, numeric x: data values as float.
         - Scatter / Split scatter, categorical x: category indices 0, 1, 2, ... (sorted order).
         - Swarm: category index + deterministic jitter (same as in _figure_swarm).
+        - Box/Violin: use group_col for categorical mapping (not xcol).
 
         Caller must use this series with the same df_f index when masking.
         """
@@ -128,39 +136,60 @@ class FigureGenerator:
             return self._swarm_axis_x(df_f, state)
         if state.plot_type == PlotType.SCATTER:
             return self._scatter_axis_x(df_f, state)
-        if state.plot_type == PlotType.BOX_PLOT:
-            return self._scatter_axis_x(df_f, state)  # categorical x -> 0,1,2,...
+        if state.plot_type in (PlotType.BOX_PLOT, PlotType.VIOLIN):
+            # Use group_col for x-axis categorical mapping
+            return self._scatter_axis_x_for_group_col(df_f, state)
         # Fallback for other types (e.g. GROUPED) - return numeric 0-based index
         return pd.Series(range(len(df_f)), index=df_f.index, dtype=float)
 
     def _scatter_axis_x(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
         """X axis values for scatter: numeric as float (with optional abs), categorical as 0,1,2,..."""
         if self._is_numeric_axis(df_f, state.xcol):
-            return self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value)
+            return self.data_processor.get_x_values(
+                df_f, state.xcol, state.use_absolute_value,
+                state.use_remove_values, state.remove_values_threshold
+            )
         x_series = df_f[state.xcol]
         unique_cats = sorted(x_series.dropna().astype(str).unique())
         cat_to_pos = {c: i for i, c in enumerate(unique_cats)}
         return x_series.astype(str).map(cat_to_pos).astype(float)
 
     def _swarm_axis_x(self, df_f: pd.DataFrame, state: PlotState) -> pd.Series:
-        """X axis values for swarm: category index + deterministic jitter (match _figure_swarm)."""
-        x_cat = df_f[state.xcol].astype(str)
+        """X axis values for swarm: category index + deterministic jitter (match _figure_swarm).
+        
+        Uses group_col for x-axis, color_grouping for nested grouping, and state.swarm_jitter_amount.
+        """
+        # Use group_col for x-axis (categorical grouping)
+        x_cat = df_f[state.group_col].astype(str)
         unique_cats = sorted(x_cat.unique())
         cat_to_pos = {cat: i for i, cat in enumerate(unique_cats)}
-        jitter_amount = 0.35
-        if state.group_col and state.group_col in df_f.columns:
+        jitter_amount = state.swarm_jitter_amount
+        
+        if state.color_grouping and state.color_grouping in df_f.columns:
+            # Nested grouping: jitter per (x_category, color_group) combination
             parts = []
-            for gv, sub in df_f.groupby(state.group_col, sort=True):
-                x_positions = sub[state.xcol].astype(str).map(cat_to_pos).values
-                seed = hash(str(gv)) % (2**31)
-                rng = np.random.default_rng(seed=seed)
-                jitter = rng.uniform(-jitter_amount / 2, jitter_amount / 2, size=len(x_positions))
-                parts.append(pd.Series(x_positions + jitter, index=sub.index))
+            for color_value, sub in df_f.groupby(state.color_grouping, sort=True):
+                x_cat_sub = sub[state.group_col].astype(str)
+                x_positions = x_cat_sub.map(cat_to_pos).values
+                # Deterministic jitter per (x_category, color_group)
+                jittered = []
+                for x_cat_val, x_pos in zip(x_cat_sub.values, x_positions):
+                    seed = hash(f"{x_cat_val}_{color_value}") % (2**31)
+                    rng = np.random.default_rng(seed=seed)
+                    jitter = rng.uniform(-jitter_amount / 2, jitter_amount / 2)
+                    jittered.append(x_pos + jitter)
+                parts.append(pd.Series(jittered, index=sub.index))
             return pd.concat(parts).sort_index()
+        
+        # No color_grouping - single trace
         x_positions = x_cat.map(cat_to_pos).values
-        rng = np.random.default_rng(seed=42)
-        jitter = rng.uniform(-jitter_amount / 2, jitter_amount / 2, size=len(x_positions))
-        return pd.Series(x_positions + jitter, index=df_f.index)
+        jittered = []
+        for x_cat_val, x_pos in zip(x_cat.values, x_positions):
+            seed = hash(str(x_cat_val)) % (2**31)
+            rng = np.random.default_rng(seed=seed)
+            jitter = rng.uniform(-jitter_amount / 2, jitter_amount / 2)
+            jittered.append(x_pos + jitter)
+        return pd.Series(jittered, index=df_f.index)
 
     def _add_mean_std_traces(
         self, 
@@ -284,8 +313,14 @@ class FigureGenerator:
             state: PlotState to use for configuration.
             selected_row_ids: If set, indices of these row_ids are passed as selectedpoints.
         """
-        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        x = self.data_processor.get_x_values(
+            df_f, state.xcol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
+        y = self.data_processor.get_y_values(
+            df_f, state.ycol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
         row_ids = df_f[self.row_id_col].astype(str)
 
         selectedpoints = None
@@ -340,8 +375,14 @@ class FigureGenerator:
         if not state.group_col:
             return self._figure_scatter(df_f, state, selected_row_ids=selected_row_ids)
 
-        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        x = self.data_processor.get_x_values(
+            df_f, state.xcol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
+        y = self.data_processor.get_y_values(
+            df_f, state.ycol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
         g = df_f[state.group_col].astype(str)
         row_ids = df_f[self.row_id_col].astype(str)
 
@@ -400,7 +441,8 @@ class FigureGenerator:
         if state.show_mean or state.show_std_sem:
             group_stats = self.data_processor.calculate_group_stats(
                 df_f, state.group_col, state.ycol, state.use_absolute_value,
-                state.xcol, include_x=True
+                state.xcol, include_x=True,
+                use_remove_values=state.use_remove_values, remove_values_threshold=state.remove_values_threshold
             )
             self._add_mean_std_traces(fig, group_stats, x_ranges, state, include_x_axis=True)
 
@@ -434,61 +476,74 @@ class FigureGenerator:
         *,
         selected_row_ids: Optional[set[str]] = None,
     ) -> dict:
-        """Create swarm/strip plot with optional group coloring.
+        """Create swarm/strip plot with categorical x (group_col) and optional color_grouping for nested grouping.
         
         Uses manual jitter by converting categorical x values to numeric positions
-        and adding random horizontal offsets, similar to the demo_jitter.py pattern.
+        and adding random horizontal offsets. With nested grouping, jitter is applied
+        within each (x_category, color_group) combination.
         
         Args:
             df_f: Filtered dataframe.
             state: PlotState to use for configuration.
             selected_row_ids: If set, indices of these row_ids are passed as selectedpoints per trace.
         """
-        # x is categorical bins, y is per-row; optional color split via group_col
-        x_cat = df_f[state.xcol].astype(str)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        # Use group_col for x-axis (categorical grouping)
+        x_cat = df_f[state.group_col].astype(str)
+        y = self.data_processor.get_y_values(
+            df_f, state.ycol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
         row_ids = df_f[self.row_id_col].astype(str)
 
         # Get unique categorical values and create mapping to numeric positions
         unique_cats = sorted(x_cat.unique())
         cat_to_pos = {cat: i for i, cat in enumerate(unique_cats)}
         
-        # Jitter parameters
-        jitter_amount = 0.35  # Horizontal spread within each category
+        # Jitter parameters - use user-controllable amount
+        jitter_amount = state.swarm_jitter_amount
         
         fig = go.Figure()
-
-        if state.group_col:
-            g = df_f[state.group_col].astype(str)
-            tmp = pd.DataFrame({"x": x_cat, "y": y, "g": g, "row_id": row_ids}).dropna(subset=["x"])
-            
-            # Calculate y-axis range from raw data (for preserving range when show_raw is off)
-            y_min_raw = float(tmp["y"].min()) if len(tmp) > 0 else None
-            y_max_raw = float(tmp["y"].max()) if len(tmp) > 0 else None
-            
-            # Calculate x ranges for each group (for mean/std positioning)
-            # For swarm plots, x is categorical, so we use the category position
-            x_ranges = {}
-            
-            for gv, sub in tmp.groupby("g", sort=True):
+        
+        # Build tmp dataframe with x, y, row_id, and optionally color_grouping
+        tmp_data = {"x": x_cat, "y": y, "row_id": row_ids}
+        if state.color_grouping and state.color_grouping in df_f.columns:
+            tmp_data["color"] = df_f[state.color_grouping].astype(str)
+        tmp = pd.DataFrame(tmp_data).dropna(subset=["x"])
+        
+        # Calculate y-axis range from raw data (for preserving range when show_raw is off)
+        y_min_raw = float(tmp["y"].min()) if len(tmp) > 0 else None
+        y_max_raw = float(tmp["y"].max()) if len(tmp) > 0 else None
+        
+        # Calculate x ranges for each trace (for mean/std positioning)
+        x_ranges = {}
+        
+        # Group by color_grouping if set, otherwise single trace
+        if state.color_grouping and "color" in tmp.columns:
+            # Group by color_grouping for nested grouping
+            for color_value, sub in tmp.groupby("color", sort=True):
                 # Convert categorical x to numeric positions
                 x_positions = sub["x"].map(cat_to_pos).values
-                # Add jitter: random offset between -jitter_amount/2 and +jitter_amount/2
-                # Use hash of group value for seed to get different jitter per group
-                seed = hash(str(gv)) % (2**31)
-                rng = np.random.default_rng(seed=seed)
-                jitter = rng.uniform(-jitter_amount/2, jitter_amount/2, size=len(x_positions))
-                x_jittered = x_positions + jitter
+                # Add jitter: deterministic seed per (x_category, color_group) combination
+                # Create jittered positions with unique seed per nested group
+                x_jittered_list = []
+                x_cat_values_list = []
+                row_id_values_list = []
                 
-                # Store x range for this group (center position ± jitter range)
-                # For swarm, we need to calculate per category, but for simplicity,
-                # we'll use the mean x position across all categories for this group
-                x_center = float(np.mean(x_positions))
-                x_ranges[str(gv)] = (x_center - jitter_amount/2, x_center + jitter_amount/2)
+                for x_cat_val, x_pos in zip(sub["x"].values, x_positions):
+                    # Seed based on both x category and color group for deterministic jitter
+                    seed = hash(f"{x_cat_val}_{color_value}") % (2**31)
+                    rng = np.random.default_rng(seed=seed)
+                    jitter = rng.uniform(-jitter_amount/2, jitter_amount/2)
+                    x_jittered_list.append(x_pos + jitter)
+                    x_cat_values_list.append(x_cat_val)
                 
-                # Store original categorical x and row_id for hover
-                x_cat_values = sub["x"].values
+                x_jittered = np.array(x_jittered_list)
+                x_cat_values = np.array(x_cat_values_list)
                 row_id_values = sub["row_id"].values
+                
+                # Store x range for this color group
+                x_center = float(np.mean(x_positions)) if len(x_positions) > 0 else 0.0
+                x_ranges[str(color_value)] = (x_center - jitter_amount/2, x_center + jitter_amount/2)
                 
                 # Only add raw data trace if show_raw is True
                 if state.show_raw:
@@ -503,42 +558,39 @@ class FigureGenerator:
                         x=x_jittered,
                         y=sub["y"].values,
                         mode="markers",
-                        name=str(gv),
+                        name=str(color_value),
                         customdata=np.column_stack([x_cat_values, row_id_values]),
                         marker=dict(size=state.point_size),
                         selectedpoints=sp,
                         selected=sel,
                         hovertemplate=(
-                            # f"roi_id={state.roi_id}<br>"
-                            f"{state.xcol}=%{{customdata[0]}}<br>"
+                            f"{state.group_col}=%{{customdata[0]}}<br>"
                             f"{state.ycol}=%{{y}}<br>"
-                            f"{state.group_col}={gv}<br>"
-                            # f"{self.row_id_col}=%{{customdata[1]}}<extra></extra>"
+                            f"{state.color_grouping}={color_value}<br>"
                         ),
                     ))
             
-            # Add mean and std/sem traces if enabled (only y-axis for swarm)
+            # Add mean and std/sem traces if enabled (grouped by color_grouping)
             if state.show_mean or state.show_std_sem:
                 group_stats = self.data_processor.calculate_group_stats(
-                    df_f, state.group_col, state.ycol, state.use_absolute_value,
-                    None, include_x=False
+                    df_f, state.color_grouping, state.ycol, state.use_absolute_value,
+                    None, include_x=False,
+                    use_remove_values=state.use_remove_values, remove_values_threshold=state.remove_values_threshold
                 )
                 self._add_mean_std_traces(fig, group_stats, x_ranges, state, include_x_axis=False)
         else:
-            tmp = pd.DataFrame({"x": x_cat, "y": y, "row_id": row_ids}).dropna(subset=["x"])
-            
-            # Calculate y-axis range from raw data (for preserving range when show_raw is off)
-            y_min_raw = float(tmp["y"].min()) if len(tmp) > 0 else None
-            y_max_raw = float(tmp["y"].max()) if len(tmp) > 0 else None
-            
+            # No color_grouping - single trace
             # Convert categorical x to numeric positions
             x_positions = tmp["x"].map(cat_to_pos).values
-            # Add jitter: random offset between -jitter_amount/2 and +jitter_amount/2
-            rng = np.random.default_rng(seed=42)  # Fixed seed for reproducibility
-            jitter = rng.uniform(-jitter_amount/2, jitter_amount/2, size=len(x_positions))
-            x_jittered = x_positions + jitter
+            # Add jitter: deterministic seed per x category
+            x_jittered_list = []
+            for x_cat_val, x_pos in zip(tmp["x"].values, x_positions):
+                seed = hash(str(x_cat_val)) % (2**31)
+                rng = np.random.default_rng(seed=seed)
+                jitter = rng.uniform(-jitter_amount/2, jitter_amount/2)
+                x_jittered_list.append(x_pos + jitter)
+            x_jittered = np.array(x_jittered_list)
             
-            # Store original categorical x and row_id for hover
             x_cat_values = tmp["x"].values
             row_id_values = tmp["row_id"].values
             
@@ -555,23 +607,21 @@ class FigureGenerator:
                     x=x_jittered,
                     y=tmp["y"].values,
                     mode="markers",
-                    name=f"ROI {state.roi_id}",
+                    name=f"ROI {state.roi_id}" if state.roi_id else "All ROIs",
                     customdata=np.column_stack([x_cat_values, row_id_values]),
                     marker=dict(size=state.point_size),
                     selectedpoints=sp,
                     selected=sel,
                     hovertemplate=(
-                        # f"roi_id={state.roi_id}<br>"
-                        f"{state.xcol}=%{{customdata[0]}}<br>"
+                        f"{state.group_col}=%{{customdata[0]}}<br>"
                         f"{state.ycol}=%{{y}}<br>"
-                        # f"{self.row_id_col}=%{{customdata[1]}}<extra></extra>"
                     ),
                 ))
 
         # Set up x-axis with categorical labels at integer positions
         layout_updates = {
             "margin": dict(l=40, r=20, t=40, b=90),
-            "xaxis_title": state.xcol,
+            "xaxis_title": state.group_col,
             "yaxis_title": state.ycol,
             "showlegend": state.show_legend,
             "xaxis": dict(
@@ -583,19 +633,10 @@ class FigureGenerator:
             "uirevision": "keep",
         }
         
-        # Preserve y-axis range when show_raw is off (for both grouped and ungrouped swarm)
-        # If show_raw is on, auto-scale y-axis (remove any fixed range)
-        if not state.show_raw:
-            if state.group_col:
-                # Use the y_min_raw and y_max_raw calculated above
-                if y_min_raw is not None and y_max_raw is not None:
-                    y_padding = (y_max_raw - y_min_raw) * 0.1 if y_max_raw != y_min_raw else abs(y_max_raw) * 0.1 if y_max_raw != 0 else 1.0
-                    layout_updates["yaxis"] = dict(range=[y_min_raw - y_padding, y_max_raw + y_padding])
-            else:
-                # Ungrouped case
-                if y_min_raw is not None and y_max_raw is not None:
-                    y_padding = (y_max_raw - y_min_raw) * 0.1 if y_max_raw != y_min_raw else abs(y_max_raw) * 0.1 if y_max_raw != 0 else 1.0
-                    layout_updates["yaxis"] = dict(range=[y_min_raw - y_padding, y_max_raw + y_padding])
+        # Preserve y-axis range when show_raw is off
+        if not state.show_raw and y_min_raw is not None and y_max_raw is not None:
+            y_padding = (y_max_raw - y_min_raw) * 0.1 if y_max_raw != y_min_raw else abs(y_max_raw) * 0.1 if y_max_raw != 0 else 1.0
+            layout_updates["yaxis"] = dict(range=[y_min_raw - y_padding, y_max_raw + y_padding])
         else:
             # When show_raw is True, explicitly set yaxis to auto-scale
             layout_updates["yaxis"] = dict(autorange=True)
@@ -604,21 +645,29 @@ class FigureGenerator:
         return fig.to_dict()
 
     def _figure_box(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create box plot with categorical x and numeric y. Optional group/color: one trace per group."""
-        x = df_f[state.xcol].astype(str)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        """Create box plot with categorical x (group_col) and numeric y. Optional color_grouping for nested grouping."""
+        # Use group_col for x-axis (categorical grouping)
+        x = df_f[state.group_col].astype(str)
+        y = self.data_processor.get_y_values(
+            df_f, state.ycol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
         tmp = pd.DataFrame({"x": x, "y": y}).dropna(subset=["x", "y"])
-        if state.group_col and state.group_col in df_f.columns:
-            tmp["g"] = df_f.loc[tmp.index, state.group_col].astype(str)
-            tmp = tmp.dropna(subset=["g"])
 
         fig = go.Figure()
-        if state.group_col and "g" in tmp.columns:
-            for group_value, sub in tmp.groupby("g", sort=True):
+        # Use Plotly's color parameter for nested grouping
+        if state.color_grouping and state.color_grouping in df_f.columns:
+            # Add color column to tmp dataframe
+            color_values = df_f.loc[tmp.index, state.color_grouping].astype(str)
+            tmp["color"] = color_values
+            tmp = tmp.dropna(subset=["color"])
+            # Plotly Box expects color as a column name string, not a Series
+            # We'll create separate traces per color group to match the nested grouping pattern
+            for color_val, sub in tmp.groupby("color", sort=True):
                 fig.add_trace(go.Box(
                     x=sub["x"],
                     y=sub["y"],
-                    name=str(group_value),
+                    name=str(color_val),
                     boxpoints="outliers",
                     jitter=0.3,
                     pointpos=-1.8,
@@ -626,12 +675,12 @@ class FigureGenerator:
                     line=dict(width=1.5),
                     showlegend=state.show_legend,
                 ))
-            layout_legend_title = state.group_col
+            layout_legend_title = state.color_grouping
         else:
             fig.add_trace(go.Box(
                 x=tmp["x"],
                 y=tmp["y"],
-                name=f"ROI {state.roi_id}",
+                name=f"ROI {state.roi_id}" if state.roi_id else "All ROIs",
                 boxpoints="outliers",
                 jitter=0.3,
                 pointpos=-1.8,
@@ -642,7 +691,7 @@ class FigureGenerator:
             layout_legend_title = None
         layout = dict(
             margin=dict(l=40, r=20, t=40, b=80),
-            xaxis_title=state.xcol,
+            xaxis_title=state.group_col,
             yaxis_title=state.ycol,
             showlegend=state.show_legend,
             xaxis=dict(tickangle=-30),
@@ -654,32 +703,40 @@ class FigureGenerator:
         return fig.to_dict()
 
     def _figure_violin(self, df_f: pd.DataFrame, state: PlotState) -> dict:
-        """Create violin plot with categorical x and numeric y. Optional group/color: one trace per group."""
-        x = df_f[state.xcol].astype(str)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        """Create violin plot with categorical x (group_col) and numeric y. Optional color_grouping for nested grouping."""
+        # Use group_col for x-axis (categorical grouping)
+        x = df_f[state.group_col].astype(str)
+        y = self.data_processor.get_y_values(
+            df_f, state.ycol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
         tmp = pd.DataFrame({"x": x, "y": y}).dropna(subset=["x", "y"])
-        if state.group_col and state.group_col in df_f.columns:
-            tmp["g"] = df_f.loc[tmp.index, state.group_col].astype(str)
-            tmp = tmp.dropna(subset=["g"])
 
         fig = go.Figure()
-        if state.group_col and "g" in tmp.columns:
-            for group_value, sub in tmp.groupby("g", sort=True):
+        # Use Plotly's color parameter for nested grouping
+        if state.color_grouping and state.color_grouping in df_f.columns:
+            # Add color column to tmp dataframe
+            color_values = df_f.loc[tmp.index, state.color_grouping].astype(str)
+            tmp["color"] = color_values
+            tmp = tmp.dropna(subset=["color"])
+            # Plotly Violin expects color as a column name string, not a Series
+            # We'll create separate traces per color group to match the nested grouping pattern
+            for color_val, sub in tmp.groupby("color", sort=True):
                 fig.add_trace(go.Violin(
                     x=sub["x"],
                     y=sub["y"],
-                    name=str(group_value),
+                    name=str(color_val),
                     box_visible=True,
                     meanline_visible=True,
                     showlegend=state.show_legend,
                     line=dict(width=1.5),
                 ))
-            layout_legend_title = state.group_col
+            layout_legend_title = state.color_grouping
         else:
             fig.add_trace(go.Violin(
                 x=tmp["x"],
                 y=tmp["y"],
-                name=f"ROI {state.roi_id}",
+                name=f"ROI {state.roi_id}" if state.roi_id else "All ROIs",
                 box_visible=True,
                 meanline_visible=True,
                 showlegend=state.show_legend,
@@ -688,7 +745,7 @@ class FigureGenerator:
             layout_legend_title = None
         layout = dict(
             margin=dict(l=40, r=20, t=40, b=80),
-            xaxis_title=state.xcol,
+            xaxis_title=state.group_col,
             yaxis_title=state.ycol,
             showlegend=state.show_legend,
             xaxis=dict(tickangle=-30),
@@ -710,7 +767,10 @@ class FigureGenerator:
             return self._figure_scatter(df_f, state)
 
         g = df_f[state.group_col].astype(str)
-        y = self.data_processor.get_y_values(df_f, state.ycol, state.use_absolute_value)
+        y = self.data_processor.get_y_values(
+            df_f, state.ycol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        )
         tmp = pd.DataFrame({"group": g, "y": y}).dropna(subset=["group"])
 
         stat = state.ystat
@@ -743,7 +803,10 @@ class FigureGenerator:
 
         Uses x column (with optional abs); each curve is normalized to 0-1 within its group (or overall if no group).
         """
-        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value).dropna()
+        x = self.data_processor.get_x_values(
+            df_f, state.xcol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        ).dropna()
         if len(x) == 0:
             logger.warning("No valid data for cumulative histogram. Falling back to scatter plot.")
             return self._figure_scatter(df_f, state)
@@ -809,7 +872,10 @@ class FigureGenerator:
 
     def _figure_histogram(self, df_f: pd.DataFrame, state: PlotState) -> dict:
         """Create histogram of x column (with optional abs): one hist when group is (none), else one trace per group."""
-        x = self.data_processor.get_x_values(df_f, state.xcol, state.use_absolute_value).dropna()
+        x = self.data_processor.get_x_values(
+            df_f, state.xcol, state.use_absolute_value,
+            state.use_remove_values, state.remove_values_threshold
+        ).dropna()
         if len(x) == 0:
             logger.warning("No valid data for histogram. Falling back to scatter plot.")
             return self._figure_scatter(df_f, state)
