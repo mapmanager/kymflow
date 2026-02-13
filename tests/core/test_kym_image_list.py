@@ -411,3 +411,169 @@ def test_kym_image_list_smoke_test() -> None:
     assert image_list.get_radon_report() == []
     
     logger.info("  - Smoke test passed: inheritance structure works correctly")
+
+
+def test_kym_image_list_radon_report_cache_exists() -> None:
+    """Test that KymImageList has _radon_report_cache after init."""
+    image_list = KymImageList(path=None, file_extension=".tif")
+    assert hasattr(image_list, "_radon_report_cache")
+    assert image_list._radon_report_cache == {}
+
+
+def test_kym_image_list_get_radon_db_path_folder_mode() -> None:
+    """Test _get_radon_db_path returns path in folder mode."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "a.tif").touch()
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        db_path = image_list._get_radon_db_path()
+        assert db_path is not None
+        assert db_path.name == "radon_report_db.csv"
+        assert db_path.parent.resolve() == tmp_path.resolve()
+
+
+def test_kym_image_list_get_radon_db_path_single_file_returns_none() -> None:
+    """Test _get_radon_db_path returns None for single-file mode."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        image_list = KymImageList(path=test_file, file_extension=".tif")
+        db_path = image_list._get_radon_db_path()
+        assert db_path is None
+
+
+def test_kym_image_list_get_radon_db_path_empty_returns_none() -> None:
+    """Test _get_radon_db_path returns None for empty list."""
+    image_list = KymImageList(path=None, file_extension=".tif")
+    db_path = image_list._get_radon_db_path()
+    assert db_path is None
+
+
+def test_kym_image_list_get_radon_report_df_has_row_id() -> None:
+    """Test get_radon_report_df adds row_id column."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    from kymflow.core.image_loaders.roi import RoiBounds
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        kym_image._file_path_dict[1] = Path(test_file)
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        image_list.images = [kym_image]
+
+        df = image_list.get_radon_report_df()
+        assert "row_id" in df.columns
+        if len(df) > 0:
+            for _, row in df.iterrows():
+                rid = row["row_id"]
+                assert "|" in str(rid)
+                assert str(row["roi_id"]) in str(rid)
+
+
+def test_kym_image_list_update_radon_report_for_image() -> None:
+    """Test update_radon_report_for_image updates cache."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    from kymflow.core.image_loaders.roi import RoiBounds
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        kym_image._file_path_dict[1] = Path(test_file)
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        image_list.images = [kym_image]
+
+        image_list.update_radon_report_for_image(kym_image)
+        path_str = str(kym_image.path)
+        assert path_str in image_list._radon_report_cache
+        reports = image_list._radon_report_cache[path_str]
+        assert len(reports) >= 1
+        assert reports[0].roi_id == roi.id
+
+
+def test_kym_image_list_load_and_save_radon_report_db() -> None:
+    """Test load/save radon report DB when we have reports."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    from kymflow.core.image_loaders.roi import RoiBounds
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir).resolve()
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        kym_image._file_path_dict[1] = test_file
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        image_list.images = [kym_image]
+
+        reports = image_list.get_radon_report()
+        assert len(reports) >= 1
+        saved = image_list.save_radon_report_db()
+        assert saved is True
+        db_path = tmp_path / "radon_report_db.csv"
+        assert db_path.exists()
+
+        image_list2 = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        assert len(image_list2._radon_report_cache) >= 1
+
+
+def test_save_analysis_updates_radon_db_csv() -> None:
+    """End-to-end: mock data -> analyze_roi -> save_analysis -> update_radon_report -> DB has expected contents.
+
+    Ensures the radon DB CSV stays up to date when user saves KymAnalysis for an ROI
+    that has kym flow radon analysis.
+    """
+    import pandas as pd
+
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    from kymflow.core.image_loaders.roi import RoiBounds
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir).resolve()
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        kym_image._file_path_dict[1] = test_file
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        image_list.images = [kym_image]
+
+        # Simulate GUI save flow: save_analysis then update_radon_report_for_image
+        ka = kym_image.get_kym_analysis()
+        assert ka.is_dirty
+        success = ka.save_analysis()
+        assert success is True
+        image_list.update_radon_report_for_image(kym_image)
+
+        # Assert radon DB CSV exists and has expected contents
+        db_path = tmp_path / "radon_report_db.csv"
+        assert db_path.exists()
+
+        df = pd.read_csv(db_path)
+        expected_cols = {"roi_id", "vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "vel_cv", "rel_path"}
+        assert expected_cols.issubset(set(df.columns)), f"Missing columns: {expected_cols - set(df.columns)}"
+        assert len(df) >= 1
+
+        row = df.iloc[0]
+        assert row["roi_id"] == roi.id
+        assert "vel_mean" in df.columns and pd.notna(row["vel_mean"])
+        assert "vel_cv" in df.columns  # may be NaN if mean was 0

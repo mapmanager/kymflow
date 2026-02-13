@@ -6,7 +6,7 @@ analysis summary data for a single ROI.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, fields
 from typing import Any, Dict, Optional
 
 
@@ -25,6 +25,7 @@ class RadonReport:
         vel_mean: Mean velocity value (mm/s), or None if not available.
         vel_std: Standard deviation of velocity (mm/s), or None if not available.
         vel_se: Standard error of velocity (mm/s), or None if not available.
+        vel_cv: Coefficient of variation (std/mean), or None if mean is zero or unavailable.
         img_min: Minimum pixel value in ROI region, or None if not calculated.
         img_max: Maximum pixel value in ROI region, or None if not calculated.
         img_mean: Mean pixel value in ROI region, or None if not calculated.
@@ -33,6 +34,7 @@ class RadonReport:
         file_name: File name without extension, or None if not available.
         parent_folder: Parent folder name, or None if not available.
         grandparent_folder: Grandparent folder name, or None if not available.
+        rel_path: Path relative to base (folder root or file-list root), for portable CSV.
     """
     
     roi_id: int
@@ -41,6 +43,7 @@ class RadonReport:
     vel_mean: Optional[float] = None
     vel_std: Optional[float] = None
     vel_se: Optional[float] = None
+    vel_cv: Optional[float] = None
     img_min: Optional[int] = None
     img_max: Optional[int] = None
     img_mean: Optional[float] = None
@@ -49,6 +52,7 @@ class RadonReport:
     file_name: Optional[str] = None
     parent_folder: Optional[str] = None
     grandparent_folder: Optional[str] = None
+    rel_path: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a dictionary for JSON/CSV export.
@@ -70,33 +74,34 @@ class RadonReport:
         Returns:
             RadonReport instance with values from the dictionary.
         """
-        # Extract only known fields to ignore unknown keys
-        known_fields = {
-            "roi_id",
-            "vel_min", "vel_max", "vel_mean", "vel_std", "vel_se",
-            "img_min", "img_max", "img_mean", "img_std",
-            "path", "file_name", "parent_folder", "grandparent_folder",
-        }
+        # Use dataclass fields to derive field names dynamically
+        known_field_names = {f.name for f in fields(cls)}
         
+        def _is_none_or_nan(v: Any) -> bool:
+            if v is None:
+                return True
+            if isinstance(v, float) and v != v:  # NaN
+                return True
+            return False
+
         # Filter to only known fields and convert types
         filtered_data: Dict[str, Any] = {}
-        for key in known_fields:
+        for key in known_field_names:
             if key in data:
                 value = data[key]
+                if _is_none_or_nan(value):
+                    value = None
                 # Type conversions for robustness
                 if key == "roi_id":
                     filtered_data[key] = int(value) if value is not None else None
                 elif key in ["img_min", "img_max"]:
-                    # These are integers
                     filtered_data[key] = int(value) if value is not None else None
-                elif key in ["vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "img_mean", "img_std"]:
-                    # These are floats
+                elif key in ["vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "vel_cv", "img_mean", "img_std"]:
                     filtered_data[key] = float(value) if value is not None else None
                 else:
-                    # Strings (path, file_name, parent_folder, grandparent_folder)
+                    # Strings (path, file_name, parent_folder, grandparent_folder, rel_path)
                     filtered_data[key] = str(value) if value is not None else None
         
-        # Ensure roi_id is present (required field)
         if "roi_id" not in filtered_data:
             raise ValueError("roi_id is required in RadonReport.from_dict()")
         

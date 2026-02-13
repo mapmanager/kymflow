@@ -143,3 +143,24 @@ def test_save_selected_skips_when_not_dirty(
 
         # Should not call save_analysis when not dirty
         mock_save.assert_not_called()
+
+
+def test_save_selected_calls_update_radon_report_for_image(
+    bus: EventBus, app_state_with_file: tuple[AppState, KymImage]
+) -> None:
+    """Test that SaveController calls update_radon_report_for_image after successful save."""
+    app_state, kym_file = app_state_with_file
+    task_state = TaskState()
+    SaveController(app_state, task_state, bus)
+
+    kym_file.update_experiment_metadata(species="mouse")
+    assert kym_file.get_kym_analysis().is_dirty is True
+
+    with patch.object(kym_file.get_kym_analysis(), "save_analysis") as mock_save:
+        mock_save.return_value = True
+        with patch.object(
+            app_state.files, "update_radon_report_for_image"
+        ) as mock_update:
+            bus.emit(SaveSelected(phase="intent"))
+            mock_save.assert_called_once()
+            mock_update.assert_called_once_with(kym_file)

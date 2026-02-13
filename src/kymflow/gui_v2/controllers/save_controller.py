@@ -76,6 +76,8 @@ class SaveController:
         try:
             success = kym_analysis.save_analysis()
             if success:
+                if hasattr(self._app_state.files, "update_radon_report_for_image"):
+                    self._app_state.files.update_radon_report_for_image(kf)
                 ui.notify(f"Saved {kf.path.name}", color="positive")
                 self._app_state.refresh_file_rows()
             else:
@@ -109,6 +111,8 @@ class SaveController:
             try:
                 success = kym_analysis.save_analysis()
                 if success:
+                    if hasattr(self._app_state.files, "update_radon_report_for_image"):
+                        self._app_state.files.update_radon_report_for_image(kf)
                     saved_count += 1
                 else:
                     skipped_count += 1

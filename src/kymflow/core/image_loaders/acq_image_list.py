@@ -18,6 +18,7 @@ Refactor note:
 
 from __future__ import annotations
 
+import os
 import threading
 import warnings
 from pathlib import Path
@@ -69,6 +70,7 @@ class AcqImageList(Generic[T]):
         path: str | Path | None = None,
         *,
         file_path_list: list[str] | list[Path] | None = None,
+        csv_source_path: Path | None = None,
         image_cls: Type[T] = AcqImage,
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
@@ -111,6 +113,7 @@ class AcqImageList(Generic[T]):
         # Internal mode: directory scan vs single-file vs file_list
         self._single_file: Optional[Path] = None
         self._file_path_list: Optional[List[Path]] = None
+        self._csv_source_path: Optional[Path] = None
 
         # Handle file_path_list mode
         if file_path_list is not None:
@@ -141,6 +144,7 @@ class AcqImageList(Generic[T]):
             self._file_path_list = normalized_paths
             self._path: Optional[Path] = None
             self._folder: Optional[Path] = None
+            self._csv_source_path = Path(csv_source_path).resolve() if csv_source_path is not None else None
             
             # Automatically load files during initialization
             self._load_files(
@@ -207,6 +211,52 @@ class AcqImageList(Generic[T]):
         if self._single_file is not None:
             return "file"
         return "folder"
+
+    def _get_base_path(self) -> Optional[Path]:
+        """Get the base path for computing relative paths.
+        
+        Returns:
+            Base path for folder mode, file-list-from-CSV mode, or single-file mode.
+            None for empty list or file-list-from-in-memory when paths have no common ancestor.
+        """
+        if self._get_mode() == "folder" and self._folder is not None:
+            return self._folder
+        if self._get_mode() == "file" and self._folder is not None:
+            return self._folder
+        if self._get_mode() == "file_list" and self._csv_source_path is not None:
+            return self._csv_source_path.parent
+        if self._get_mode() == "file_list" and self.images:
+            try:
+                return Path(os.path.commonpath([str(img.path) for img in self.images if img.path]))
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def get_paths_with_rel_path(self) -> List[tuple[Path, str]]:
+        """Get (full_path, rel_path) for each image in list order.
+        
+        rel_path is relative to the base (folder root, CSV parent, or common ancestor).
+        Used for portable CSV export.
+        
+        Returns:
+            List of (Path, str) tuples.
+        """
+        base = self._get_base_path()
+        result: List[tuple[Path, str]] = []
+        for img in self.images:
+            if img.path is None:
+                result.append((Path(), ""))
+                continue
+            p = Path(img.path).resolve()
+            if base is not None:
+                try:
+                    rel = str(p.relative_to(base))
+                except ValueError:
+                    rel = p.name
+            else:
+                rel = p.name
+            result.append((p, rel))
+        return result
 
     def _normalized_ext(self) -> str:
         """Return normalized extension with leading dot (e.g. '.tif')."""
@@ -419,6 +469,7 @@ class AcqImageList(Generic[T]):
             )
             return cls(
                 file_path_list=file_path_list,
+                csv_source_path=path_obj,
                 image_cls=image_cls,
                 file_extension=file_extension,
                 ignore_file_stub=ignore_file_stub,

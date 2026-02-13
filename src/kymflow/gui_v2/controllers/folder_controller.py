@@ -288,7 +288,7 @@ class FolderController:
             except RuntimeError as e:
                 if "parent element" in str(e) or "slot" in str(e).lower():
                     # UI context is gone, skip notification
-                    logger.debug(f"Skipping notification - UI context deleted: {e}")
+                    logger.error(f"Skipping notification - UI context deleted: {e}")
                 else:
                     raise
 
@@ -299,7 +299,7 @@ class FolderController:
             except RuntimeError as e:
                 if "parent element" in str(e) or "slot" in str(e).lower():
                     # UI context is gone, skip notification
-                    logger.debug(f"Skipping notification - UI context deleted: {e}")
+                    logger.error(f"Skipping notification - UI context deleted: {e}")
                 else:
                     raise
             if previous_path:
@@ -316,7 +316,7 @@ class FolderController:
             except RuntimeError as e:
                 if "parent element" in str(e) or "slot" in str(e).lower():
                     # UI context is gone, skip notification
-                    logger.debug(f"Skipping notification - UI context deleted: {e}")
+                    logger.error(f"Skipping notification - UI context deleted: {e}")
                 else:
                     raise
             if previous_path:

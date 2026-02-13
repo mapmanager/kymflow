@@ -1261,3 +1261,81 @@ def test_acq_image_list_reload_deprecation_warning() -> None:
         
         logger.info("  - reload() emits deprecation warning correctly")
 
+
+def test_acq_image_list_get_base_path_folder_mode() -> None:
+    """Test _get_base_path in folder mode."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "file1.tif").touch()
+        image_list = AcqImageList(
+            path=tmp_path,
+            image_cls=AcqImage,
+            file_extension=".tif",
+        )
+        base = image_list._get_base_path()
+        assert base is not None
+        assert base.resolve() == tmp_path.resolve()
+
+
+def test_acq_image_list_get_base_path_file_mode() -> None:
+    """Test _get_base_path in single-file mode."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        image_list = AcqImageList(
+            path=test_file,
+            image_cls=AcqImage,
+            file_extension=".tif",
+        )
+        base = image_list._get_base_path()
+        assert base is not None
+        assert base.resolve() == tmp_path.resolve()
+
+
+def test_acq_image_list_get_base_path_empty() -> None:
+    """Test _get_base_path with empty list."""
+    image_list = AcqImageList(path=None, image_cls=AcqImage, file_extension=".tif")
+    base = image_list._get_base_path()
+    assert base is None
+
+
+def test_acq_image_list_get_paths_with_rel_path() -> None:
+    """Test get_paths_with_rel_path returns (path, rel_path) tuples."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "a.tif").touch()
+        (tmp_path / "b.tif").touch()
+        image_list = AcqImageList(
+            path=tmp_path,
+            image_cls=AcqImage,
+            file_extension=".tif",
+        )
+        paths_with_rel = image_list.get_paths_with_rel_path()
+        assert isinstance(paths_with_rel, list)
+        for item in paths_with_rel:
+            assert isinstance(item, tuple)
+            assert len(item) == 2
+            full_path, rel_path = item
+            assert isinstance(full_path, Path)
+            assert isinstance(rel_path, str)
+            assert rel_path in ("a.tif", "b.tif") or "tif" in rel_path
+
+
+def test_acq_image_list_csv_source_path_when_loading_from_csv() -> None:
+    """Test _csv_source_path is set when loading from CSV."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        csv_file = tmp_path / "file_list.csv"
+        tif1 = tmp_path / "a.tif"
+        tif1.touch()
+        csv_file.write_text("rel_path\na.tif\n", encoding="utf-8")
+        image_list = AcqImageList.load_from_path(
+            csv_file,
+            image_cls=AcqImage,
+            file_extension=".tif",
+        )
+        assert hasattr(image_list, "_csv_source_path")
+        assert image_list._csv_source_path is not None
+        assert image_list._csv_source_path.name == "file_list.csv"
+

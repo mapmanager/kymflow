@@ -1507,6 +1507,13 @@ class KymAnalysis:
         path = str(self.acq_image.path) if self.acq_image.path is not None else None
         file_name = self.acq_image.path.stem if self.acq_image.path is not None else None
         
+        parent_folder: Optional[str] = None
+        grandparent_folder: Optional[str] = None
+        if self.acq_image.path is not None and self.acq_image.path.parent:
+            parent_folder = self.acq_image.path.parent.name
+            if self.acq_image.path.parent.parent:
+                grandparent_folder = self.acq_image.path.parent.parent.name
+        
         for roi_id in roi_ids:
             # Fetch velocity data for this ROI
             velocity = self.get_analysis_value(roi_id, 'velocity')
@@ -1517,7 +1524,8 @@ class KymAnalysis:
             vel_mean: Optional[float] = None
             vel_std: Optional[float] = None
             vel_se: Optional[float] = None
-            
+            vel_cv: Optional[float] = None
+
             if velocity is None:
                 # No analysis data for this ROI
                 logger.warning(f"ROI {roi_id} has no velocity analysis data")
@@ -1532,7 +1540,10 @@ class KymAnalysis:
                     vel_max = float(np.nanmax(velocity))
                     vel_mean = float(np.nanmean(velocity))
                     vel_std = float(np.nanstd(velocity))
-                    
+                    # Coefficient of variation: cv = std/mean (None if mean is zero or very small)
+                    if vel_mean is not None and abs(vel_mean) > 1e-10 and vel_std is not None:
+                        vel_cv = vel_std / vel_mean
+
                     # Calculate standard error: SE = std / sqrt(n)
                     # Count only non-NaN values for n
                     n_valid = np.sum(~np.isnan(velocity))
@@ -1570,15 +1581,15 @@ class KymAnalysis:
                 vel_mean=vel_mean,
                 vel_std=vel_std,
                 vel_se=vel_se,
+                vel_cv=vel_cv,
                 img_min=img_min,
                 img_max=img_max,
                 img_mean=img_mean,
                 img_std=img_std,
                 path=path,
                 file_name=file_name,
-                # parent_folder and grandparent_folder are added by AcqImageList.get_radon_report()
-                parent_folder=None,
-                grandparent_folder=None,
+                parent_folder=parent_folder,
+                grandparent_folder=grandparent_folder,
             )
             
             report.append(radon_report)

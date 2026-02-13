@@ -129,12 +129,6 @@ class AcqImage:
         """
         try:
             parts = path.parts
-            # For absolute paths like /a/b/c/file.tif:
-            # parts = ['/', 'a', 'b', 'c', 'file.tif']
-            # parts[-1] is filename, parts[-2] is parent1, etc.
-            # For relative paths like a/b/c/file.tif:
-            # parts = ['a', 'b', 'c', 'file.tif']
-            # parts[-1] is filename, parts[-2] is parent1, etc.
             
             parent1 = None
             parent2 = None

@@ -696,8 +696,8 @@ def main() -> None:
     path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis/radon_report.csv'
 
     df = pd.read_csv(path)
-
-    # print(df.head())
+    if "row_id" not in df.columns and "path" in df.columns and "roi_id" in df.columns:
+        df["row_id"] = df["path"].astype(str) + "|" + df["roi_id"].astype(str)
 
     _setUpGuiDefaults()
     
@@ -718,7 +718,7 @@ def main() -> None:
     )
 
     default_plot_state = None
-    ctrl = PlotController(df, roi_id_col="roi_id", row_id_col="path", plot_state=default_plot_state)
+    ctrl = PlotController(df, roi_id_col="roi_id", row_id_col="row_id", plot_state=default_plot_state)
     ctrl.build()
     
     # Example: programmatically select a point by row_id

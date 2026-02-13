@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pandas as pd
+from dataclasses import replace as dataclass_replace
 
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
@@ -64,6 +65,7 @@ class KymImageList(AcqImageList[KymImage]):
         path: str | Path | None = None,
         *,
         file_path_list: list[str] | list[Path] | None = None,
+        csv_source_path: Path | None = None,
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
         depth: int = 1,
@@ -97,6 +99,7 @@ class KymImageList(AcqImageList[KymImage]):
         super().__init__(
             path=path,
             file_path_list=file_path_list,
+            csv_source_path=csv_source_path,
             image_cls=KymImage,  # Always KymImage, no parameter
             file_extension=file_extension,
             ignore_file_stub=ignore_file_stub,
@@ -105,6 +108,8 @@ class KymImageList(AcqImageList[KymImage]):
             cancel_event=cancel_event,
             progress_cb=progress_cb,
         )
+        self._radon_report_cache: Dict[str, List[RadonReport]] = {}
+        self._load_radon_report_db()
 
     @classmethod
     def load_from_path(
@@ -153,6 +158,7 @@ class KymImageList(AcqImageList[KymImage]):
             )
             return cls(
                 file_path_list=file_path_list,
+                csv_source_path=path_obj,
                 file_extension=file_extension,
                 ignore_file_stub=ignore_file_stub,
                 cancel_event=cancel_event,
@@ -247,90 +253,135 @@ class KymImageList(AcqImageList[KymImage]):
                     zero_gap_params=zero_gap_params,
                 )
     
+    def _get_radon_db_path(self) -> Optional[Path]:
+        """Path to radon_report_db.csv for current mode.
+        
+        Returns None for single-file mode, empty list, or file-list from in-memory list.
+        """
+        if self._get_mode() == "file":
+            return None
+        if self._get_mode() == "folder" and self._folder is not None:
+            return self._folder / "radon_report_db.csv"
+        if self._get_mode() == "file_list" and self._csv_source_path is not None:
+            return self._csv_source_path.parent / f"{self._csv_source_path.stem}_radon_report_db.csv"
+        return None
+
+    def _load_radon_report_db(self) -> None:
+        """Load radon report database from CSV if it exists."""
+        db_path = self._get_radon_db_path()
+        if db_path is None or not db_path.exists():
+            self._radon_report_cache = {}
+            return
+        try:
+            df = pd.read_csv(db_path)
+            base = self._get_base_path()
+            cache: Dict[str, List[RadonReport]] = {}
+            for _, row in df.iterrows():
+                d = row.to_dict()
+                path_val = d.get("path")
+                if pd.isna(path_val) or path_val is None or path_val == "":
+                    if base is not None and "rel_path" in d and d.get("rel_path"):
+                        path_val = str(base / str(d["rel_path"]))
+                    else:
+                        continue
+                path_str = str(path_val)
+                report = RadonReport.from_dict(d)
+                if path_str not in cache:
+                    cache[path_str] = []
+                cache[path_str].append(report)
+            self._radon_report_cache = cache
+        except Exception as e:
+            logger.warning(f"Failed to load radon report DB from {db_path}: {e}")
+            self._radon_report_cache = {}
+
+    def save_radon_report_db(self) -> bool:
+        """Persist radon report cache to CSV. Returns True if saved, False if no DB path."""
+        db_path = self._get_radon_db_path()
+        if db_path is None:
+            return False
+        reports = self.get_radon_report()
+        if not reports:
+            return False
+        report_dicts = [r.to_dict() for r in reports]
+        df = pd.DataFrame(report_dicts)
+        df.to_csv(db_path, index=False)
+        return True
+
+    def update_radon_report_for_image(self, kym_image: KymImage) -> None:
+        """Update radon report cache for one KymImage (e.g. after user saves analysis)."""
+        if kym_image.path is None:
+            return
+        path_str = str(kym_image.path)
+        try:
+            roi_reports = kym_image.get_kym_analysis().get_radon_report()
+            base = self._get_base_path()
+            rel_path = None
+            if base is not None and kym_image.path is not None:
+                try:
+                    base_res = Path(base).resolve()
+                    path_res = Path(kym_image.path).resolve()
+                    rel_path = str(path_res.relative_to(base_res))
+                except ValueError:
+                    rel_path = Path(kym_image.path).name
+            with_rel = [dataclass_replace(r, rel_path=rel_path) for r in roi_reports]
+            self._radon_report_cache[path_str] = with_rel
+            self.save_radon_report_db()
+        except Exception as e:
+            logger.warning(f"Failed to update radon report for {path_str}: {e}")
+
+    def _build_reports_from_images(self) -> List[RadonReport]:
+        """Build radon reports from images (delegate to KymAnalysis, add rel_path). Populates cache."""
+        master_report: List[RadonReport] = []
+        base = self._get_base_path()
+        for image in self.images:
+            try:
+                roi_reports = image.get_kym_analysis().get_radon_report()
+                rel_path = None
+                if base is not None and image.path is not None:
+                    try:
+                        base_res = Path(base).resolve()
+                        path_res = Path(image.path).resolve()
+                        rel_path = str(path_res.relative_to(base_res))
+                    except ValueError:
+                        rel_path = Path(image.path).name
+                with_rel = [dataclass_replace(r, rel_path=rel_path) for r in roi_reports]
+                if image.path is not None:
+                    self._radon_report_cache[str(image.path)] = with_rel
+                master_report.extend(with_rel)
+            except Exception as e:
+                logger.warning(f"Failed to generate radon report for image {image.path}: {e}")
+        return master_report
+
     def get_radon_report(self) -> List[RadonReport]:
         """Generate aggregated radon velocity analysis summary report for all KymImage files.
         
-        Iterates through all images in the list and calls get_radon_report() on each
-        KymImage's KymAnalysis. Combines all reports into a single master list.
+        Uses cached reports when available; otherwise builds from KymAnalysis per image
+        and adds rel_path. Order follows self.images.
         
         Returns:
-            List of RadonReport instances, one per ROI across all images. Each report
-            contains velocity statistics, ROI image statistics, and file metadata including
-            parent_folder and grandparent_folder.
-            
-        Note:
-            This method does not require image data to be loaded - it works on KymImage
-            instances that have analysis data available. However, ROI image statistics
-            (img_min, img_max, etc.) may be None if not calculated.
+            List of RadonReport instances, one per ROI across all images.
         """
-        master_report: List[RadonReport] = []
-        
-        for image in self.images:
-            try:
-                # Get KymAnalysis instance for this image
-                kym_analysis = image.get_kym_analysis()
-                
-                # Get radon report for all ROIs in this image
-                roi_reports = kym_analysis.get_radon_report()
-                
-                # Calculate parent and grandparent folder information
-                if image.path is not None:
-                    parent_folder = image.path.parent.name if image.path.parent else None
-                    grandparent_folder = (
-                        image.path.parent.parent.name 
-                        if image.path.parent and image.path.parent.parent 
-                        else None
-                    )
-                else:
-                    parent_folder = None
-                    grandparent_folder = None
-                
-                # Update each RadonReport with folder metadata
-                # Since RadonReport is frozen, we need to create new instances
-                for roi_report in roi_reports:
-                    # Create new RadonReport with updated folder information
-                    updated_report = RadonReport(
-                        roi_id=roi_report.roi_id,
-                        vel_min=roi_report.vel_min,
-                        vel_max=roi_report.vel_max,
-                        vel_mean=roi_report.vel_mean,
-                        vel_std=roi_report.vel_std,
-                        vel_se=roi_report.vel_se,
-                        img_min=roi_report.img_min,
-                        img_max=roi_report.img_max,
-                        img_mean=roi_report.img_mean,
-                        img_std=roi_report.img_std,
-                        path=roi_report.path,
-                        file_name=roi_report.file_name,
-                        parent_folder=parent_folder,
-                        grandparent_folder=grandparent_folder,
-                    )
-                    master_report.append(updated_report)
-                
-            except Exception as e:
-                # Log error but continue processing other images
-                logger.warning(
-                    f"Failed to generate radon report for image {image.path}: {e}"
-                )
-                continue
-        
-        return master_report
-    
+        if self._radon_report_cache:
+            master: List[RadonReport] = []
+            for image in self.images:
+                if image.path is None:
+                    continue
+                reports = self._radon_report_cache.get(str(image.path), [])
+                master.extend(reports)
+            return master
+        return self._build_reports_from_images()
+
     def get_radon_report_df(self) -> pd.DataFrame:
         """Get radon velocity analysis summary report as a pandas DataFrame.
         
-        Convenience method that calls get_radon_report() and converts the result
-        to a pandas DataFrame. Each row represents one ROI with all its statistics
-        and metadata.
-        
-        Returns:
-            pandas DataFrame with columns corresponding to RadonReport fields:
+        Includes row_id column (path|roi_id) for unique row identification.
         """
         reports = self.get_radon_report()
-        
-        # Convert list of RadonReport instances to list of dicts, then to DataFrame
-        # Using to_dict() method for proper serialization
-        report_dicts = [report.to_dict() for report in reports]
-        
+        report_dicts = [r.to_dict() for r in reports]
         df = pd.DataFrame(report_dicts)
+        if not df.empty and "path" in df.columns and "roi_id" in df.columns:
+            df["row_id"] = df.apply(
+                lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
+                axis=1,
+            )
         return df
