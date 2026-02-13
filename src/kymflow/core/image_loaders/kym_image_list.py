@@ -252,8 +252,6 @@ class KymImageList(AcqImageList[KymImage]):
         
         Iterates through all images in the list and calls get_radon_report() on each
         KymImage's KymAnalysis. Combines all reports into a single master list.
-        Since all images are guaranteed to be KymImage instances, we can directly
-        call get_kym_analysis() without hasattr checks.
         
         Returns:
             List of RadonReport instances, one per ROI across all images. Each report
@@ -327,13 +325,6 @@ class KymImageList(AcqImageList[KymImage]):
         
         Returns:
             pandas DataFrame with columns corresponding to RadonReport fields:
-            - roi_id, vel_min, vel_max, vel_mean, vel_std, vel_se
-            - img_min, img_max, img_mean, img_std
-            - path, file_name, parent_folder, grandparent_folder
-            
-        Note:
-            Requires pandas to be installed. None values in the reports are preserved
-            as NaN in the DataFrame.
         """
         reports = self.get_radon_report()
         
