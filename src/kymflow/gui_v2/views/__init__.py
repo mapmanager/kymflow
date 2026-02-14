@@ -27,6 +27,7 @@ from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
 from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
+from kymflow.gui_v2.views.plot_pool_bindings import PlotPoolBindings  # 20260213ppc
 from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
 
 __all__ = [
@@ -55,5 +56,6 @@ __all__ = [
     "LinePlotControlsBindings",
     "MetadataExperimentalBindings",
     "MetadataHeaderBindings",
+    "PlotPoolBindings",  # 20260213ppc
     "TaskProgressBindings",
 ]

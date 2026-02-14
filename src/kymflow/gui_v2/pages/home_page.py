@@ -57,10 +57,14 @@ from kymflow.gui_v2.views import (
     MetadataHeaderView,
     MetadataTabView,
     OptionsTabView,
+    PlotPoolBindings,  # 20260213ppc
     TaskProgressBindings,
     TaskProgressView,
 )
 from kymflow.core.utils.logging import get_logger
+from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
+from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolController  # 20260213ppc
+
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
@@ -153,6 +157,9 @@ class HomePage(BasePage):
         self._folder_bindings: FolderSelectorBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
         self._event_bindings: KymEventBindings | None = None
+        # 20260213ppc: Plot pool controller ref (set when LazySection render runs)
+        self._plot_pool_controller_ref: dict = {"value": None}
+        self._plot_pool_bindings: PlotPoolBindings | None = None
 
         # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
@@ -314,8 +321,100 @@ class HomePage(BasePage):
         self._drawer_metadata_header_bindings = MetadataHeaderBindings(
             self.bus, self._drawer_metadata_header_view
         )
+        # 20260213ppc: Plot pool bindings (FileSelection, FileListChanged, RadonReportUpdated, AnalysisCompleted)
+        self._plot_pool_bindings = PlotPoolBindings(
+            self.bus,
+            self._plot_pool_controller_ref,
+            app_state=self.context.app_state,
+            refresh_callback=self._refresh_plot_pool_content,
+        )
 
         self._setup_complete = True
+
+    def _refresh_plot_pool_content(self) -> None:
+        """Refresh plot pool with radon data. Unified handler for FileListChanged and RadonReportUpdated.
+
+        20260213ppc: If controller exists (section open), calls update_df. Else rebuilds section.
+        """
+        if not hasattr(self, "_plot_pool_container") or self._plot_pool_container is None:
+            return
+        ctrl = self._plot_pool_controller_ref.get("value")
+        if ctrl is not None:
+            # Section is open: update in place
+            app_state = self.context.app_state
+            if not hasattr(app_state.files, "get_radon_report_df"):
+                return
+            try:
+                df = app_state.files.get_radon_report_df()
+            except Exception as ex:
+                logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+                return
+            if df is None or df.empty or "_unique_id" not in df.columns:
+                return
+            try:
+                ctrl.update_df(df)
+            except Exception as ex:
+                logger.warning("20260213ppc plot pool update_df failed: %s", ex)
+        else:
+            # Section is closed or never opened: rebuild
+            self._plot_pool_container.clear()
+            with self._plot_pool_container:
+                self._build_plot_pool_lazy_section()
+
+    def _build_plot_pool_lazy_section(self):  # 20260213ppc
+        """Build PlotPoolController in LazySection, or placeholder if no data. Starts minimized."""
+        # 20260213ppc
+        app_state = self.context.app_state
+        has_data = False
+        if hasattr(app_state.files, "get_radon_report_df"):
+            try:
+                df = app_state.files.get_radon_report_df()
+                has_data = (
+                    df is not None
+                    and not df.empty
+                    and hasattr(df, "columns")
+                    and "_unique_id" in df.columns
+                )
+            except Exception as ex:
+                logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+
+        if not has_data:
+            with ui.expansion("Pool Plot (Radon)", value=False).classes("w-full"):  # 20260213ppc
+                ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+            return
+
+        def render_fn(container):
+            self._plot_pool_controller_ref["value"] = None
+            try:
+                df = app_state.files.get_radon_report_df()
+            except Exception as ex:
+                logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+                with container:
+                    ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+                return
+            if df is None or df.empty or "_unique_id" not in df.columns:
+                with container:
+                    ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+                return
+            ctrl = PlotPoolController(
+                df,
+                pre_filter_columns=["roi_id"],
+                unique_row_id_col="_unique_id",
+                on_table_row_selected=self._on_plot_pool_row_selected,
+            )
+            ctrl.build(container=container)
+            self._plot_pool_controller_ref["value"] = ctrl
+
+        from nicewidgets.plot_pool_widget.lazy_section import LazySection
+        LazySection(
+            "Pool Plot (Radon)",  # 20260213ppc
+            render_fn=render_fn,
+            config=LazySectionConfig(render_once=False, clear_on_close=True, show_spinner=True),
+        )
+
+    def _on_plot_pool_row_selected(self, row_id: str, row_dict: dict) -> None:
+        """Callback when user selects a row in PlotPoolController table. 20260213ppc"""
+        logger.info("20260213ppc on_table_row_selected row_id=%s row_dict_keys=%s", row_id, list(row_dict.keys()) if row_dict else [])
 
     def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
         """Callback when splitter pane filter controls change - applies filters to plot."""
@@ -658,21 +757,36 @@ class HomePage(BasePage):
                                 self._image_line_viewer.set_selected_roi(current_roi)
                             self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
 
-                        # BOTTOM: Event table
+                        # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:
-                            self._event_view.render()
-                            current_file = self.context.app_state.selected_file
-                            if current_file is not None:
-                                blinded = self.context.app_config.get_blinded() if self.context.app_config else False
-                                report = current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
-                                self._event_view.set_events(report)
-                            current_roi = self.context.app_state.selected_roi_id
-                            if current_roi is not None:
-                                self._event_view.set_selected_roi(current_roi)
-                            # Wire up event filter callback to refresh plot
-                            self._event_view._on_event_filter_changed = lambda filter: self._image_line_viewer.set_event_filter(filter)
-                            # Sync initial filter state from event view to image line viewer
-                            self._image_line_viewer.set_event_filter(self._event_view._event_filter)
+                            events_plot_splitter_val = 55.0  # % for events, rest for plot pool
+                            with ui.splitter(
+                                value=events_plot_splitter_val,
+                                limits=(0, 85),  # 0 allows Kym Event view to be fully collapsed
+                                horizontal=True,
+                            ).classes("w-full flex-1 min-h-0") as events_plot_splitter:
+                                # Events pane (left)
+                                with events_plot_splitter.before:
+                                    with ui.column().classes("w-full h-full min-h-0 flex flex-col"):
+                                        self._event_view.render()
+                                        current_file = self.context.app_state.selected_file
+                                        if current_file is not None:
+                                            blinded = self.context.app_config.get_blinded() if self.context.app_config else False
+                                            report = current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
+                                            self._event_view.set_events(report)
+                                        current_roi = self.context.app_state.selected_roi_id
+                                        if current_roi is not None:
+                                            self._event_view.set_selected_roi(current_roi)
+                                        # Wire up event filter callback to refresh plot
+                                        self._event_view._on_event_filter_changed = lambda filter: self._image_line_viewer.set_event_filter(filter)
+                                        # Sync initial filter state from event view to image line viewer
+                                        self._image_line_viewer.set_event_filter(self._event_view._event_filter)
+                                # Plot pool pane (right) - 20260213ppc
+                                with events_plot_splitter.after:
+                                    self._plot_pool_container = ui.column().classes(
+                                        "w-full h-full min-h-0 flex flex-col overflow-auto"
+                                    )
+                                    self._refresh_plot_pool_content()
 
                         # Draw a small visual handle on the nested splitter separator.
                         with plot_splitter.separator:

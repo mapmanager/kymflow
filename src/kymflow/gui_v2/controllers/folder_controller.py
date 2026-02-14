@@ -353,6 +353,8 @@ class FolderController:
             prefix = "Reading CSV"
         elif msg.phase == "wrap":
             prefix = "Preparing files"
+        elif msg.phase == "rebuild_radon_db":
+            prefix = "Rebuilding radon database"
         elif msg.phase == "done":
             prefix = "Done"
         else:

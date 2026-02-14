@@ -18,6 +18,17 @@ else:
     from kymflow.core.plotting.theme import ThemeMode
 
 
+@dataclass(frozen=True)
+class RadonReportUpdated:
+    """Emitted when _radon_report_cache is updated (e.g. Analyze Flow complete).
+
+    Signals that radon df may have changed. Plot pool subscribes to refresh.
+    Does NOT imply CSV was persisted (that happens only on explicit Save).
+    """
+
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class FileListChanged:
     """AppState file list change notification.

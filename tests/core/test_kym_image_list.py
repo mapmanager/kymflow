@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import shutil
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
@@ -451,7 +452,7 @@ def test_kym_image_list_get_radon_db_path_empty_returns_none() -> None:
 
 
 def test_kym_image_list_get_radon_report_df_has_row_id() -> None:
-    """Test get_radon_report_df adds row_id column."""
+    """Test get_radon_report_df adds row_id and _unique_id columns."""
     test_image = np.zeros((100, 100), dtype=np.uint16)
     kym_image = KymImage(img_data=test_image, load_image=False)
     kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
@@ -461,20 +462,23 @@ def test_kym_image_list_get_radon_report_df_has_row_id() -> None:
     kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir)
+        tmp_path = Path(tmpdir).resolve()
         test_file = tmp_path / "test.tif"
         test_file.touch()
-        kym_image._file_path_dict[1] = Path(test_file)
+        kym_image._file_path_dict[1] = test_file
+        kym_image.get_kym_analysis().save_analysis()
         image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
-        image_list.images = [kym_image]
 
         df = image_list.get_radon_report_df()
         assert "row_id" in df.columns
+        assert "_unique_id" in df.columns
         if len(df) > 0:
             for _, row in df.iterrows():
                 rid = row["row_id"]
+                uid = row["_unique_id"]
                 assert "|" in str(rid)
                 assert str(row["roi_id"]) in str(rid)
+                assert uid == rid
 
 
 def test_kym_image_list_update_radon_report_for_image() -> None:
@@ -518,8 +522,8 @@ def test_kym_image_list_load_and_save_radon_report_db() -> None:
         test_file = tmp_path / "test.tif"
         test_file.touch()
         kym_image._file_path_dict[1] = test_file
+        kym_image.get_kym_analysis().save_analysis()
         image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
-        image_list.images = [kym_image]
 
         reports = image_list.get_radon_report()
         assert len(reports) >= 1
@@ -527,9 +531,12 @@ def test_kym_image_list_load_and_save_radon_report_db() -> None:
         assert saved is True
         db_path = tmp_path / "radon_report_db.csv"
         assert db_path.exists()
+        saved_df = pd.read_csv(db_path)
+        assert "_unique_id" in saved_df.columns
 
         image_list2 = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
         assert len(image_list2._radon_report_cache) >= 1
+        assert len(image_list2.get_radon_report()) >= 1
 
 
 def test_save_analysis_updates_radon_db_csv() -> None:
@@ -577,3 +584,68 @@ def test_save_analysis_updates_radon_db_csv() -> None:
         assert row["roi_id"] == roi.id
         assert "vel_mean" in df.columns and pd.notna(row["vel_mean"])
         assert "vel_cv" in df.columns  # may be NaN if mean was 0
+
+
+def test_radon_db_no_file_build_and_save() -> None:
+    """No DB file on load: build entire DB and save (same worker, progress)."""
+    import pandas as pd
+
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    from kymflow.core.image_loaders.roi import RoiBounds
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir).resolve()
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        kym_image._file_path_dict[1] = test_file
+        kym_image.get_kym_analysis().save_analysis()
+
+        db_path = tmp_path / "radon_report_db.csv"
+        assert not db_path.exists(), "DB should not exist before load"
+
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+
+        assert db_path.exists()
+        df = pd.read_csv(db_path)
+        assert "vel_cv" in df.columns
+        assert len(df) >= 1
+        assert df.iloc[0]["roi_id"] == roi.id
+
+
+def test_radon_db_stale_rebuild_and_save() -> None:
+    """Stale DB (missing vel_cv): rebuild and save (same worker, progress)."""
+    import pandas as pd
+
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+    from kymflow.core.image_loaders.roi import RoiBounds
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir).resolve()
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+        kym_image._file_path_dict[1] = test_file
+        kym_image.get_kym_analysis().save_analysis()
+
+        old_db = tmp_path / "radon_report_db.csv"
+        pd.DataFrame(
+            [{"roi_id": roi.id, "vel_mean": 1.0, "vel_min": 0.1, "vel_max": 2.0, "rel_path": "test.tif"}]
+        ).to_csv(old_db, index=False)
+        assert "vel_cv" not in pd.read_csv(old_db).columns
+
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+
+        df = pd.read_csv(old_db)
+        assert "vel_cv" in df.columns
+        assert len(df) >= 1

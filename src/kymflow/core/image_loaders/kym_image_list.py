@@ -16,17 +16,17 @@ Modes:
 from __future__ import annotations
 
 import threading
+from dataclasses import fields, replace as dataclass_replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pandas as pd
-from dataclasses import replace as dataclass_replace
 
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.radon_report import RadonReport
 from kymflow.core.utils.logging import get_logger
-from kymflow.core.utils.progress import ProgressCallback
+from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import (
@@ -109,7 +109,7 @@ class KymImageList(AcqImageList[KymImage]):
             progress_cb=progress_cb,
         )
         self._radon_report_cache: Dict[str, List[RadonReport]] = {}
-        self._load_radon_report_db()
+        self._load_radon_report_db(progress_cb=progress_cb, cancel_event=cancel_event)
 
     @classmethod
     def load_from_path(
@@ -266,33 +266,79 @@ class KymImageList(AcqImageList[KymImage]):
             return self._csv_source_path.parent / f"{self._csv_source_path.stem}_radon_report_db.csv"
         return None
 
-    def _load_radon_report_db(self) -> None:
-        """Load radon report database from CSV if it exists."""
+    def _load_radon_report_db(
+        self,
+        progress_cb: ProgressCallback | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
+        """Load radon report database from CSV if it exists; rebuild if missing or stale."""
         db_path = self._get_radon_db_path()
-        if db_path is None or not db_path.exists():
-            self._radon_report_cache = {}
+        if db_path is None:
             return
-        try:
-            df = pd.read_csv(db_path)
-            base = self._get_base_path()
-            cache: Dict[str, List[RadonReport]] = {}
-            for _, row in df.iterrows():
-                d = row.to_dict()
-                path_val = d.get("path")
-                if pd.isna(path_val) or path_val is None or path_val == "":
-                    if base is not None and "rel_path" in d and d.get("rel_path"):
-                        path_val = str(base / str(d["rel_path"]))
-                    else:
-                        continue
-                path_str = str(path_val)
-                report = RadonReport.from_dict(d)
-                if path_str not in cache:
-                    cache[path_str] = []
-                cache[path_str].append(report)
-            self._radon_report_cache = cache
-        except Exception as e:
-            logger.warning(f"Failed to load radon report DB from {db_path}: {e}")
-            self._radon_report_cache = {}
+
+        need_rebuild = False
+        rebuild_reason = ""
+        if db_path.exists():
+            try:
+                df = pd.read_csv(db_path)
+                expected_cols = {f.name for f in fields(RadonReport)}
+                missing = expected_cols - set(df.columns)
+                if missing:
+                    need_rebuild = True
+                    rebuild_reason = "schema was stale"
+                else:
+                    base = self._get_base_path()
+                    cache: Dict[str, List[RadonReport]] = {}
+                    for _, row in df.iterrows():
+                        d = row.to_dict()
+                        path_val = d.get("path")
+                        if pd.isna(path_val) or path_val is None or path_val == "":
+                            if base is not None and "rel_path" in d and d.get("rel_path"):
+                                path_val = str(base / str(d["rel_path"]))
+                            else:
+                                continue
+                        path_str = str(path_val)
+                        report = RadonReport.from_dict(d)
+                        if path_str not in cache:
+                            cache[path_str] = []
+                        cache[path_str].append(report)
+                    self._radon_report_cache = cache
+            except Exception as e:
+                logger.warning(f"Failed to load radon report DB from {db_path}: {e}")
+                need_rebuild = True
+                rebuild_reason = "load failed"
+        else:
+            need_rebuild = True
+            rebuild_reason = "no DB file"
+
+        if need_rebuild:
+            n = len(self.images)
+            if progress_cb is not None:
+                progress_cb(
+                    ProgressMessage(
+                        phase="rebuild_radon_db",
+                        done=0,
+                        total=n,
+                        detail="Rebuilding radon database...",
+                    )
+                )
+            self._build_reports_from_images(
+                progress_cb=progress_cb,
+                cancel_event=cancel_event,
+            )
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            self.save_radon_report_db()
+            logger.info("Radon DB load complete (rebuilt from images: %s)", rebuild_reason)
+            if progress_cb is not None and n > 0:
+                progress_cb(
+                    ProgressMessage(
+                        phase="rebuild_radon_db",
+                        done=n,
+                        total=n,
+                        detail="Done",
+                    )
+                )
 
     def save_radon_report_db(self) -> bool:
         """Persist radon report cache to CSV. Returns True if saved, False if no DB path."""
@@ -304,11 +350,23 @@ class KymImageList(AcqImageList[KymImage]):
             return False
         report_dicts = [r.to_dict() for r in reports]
         df = pd.DataFrame(report_dicts)
+        if not df.empty and "path" in df.columns and "roi_id" in df.columns:
+            df["_unique_id"] = df.apply(
+                lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
+                axis=1,
+            )
+        logger.info(f"Saving radon report DB to:")
+        logger.info(f"  {db_path}")
+        print(df.head())
+
         df.to_csv(db_path, index=False)
         return True
 
-    def update_radon_report_for_image(self, kym_image: KymImage) -> None:
-        """Update radon report cache for one KymImage (e.g. after user saves analysis)."""
+    def update_radon_report_cache_only(self, kym_image: KymImage) -> None:
+        """Update radon report cache in memory only (e.g. after Analyze Flow completes).
+
+        Does NOT persist to CSV. Use update_radon_report_for_image when user explicitly saves.
+        """
         if kym_image.path is None:
             return
         path_str = str(kym_image.path)
@@ -325,15 +383,29 @@ class KymImageList(AcqImageList[KymImage]):
                     rel_path = Path(kym_image.path).name
             with_rel = [dataclass_replace(r, rel_path=rel_path) for r in roi_reports]
             self._radon_report_cache[path_str] = with_rel
-            self.save_radon_report_db()
         except Exception as e:
-            logger.warning(f"Failed to update radon report for {path_str}: {e}")
+            logger.warning(f"Failed to update radon report cache for {path_str}: {e}")
 
-    def _build_reports_from_images(self) -> List[RadonReport]:
+    def update_radon_report_for_image(self, kym_image: KymImage) -> None:
+        """Update radon report cache and persist to CSV (e.g. after user saves analysis)."""
+        if kym_image.path is None:
+            return
+        self.update_radon_report_cache_only(kym_image)
+        self.save_radon_report_db()
+
+    def _build_reports_from_images(
+        self,
+        progress_cb: ProgressCallback | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> List[RadonReport]:
         """Build radon reports from images (delegate to KymAnalysis, add rel_path). Populates cache."""
         master_report: List[RadonReport] = []
         base = self._get_base_path()
-        for image in self.images:
+        n = len(self.images)
+        progress_every = max(1, n // 20) if n > 0 else 1
+        for i, image in enumerate(self.images):
+            if cancel_event is not None and cancel_event.is_set():
+                raise CancelledError("Cancelled during radon DB rebuild")
             try:
                 roi_reports = image.get_kym_analysis().get_radon_report()
                 rel_path = None
@@ -350,6 +422,16 @@ class KymImageList(AcqImageList[KymImage]):
                 master_report.extend(with_rel)
             except Exception as e:
                 logger.warning(f"Failed to generate radon report for image {image.path}: {e}")
+            if progress_cb is not None and n > 0:
+                if (i + 1) % progress_every == 0 or (i + 1) == n:
+                    progress_cb(
+                        ProgressMessage(
+                            phase="rebuild_radon_db",
+                            done=i + 1,
+                            total=n,
+                            detail=f"{i + 1}/{n}",
+                        )
+                    )
         return master_report
 
     def get_radon_report(self) -> List[RadonReport]:
@@ -374,14 +456,16 @@ class KymImageList(AcqImageList[KymImage]):
     def get_radon_report_df(self) -> pd.DataFrame:
         """Get radon velocity analysis summary report as a pandas DataFrame.
         
-        Includes row_id column (path|roi_id) for unique row identification.
+        Includes _unique_id (path|roi_id) and row_id for unique row identification.
         """
         reports = self.get_radon_report()
         report_dicts = [r.to_dict() for r in reports]
         df = pd.DataFrame(report_dicts)
         if not df.empty and "path" in df.columns and "roi_id" in df.columns:
-            df["row_id"] = df.apply(
+            unique_id = df.apply(
                 lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
                 axis=1,
             )
+            df["_unique_id"] = unique_id
+            df["row_id"] = unique_id
         return df
