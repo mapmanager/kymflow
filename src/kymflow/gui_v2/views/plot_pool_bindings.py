@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection
-from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged, RadonReportUpdated
+from kymflow.gui_v2.events_state import (
+    AnalysisCompleted,
+    FileListChanged,
+    RadonReportUpdated,
+    VelocityEventDbUpdated,
+)
 from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,34 +40,43 @@ class PlotPoolBindings:
         *,
         app_state: AppState | None = None,
         refresh_callback: Callable[[], None] | None = None,
+        plot_pool_velocity_controller_ref: dict[str, Any] | None = None,
+        refresh_velocity_callback: Callable[[], None] | None = None,
     ) -> None:
         """Initialize bindings.
 
         Args:
             bus: Event bus to subscribe to.
-            controller_ref: Dict with 'value' key holding PlotPoolController or None.
-                Set by HomePage when LazySection render_fn creates the controller.
+            controller_ref: Dict with 'value' key holding PlotPoolController (Radon) or None.
             app_state: AppState for accessing files (needed for update_radon_report_cache_only
                 on AnalysisCompleted). If None, AnalysisCompleted path is no-op.
             refresh_callback: Called when FileListChanged or RadonReportUpdated fires.
-                Use to update the plot pool section with fresh radon data.
+            plot_pool_velocity_controller_ref: Dict for velocity events PlotPoolController.
+            refresh_velocity_callback: Called when VelocityEventDbUpdated or FileListChanged fires.
         """
         self._bus = bus
         self._controller_ref = controller_ref
         self._app_state = app_state
         self._refresh_callback = refresh_callback
+        self._plot_pool_velocity_controller_ref = plot_pool_velocity_controller_ref
+        self._refresh_velocity_callback = refresh_velocity_callback
         self._subscribed = False
 
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         if refresh_callback is not None:
             bus.subscribe(FileListChanged, self._on_radon_data_changed)
             bus.subscribe(RadonReportUpdated, self._on_radon_data_changed)
+        if refresh_velocity_callback is not None:
+            bus.subscribe(VelocityEventDbUpdated, self._on_velocity_data_changed)
+            bus.subscribe(FileListChanged, self._on_velocity_data_changed)
         if app_state is not None and refresh_callback is not None:
             bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._subscribed = True
         subs = ["FileSelection"]
         if refresh_callback:
             subs.extend(["FileListChanged", "RadonReportUpdated"])
+        if refresh_velocity_callback:
+            subs.extend(["VelocityEventDbUpdated", "FileListChanged"])
         if app_state and refresh_callback:
             subs.append("AnalysisCompleted")
         logger.info("20260213ppc PlotPoolBindings subscribed to %s", ", ".join(subs))
@@ -75,9 +89,20 @@ class PlotPoolBindings:
         if self._refresh_callback is not None:
             self._bus.unsubscribe(FileListChanged, self._on_radon_data_changed)
             self._bus.unsubscribe(RadonReportUpdated, self._on_radon_data_changed)
+        if self._refresh_velocity_callback is not None:
+            self._bus.unsubscribe(VelocityEventDbUpdated, self._on_velocity_data_changed)
+            self._bus.unsubscribe(FileListChanged, self._on_velocity_data_changed)
         if self._app_state is not None and self._refresh_callback is not None:
             self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._subscribed = False
+
+    def _on_velocity_data_changed(self, _e: FileListChanged | VelocityEventDbUpdated) -> None:
+        """On FileListChanged or VelocityEventDbUpdated: refresh velocity plot pool."""
+        if self._refresh_velocity_callback is not None:
+            try:
+                self._refresh_velocity_callback()
+            except Exception as ex:
+                logger.warning("velocity plot pool refresh_callback failed: %s", ex)
 
     def _on_radon_data_changed(self, _e: FileListChanged | RadonReportUpdated) -> None:
         """On FileListChanged or RadonReportUpdated: refresh plot pool with radon data."""

@@ -29,6 +29,16 @@ class RadonReportUpdated:
     pass
 
 
+@dataclass(frozen=True)
+class VelocityEventDbUpdated:
+    """Emitted when velocity event db cache is updated (e.g. detect events, save).
+
+    Signals that velocity event df may have changed. Velocity plot pool subscribes to refresh.
+    """
+
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class FileListChanged:
     """AppState file list change notification.

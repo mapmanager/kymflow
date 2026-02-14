@@ -14,6 +14,7 @@ from kymflow.core.state import TaskState
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import SaveAll, SaveSelected
+from kymflow.gui_v2.events_state import VelocityEventDbUpdated
 from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ class SaveController:
         """
         self._app_state: AppState = app_state
         self._task_state: TaskState = task_state
+        self._bus: EventBus = bus
         bus.subscribe_intent(SaveSelected, self._on_save_selected)
         bus.subscribe_intent(SaveAll, self._on_save_all)
 
@@ -78,6 +80,9 @@ class SaveController:
             if success:
                 if hasattr(self._app_state.files, "update_radon_report_for_image"):
                     self._app_state.files.update_radon_report_for_image(kf)
+                if hasattr(self._app_state.files, "update_velocity_event_for_image"):
+                    self._app_state.files.update_velocity_event_for_image(kf)
+                    self._bus.emit(VelocityEventDbUpdated())
                 ui.notify(f"Saved {kf.path.name}", color="positive")
                 self._app_state.refresh_file_rows()
             else:
@@ -113,6 +118,9 @@ class SaveController:
                 if success:
                     if hasattr(self._app_state.files, "update_radon_report_for_image"):
                         self._app_state.files.update_radon_report_for_image(kf)
+                    if hasattr(self._app_state.files, "update_velocity_event_for_image"):
+                        self._app_state.files.update_velocity_event_for_image(kf)
+                        self._bus.emit(VelocityEventDbUpdated())
                     saved_count += 1
                 else:
                     skipped_count += 1

@@ -25,6 +25,7 @@ import pandas as pd
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.radon_report import RadonReport
+from kymflow.core.image_loaders.velocity_event_db import VelocityEventDb
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
@@ -110,6 +111,15 @@ class KymImageList(AcqImageList[KymImage]):
         )
         self._radon_report_cache: Dict[str, List[RadonReport]] = {}
         self._load_radon_report_db(progress_cb=progress_cb, cancel_event=cancel_event)
+        self._velocity_event_db = VelocityEventDb(
+            db_path=self._get_velocity_event_db_path(),
+            base_path_provider=self._get_base_path,
+        )
+        self._velocity_event_db.load(
+            images_provider=lambda: self.images,
+            progress_cb=progress_cb,
+            cancel_event=cancel_event,
+        )
 
     @classmethod
     def load_from_path(
@@ -252,6 +262,25 @@ class KymImageList(AcqImageList[KymImage]):
                     nan_gap_params=nan_gap_params,
                     zero_gap_params=zero_gap_params,
                 )
+            self.update_velocity_event_cache_only(image)
+
+    def get_velocity_event_df(self) -> pd.DataFrame:
+        """Get velocity event database as a pandas DataFrame.
+        
+        Returns DataFrame with kym_event_id, path, roi_id, and event fields.
+        """
+        return self._velocity_event_db.get_df()
+
+    def update_velocity_event_cache_only(self, kym_image: KymImage) -> None:
+        """Update velocity event cache in memory only (e.g. after detect_all_events).
+        
+        Does NOT persist to CSV. Use update_velocity_event_for_image when user saves.
+        """
+        self._velocity_event_db.update_from_image(kym_image)
+
+    def update_velocity_event_for_image(self, kym_image: KymImage) -> None:
+        """Update velocity event cache and persist to CSV (e.g. after user saves analysis)."""
+        self._velocity_event_db.update_from_image_and_persist(kym_image)
     
     def _get_radon_db_path(self) -> Optional[Path]:
         """Path to radon_report_db.csv for current mode.
@@ -264,6 +293,19 @@ class KymImageList(AcqImageList[KymImage]):
             return self._folder / "radon_report_db.csv"
         if self._get_mode() == "file_list" and self._csv_source_path is not None:
             return self._csv_source_path.parent / f"{self._csv_source_path.stem}_radon_report_db.csv"
+        return None
+
+    def _get_velocity_event_db_path(self) -> Optional[Path]:
+        """Path to kym_event_db.csv for current mode.
+        
+        Returns None for single-file mode, empty list, or file-list from in-memory list.
+        """
+        if self._get_mode() == "file":
+            return None
+        if self._get_mode() == "folder" and self._folder is not None:
+            return self._folder / "kym_event_db.csv"
+        if self._get_mode() == "file_list" and self._csv_source_path is not None:
+            return self._csv_source_path.parent / f"{self._csv_source_path.stem}_kym_event_db.csv"
         return None
 
     def _load_radon_report_db(
@@ -355,7 +397,7 @@ class KymImageList(AcqImageList[KymImage]):
                 lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
                 axis=1,
             )
-        logger.info(f"Saving radon report DB to:")
+        logger.info("Saving radon report DB to:")
         logger.info(f"  {db_path}")
         print(df.head())
 

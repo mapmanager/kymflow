@@ -157,8 +157,9 @@ class HomePage(BasePage):
         self._folder_bindings: FolderSelectorBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
         self._event_bindings: KymEventBindings | None = None
-        # 20260213ppc: Plot pool controller ref (set when LazySection render runs)
+        # 20260213ppc: Plot pool controller refs (set when LazySection render runs)
         self._plot_pool_controller_ref: dict = {"value": None}
+        self._plot_pool_velocity_controller_ref: dict = {"value": None}
         self._plot_pool_bindings: PlotPoolBindings | None = None
 
         # Splitter pane toolbar views
@@ -321,12 +322,14 @@ class HomePage(BasePage):
         self._drawer_metadata_header_bindings = MetadataHeaderBindings(
             self.bus, self._drawer_metadata_header_view
         )
-        # 20260213ppc: Plot pool bindings (FileSelection, FileListChanged, RadonReportUpdated, AnalysisCompleted)
+        # 20260213ppc: Plot pool bindings (FileSelection, FileListChanged, RadonReportUpdated, VelocityEventDbUpdated, AnalysisCompleted)
         self._plot_pool_bindings = PlotPoolBindings(
             self.bus,
             self._plot_pool_controller_ref,
             app_state=self.context.app_state,
             refresh_callback=self._refresh_plot_pool_content,
+            plot_pool_velocity_controller_ref=self._plot_pool_velocity_controller_ref,
+            refresh_velocity_callback=self._refresh_plot_pool_velocity_content,
         )
 
         self._setup_complete = True
@@ -361,60 +364,183 @@ class HomePage(BasePage):
             with self._plot_pool_container:
                 self._build_plot_pool_lazy_section()
 
-    def _build_plot_pool_lazy_section(self):  # 20260213ppc
-        """Build PlotPoolController in LazySection, or placeholder if no data. Starts minimized."""
-        # 20260213ppc
-        app_state = self.context.app_state
-        has_data = False
-        if hasattr(app_state.files, "get_radon_report_df"):
-            try:
-                df = app_state.files.get_radon_report_df()
-                has_data = (
-                    df is not None
-                    and not df.empty
-                    and hasattr(df, "columns")
-                    and "_unique_id" in df.columns
-                )
-            except Exception as ex:
-                logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+    def _refresh_plot_pool_velocity_content(self) -> None:
+        """Refresh velocity event plot pool. Handler for VelocityEventDbUpdated and FileListChanged.
 
-        if not has_data:
-            with ui.expansion("Pool Plot (Radon)", value=False).classes("w-full"):  # 20260213ppc
-                ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+        If controller exists (section open), calls update_df. Else rebuilds section.
+        """
+        if not hasattr(self, "_plot_pool_container") or self._plot_pool_container is None:
             return
-
-        def render_fn(container):
-            self._plot_pool_controller_ref["value"] = None
+        app_state = self.context.app_state
+        if app_state.files is None or not hasattr(app_state.files, "get_velocity_event_df"):
+            return
+        ctrl = self._plot_pool_velocity_controller_ref.get("value")
+        if ctrl is not None:
             try:
-                df = app_state.files.get_radon_report_df()
+                df = app_state.files.get_velocity_event_df()
             except Exception as ex:
-                logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
-                with container:
-                    ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+                logger.warning("get_velocity_event_df failed: %s", ex)
                 return
-            if df is None or df.empty or "_unique_id" not in df.columns:
-                with container:
-                    ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+            if df is None or df.empty or "kym_event_id" not in df.columns:
                 return
-            ctrl = PlotPoolController(
-                df,
-                pre_filter_columns=["roi_id"],
-                unique_row_id_col="_unique_id",
-                on_table_row_selected=self._on_plot_pool_row_selected,
-            )
-            ctrl.build(container=container)
-            self._plot_pool_controller_ref["value"] = ctrl
+            try:
+                ctrl.update_df(df)
+            except Exception as ex:
+                logger.warning("velocity plot pool update_df failed: %s", ex)
+        else:
+            self._plot_pool_container.clear()
+            with self._plot_pool_container:
+                self._build_plot_pool_lazy_section()
 
-        from nicewidgets.plot_pool_widget.lazy_section import LazySection
-        LazySection(
-            "Pool Plot (Radon)",  # 20260213ppc
-            render_fn=render_fn,
-            config=LazySectionConfig(render_once=False, clear_on_close=True, show_spinner=True),
-        )
+    def _build_plot_pool_lazy_section(self):  # 20260213ppc
+        """Build PlotPoolControllers in LazySections. Radon and Velocity Events. Starts minimized."""
+        app_state = self.context.app_state
+        # Wrap in column to ensure radon and velocity stack vertically (not side-by-side)
+        with ui.column().classes("w-full flex flex-col gap-2"):
+            if app_state.files is None:
+                with ui.expansion("Pool Plot (Radon)", value=False).classes("w-full"):
+                    ui.label("No data. Load a folder.").classes("text-sm text-gray-500")
+                with ui.expansion("Pool Plot (Velocity Events)", value=False).classes("w-full"):
+                    ui.label("No data. Load a folder.").classes("text-sm text-gray-500")
+                return
+
+            # Radon Pool Plot
+            has_radon = False
+            if hasattr(app_state.files, "get_radon_report_df"):
+                try:
+                    df = app_state.files.get_radon_report_df()
+                    has_radon = (
+                        df is not None
+                        and not df.empty
+                        and hasattr(df, "columns")
+                        and "_unique_id" in df.columns
+                    )
+                except Exception as ex:
+                    logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+
+            if has_radon:
+
+                def render_radon_fn(container):
+                    self._plot_pool_controller_ref["value"] = None
+                    try:
+                        df = app_state.files.get_radon_report_df()
+                    except Exception as ex:
+                        logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+                        with container:
+                            ui.label("No radon data.").classes("text-sm text-gray-500")
+                        return
+                    if df is None or df.empty or "_unique_id" not in df.columns:
+                        with container:
+                            ui.label("No radon data.").classes("text-sm text-gray-500")
+                        return
+                    ctrl = PlotPoolController(
+                        df,
+                        pre_filter_columns=["roi_id"],
+                        unique_row_id_col="_unique_id",
+                        db_type="radon_db",
+                        app_name="kymflow",
+                        on_table_row_selected=self._on_plot_pool_row_selected,
+                    )
+                    ctrl.build(container=container)
+                    self._plot_pool_controller_ref["value"] = ctrl
+
+                from nicewidgets.plot_pool_widget.lazy_section import LazySection
+
+                LazySection(
+                    "Pool Plot (Radon)",
+                    render_fn=render_radon_fn,
+                    config=LazySectionConfig(render_once=False, clear_on_close=True, show_spinner=True),
+                )
+            else:
+                with ui.expansion("Pool Plot (Radon)", value=False).classes("w-full"):
+                    ui.label("No radon data. Load a folder with analyzed kymographs.").classes("text-sm text-gray-500")
+
+            # Velocity Events Pool Plot
+            has_velocity = False
+            if hasattr(app_state.files, "get_velocity_event_df"):
+                try:
+                    df_vel = app_state.files.get_velocity_event_df()
+                    has_velocity = (
+                        df_vel is not None
+                        and not df_vel.empty
+                        and hasattr(df_vel, "columns")
+                        and "kym_event_id" in df_vel.columns
+                    )
+                except Exception as ex:
+                    logger.warning("get_velocity_event_df failed: %s", ex)
+
+            if has_velocity:
+
+                def render_velocity_fn(container):
+                    self._plot_pool_velocity_controller_ref["value"] = None
+                    try:
+                        df_vel = app_state.files.get_velocity_event_df()
+                    except Exception as ex:
+                        logger.warning("get_velocity_event_df failed: %s", ex)
+                        with container:
+                            ui.label("No velocity event data.").classes("text-sm text-gray-500")
+                        return
+                    if df_vel is None or df_vel.empty or "kym_event_id" not in df_vel.columns:
+                        with container:
+                            ui.label("No velocity event data.").classes("text-sm text-gray-500")
+                        return
+                    ctrl = PlotPoolController(
+                        df_vel,
+                        pre_filter_columns=["roi_id"],
+                        unique_row_id_col="kym_event_id",
+                        db_type="velocity_event_db",
+                        app_name="kymflow",
+                        on_table_row_selected=self._on_plot_pool_velocity_row_selected,
+                    )
+                    ctrl.build(container=container)
+                    self._plot_pool_velocity_controller_ref["value"] = ctrl
+
+                from nicewidgets.plot_pool_widget.lazy_section import LazySection
+
+                LazySection(
+                    "Pool Plot (Velocity Events)",
+                    render_fn=render_velocity_fn,
+                    config=LazySectionConfig(render_once=False, clear_on_close=True, show_spinner=True),
+                )
+            else:
+                with ui.expansion("Pool Plot (Velocity Events)", value=False).classes("w-full"):
+                    ui.label("No velocity event data. Load a folder and run event detection.").classes(
+                        "text-sm text-gray-500"
+                    )
 
     def _on_plot_pool_row_selected(self, row_id: str, row_dict: dict) -> None:
-        """Callback when user selects a row in PlotPoolController table or plot. Emits FileSelection intent."""
+        """Callback when user selects a row in Radon PlotPoolController. Emits FileSelection intent."""
         parts = row_id.split("|", 1)
+        path = parts[0] if parts else ""
+        roi_id_raw = parts[1] if len(parts) > 1 else None
+        if not path:
+            return
+        roi_id: int | None = None
+        if roi_id_raw is not None:
+            try:
+                roi_id = int(roi_id_raw)
+            except (ValueError, TypeError):
+                roi_id = None
+        app_state = self.context.app_state
+        if app_state.files.find_by_path(path) is None:
+            return
+        self.bus.emit(
+            FileSelection(
+                path=path,
+                file=None,
+                roi_id=roi_id,
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
+
+    def _on_plot_pool_velocity_row_selected(self, row_id: str, row_dict: dict) -> None:
+        """Callback when user selects a row in Velocity Events PlotPoolController.
+
+        Parses kym_event_id (path|roi_id|event_idx) and emits FileSelection with path, roi_id.
+        Event-level selection (path, roi, event_id) deferred to Next Steps.
+        """
+        parts = row_id.split("|", 2)
         path = parts[0] if parts else ""
         roi_id_raw = parts[1] if len(parts) > 1 else None
         if not path:
