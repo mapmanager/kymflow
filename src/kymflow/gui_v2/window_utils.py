@@ -77,6 +77,8 @@ def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> No
     
     _parents = file._compute_parents_from_path(file.path)
     # _parents is a tuple(parent1, parent2, parent3)
+    # reverse _parents
+    _parents = _parents[::-1]
     # make a string with '/'
     _parents_str = '/'.join([p for p in _parents if p is not None])
     if blinded:
