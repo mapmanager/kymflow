@@ -32,7 +32,7 @@ from kymflow.gui_v2.controllers import (
     TaskStateBridgeController,
     VelocityEventUpdateController,
 )
-from kymflow.gui_v2.events import NextPrevFileEvent, SaveSelected, SelectionOrigin
+from kymflow.gui_v2.events import FileSelection, NextPrevFileEvent, SaveSelected, SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.views import (
     AboutTabView,
@@ -413,8 +413,30 @@ class HomePage(BasePage):
         )
 
     def _on_plot_pool_row_selected(self, row_id: str, row_dict: dict) -> None:
-        """Callback when user selects a row in PlotPoolController table. 20260213ppc"""
-        logger.info("20260213ppc on_table_row_selected row_id=%s row_dict_keys=%s", row_id, list(row_dict.keys()) if row_dict else [])
+        """Callback when user selects a row in PlotPoolController table or plot. Emits FileSelection intent."""
+        parts = row_id.split("|", 1)
+        path = parts[0] if parts else ""
+        roi_id_raw = parts[1] if len(parts) > 1 else None
+        if not path:
+            return
+        roi_id: int | None = None
+        if roi_id_raw is not None:
+            try:
+                roi_id = int(roi_id_raw)
+            except (ValueError, TypeError):
+                roi_id = None
+        app_state = self.context.app_state
+        if app_state.files.find_by_path(path) is None:
+            return
+        self.bus.emit(
+            FileSelection(
+                path=path,
+                file=None,
+                roi_id=roi_id,
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
 
     def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
         """Callback when splitter pane filter controls change - applies filters to plot."""

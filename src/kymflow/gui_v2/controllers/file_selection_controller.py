@@ -84,6 +84,10 @@ class FileSelectionController:
 
         # Update AppState with selection (origin preserved for feedback loop prevention)
         self._app_state.select_file(match, origin=e.origin)
+
+        # If roi_id was provided in the intent, select it
+        if match is not None and e.roi_id is not None:
+            self._app_state.select_roi(e.roi_id)
         
         # Set window title for selected file (use file object for blinded support)
         if match is not None:

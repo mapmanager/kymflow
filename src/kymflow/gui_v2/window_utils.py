@@ -82,7 +82,7 @@ def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> No
     if blinded:
         _parents_str = 'Blinded'
 
-    logger.info(f'_parents:{_parents}')
+    # logger.info(f'_parents:{_parents}')
 
     file_name = file.get_file_name(blinded=blinded) or "unknown"
     
@@ -93,7 +93,7 @@ def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> No
     if native is not None:
         main_window = getattr(native, "main_window", None)
         if main_window is not None:
-            logger.debug(f'=== setting window title to "{title}"')
+            # logger.debug(f'=== setting window title to "{title}"')
             main_window.set_title(title)
         else:
             pass
