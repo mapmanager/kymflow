@@ -87,8 +87,9 @@ def test_app_context_loads_app_config(tmp_path: Path, monkeypatch) -> None:
         name = "MainProcess"
 
     monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    monkeypatch.setattr(app_context, "setUpGuiDefaults", lambda text_size: None)
 
-    # Mock ui with all elements that _setUpGuiDefaults() uses
+    # Mock ui with all elements that setUpGuiDefaults() uses (when not patched)
     def create_mock_ui_element():
         return SimpleNamespace(default_classes=lambda x: None, default_props=lambda x: None)
 
@@ -137,6 +138,7 @@ def test_app_context_uses_app_config_text_size(tmp_path: Path, monkeypatch) -> N
         name = "MainProcess"
 
     monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    monkeypatch.setattr(app_context, "setUpGuiDefaults", lambda text_size: None)
 
     # Mock ui.default_classes to capture calls
     captured_classes = {}
@@ -164,16 +166,44 @@ def test_app_context_uses_app_config_text_size(tmp_path: Path, monkeypatch) -> N
     import os
     monkeypatch.setenv("KYMFLOW_APP_CONFIG_PATH", str(cfg_path))
 
-    # Initialize AppContext (this will call _setUpGuiDefaults)
+    # Initialize AppContext (this will call setUpGuiDefaults from nicewidgets)
     context = AppContext()
 
     # Verify app_config was loaded with correct value
     assert context.app_config is not None
     assert context.app_config.get_attribute("text_size") == "text-base"
 
-    # Note: We can't easily verify that _setUpGuiDefaults used the value
+    # Note: We can't easily verify that setUpGuiDefaults used the value
     # because it sets default_classes which are static methods.
     # But we can verify the config was loaded correctly.
+
+
+def test_app_context_calls_setUpGuiDefaults_with_text_size_from_app_config(tmp_path: Path, monkeypatch) -> None:
+    """Test that AppContext calls setUpGuiDefaults with text_size from app_config."""
+    AppContext._instance = None
+
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    cfg.set_attribute("text_size", "text-lg")
+    cfg.save()
+
+    captured: list[str] = []
+
+    def capture_setUpGuiDefaults(text_size: str) -> None:
+        captured.append(text_size)
+
+    class MockProcess:
+        name = "MainProcess"
+
+    monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    monkeypatch.setattr(app_context, "setUpGuiDefaults", capture_setUpGuiDefaults)
+
+    import os
+    monkeypatch.setenv("KYMFLOW_APP_CONFIG_PATH", str(cfg_path))
+
+    AppContext()
+
+    assert captured == ["text-lg"]
 
 
 def test_app_context_app_config_none_in_worker_process(monkeypatch) -> None:
@@ -212,8 +242,9 @@ def test_app_context_syncs_folder_depth_from_app_config(tmp_path: Path, monkeypa
         name = "MainProcess"
 
     monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    monkeypatch.setattr(app_context, "setUpGuiDefaults", lambda text_size: None)
 
-    # Mock ui with all elements that _setUpGuiDefaults() uses
+    # Mock ui with all elements that setUpGuiDefaults() uses (when not patched)
     def create_mock_ui_element():
         return SimpleNamespace(default_classes=lambda x: None, default_props=lambda x: None)
 
@@ -264,8 +295,9 @@ def test_app_context_syncs_folder_depth_default(tmp_path: Path, monkeypatch) -> 
         name = "MainProcess"
 
     monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    monkeypatch.setattr(app_context, "setUpGuiDefaults", lambda text_size: None)
 
-    # Mock ui with all elements that _setUpGuiDefaults() uses
+    # Mock ui with all elements that setUpGuiDefaults() uses (when not patched)
     def create_mock_ui_element():
         return SimpleNamespace(default_classes=lambda x: None, default_props=lambda x: None)
 
@@ -421,6 +453,7 @@ def test_app_context_initializes_runtime_env_main_process(tmp_path: Path, monkey
         name = "MainProcess"
     
     monkeypatch.setattr(app_context, "mp", SimpleNamespace(current_process=lambda: MockProcess()))
+    monkeypatch.setattr(app_context, "setUpGuiDefaults", lambda text_size: None)
     
     # Mock ui
     def create_mock_ui_element():

@@ -15,6 +15,8 @@ from typing import Optional
 
 from nicegui import ui, app
 
+from nicewidgets.utils import setUpGuiDefaults
+
 from kymflow.gui_v2.state import AppState
 from kymflow.core.state import TaskState
 from kymflow.core.plotting.theme import ThemeMode
@@ -73,75 +75,6 @@ class RuntimeEnvironment:
             is_remote=is_remote,
             has_file_system_access=has_file_system_access,
         )
-
-
-def _setUpGuiDefaults(app_config: AppConfig | None = None):
-    """Set up default classes and props for all ui elements.
-    
-    Args:
-        app_config: AppConfig instance to get text_size from. If None, uses default.
-    """
-    
-    logger.info('setting default_classes() and default_props()to specify style of all ui elements')
-    # logger.info(f'  ui.button and ui.label ui.checkbox')
-    
-    # logger.debug(f'app_config is:{app_config}')
-
-    # Get text_size from app_config, fallback to default
-    if app_config is not None:
-        text_size = app_config.get_attribute('text_size')
-        logger.debug(f'  app_config.get_attribute("text_size") is: {text_size}')
-    else:
-        logger.debug('  no app_config, default text_size is "text-sm"')
-        text_size = 'text-sm'
-    
-    # map tailwind to quasar size
-    text_size_quasar = {
-        "text-xs": "xs",
-        "text-sm": "sm",
-        "text-base": "md",
-        "text-lg": "lg",
-    }[text_size]
-
-    logger.debug(f'=== using text_size:"{text_size}" text_size_quasar:{text_size_quasar}')
-
-    ui.label.default_classes(f"{text_size} select-text")  #  select-text allows double-click selection
-    ui.label.default_props("dense")
-    #
-    ui.button.default_classes(text_size)
-    ui.button.default_props("dense")
-    #
-    ui.checkbox.default_classes(text_size)
-    ui.checkbox.default_props(f"dense size={text_size_quasar}")
-    # ui.checkbox.default_props("dense size=xs")
-    # .props('size=xs')
-    #
-    ui.select.default_classes(text_size)
-    ui.select.default_props("dense")
-    #
-    ui.input.default_classes(text_size)
-    ui.input.default_props("dense")
-    #
-    ui.number.default_classes(text_size)
-    ui.number.default_props("dense")
-    #
-    ui.expansion.default_classes(text_size)
-    ui.expansion.default_props("dense")
-    #
-    ui.slider.default_classes(text_size)
-    ui.slider.default_props("dense")
-    #
-    ui.linear_progress.default_classes(text_size)
-    ui.linear_progress.default_props("dense")
-
-    ui.menu.default_classes(text_size)
-    ui.menu.default_props("dense")
-
-    ui.menu_item.default_classes(text_size)
-    ui.menu_item.default_props("dense")
-
-    ui.radio.default_classes(text_size)
-    ui.radio.default_props("dense")
 
 class AppContext:
     """Singleton managing shared application state across all pages.
@@ -233,7 +166,8 @@ class AppContext:
         
         #
         # configure default classes (after app_config is loaded)
-        _setUpGuiDefaults(self.app_config)
+        text_size = self.app_config.get_attribute("text_size")
+        setUpGuiDefaults(text_size)
 
         #
         # global css styles

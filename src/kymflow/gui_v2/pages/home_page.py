@@ -63,7 +63,7 @@ from kymflow.gui_v2.views import (
 )
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
-from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolController  # 20260213ppc
+from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc
 
 logger = get_logger(__name__)
 
@@ -433,14 +433,14 @@ class HomePage(BasePage):
                         with container:
                             ui.label("No radon data.").classes("text-sm text-gray-500")
                         return
-                    ctrl = PlotPoolController(
-                        df,
+                    cfg = PlotPoolConfig(
                         pre_filter_columns=["roi_id"],
                         unique_row_id_col="_unique_id",
                         db_type="radon_db",
                         app_name="kymflow",
                         on_table_row_selected=self._on_plot_pool_row_selected,
                     )
+                    ctrl = PlotPoolController(df, config=cfg)
                     ctrl.build(container=container)
                     self._plot_pool_controller_ref["value"] = ctrl
 
@@ -484,14 +484,14 @@ class HomePage(BasePage):
                         with container:
                             ui.label("No velocity event data.").classes("text-sm text-gray-500")
                         return
-                    ctrl = PlotPoolController(
-                        df_vel,
+                    cfg = PlotPoolConfig(
                         pre_filter_columns=["roi_id"],
                         unique_row_id_col="kym_event_id",
                         db_type="velocity_event_db",
                         app_name="kymflow",
                         on_table_row_selected=self._on_plot_pool_velocity_row_selected,
                     )
+                    ctrl = PlotPoolController(df_vel, config=cfg)
                     ctrl.build(container=container)
                     self._plot_pool_velocity_controller_ref["value"] = ctrl
 
