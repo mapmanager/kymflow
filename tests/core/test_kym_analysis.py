@@ -588,6 +588,28 @@ def test_kymanalysis_total_num_velocity_events() -> None:
     assert kym_analysis.num_velocity_events(roi2.id) == 1
 
 
+def test_kymanalysis_num_user_added_velocity_events() -> None:
+    """Test num_user_added_velocity_events() counts only User Added events."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
+
+    kym_analysis = kym_image.get_kym_analysis()
+
+    bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
+    roi1 = kym_image.rois.create_roi(bounds=bounds1)
+    bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
+    roi2 = kym_image.rois.create_roi(bounds=bounds2)
+
+    # add_velocity_event creates events with event_type="User Added"
+    kym_analysis.add_velocity_event(roi1.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi1.id, t_start=2.0, t_end=3.0)
+    kym_analysis.add_velocity_event(roi2.id, t_start=1.0, t_end=2.0)
+
+    assert kym_analysis.num_user_added_velocity_events() == 3
+    assert kym_analysis.total_num_velocity_events() == 3
+
+
 def test_kymanalysis_get_velocity_events_filtered_returns_none_when_not_run() -> None:
     """Test that get_velocity_events_filtered returns None when events not run."""
     test_image = np.zeros((100, 100), dtype=np.uint16)

@@ -279,6 +279,7 @@ class KymImage(AcqImage):
             "Saved": "True" if not self.get_kym_analysis().is_dirty else "False",
             "Num ROIS": self.rois.numRois(),
             "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),
+            "User Event": self.get_kym_analysis().num_user_added_velocity_events(),
             "Parent Folder": parent_folder,  # Use blinded or unblinded parent1
             "Grandparent Folder": grandparent_folder,
             "pixels": self.pixels_per_line if self.pixels_per_line is not None else "-",

@@ -305,7 +305,7 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     # Register minimal shutdown handlers to persist configs (native mode only)
     if native_bool:
         install_shutdown_handlers(context)
-
+    
     ui.run(
         host=host,
         port=port,

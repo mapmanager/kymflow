@@ -1089,6 +1089,17 @@ class KymAnalysis:
         """
         return sum(len(events) for events in self._velocity_events.values())
 
+    def num_user_added_velocity_events(self) -> int:
+        """Return the total number of velocity events with event_type == "User Added" across all ROIs.
+
+        Returns:
+            Total number of user-added velocity events across all ROIs.
+        """
+        count = 0
+        for events in self._velocity_events.values():
+            count += sum(1 for event in events if event.event_type == "User Added")
+        return count
+
     def get_velocity_events(self, roi_id: int) -> Optional[list[VelocityEvent]]:
         """Return velocity event results for roi_id, or None if not present.
 

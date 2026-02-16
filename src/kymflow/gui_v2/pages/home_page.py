@@ -61,7 +61,7 @@ from kymflow.gui_v2.views import (
     TaskProgressBindings,
     TaskProgressView,
 )
-from kymflow.gui_v2.window_utils import reveal_in_file_manager
+from kymflow.gui_v2.window_utils import copy_to_clipboard, reveal_in_file_manager
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc
@@ -706,6 +706,13 @@ class HomePage(BasePage):
             logger.info(f"Reveal In Finder: {selected_file.path}")
             
             reveal_in_file_manager(selected_file.path)
+        elif action == 'copy_file_table':
+            table_text = self._file_table_view.get_table_as_text()
+            if table_text:
+                copy_to_clipboard(table_text)
+                logger.info("File table copied to clipboard")
+            else:
+                logger.warning("No table data to copy")
         elif action == 'other':
             # TODO: Implement other action functionality
             logger.info(f"Other action:")
@@ -898,6 +905,10 @@ class HomePage(BasePage):
                                 ui.menu_item(
                                     'Reveal In Finder',
                                     on_click=lambda: self._on_context_menu('reveal_in_finder')
+                                )
+                                ui.menu_item(
+                                    'Copy File Table',
+                                    on_click=lambda: self._on_context_menu('copy_file_table')
                                 )
                                 ui.menu_item(
                                     'Other...',

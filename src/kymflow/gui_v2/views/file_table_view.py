@@ -84,6 +84,7 @@ def _default_columns() -> list[ColumnConfig]:
         }),
         _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
         _col("Total Num Velocity Events", "Events", width=100, cell_class="ag-cell-right"),  # abb 202601
+        _col("User Event", "User Event", width=100, cell_class="ag-cell-right"),
         _col("Parent Folder", "Parent", flex=1, min_width=120),
         _col("Grandparent Folder", "Grandparent", filterable=True, flex=1, min_width=120),
         _col("duration (s)", "Duration (s)", width=140, cell_class="ag-cell-right"),
@@ -389,3 +390,36 @@ class FileTableView:
                     phase="intent",
                 )
             )
+
+    def get_table_as_text(self) -> str:
+        """Get current table data as tab-separated values (TSV) string.
+
+        Includes all columns (ignores hide=True). Empty string if no data.
+
+        Returns:
+            TSV-formatted string with all columns and rows.
+        """
+        if not self._pending_rows:
+            return ""
+
+        columns = _default_columns()
+
+        # Header row from column definitions (all columns)
+        headers = [col.header or col.field for col in columns]
+
+        rows: list[str] = []
+        for row_dict in self._pending_rows:
+            row_values = []
+            for col in columns:
+                value = row_dict.get(col.field, "")
+                if value is None:
+                    value_str = ""
+                elif value == "":
+                    value_str = ""
+                else:
+                    value_str = str(value)
+                value_str = value_str.replace("\t", " ").replace("\n", " ").replace("\r", " ")
+                row_values.append(value_str)
+            rows.append("\t".join(row_values))
+
+        return "\t".join(headers) + "\n" + "\n".join(rows)

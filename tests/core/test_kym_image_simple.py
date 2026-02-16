@@ -181,6 +181,8 @@ def test_kym_image_getrowdict() -> None:
     assert "Saved" in row_dict
     assert "Num ROIS" in row_dict
     assert "Total Num Velocity Events" in row_dict
+    assert "User Event" in row_dict
+    assert row_dict["User Event"] == 0
     assert "Parent Folder" in row_dict
     assert "Grandparent Folder" in row_dict
     assert "duration (s)" in row_dict
@@ -196,6 +198,37 @@ def test_kym_image_getrowdict() -> None:
     assert row_dict["length (um)"] == pytest.approx(56.8, abs=0.1)
     
     logger.info(f"  - getRowDict() returns correct structure: {list(row_dict.keys())}")
+
+
+def test_kym_image_getrowdict_user_event_count() -> None:
+    """Test KymImage.getRowDict() includes correct User Event count."""
+    import numpy as np
+
+    from kymflow.core.image_loaders.roi import RoiBounds
+
+    test_image = np.zeros((100, 200), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+
+    kym_image.update_header(
+        shape=(100, 200),
+        ndim=2,
+        voxels=[0.001, 0.284],
+        voxels_units=["s", "um"],
+        labels=["Time (s)", "Space (um)"],
+    )
+
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+
+    kym_analysis = kym_image.get_kym_analysis()
+    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi.id, t_start=2.0, t_end=3.0)
+
+    row_dict = kym_image.getRowDict()
+
+    assert "User Event" in row_dict
+    assert row_dict["User Event"] == 2
+    assert row_dict["Total Num Velocity Events"] == 2
 
 
 def test_kym_image_image_dur() -> None:
