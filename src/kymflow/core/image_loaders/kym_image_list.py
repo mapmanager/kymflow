@@ -456,7 +456,8 @@ class KymImageList(AcqImageList[KymImage]):
                         base_res = Path(base).resolve()
                         path_res = Path(image.path).resolve()
                         rel_path = str(path_res.relative_to(base_res))
-                    except ValueError:
+                    except ValueError as e:
+                        logger.error(f"Failed to get relative path for image {image.path}, e is: {e}")
                         rel_path = Path(image.path).name
                 with_rel = [dataclass_replace(r, rel_path=rel_path) for r in roi_reports]
                 if image.path is not None:

@@ -264,7 +264,8 @@ class VelocityEventDb:
                 base_res = Path(base).resolve()
                 path_res = Path(kym_image.path).resolve()
                 rel_path = str(path_res.relative_to(base_res))
-            except ValueError:
+            except ValueError as e:
+                logger.error(f"Failed to get relative path for image {kym_image.path}, e is: {e}")
                 rel_path = Path(kym_image.path).name
 
         parent_folder = None
