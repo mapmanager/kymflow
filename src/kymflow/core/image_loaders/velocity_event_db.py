@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional
 
 import pandas as pd
 
+from kymflow.core.image_loaders.velocity_event_report import VelocityEventReport
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
@@ -20,12 +21,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Required columns for CSV schema validation (from VelocityEvent + identity)
+# Required columns for CSV schema validation (must match VelocityEventReport fields)
 _EXPECTED_COLS = {
     "kym_event_id",
     "path",
     "roi_id",
     "rel_path",
+    "parent_folder",
+    "grandparent_folder",
     "event_type",
     "i_start",
     "t_start",
@@ -264,6 +267,15 @@ class VelocityEventDb:
             except ValueError:
                 rel_path = Path(kym_image.path).name
 
+        parent_folder = None
+        grandparent_folder = None
+        if kym_image.path is not None:
+            path_obj = Path(kym_image.path)
+            if path_obj.parent:
+                parent_folder = path_obj.parent.name
+                if path_obj.parent.parent:
+                    grandparent_folder = path_obj.parent.parent.name
+
         try:
             ka = kym_image.get_kym_analysis()
             rows: List[dict] = []
@@ -272,16 +284,16 @@ class VelocityEventDb:
                 if events is None:
                     events = []
                 for idx, event in enumerate(events):
-                    kym_event_id = _kym_event_id(path_str, roi_id, idx)
-                    d = event.to_dict(round_decimals=3)
-                    row = {
-                        "kym_event_id": kym_event_id,
-                        "path": path_str,
-                        "roi_id": roi_id,
-                        "rel_path": rel_path,
-                        **d,
-                    }
-                    rows.append(row)
+                    report = VelocityEventReport.from_velocity_event(
+                        event,
+                        path_str,
+                        roi_id,
+                        idx,
+                        rel_path=rel_path,
+                        parent_folder=parent_folder,
+                        grandparent_folder=grandparent_folder,
+                    )
+                    rows.append(report.to_dict())
 
             # Remove existing entries for this path
             self._cache = [r for r in self._cache if r.get("path") != path_str]

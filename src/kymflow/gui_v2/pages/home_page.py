@@ -61,6 +61,7 @@ from kymflow.gui_v2.views import (
     TaskProgressBindings,
     TaskProgressView,
 )
+from kymflow.gui_v2.window_utils import reveal_in_file_manager
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc
@@ -671,6 +672,30 @@ class HomePage(BasePage):
             )
         )
 
+    def _on_context_menu(self, action: str) -> None:
+        """Handle context menu actions for file table.
+        
+        Args:
+            action: Action identifier ('reveal_in_finder' or 'other')
+        """
+        if action == 'reveal_in_finder':
+
+            selected_file = self.context.app_state.selected_file
+            if selected_file is None:
+                logger.warning(f"No file selected for context menu action: {action}")
+                return
+
+            # TODO: Implement reveal in Finder functionality
+            # Example: subprocess.run(['open', '-R', str(selected_file.path)])
+            logger.info(f"Reveal In Finder: {selected_file.path}")
+            
+            reveal_in_file_manager(selected_file.path)
+        elif action == 'other':
+            # TODO: Implement other action functionality
+            logger.info(f"Other action:")
+        else:
+            logger.warning(f"Unknown context menu action: '{action}'")
+
     def _register_save_selected_shortcut(self) -> None:
         """Register global Command+S/Ctrl+S shortcut for save selected (unless editing)."""
         if self._save_selected_shortcut_registered:
@@ -852,6 +877,17 @@ class HomePage(BasePage):
 
                         # File table gets all remaining height
                         with ui.column().classes("w-full flex-1 min-h-0"):
+                            # Context menu for file table actions
+                            with ui.context_menu():
+                                ui.menu_item(
+                                    'Reveal In Finder',
+                                    on_click=lambda: self._on_context_menu('reveal_in_finder')
+                                )
+                                ui.menu_item(
+                                    'Other...',
+                                    on_click=lambda: self._on_context_menu('other')
+                                )
+                            
                             self._file_table_view.render()
                             self._file_table_view.set_files(list(self.context.app_state.files))
 
