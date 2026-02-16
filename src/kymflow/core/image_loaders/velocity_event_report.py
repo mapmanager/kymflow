@@ -20,6 +20,9 @@ class VelocityEventReport:
 
     Combines identity (path, roi, rel_path) with all VelocityEvent attributes.
     Used when building/loading the velocity event database cache.
+    accepted: KymAnalysis-level boolean indicating whether this analysis has been accepted
+        by the user (True/False), or None if not available. Set at the image level,
+        applies to all events in the image.
     """
 
     # Identity
@@ -50,6 +53,7 @@ class VelocityEventReport:
     machine_type: Optional[str] = None
     user_type: Optional[str] = None
     note: Optional[str] = None
+    accepted: Optional[bool] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a dictionary for CSV export."""
@@ -65,6 +69,7 @@ class VelocityEventReport:
         rel_path: Optional[str] = None,
         parent_folder: Optional[str] = None,
         grandparent_folder: Optional[str] = None,
+        accepted: Optional[bool] = None,
         round_decimals: int = 3,
     ) -> "VelocityEventReport":
         """Build a VelocityEventReport from a VelocityEvent and DB metadata."""
@@ -77,6 +82,7 @@ class VelocityEventReport:
             rel_path=rel_path,
             parent_folder=parent_folder,
             grandparent_folder=grandparent_folder,
+            accepted=accepted,
             event_type=d.get("event_type"),
             i_start=d.get("i_start"),
             i_peak=d.get("i_peak"),
@@ -127,6 +133,15 @@ class VelocityEventReport:
                     "nan_fraction_in_event", "duration_sec",
                 ]:
                     filtered_data[key] = float(value) if value is not None else None
+                elif key == "accepted":
+                    if value is None:
+                        filtered_data[key] = None
+                    elif isinstance(value, bool):
+                        filtered_data[key] = value
+                    elif isinstance(value, str):
+                        filtered_data[key] = value.lower() in ("true", "1", "yes")
+                    else:
+                        filtered_data[key] = bool(value)
                 else:
                     filtered_data[key] = str(value) if value is not None else None
 

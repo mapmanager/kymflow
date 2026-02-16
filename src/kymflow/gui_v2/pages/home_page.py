@@ -516,7 +516,7 @@ class HomePage(BasePage):
             )
         elif db_type == "velocity_event_db":
             return PlotPoolConfig(
-                pre_filter_columns=["roi_id", "event_type"],
+                pre_filter_columns=["roi_id", "accepted", "event_type"],
                 unique_row_id_col="_unique_row_id",
                 db_type="velocity_event_db",
                 app_name="kymflow",

@@ -46,6 +46,7 @@ _EXPECTED_COLS = {
     "machine_type",
     "user_type",
     "note",
+    "accepted",
 }
 
 
@@ -274,6 +275,7 @@ class VelocityEventDb:
 
         try:
             ka = kym_image.get_kym_analysis()
+            accepted = ka.get_accepted()
             rows: List[dict] = []
             for roi_id in kym_image.rois.get_roi_ids():
                 events = ka.get_velocity_events(roi_id)
@@ -288,6 +290,7 @@ class VelocityEventDb:
                         rel_path=rel_path,
                         parent_folder=parent_folder,
                         grandparent_folder=grandparent_folder,
+                        accepted=accepted,
                     )
                     rows.append(report.to_dict())
 
