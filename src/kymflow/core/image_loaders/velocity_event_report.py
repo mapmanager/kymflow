@@ -23,7 +23,7 @@ class VelocityEventReport:
     """
 
     # Identity
-    kym_event_id: str
+    _unique_row_id: str
     path: Optional[str] = None
     roi_id: int = 0
     rel_path: Optional[str] = None
@@ -68,10 +68,10 @@ class VelocityEventReport:
         round_decimals: int = 3,
     ) -> "VelocityEventReport":
         """Build a VelocityEventReport from a VelocityEvent and DB metadata."""
-        kym_event_id = f"{path_str}|{roi_id}|{event_idx}"
+        _unique_row_id = f"{path_str}|{roi_id}|{event_idx}"
         d = event.to_dict(round_decimals=round_decimals)
         return cls(
-            kym_event_id=kym_event_id,
+            _unique_row_id=_unique_row_id,
             path=path_str,
             roi_id=roi_id,
             rel_path=rel_path,
@@ -130,7 +130,7 @@ class VelocityEventReport:
                 else:
                     filtered_data[key] = str(value) if value is not None else None
 
-        if "kym_event_id" not in filtered_data:
-            filtered_data["kym_event_id"] = ""
+        if "_unique_row_id" not in filtered_data:
+            filtered_data["_unique_row_id"] = ""
 
         return cls(**filtered_data)

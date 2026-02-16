@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 # Required columns for CSV schema validation (must match VelocityEventReport fields)
 _EXPECTED_COLS = {
-    "kym_event_id",
+    "_unique_row_id",
     "path",
     "roi_id",
     "rel_path",
@@ -49,11 +49,6 @@ _EXPECTED_COLS = {
 }
 
 
-def _kym_event_id(path: str, roi_id: int, event_idx: int) -> str:
-    """Generate kym_event_id: path|roi_id|event_idx."""
-    return f"{path}|{roi_id}|{event_idx}"
-
-
 class VelocityEventDb:
     """Encapsulates CRUD and I/O for the velocity event database.
 
@@ -74,7 +69,7 @@ class VelocityEventDb:
         """
         self._db_path: Optional[Path] = db_path
         self._base_path_provider: Optional[Callable[[], Optional[Path]]] = base_path_provider
-        # Cache: list of row dicts (VelocityReportRow-like + kym_event_id, rel_path)
+        # Cache: list of row dicts (VelocityReportRow-like + _unique_row_id, rel_path)
         self._cache: List[dict] = []
 
     def get_db_path(self) -> Optional[Path]:
@@ -335,11 +330,11 @@ class VelocityEventDb:
                     )
 
     def get_all_events(self) -> List[dict]:
-        """Return all cached events as list of row dicts (VelocityReportRow-like + kym_event_id)."""
+        """Return all cached events as list of row dicts (VelocityReportRow-like + _unique_row_id)."""
         return list(self._cache)
 
     def get_df(self) -> pd.DataFrame:
-        """Return cached events as DataFrame. Columns include kym_event_id, path, roi_id, etc."""
+        """Return cached events as DataFrame. Columns include _unique_row_id, path, roi_id, etc."""
         if not self._cache:
             return pd.DataFrame()
         return pd.DataFrame(self._cache)

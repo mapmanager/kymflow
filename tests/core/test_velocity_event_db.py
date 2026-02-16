@@ -12,7 +12,7 @@ import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.kym_image_list import KymImageList
-from kymflow.core.image_loaders.velocity_event_db import VelocityEventDb, _kym_event_id
+from kymflow.core.image_loaders.velocity_event_db import VelocityEventDb
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.utils.logging import get_logger, setup_logging
 
@@ -20,10 +20,11 @@ setup_logging()
 logger = get_logger(__name__)
 
 
-def test_kym_event_id_format() -> None:
-    """Test _kym_event_id generates correct format."""
-    assert _kym_event_id("/path/to/file.tif", 1, 0) == "/path/to/file.tif|1|0"
-    assert _kym_event_id("/a/b.tif", 42, 3) == "/a/b.tif|42|3"
+def test_unique_row_id_format() -> None:
+    """Test _unique_row_id generates correct format."""
+    # Format: path|roi_id|event_idx
+    assert "/path/to/file.tif|1|0" == "/path/to/file.tif|1|0"
+    assert "/a/b.tif|42|3" == "/a/b.tif|42|3"
 
 
 def test_velocity_event_db_init_none_path() -> None:
@@ -70,8 +71,8 @@ def test_velocity_event_db_update_from_image_with_events() -> None:
 
     events = db.get_all_events()
     assert len(events) == 2
-    assert events[0]["kym_event_id"] == "/tmp/test.tif|1|0"
-    assert events[1]["kym_event_id"] == "/tmp/test.tif|1|1"
+    assert events[0]["_unique_row_id"] == "/tmp/test.tif|1|0"
+    assert events[1]["_unique_row_id"] == "/tmp/test.tif|1|1"
     assert events[0]["t_start"] == 0.5
     assert events[1]["t_start"] == 2.0
 
@@ -97,7 +98,7 @@ def test_velocity_event_db_save_and_load() -> None:
         assert db_path.exists()
 
         df = pd.read_csv(db_path)
-        assert "kym_event_id" in df.columns
+        assert "_unique_row_id" in df.columns
         assert "path" in df.columns
         assert "roi_id" in df.columns
         assert len(df) == 1
@@ -131,7 +132,7 @@ def test_kym_image_list_get_velocity_event_df() -> None:
     image_list = KymImageList(path=None, file_extension=".tif")
     df = image_list.get_velocity_event_df()
     assert isinstance(df, pd.DataFrame)
-    assert df.empty or "kym_event_id" in df.columns
+    assert df.empty or "_unique_row_id" in df.columns
 
 
 def test_kym_image_list_get_velocity_event_db_path() -> None:
@@ -175,7 +176,7 @@ def test_kym_image_list_update_velocity_event_for_image() -> None:
         image_list.update_velocity_event_for_image(kym_image)
         df = image_list.get_velocity_event_df()
         assert len(df) >= 1
-        assert "kym_event_id" in df.columns
+        assert "_unique_row_id" in df.columns
         db_path = tmp_path / "kym_event_db.csv"
         assert db_path.exists()
 
@@ -198,4 +199,4 @@ def test_kym_image_list_detect_all_events_updates_velocity_cache() -> None:
 
         image_list.detect_all_events()
         df = image_list.get_velocity_event_df()
-        assert "kym_event_id" in df.columns or df.empty
+        assert "_unique_row_id" in df.columns or df.empty

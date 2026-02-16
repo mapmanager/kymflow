@@ -267,7 +267,7 @@ class KymImageList(AcqImageList[KymImage]):
     def get_velocity_event_df(self) -> pd.DataFrame:
         """Get velocity event database as a pandas DataFrame.
         
-        Returns DataFrame with kym_event_id, path, roi_id, and event fields.
+        Returns DataFrame with _unique_row_id, path, roi_id, and event fields.
         """
         return self._velocity_event_db.get_df()
 
@@ -393,7 +393,7 @@ class KymImageList(AcqImageList[KymImage]):
         report_dicts = [r.to_dict() for r in reports]
         df = pd.DataFrame(report_dicts)
         if not df.empty and "path" in df.columns and "roi_id" in df.columns:
-            df["_unique_id"] = df.apply(
+            df["_unique_row_id"] = df.apply(
                 lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
                 axis=1,
             )
@@ -499,7 +499,7 @@ class KymImageList(AcqImageList[KymImage]):
     def get_radon_report_df(self) -> pd.DataFrame:
         """Get radon velocity analysis summary report as a pandas DataFrame.
         
-        Includes _unique_id (path|roi_id) and row_id for unique row identification.
+        Includes _unique_row_id (path|roi_id) for unique row identification.
         """
         reports = self.get_radon_report()
         report_dicts = [r.to_dict() for r in reports]
@@ -509,6 +509,6 @@ class KymImageList(AcqImageList[KymImage]):
                 lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
                 axis=1,
             )
-            df["_unique_id"] = unique_id
+            df["_unique_row_id"] = unique_id
             df["row_id"] = unique_id
         return df

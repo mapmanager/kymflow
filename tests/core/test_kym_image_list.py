@@ -452,7 +452,7 @@ def test_kym_image_list_get_radon_db_path_empty_returns_none() -> None:
 
 
 def test_kym_image_list_get_radon_report_df_has_row_id() -> None:
-    """Test get_radon_report_df adds row_id and _unique_id columns."""
+    """Test get_radon_report_df adds row_id and _unique_row_id columns."""
     test_image = np.zeros((100, 100), dtype=np.uint16)
     kym_image = KymImage(img_data=test_image, load_image=False)
     kym_image.update_header(shape=(100, 100), ndim=2, voxels=[0.001, 0.284])
@@ -471,11 +471,11 @@ def test_kym_image_list_get_radon_report_df_has_row_id() -> None:
 
         df = image_list.get_radon_report_df()
         assert "row_id" in df.columns
-        assert "_unique_id" in df.columns
+        assert "_unique_row_id" in df.columns
         if len(df) > 0:
             for _, row in df.iterrows():
                 rid = row["row_id"]
-                uid = row["_unique_id"]
+                uid = row["_unique_row_id"]
                 assert "|" in str(rid)
                 assert str(row["roi_id"]) in str(rid)
                 assert uid == rid
@@ -532,7 +532,7 @@ def test_kym_image_list_load_and_save_radon_report_db() -> None:
         db_path = tmp_path / "radon_report_db.csv"
         assert db_path.exists()
         saved_df = pd.read_csv(db_path)
-        assert "_unique_id" in saved_df.columns
+        assert "_unique_row_id" in saved_df.columns
 
         image_list2 = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
         assert len(image_list2._radon_report_cache) >= 1

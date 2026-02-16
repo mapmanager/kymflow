@@ -353,7 +353,7 @@ class HomePage(BasePage):
             except Exception as ex:
                 logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
                 return
-            if df is None or df.empty or "_unique_id" not in df.columns:
+            if df is None or df.empty or "_unique_row_id" not in df.columns:
                 return
             try:
                 ctrl.update_df(df)
@@ -382,7 +382,7 @@ class HomePage(BasePage):
             except Exception as ex:
                 logger.warning("get_velocity_event_df failed: %s", ex)
                 return
-            if df is None or df.empty or "kym_event_id" not in df.columns:
+            if df is None or df.empty or "_unique_row_id" not in df.columns:
                 return
             try:
                 ctrl.update_df(df)
@@ -414,7 +414,7 @@ class HomePage(BasePage):
                         df is not None
                         and not df.empty
                         and hasattr(df, "columns")
-                        and "_unique_id" in df.columns
+                        and "_unique_row_id" in df.columns
                     )
                 except Exception as ex:
                     logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
@@ -430,7 +430,7 @@ class HomePage(BasePage):
                         with container:
                             ui.label("No radon data.").classes("text-sm text-gray-500")
                         return
-                    if df is None or df.empty or "_unique_id" not in df.columns:
+                    if df is None or df.empty or "_unique_row_id" not in df.columns:
                         with container:
                             ui.label("No radon data.").classes("text-sm text-gray-500")
                         return
@@ -459,7 +459,7 @@ class HomePage(BasePage):
                         df_vel is not None
                         and not df_vel.empty
                         and hasattr(df_vel, "columns")
-                        and "kym_event_id" in df_vel.columns
+                        and "_unique_row_id" in df_vel.columns
                     )
                 except Exception as ex:
                     logger.warning("get_velocity_event_df failed: %s", ex)
@@ -475,7 +475,7 @@ class HomePage(BasePage):
                         with container:
                             ui.label("No velocity event data.").classes("text-sm text-gray-500")
                         return
-                    if df_vel is None or df_vel.empty or "kym_event_id" not in df_vel.columns:
+                    if df_vel is None or df_vel.empty or "_unique_row_id" not in df_vel.columns:
                         with container:
                             ui.label("No velocity event data.").classes("text-sm text-gray-500")
                         return
@@ -509,15 +509,15 @@ class HomePage(BasePage):
         if db_type == "radon_db":
             return PlotPoolConfig(
                 pre_filter_columns=["roi_id", "accepted"],
-                unique_row_id_col="_unique_id",
+                unique_row_id_col="_unique_row_id",
                 db_type="radon_db",
                 app_name="kymflow",
                 on_table_row_selected=self._on_plot_pool_row_selected,
             )
         elif db_type == "velocity_event_db":
             return PlotPoolConfig(
-                pre_filter_columns=["roi_id"],
-                unique_row_id_col="kym_event_id",
+                pre_filter_columns=["roi_id", "event_type"],
+                unique_row_id_col="_unique_row_id",
                 db_type="velocity_event_db",
                 app_name="kymflow",
                 on_table_row_selected=self._on_plot_pool_velocity_row_selected,
@@ -554,7 +554,7 @@ class HomePage(BasePage):
     def _on_plot_pool_velocity_row_selected(self, row_id: str, row_dict: dict) -> None:
         """Callback when user selects a row in Velocity Events PlotPoolController.
 
-        Parses kym_event_id (path|roi_id|event_idx) and emits FileSelection with path, roi_id.
+        Parses _unique_row_id (path|roi_id|event_idx) and emits FileSelection with path, roi_id.
         Event-level selection (path, roi, event_id) deferred to Next Steps.
         """
         parts = row_id.split("|", 2)
