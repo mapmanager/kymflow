@@ -65,6 +65,7 @@ from kymflow.gui_v2.window_utils import copy_to_clipboard, reveal_in_file_manage
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc
+from nicewidgets.plot_pool_widget.plot_state import PlotState, PlotType
 
 logger = get_logger(__name__)
 
@@ -511,6 +512,19 @@ class HomePage(BasePage):
                 pre_filter_columns=["roi_id", "accepted"],
                 unique_row_id_col="_unique_row_id",
                 db_type="radon_db",
+                plot_state=PlotState(
+                    xcol="grandparent_folder",
+                    ycol="vel_mean",
+                    pre_filter={
+                        "roi_id": "1",
+                        "accepted": "True",
+                    },
+                    plot_type=PlotType.SWARM,
+                    group_col="grandparent_folder",
+                    color_grouping="roi_id",
+                    use_absolute_value=False,
+                    show_legend=False,
+                ),
                 app_name="kymflow",
                 on_table_row_selected=self._on_plot_pool_row_selected,
             )
@@ -520,6 +534,20 @@ class HomePage(BasePage):
                 unique_row_id_col="_unique_row_id",
                 db_type="velocity_event_db",
                 app_name="kymflow",
+                plot_state=PlotState(
+                    xcol="grandparent_folder",
+                    ycol="t_start",
+                    pre_filter={
+                        "roi_id": "1",
+                        "accepted": "True",
+                        "event_type": "User Added",
+                    },
+                    plot_type=PlotType.SWARM,
+                    group_col="grandparent_folder",
+                    color_grouping="event_type",
+                    # use_absolute_value=False,
+                    show_legend=False,
+                ),
                 on_table_row_selected=self._on_plot_pool_velocity_row_selected,
             )
         else:
