@@ -1489,10 +1489,12 @@ class KymAnalysis:
         Returns:
             List of RadonReport instances, one per ROI. Each report contains:
             - roi_id: int - ROI identifier
-            - vel_min, vel_max, vel_mean, vel_std, vel_se: float | None - Velocity statistics
+            - vel_min, vel_max, vel_mean, vel_std, vel_se, vel_cv: float | None - Velocity statistics
+            - vel_n_nan, vel_n_zero, vel_n_big: int | None - Velocity count statistics
             - img_min, img_max, img_mean, img_std: int | float | None - ROI image statistics
             - path: str | None - Full file path
             - file_name: str | None - File name without extension
+            - accepted: bool | None - Whether analysis has been accepted (KymAnalysis-level)
             
         Note:
             ROI image statistics (img_min, img_max, etc.) may be None if not calculated.
@@ -1514,6 +1516,9 @@ class KymAnalysis:
             if self.acq_image.path.parent.parent:
                 grandparent_folder = self.acq_image.path.parent.parent.name
         
+        # Get accepted status once per image (shared by all ROIs)
+        accepted = self.get_accepted()
+        
         for roi_id in roi_ids:
             # Fetch velocity data for this ROI
             velocity = self.get_analysis_value(roi_id, 'velocity')
@@ -1525,6 +1530,9 @@ class KymAnalysis:
             vel_std: Optional[float] = None
             vel_se: Optional[float] = None
             vel_cv: Optional[float] = None
+            vel_n_nan: Optional[int] = None
+            vel_n_zero: Optional[int] = None
+            vel_n_big: Optional[int] = None
 
             if velocity is None:
                 # No analysis data for this ROI
@@ -1549,6 +1557,17 @@ class KymAnalysis:
                     n_valid = np.sum(~np.isnan(velocity))
                     if vel_std is not None and n_valid > 0:
                         vel_se = vel_std / np.sqrt(n_valid)
+                    
+                    # Calculate count statistics
+                    vel_n_nan = int(np.sum(np.isnan(velocity)))
+                    # Count zeros (excluding NaN values)
+                    vel_n_zero = int(np.sum((velocity == 0) & (~np.isnan(velocity))))
+                    # Count "big" velocities: values > mean + 2*std (excluding NaN values)
+                    if vel_mean is not None and vel_std is not None:
+                        big_threshold = vel_mean + 2.0 * vel_std
+                        vel_n_big = int(np.sum((velocity > big_threshold) & (~np.isnan(velocity))))
+                    else:
+                        vel_n_big = None
             
             # Fetch ROI image statistics from the ROI object
             roi = self.acq_image.rois.get(roi_id)
@@ -1582,6 +1601,9 @@ class KymAnalysis:
                 vel_std=vel_std,
                 vel_se=vel_se,
                 vel_cv=vel_cv,
+                vel_n_nan=vel_n_nan,
+                vel_n_zero=vel_n_zero,
+                vel_n_big=vel_n_big,
                 img_min=img_min,
                 img_max=img_max,
                 img_mean=img_mean,
@@ -1590,6 +1612,7 @@ class KymAnalysis:
                 file_name=file_name,
                 parent_folder=parent_folder,
                 grandparent_folder=grandparent_folder,
+                accepted=accepted,
             )
             
             report.append(radon_report)

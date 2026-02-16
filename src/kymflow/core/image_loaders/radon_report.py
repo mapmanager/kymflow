@@ -26,6 +26,9 @@ class RadonReport:
         vel_std: Standard deviation of velocity (mm/s), or None if not available.
         vel_se: Standard error of velocity (mm/s), or None if not available.
         vel_cv: Coefficient of variation (std/mean), or None if mean is zero or unavailable.
+        vel_n_nan: Number of NaN values in velocity array, or None if not available.
+        vel_n_zero: Number of zero values in velocity array, or None if not available.
+        vel_n_big: Number of "big" velocity values (> mean + 2*std), or None if not available.
         img_min: Minimum pixel value in ROI region, or None if not calculated.
         img_max: Maximum pixel value in ROI region, or None if not calculated.
         img_mean: Mean pixel value in ROI region, or None if not calculated.
@@ -35,6 +38,9 @@ class RadonReport:
         parent_folder: Parent folder name, or None if not available.
         grandparent_folder: Grandparent folder name, or None if not available.
         rel_path: Path relative to base (folder root or file-list root), for portable CSV.
+        accepted: KymAnalysis-level boolean indicating whether this analysis has been accepted
+            by the user (True/False), or None if not available. This is set at the image level
+            and applies to all ROIs in the image.
     """
     
     roi_id: int
@@ -44,6 +50,9 @@ class RadonReport:
     vel_std: Optional[float] = None
     vel_se: Optional[float] = None
     vel_cv: Optional[float] = None
+    vel_n_nan: Optional[int] = None
+    vel_n_zero: Optional[int] = None
+    vel_n_big: Optional[int] = None
     img_min: Optional[int] = None
     img_max: Optional[int] = None
     img_mean: Optional[float] = None
@@ -53,6 +62,7 @@ class RadonReport:
     parent_folder: Optional[str] = None
     grandparent_folder: Optional[str] = None
     rel_path: Optional[str] = None
+    accepted: Optional[bool] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a dictionary for JSON/CSV export.
@@ -94,10 +104,21 @@ class RadonReport:
                 # Type conversions for robustness
                 if key == "roi_id":
                     filtered_data[key] = int(value) if value is not None else None
-                elif key in ["img_min", "img_max"]:
+                elif key in ["img_min", "img_max", "vel_n_nan", "vel_n_zero", "vel_n_big"]:
                     filtered_data[key] = int(value) if value is not None else None
                 elif key in ["vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "vel_cv", "img_mean", "img_std"]:
                     filtered_data[key] = float(value) if value is not None else None
+                elif key == "accepted":
+                    # Handle bool conversion: bool, string "True"/"False", int 1/0, None
+                    if value is None:
+                        filtered_data[key] = None
+                    elif isinstance(value, bool):
+                        filtered_data[key] = value
+                    elif isinstance(value, str):
+                        filtered_data[key] = value.lower() in ("true", "1", "yes")
+                    else:
+                        # Convert int 1/0 or other truthy/falsy values
+                        filtered_data[key] = bool(value)
                 else:
                     # Strings (path, file_name, parent_folder, grandparent_folder, rel_path)
                     filtered_data[key] = str(value) if value is not None else None

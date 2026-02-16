@@ -434,13 +434,7 @@ class HomePage(BasePage):
                         with container:
                             ui.label("No radon data.").classes("text-sm text-gray-500")
                         return
-                    cfg = PlotPoolConfig(
-                        pre_filter_columns=["roi_id"],
-                        unique_row_id_col="_unique_id",
-                        db_type="radon_db",
-                        app_name="kymflow",
-                        on_table_row_selected=self._on_plot_pool_row_selected,
-                    )
+                    cfg = self._get_plot_pool_config("radon_db")
                     ctrl = PlotPoolController(df, config=cfg)
                     ctrl.build(container=container)
                     self._plot_pool_controller_ref["value"] = ctrl
@@ -485,13 +479,7 @@ class HomePage(BasePage):
                         with container:
                             ui.label("No velocity event data.").classes("text-sm text-gray-500")
                         return
-                    cfg = PlotPoolConfig(
-                        pre_filter_columns=["roi_id"],
-                        unique_row_id_col="kym_event_id",
-                        db_type="velocity_event_db",
-                        app_name="kymflow",
-                        on_table_row_selected=self._on_plot_pool_velocity_row_selected,
-                    )
+                    cfg = self._get_plot_pool_config("velocity_event_db")
                     ctrl = PlotPoolController(df_vel, config=cfg)
                     ctrl.build(container=container)
                     self._plot_pool_velocity_controller_ref["value"] = ctrl
@@ -508,6 +496,34 @@ class HomePage(BasePage):
                     ui.label("No velocity event data. Load a folder and run event detection.").classes(
                         "text-sm text-gray-500"
                     )
+
+    def _get_plot_pool_config(self, db_type: str) -> PlotPoolConfig:
+        """Create PlotPoolConfig based on db_type.
+        
+        Args:
+            db_type: Either "radon_db" or "velocity_event_db"
+            
+        Returns:
+            Configured PlotPoolConfig instance
+        """
+        if db_type == "radon_db":
+            return PlotPoolConfig(
+                pre_filter_columns=["roi_id", "accepted"],
+                unique_row_id_col="_unique_id",
+                db_type="radon_db",
+                app_name="kymflow",
+                on_table_row_selected=self._on_plot_pool_row_selected,
+            )
+        elif db_type == "velocity_event_db":
+            return PlotPoolConfig(
+                pre_filter_columns=["roi_id"],
+                unique_row_id_col="kym_event_id",
+                db_type="velocity_event_db",
+                app_name="kymflow",
+                on_table_row_selected=self._on_plot_pool_velocity_row_selected,
+            )
+        else:
+            raise ValueError(f"Unknown db_type: {db_type}")
 
     def _on_plot_pool_row_selected(self, row_id: str, row_dict: dict) -> None:
         """Callback when user selects a row in Radon PlotPoolController. Emits FileSelection intent."""
