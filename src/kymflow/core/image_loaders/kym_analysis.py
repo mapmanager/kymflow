@@ -1437,6 +1437,13 @@ class KymAnalysis:
                     event_uuid = str(uuid4())
                     object.__setattr__(event, "_uuid", event_uuid)
                 event_id = event._uuid
+                # 20260217_fix_t_peak: guard for missing t_peak
+                if event.t_peak is None or (isinstance(event.t_peak, float) and not np.isfinite(event.t_peak)):
+                    logger.warning(
+                        "20260217_fix_t_peak: t_peak is missing/None for t_start:%s event_id=%s",
+                        event.t_start,
+                        event_id,
+                    )
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
                 event_dict["path"] = path
@@ -1480,6 +1487,13 @@ class KymAnalysis:
         if grandparent_folder is None:
             grandparent_folder = ""
         
+        # 20260217_fix_t_peak: guard for missing t_peak
+        if event.t_peak is None or (isinstance(event.t_peak, float) and not np.isfinite(event.t_peak)):
+            logger.warning(
+                "20260217_fix_t_peak: t_peak is missing/None for t_start:%s event_id=%s",
+                event.t_start,
+                event_id,
+            )
         event_dict["event_id"] = event_id
         event_dict["roi_id"] = roi_id
         event_dict["path"] = path
@@ -1488,7 +1502,7 @@ class KymAnalysis:
         else:
             event_dict["file_name"] = Path(path).stem if path else None
         event_dict["grandparent_folder"] = grandparent_folder
-        
+
         return event_dict
 
     def get_radon_report(self) -> List[RadonReport]:

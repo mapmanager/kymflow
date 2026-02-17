@@ -46,7 +46,7 @@ HOME_PLOT_EVENT_SPLITTER_RANGE: tuple[float, float] = (30.0, 90.0)
 # Events|Plot splitter: min keeps .before (Kym Event pane) from collapsing to 0.
 # ~2% ≈ 5px on typical container heights (Quasar splitter uses % units).
 # To change manually: edit EVENTS_PLOT_SPLITTER_MIN_PERCENT (e.g. 3.0 for ~7px).
-EVENTS_PLOT_SPLITTER_MIN_PERCENT: float = 2.0
+EVENTS_PLOT_SPLITTER_MIN_PERCENT: float = 0.0  #2.0
 HOME_EVENTS_PLOT_SPLITTER_RANGE: tuple[float, float] = (
     EVENTS_PLOT_SPLITTER_MIN_PERCENT,
     85.0,

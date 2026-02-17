@@ -89,7 +89,7 @@ class BaselineDropParams:
     mad_k: float = 3.0
     abs_score_floor: float = 0.25
     merge_gap_sec: float = 0.10
-    top_k_total: int = 0  # 6
+    top_k_total: int = 2  # 6
     min_sep_sec: float = 0.75
 
 

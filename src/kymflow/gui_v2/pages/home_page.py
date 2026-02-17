@@ -1001,11 +1001,14 @@ class HomePage(BasePage):
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:
+                            # just some v-height to seperate splitters
+                            # ui.element("div").style("height:1px; min-height:1px; line-height:1px; padding:0; margin:0;")
+                            # ui.element("div").style("height: 1px; padding: 0; margin: 0")
                             with ui.splitter(
                                 value=events_plot_splitter["value"],
                                 limits=events_plot_splitter["limits"],
                                 horizontal=True,
-                            ).classes("w-full flex-1 min-h-0") as events_plot_splitter_ui:
+                            ).classes("w-full flex-1 min-h-0 mt-[6px]") as events_plot_splitter_ui:
                                 events_plot_splitter_ref["value"] = events_plot_splitter_ui
 
                                 def _toggle_events_plot_splitter() -> None:
@@ -1043,7 +1046,8 @@ class HomePage(BasePage):
                                 add_splitter_handle(
                                     events_plot_splitter_ui,
                                     on_dblclick=_toggle_events_plot_splitter,
-                                    offset="after",
+                                    offset="center",
+                                    # offset="before",
                                 )
                                 events_plot_splitter_ui.on(
                                     "update:model-value",

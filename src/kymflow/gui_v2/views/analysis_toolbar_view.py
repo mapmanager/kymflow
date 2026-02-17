@@ -9,8 +9,9 @@ by AnalysisToolbarBindings).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Optional
+import dataclasses
 from pathlib import Path
+from typing import TYPE_CHECKING, Callable, Optional
 
 from nicegui import ui
 
@@ -115,6 +116,7 @@ class AnalysisToolbarView:
         self._progress_bar: Optional[ui.linear_progress] = None
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
+        self._reset_event_params_button: Optional[ui.button] = None
         # self._detect_all_events_button: Optional[ui.button] = None  # Commented out: Detect Events (all files) disabled
         self._win_cmp_sec_input: Optional[ui.number] = None
         self._smooth_sec_input: Optional[ui.number] = None
@@ -149,6 +151,7 @@ class AnalysisToolbarView:
         self._progress_bar = None
         # self._progress_label = None
         self._detect_events_button = None
+        self._reset_event_params_button = None
         # self._detect_all_events_button = None  # Commented out: Detect Events (all files) disabled
         self._win_cmp_sec_input = None
         self._smooth_sec_input = None
@@ -710,11 +713,15 @@ class AnalysisToolbarView:
         # with ui.expansion("event analysis", value=True).classes("w-full"):
         with kym_expansion("Event Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
-                # Detect Events buttons (moved to top, right after expansion)
+                # Detect Events and Reset buttons (same row)
                 with ui.row().classes("items-end gap-2"):
                     self._detect_events_button = ui.button(
                         "Detect Events",
                         on_click=self._on_detect_events_click
+                    )
+                    self._reset_event_params_button = ui.button(
+                        "Reset",
+                        on_click=self._on_reset_event_params_click,
                     )
                     # Commented out: Detect Events (all files) disabled
                     # self._detect_all_events_button = ui.button(
@@ -754,6 +761,23 @@ class AnalysisToolbarView:
                     min=0.0,
                     step=0.01
                 ).classes("w-full").props("dense")
+
+    def _on_reset_event_params_click(self) -> None:
+        """Reset event analysis parameter inputs to BaselineDropParams class defaults."""
+        # Read defaults from class definition (no BaselineDropParams instance)
+        defaults = {
+            f.name: f.default
+            for f in dataclasses.fields(BaselineDropParams)
+            if f.default is not dataclasses.MISSING
+        }
+        if self._win_cmp_sec_input is not None and "win_cmp_sec" in defaults:
+            self._win_cmp_sec_input.value = defaults["win_cmp_sec"]
+        if self._smooth_sec_input is not None and "smooth_sec" in defaults:
+            self._smooth_sec_input.value = defaults["smooth_sec"]
+        if self._mad_k_input is not None and "mad_k" in defaults:
+            self._mad_k_input.value = defaults["mad_k"]
+        if self._abs_score_floor_input is not None and "abs_score_floor" in defaults:
+            self._abs_score_floor_input.value = defaults["abs_score_floor"]
 
     def _on_detect_events_click(self) -> None:
         """Handle Detect Events button click."""

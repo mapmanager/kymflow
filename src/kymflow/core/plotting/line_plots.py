@@ -367,13 +367,13 @@ def _add_velocity_event_overlays(  # pragma: no cover
     xref = f"x{row if row > 1 else ''}"
     yref = f"y{row if row > 1 else ''}"
     
-    # Event overlay brightness (alpha value, 0.0 = transparent, 1.0 = opaque)
-    event_overlay_alpha = 0.5
-    
+    # Event overlay brightness (alpha: 0.0 = transparent, 1.0 = opaque)
+    event_overlay_alpha = 0.5  # red, blue, yellow
+    baseline_rise_alpha = 0.4  # green (slightly more transparent so trace remains visible)
     # Color mapping by event_type
     color_map = {
         "baseline_drop": f"rgba(255, 0, 0, {event_overlay_alpha})",  # red
-        "baseline_rise": f"rgba(0, 255, 0, {event_overlay_alpha})",  # green
+        "baseline_rise": f"rgba(0, 255, 0, {baseline_rise_alpha})",  # green
         "nan_gap": f"rgba(0, 0, 255, {event_overlay_alpha})",  # blue
         "User Added": f"rgba(255, 255, 0, {event_overlay_alpha})",  # yellow
     }
@@ -401,23 +401,15 @@ def _add_velocity_event_overlays(  # pragma: no cover
             continue
         
         _outlineRect = False
-        # Determine t_end
         if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
-            # Use fixed span when t_end is missing or invalid
             t_end_plot = t_start + span_sec_if_no_end
-            _outlineRect = True  # no t_end then use outline
+            _outlineRect = True
         else:
             t_end_plot = float(event.t_end)
-            # Clamp to time range
             if t_end_plot > time_max:
                 t_end_plot = time_max
-        
-        # Ensure x0 < x1
-        x0 = t_start
-        x1 = t_end_plot
-        if x1 < x0:
-            x0, x1 = x1, x0
-        
+        x0, x1 = t_start, t_end_plot
+
         # Get event_id (UUID) from event object
         event_uuid = event._uuid if hasattr(event, '_uuid') and event._uuid else None
         if event_uuid is None:
@@ -450,7 +442,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
             "y0": 0,
             "y1": 1,
             "fillcolor": event_color,
-            "layer": "below",
+            "layer": "above",  # Render on top of velocity trace
             "name": event_uuid,  # UUID for CRUD operations
         }
         
@@ -924,6 +916,9 @@ def _calculate_event_rect_coords(
 ) -> tuple[float, float]:
     """Calculate x0, x1 coordinates for an event rect.
     
+    Uses t_start as left (x0) and t_end as right (x1), or t_start + span_sec_if_no_end
+    when t_end is None or invalid.
+    
     Args:
         event: VelocityEvent to calculate coordinates for.
         time_range: Tuple of (time_min, time_max) for clamping in physical units.
@@ -943,23 +938,13 @@ def _calculate_event_rect_coords(
         raise ValueError(f"Invalid time_range: {time_range}")
     
     t_start = float(event.t_start)
-    
-    # Determine t_end
     if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
-        # Use fixed span when t_end is missing or invalid
         t_end_plot = t_start + span_sec_if_no_end
     else:
         t_end_plot = float(event.t_end)
-        # Clamp to time range
         if t_end_plot > time_max:
             t_end_plot = time_max
-    
-    # Ensure x0 < x1
-    x0 = t_start
-    x1 = t_end_plot
-    if x1 < x0:
-        x0, x1 = x1, x0
-    
+    x0, x1 = t_start, t_end_plot
     return (x0, x1)
 
 
@@ -1005,16 +990,17 @@ def add_kym_event_rect(
     
     # Calculate coordinates
     x0, x1 = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end)
-    
+
     # Determine xref and yref for this row
     xref = f"x{row if row > 1 else ''}"
     yref = f"y{row if row > 1 else ''}"
     
     # Get event color (same logic as _add_velocity_event_overlays)
-    event_overlay_alpha = 0.5
+    event_overlay_alpha = 0.5  # red, blue, yellow
+    baseline_rise_alpha = 0.4  # green
     color_map = {
         "baseline_drop": f"rgba(255, 0, 0, {event_overlay_alpha})",  # red
-        "baseline_rise": f"rgba(0, 255, 0, {event_overlay_alpha})",  # green
+        "baseline_rise": f"rgba(0, 255, 0, {baseline_rise_alpha})",  # green
         "nan_gap": f"rgba(0, 0, 255, {event_overlay_alpha})",  # blue
         "User Added": f"rgba(255, 255, 0, {event_overlay_alpha})",  # yellow
     }
@@ -1030,7 +1016,7 @@ def add_kym_event_rect(
         "y0": 0,
         "y1": 1,
         "fillcolor": event_color,
-        "layer": "below",
+        "layer": "above",  # Render on top of velocity trace
         "name": event_uuid,
         "line": {"width": 0},  # Non-selected by default (no outline)
     }
@@ -1111,10 +1097,10 @@ def move_kym_event_rect(
         return
     
     shape_idx, shape_dict = result
-    
+
     # Calculate new coordinates
     x0, x1 = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end)
-    
+
     # Update coordinates (preserve other properties)
     layout = plotly_dict['layout']
     layout['shapes'][shape_idx]['x0'] = x0
@@ -1239,10 +1225,11 @@ def select_kym_event_rect(
     # Get target UUID from event._uuid
     target_uuid = event._uuid if event is not None and hasattr(event, '_uuid') and event._uuid else None
 
-    # Determine dash style for selected event
+    # Determine dash style for selected event (dashed when no t_end, e.g. user-added)
     use_dash = False
     if event is not None:
-        if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= event.t_start:
+        t_start = float(event.t_start) if event.t_start is not None else 0.0
+        if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
             use_dash = True
     
     # Iterate all shapes and update selection state

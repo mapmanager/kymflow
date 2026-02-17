@@ -94,6 +94,7 @@ def _default_columns() -> list[ColumnConfig]:
         ),
         _col("event_type", "Type", width=160),
         _col("t_start", "Start (s)", width=110, cell_class="ag-cell-right"),
+        _col("t_peak", "Peak (s)", width=110, cell_class="ag-cell-right"),
         # _col("t_end", "Stop (s)", width=110, cell_class="ag-cell-right"),
         _col("duration_sec", "Dur (s)", width=110, cell_class="ag-cell-right"),
         _col("strength", "Strength", width=110, cell_class="ag-cell-right"),
