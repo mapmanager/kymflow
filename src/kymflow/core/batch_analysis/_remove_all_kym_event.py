@@ -12,39 +12,13 @@ logger = get_logger(__name__)
 
 setup_logging()
 
-def getKymFileList(path:str, depth:int = 4):
-    path = Path(path)
-    parent_dir = path.parent
-    # grandparent_dir = p.parent.parent
+def _delete_all_kym_event(path:str):
+    """Delete all kym velocity events for all KymImage in the given path.
     
-    logger.info(f"building KymImageList: {parent_dir}")
-    kymList = KymImageList(path, file_extension=".tif", depth=depth)
-    return kymList
-
-def _delete_all_kym_event(kymImage:KymImage) -> bool:
-    """Inspect kym image and return True if kym image needs saving
-    remove all kym velocity events
+    if any changes, rebuild velocity event cache and save to CSV
     """
-    retNeedSaving = False
-    ka = kymImage.get_kym_analysis()
-    for roi_id in kymImage.rois.get_roi_ids():
-        n_total_events = ka.num_velocity_events(roi_id)
-        
-        if n_total_events == 0:
-            continue
-        ka.remove_velocity_event(roi_id, remove_these="_remove_all")
-        retNeedSaving = True
-
-    return retNeedSaving
-
-if __name__ == "__main__":
-    reply = input("[[DANGER]] This will modify existing analysis. Do you want to proceed? (y/n): ").strip().lower()
-    if reply != "y":
-        print("Aborted.")
-        raise SystemExit(0)
-
-    path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis"
-    kymList = KymImageList(path, file_extension=".tif", depth=4)
+    logger.info(f'loading kymimagelist from path:{path}')
+    kymList = KymImageList(file_path_list=path, file_extension=".tif", depth=4)
     
     any_changes = False
     for kymImage in kymList:
@@ -67,3 +41,17 @@ if __name__ == "__main__":
     if any_changes:
         logger.info("rebuilding velocity event cache and saving to CSV")
         kymList.rebuild_velocity_event_db_and_save()
+    else:
+        logger.info("no changes detected")
+
+if __name__ == "__main__":
+    reply = input("[[DANGER]] This will modify existing analysis. Do you want to proceed? (y/n): ").strip().lower()
+    if reply != "y":
+        print("Aborted.")
+        raise SystemExit(0)
+
+    # path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis"
+    
+    path = '/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis/randomized-declan-20260208-n-5.csv'
+
+    _delete_all_kym_event(path)

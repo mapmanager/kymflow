@@ -40,8 +40,17 @@ SCHEMA_VERSION: int = 3
 DEFAULT_FOLDER_DEPTH: int = 1
 DEFAULT_HOME_FILE_PLOT_SPLITTER: float = 15.0
 DEFAULT_HOME_PLOT_EVENT_SPLITTER: float = 50.0
+DEFAULT_HOME_EVENTS_PLOT_SPLITTER: float = 55.0
 HOME_FILE_PLOT_SPLITTER_RANGE: tuple[float, float] = (0.0, 60.0)
 HOME_PLOT_EVENT_SPLITTER_RANGE: tuple[float, float] = (30.0, 90.0)
+# Events|Plot splitter: min keeps .before (Kym Event pane) from collapsing to 0.
+# ~2% ≈ 5px on typical container heights (Quasar splitter uses % units).
+# To change manually: edit EVENTS_PLOT_SPLITTER_MIN_PERCENT (e.g. 3.0 for ~7px).
+EVENTS_PLOT_SPLITTER_MIN_PERCENT: float = 2.0
+HOME_EVENTS_PLOT_SPLITTER_RANGE: tuple[float, float] = (
+    EVENTS_PLOT_SPLITTER_MIN_PERCENT,
+    85.0,
+)
 MAX_RECENTS: int = 15
 
 
@@ -165,6 +174,7 @@ class UserConfigData:
     # Home page splitter positions (percentages).
     home_file_plot_splitter: float = DEFAULT_HOME_FILE_PLOT_SPLITTER
     home_plot_event_splitter: float = DEFAULT_HOME_PLOT_EVENT_SPLITTER
+    home_events_plot_splitter: float = DEFAULT_HOME_EVENTS_PLOT_SPLITTER
 
     def to_json_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -240,6 +250,7 @@ class UserConfigData:
         # home splitter positions
         hfps = d.get("home_file_plot_splitter", DEFAULT_HOME_FILE_PLOT_SPLITTER)
         hpse = d.get("home_plot_event_splitter", DEFAULT_HOME_PLOT_EVENT_SPLITTER)
+        heps = d.get("home_events_plot_splitter", DEFAULT_HOME_EVENTS_PLOT_SPLITTER)
         try:
             home_file_plot_splitter = float(hfps)
         except Exception:
@@ -248,6 +259,10 @@ class UserConfigData:
             home_plot_event_splitter = float(hpse)
         except Exception:
             home_plot_event_splitter = DEFAULT_HOME_PLOT_EVENT_SPLITTER
+        try:
+            home_events_plot_splitter = float(heps)
+        except Exception:
+            home_events_plot_splitter = DEFAULT_HOME_EVENTS_PLOT_SPLITTER
 
         return cls(
             schema_version=schema_version,
@@ -258,6 +273,7 @@ class UserConfigData:
             default_folder_depth=default_folder_depth,
             home_file_plot_splitter=home_file_plot_splitter,
             home_plot_event_splitter=home_plot_event_splitter,
+            home_events_plot_splitter=home_events_plot_splitter,
         )
 
 
@@ -444,6 +460,12 @@ class UserConfig:
             data.home_plot_event_splitter = float(data.home_plot_event_splitter)
         except Exception:
             data.home_plot_event_splitter = DEFAULT_HOME_PLOT_EVENT_SPLITTER
+        if not hasattr(data, "home_events_plot_splitter"):
+            data.home_events_plot_splitter = DEFAULT_HOME_EVENTS_PLOT_SPLITTER
+        try:
+            data.home_events_plot_splitter = float(data.home_events_plot_splitter)
+        except Exception:
+            data.home_events_plot_splitter = DEFAULT_HOME_EVENTS_PLOT_SPLITTER
 
         data.home_file_plot_splitter = _clamp_float(
             data.home_file_plot_splitter,
@@ -454,6 +476,11 @@ class UserConfig:
             data.home_plot_event_splitter,
             HOME_PLOT_EVENT_SPLITTER_RANGE[0],
             HOME_PLOT_EVENT_SPLITTER_RANGE[1],
+        )
+        data.home_events_plot_splitter = _clamp_float(
+            data.home_events_plot_splitter,
+            HOME_EVENTS_PLOT_SPLITTER_RANGE[0],
+            HOME_EVENTS_PLOT_SPLITTER_RANGE[1],
         )
 
     def save(self) -> None:
@@ -692,14 +719,17 @@ class UserConfig:
                 return int(rf.depth)
         return int(self.data.default_folder_depth)
 
-    def get_home_splitter_positions(self) -> tuple[float, float]:
-        """Return (file_plot_splitter, plot_event_splitter)."""
+    def get_home_splitter_positions(self) -> tuple[float, float, float]:
+        """Return (file_plot_splitter, plot_event_splitter, events_plot_splitter)."""
         return (
             float(self.data.home_file_plot_splitter),
             float(self.data.home_plot_event_splitter),
+            float(self.data.home_events_plot_splitter),
         )
 
-    def set_home_splitter_positions(self, file_plot: float, plot_event: float) -> None:
+    def set_home_splitter_positions(
+        self, file_plot: float, plot_event: float, events_plot: float
+    ) -> None:
         self.data.home_file_plot_splitter = _clamp_float(
             float(file_plot),
             HOME_FILE_PLOT_SPLITTER_RANGE[0],
@@ -709,6 +739,11 @@ class UserConfig:
             float(plot_event),
             HOME_PLOT_EVENT_SPLITTER_RANGE[0],
             HOME_PLOT_EVENT_SPLITTER_RANGE[1],
+        )
+        self.data.home_events_plot_splitter = _clamp_float(
+            float(events_plot),
+            HOME_EVENTS_PLOT_SPLITTER_RANGE[0],
+            HOME_EVENTS_PLOT_SPLITTER_RANGE[1],
         )
 
     def set_default_folder_depth(self, depth: int) -> None:

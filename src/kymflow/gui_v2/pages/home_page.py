@@ -35,6 +35,7 @@ from kymflow.gui_v2.controllers import (
 )
 from kymflow.gui_v2.events import FileSelection, NextPrevFileEvent, SaveSelected, SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
+from kymflow.gui_v2.utils.splitter_handle import add_splitter_handle
 from kymflow.gui_v2.views import (
     AboutTabView,
     AnalysisToolbarBindings,
@@ -807,22 +808,6 @@ class HomePage(BasePage):
         self._register_next_prev_file_shortcuts()
         self._register_save_selected_shortcut()
 
-        # Add CSS for splitter handle container + small split handles
-        ui.add_css("""
-            .handle_wrap {
-                height: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .splitter_handle {
-                width: 26px;
-                height: 5px;
-                border-radius: 4px;
-                background: rgba(148, 163, 184, 0.8);
-            }
-        """)
-
         # Snap positions are percentages for the LEFT pane (before)
         CLOSED = 6
         OPEN_DEFAULT = 28
@@ -855,18 +840,18 @@ class HomePage(BasePage):
                     # build() creates fresh UI elements in the new container context
                     self.build()
 
-            # SEPARATOR: toggle button lives on the handle
-            with splitter.separator:
-                with ui.element('div').classes('handle_wrap'):
-                    def toggle_snap() -> None:
-                        """If open-ish, remember current width and close; else reopen to last width."""
-                        if splitter.value > (CLOSED + 2):
-                            last_open['value'] = splitter.value
-                            splitter.value = CLOSED
-                        else:
-                            splitter.value = last_open['value']
+            def _toggle_drawer_splitter() -> None:
+                if splitter.value > (CLOSED + 2):
+                    last_open['value'] = splitter.value
+                    splitter.value = CLOSED
+                else:
+                    splitter.value = last_open['value']
 
-                    ui.button(icon='chevron_left', on_click=toggle_snap).props('flat dense')
+            add_splitter_handle(
+                splitter,
+                on_dblclick=_toggle_drawer_splitter,
+                orientation="vertical",
+            )
 
     def build(self) -> None:
         """Build the Home page UI.
@@ -878,37 +863,49 @@ class HomePage(BasePage):
         Selection restoration happens after the UI is created, but only once
         per client session to avoid overwriting user selections.
         """
-        # Splitter parameters (percentages, vertical layout). Tweak these as needed.
+        # Splitter parameters (percentages, horizontal layout). Tweak these as needed.
         file_plot_splitter = {"value": 15.0, "limits": (0, 60)}
         plot_event_splitter = {"value": 50.0, "limits": (30, 90)}
+        from kymflow.core.user_config import HOME_EVENTS_PLOT_SPLITTER_RANGE
+
+        events_plot_splitter = {"value": 55.0, "limits": HOME_EVENTS_PLOT_SPLITTER_RANGE}
 
         user_config = self.context.user_config
         if user_config is not None:
-            saved_file_plot, saved_plot_event = user_config.get_home_splitter_positions()
+            saved_file_plot, saved_plot_event, saved_events_plot = user_config.get_home_splitter_positions()
             min_fp, max_fp = file_plot_splitter["limits"]
             min_pe, max_pe = plot_event_splitter["limits"]
+            min_ep, max_ep = events_plot_splitter["limits"]
             file_plot_splitter["value"] = max(min_fp, min(max_fp, saved_file_plot))
             plot_event_splitter["value"] = max(min_pe, min(max_pe, saved_plot_event))
+            events_plot_splitter["value"] = max(min_ep, min(max_ep, saved_events_plot))
         # Remember last open sizes for double-click min/max toggles.
         file_plot_last = {"value": file_plot_splitter["value"]}
         plot_event_last = {"value": plot_event_splitter["value"]}
+        events_plot_last = {"value": events_plot_splitter["value"]}
 
         # File table SECOND (creates grid ui here) - in disclosure triangle
         # with ui.expansion("Files", value=True).classes("w-full"):
         if 1:
             # Splitter between file table (top) and plot/event area (bottom).
             plot_splitter_ref: dict[str, ui.splitter | None] = {"value": None}
+            events_plot_splitter_ref: dict[str, ui.splitter | None] = {"value": None}
 
             def _update_splitter_positions() -> None:
                 if user_config is None:
                     return
                 file_val = float(file_plot_splitter_ui.value)
                 plot_splitter = plot_splitter_ref["value"]
+                events_splitter = events_plot_splitter_ref["value"]
                 if plot_splitter is None:
                     plot_val = float(plot_event_splitter["value"])
                 else:
                     plot_val = float(plot_splitter.value)
-                user_config.set_home_splitter_positions(file_val, plot_val)
+                if events_splitter is None:
+                    events_val = float(events_plot_splitter["value"])
+                else:
+                    events_val = float(events_splitter.value)
+                user_config.set_home_splitter_positions(file_val, plot_val, events_val)
 
             with ui.splitter(
                 value=file_plot_splitter["value"],
@@ -1004,14 +1001,24 @@ class HomePage(BasePage):
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:
-                            events_plot_splitter_val = 55.0  # % for events, rest for plot pool
                             with ui.splitter(
-                                value=events_plot_splitter_val,
-                                limits=(0, 85),  # 0 allows Kym Event view to be fully collapsed
+                                value=events_plot_splitter["value"],
+                                limits=events_plot_splitter["limits"],
                                 horizontal=True,
-                            ).classes("w-full flex-1 min-h-0") as events_plot_splitter:
+                            ).classes("w-full flex-1 min-h-0") as events_plot_splitter_ui:
+                                events_plot_splitter_ref["value"] = events_plot_splitter_ui
+
+                                def _toggle_events_plot_splitter() -> None:
+                                    min_val, max_val = events_plot_splitter["limits"]
+                                    if events_plot_splitter_ui.value > (min_val + 1):
+                                        events_plot_last["value"] = events_plot_splitter_ui.value
+                                        events_plot_splitter_ui.value = min_val
+                                    else:
+                                        events_plot_splitter_ui.value = events_plot_last["value"] or 55.0
+                                    _update_splitter_positions()
+
                                 # Events pane (left)
-                                with events_plot_splitter.before:
+                                with events_plot_splitter_ui.before:
                                     with ui.column().classes("w-full h-full min-h-0 flex flex-col"):
                                         self._event_view.render()
                                         current_file = self.context.app_state.selected_file
@@ -1027,28 +1034,31 @@ class HomePage(BasePage):
                                         # Sync initial filter state from event view to image line viewer
                                         self._image_line_viewer.set_event_filter(self._event_view._event_filter)
                                 # Plot pool pane (right) - 20260213ppc
-                                with events_plot_splitter.after:
+                                with events_plot_splitter_ui.after:
                                     self._plot_pool_container = ui.column().classes(
                                         "w-full h-full min-h-0 flex flex-col overflow-auto"
                                     )
                                     self._refresh_plot_pool_content()
 
-                        # Draw a small visual handle on the nested splitter separator.
-                        with plot_splitter.separator:
-                            handle = ui.element("div").classes("splitter_handle")
-                            handle.on("dblclick", lambda _e: _toggle_plot_event_splitter())
+                                add_splitter_handle(
+                                    events_plot_splitter_ui,
+                                    on_dblclick=_toggle_events_plot_splitter,
+                                    offset="after",
+                                )
+                                events_plot_splitter_ui.on(
+                                    "update:model-value",
+                                    _update_splitter_positions,
+                                    throttle=0.2,
+                                )
 
+                        add_splitter_handle(plot_splitter, on_dblclick=_toggle_plot_event_splitter)
                         plot_splitter.on(
                             "update:model-value",
                             _update_splitter_positions,
                             throttle=0.2,
                         )
 
-                # Draw a small visual handle on the file/plot splitter separator.
-                with file_plot_splitter_ui.separator:
-                    handle = ui.element("div").classes("splitter_handle")
-                    handle.on("dblclick", lambda _e: _toggle_file_plot_splitter())
-
+                add_splitter_handle(file_plot_splitter_ui, on_dblclick=_toggle_file_plot_splitter)
                 file_plot_splitter_ui.on(
                     "update:model-value",
                     _update_splitter_positions,

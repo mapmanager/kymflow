@@ -6,8 +6,10 @@ from pathlib import Path
 
 from kymflow.core.user_config import (
     DEFAULT_FOLDER_DEPTH,
+    DEFAULT_HOME_EVENTS_PLOT_SPLITTER,
     DEFAULT_HOME_FILE_PLOT_SPLITTER,
     DEFAULT_HOME_PLOT_EVENT_SPLITTER,
+    HOME_EVENTS_PLOT_SPLITTER_RANGE,
     HOME_FILE_PLOT_SPLITTER_RANGE,
     HOME_PLOT_EVENT_SPLITTER_RANGE,
     SCHEMA_VERSION,
@@ -25,6 +27,7 @@ def test_load_defaults_when_missing(tmp_path: Path) -> None:
     assert cfg.get_home_splitter_positions() == (
         DEFAULT_HOME_FILE_PLOT_SPLITTER,
         DEFAULT_HOME_PLOT_EVENT_SPLITTER,
+        DEFAULT_HOME_EVENTS_PLOT_SPLITTER,
     )
     assert not cfg_path.exists()
 
@@ -54,7 +57,7 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
 
     cfg.push_recent_path(folder_a, depth=2)
     cfg.push_recent_path(folder_b, depth=3)
-    cfg.set_home_splitter_positions(12.5, 61.0)
+    cfg.set_home_splitter_positions(12.5, 61.0, 55.0)
     cfg.save()
 
     cfg2 = UserConfig.load(config_path=cfg_path)
@@ -64,7 +67,7 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
     # With append behavior: oldest first - folder_a (depth=2) was added first, folder_b (depth=3) was added last
     assert recents[0][1] == 2
     assert recents[1][1] == 3
-    assert cfg2.get_home_splitter_positions() == (12.5, 61.0)
+    assert cfg2.get_home_splitter_positions() == (12.5, 61.0, 55.0)
 
 
 def test_push_recent_moves_to_end_and_updates_depth(tmp_path: Path) -> None:
@@ -173,11 +176,12 @@ def test_splitter_positions_are_clamped(tmp_path: Path) -> None:
     cfg_path = tmp_path / "user_config.json"
     cfg = UserConfig.load(config_path=cfg_path)
 
-    cfg.set_home_splitter_positions(-10.0, 200.0)
-    file_plot, plot_event = cfg.get_home_splitter_positions()
+    cfg.set_home_splitter_positions(-10.0, 200.0, 100.0)
+    file_plot, plot_event, events_plot = cfg.get_home_splitter_positions()
 
     assert file_plot == HOME_FILE_PLOT_SPLITTER_RANGE[0]
     assert plot_event == HOME_PLOT_EVENT_SPLITTER_RANGE[1]
+    assert events_plot == HOME_EVENTS_PLOT_SPLITTER_RANGE[1]
 
 
 def test_ensure_exists(tmp_path: Path) -> None:
@@ -288,22 +292,25 @@ def test_home_splitter_getter_setter(tmp_path: Path) -> None:
     cfg = UserConfig.load(config_path=cfg_path)
     
     # Test default values
-    file_plot, plot_event = cfg.get_home_splitter_positions()
+    file_plot, plot_event, events_plot = cfg.get_home_splitter_positions()
     assert file_plot == DEFAULT_HOME_FILE_PLOT_SPLITTER
     assert plot_event == DEFAULT_HOME_PLOT_EVENT_SPLITTER
+    assert events_plot == DEFAULT_HOME_EVENTS_PLOT_SPLITTER
     
     # Test setting valid values
-    cfg.set_home_splitter_positions(20.0, 60.0)
-    file_plot2, plot_event2 = cfg.get_home_splitter_positions()
+    cfg.set_home_splitter_positions(20.0, 60.0, 70.0)
+    file_plot2, plot_event2, events_plot2 = cfg.get_home_splitter_positions()
     assert file_plot2 == 20.0
     assert plot_event2 == 60.0
+    assert events_plot2 == 70.0
     
     # Test persistence
     cfg.save()
     cfg2 = UserConfig.load(config_path=cfg_path)
-    file_plot3, plot_event3 = cfg2.get_home_splitter_positions()
+    file_plot3, plot_event3, events_plot3 = cfg2.get_home_splitter_positions()
     assert file_plot3 == 20.0
     assert plot_event3 == 60.0
+    assert events_plot3 == 70.0
 
 
 def test_push_recent_path_with_file(tmp_path: Path) -> None:

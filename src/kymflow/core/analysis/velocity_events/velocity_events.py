@@ -84,12 +84,12 @@ class BaselineDropParams:
             Moderate importance; mostly relevant if top_k_total > 0.
     """
     win_cmp_sec: float = 0.25
-    smooth_sec: float = 0.05
+    smooth_sec: float = 0.1  # 0.05
     min_valid_per_side: Optional[int] = None
     mad_k: float = 3.0
     abs_score_floor: float = 0.25
     merge_gap_sec: float = 0.10
-    top_k_total: int = 6
+    top_k_total: int = 0  # 6
     min_sep_sec: float = 0.75
 
 
