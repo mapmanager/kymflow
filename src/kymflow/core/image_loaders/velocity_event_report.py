@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, fields
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+# Single source of truth for CSV float precision. Used by save, load, and staleness comparison.
+VELOCITY_EVENT_CSV_ROUND_DECIMALS = 3
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
 
@@ -71,9 +73,11 @@ class VelocityEventReport:
         parent_folder: Optional[str] = None,
         grandparent_folder: Optional[str] = None,
         accepted: Optional[bool] = None,
-        round_decimals: int = 3,
+        round_decimals: Optional[int] = None,
     ) -> "VelocityEventReport":
         """Build a VelocityEventReport from a VelocityEvent and DB metadata."""
+        if round_decimals is None:
+            round_decimals = VELOCITY_EVENT_CSV_ROUND_DECIMALS
         _unique_row_id = f"{path_str}|{roi_id}|{event_idx}"
         d = event.to_dict(round_decimals=round_decimals)
         return cls(

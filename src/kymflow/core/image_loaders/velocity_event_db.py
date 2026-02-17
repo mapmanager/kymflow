@@ -7,12 +7,16 @@ all CRUD and I/O in this class.
 
 from __future__ import annotations
 import os
+from dataclasses import fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional
 
 import pandas as pd
 
-from kymflow.core.image_loaders.velocity_event_report import VelocityEventReport
+from kymflow.core.image_loaders.velocity_event_report import (
+    VELOCITY_EVENT_CSV_ROUND_DECIMALS,
+    VelocityEventReport,
+)
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
@@ -48,6 +52,20 @@ _EXPECTED_COLS = {
     "note",
     "accepted",
 }
+
+
+def _norm_event_tuple(
+    t_start: Optional[float],
+    t_end: Optional[float],
+    event_type: Optional[str],
+    round_decimals: int = VELOCITY_EVENT_CSV_ROUND_DECIMALS,
+) -> tuple:
+    """Canonical tuple for staleness comparison. Rounds values; treats None and nan as equivalent for t_end and event_type."""
+    rd = round_decimals
+    ts = round(float(t_start), rd) if t_start is not None and not pd.isna(t_start) else None
+    te = round(float(t_end), rd) if t_end is not None and not pd.isna(t_end) else None
+    et = "" if event_type is None or pd.isna(event_type) else str(event_type)
+    return (ts, te, et)
 
 
 class VelocityEventDb:
@@ -141,8 +159,10 @@ class VelocityEventDb:
             )
             if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
                 return
-            
-            self.save()
+
+            # Rebuild in-memory cache only. Do NOT persist to CSV here.
+            # CSV is saved only when user explicitly saves (Save Selected / Save All)
+            # via update_velocity_event_for_image -> update_from_image_and_persist.
             logger.info("Velocity event DB load complete (rebuilt from images: %s)", rebuild_reason)
             
             if progress_cb is not None and n > 0:
@@ -197,7 +217,8 @@ class VelocityEventDb:
                         events = []
                     key = (path_str, roi_id)
                     current[key] = [
-                        (e.t_start, e.t_end or e.t_start, e.event_type) for e in events
+                        (e.t_start, e.t_end, getattr(e.event_type, "value", e.event_type))
+                        for e in events
                     ]
             except Exception as e:
                 logger.warning("Failed to get velocity events for %s: %s", path_str, e)
@@ -214,38 +235,46 @@ class VelocityEventDb:
             if key not in cache_by_key:
                 cache_by_key[key] = []
             t_start = row.get("t_start")
-            t_end = row.get("t_end", t_start)
-            event_type = row.get("event_type", "")
+            t_end = row.get("t_end")
+            event_type = row.get("event_type")
             cache_by_key[key].append((t_start, t_end, event_type))
 
-        # Compare
+        # Compare: normalize both sides before comparison
         all_keys = set(current.keys()) | set(cache_by_key.keys())
         for key in all_keys:
             curr_list = current.get(key, [])
             cache_list = cache_by_key.get(key, [])
             if len(curr_list) != len(cache_list):
                 return True
-            curr_sorted = sorted(curr_list, key=lambda x: (x[0], x[1]))
-            cache_sorted = sorted(cache_list, key=lambda x: (x[0], x[1]))
+            curr_norm = [_norm_event_tuple(x[0], x[1], x[2]) for x in curr_list]
+            cache_norm = [_norm_event_tuple(x[0], x[1], x[2]) for x in cache_list]
+            curr_sorted = sorted(curr_norm, key=lambda x: (x[0], x[1]))
+            cache_sorted = sorted(cache_norm, key=lambda x: (x[0], x[1]))
             if curr_sorted != cache_sorted:
-                logger.debug('STALE')
-                logger.debug(f"  curr_sorted:")
+                logger.debug("STALE")
+                logger.debug("  curr_sorted:")
                 for _i in curr_sorted:
                     print(_i)
-                logger.debug(f"  cache_sorted:")
+                logger.debug("  cache_sorted:")
                 for _i in cache_sorted:
                     print(_i)
                 return True
         return False
 
     def save(self) -> bool:
-        """Persist cache to CSV. Returns True if saved, False if no DB path."""
+        """Persist cache to CSV. Returns True if saved, False if no DB path.
+
+        When cache is empty, writes a CSV with correct column headers and 0 rows
+        so the file reflects that all events were deleted (e.g. after remove-all script).
+        """
         if self._db_path is None:
             return False
-        if not self._cache:
-            return False
         try:
-            df = pd.DataFrame(self._cache)
+            if self._cache:
+                df = pd.DataFrame(self._cache)
+            else:
+                col_order = [f.name for f in fields(VelocityEventReport)]
+                df = pd.DataFrame(columns=col_order)
             logger.info("Saving velocity event DB to: %s", self._db_path)
             df.to_csv(self._db_path, index=False)
             return True

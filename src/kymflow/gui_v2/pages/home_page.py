@@ -23,6 +23,7 @@ from kymflow.gui_v2.controllers import (
     FileTablePersistenceController,
     FolderController,
     ImageDisplayController,
+    KymEventCacheSyncController,
     KymEventRangeStateController,
     MetadataController,
     NextPrevFileController,
@@ -120,6 +121,7 @@ class HomePage(BasePage):
         self._velocity_event_update_controller: VelocityEventUpdateController | None = None
         self._add_kym_event_controller: AddKymEventController | None = None
         self._delete_kym_event_controller: DeleteKymEventController | None = None
+        self._kym_event_cache_sync_controller: KymEventCacheSyncController | None = None
         self._analysis_controller: AnalysisController | None = None
         self._save_controller: SaveController | None = None
         self._task_state_bridge: TaskStateBridgeController | None = None
@@ -265,6 +267,9 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._delete_kym_event_controller = DeleteKymEventController(
+            self.context.app_state, self.bus
+        )
+        self._kym_event_cache_sync_controller = KymEventCacheSyncController(
             self.context.app_state, self.bus
         )
         self._analysis_controller = AnalysisController(

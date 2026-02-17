@@ -281,7 +281,18 @@ class KymImageList(AcqImageList[KymImage]):
     def update_velocity_event_for_image(self, kym_image: KymImage) -> None:
         """Update velocity event cache and persist to CSV (e.g. after user saves analysis)."""
         self._velocity_event_db.update_from_image_and_persist(kym_image)
-    
+
+    def rebuild_velocity_event_db_and_save(self) -> bool:
+        """Rebuild velocity event cache from all images and persist to CSV.
+
+        Use after batch scripts that mutate events (e.g. remove-all).
+        Returns True if saved, False if no DB path (single-file mode).
+        """
+        if self._velocity_event_db.get_db_path() is None:
+            return False
+        self._velocity_event_db.rebuild_from_images(images_provider=lambda: self.images)
+        return self._velocity_event_db.save()
+
     def _get_radon_db_path(self) -> Optional[Path]:
         """Path to radon_report_db.csv for current mode.
         

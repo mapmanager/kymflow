@@ -13,7 +13,6 @@ from nicegui import ui
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import DetectEvents
-from kymflow.gui_v2.events_state import VelocityEventDbUpdated
 from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -168,15 +167,7 @@ class EventAnalysisController:
                 len(events),
             )
 
-            # Update velocity event cache (in-memory only)
-            if hasattr(self._app_state.files, "update_velocity_event_cache_only"):
-                try:
-                    self._app_state.files.update_velocity_event_cache_only(kf)
-                    self._bus.emit(VelocityEventDbUpdated())
-                except Exception as ex:
-                    logger.warning("update_velocity_event_cache_only failed: %s", ex)
-
-            # Emit state event to trigger UI refresh
+            # Emit state event to trigger UI refresh (KymEventCacheSyncController handles cache update)
             path_str = str(kf.path) if kf.path else None
             self._bus.emit(
                 DetectEvents(

@@ -21,37 +21,49 @@ def getKymFileList(path:str, depth:int = 4):
     kymList = KymImageList(path, file_extension=".tif", depth=depth)
     return kymList
 
-def _inspect_kym_event(kymImage:KymImage):
-
-    parent_folder = kymImage.path.parent.name
-    grandparent_folder = kymImage.path.parent.parent.name
-    rel_path = (grandparent_folder, parent_folder, kymImage.path.name)
-
-    # load an inspect kym analysis kym event
+def _delete_all_kym_event(kymImage:KymImage) -> bool:
+    """Inspect kym image and return True if kym image needs saving
+    remove all kym velocity events
+    """
+    retNeedSaving = False
     ka = kymImage.get_kym_analysis()
-
-    _showed_first = False
     for roi_id in kymImage.rois.get_roi_ids():
-        # n_user_events = ka.num_user_added_velocity_events(roi_id)
         n_total_events = ka.num_velocity_events(roi_id)
         
         if n_total_events == 0:
-            # logger.info(f"  no velocity events for roi {roi_id}")
             continue
+        ka.remove_velocity_event(roi_id, remove_these="_remove_all")
+        retNeedSaving = True
 
-        velEvents = ka.get_velocity_report(roi_id)
-
-        if not _showed_first:
-            logger.info(f"  {rel_path}")
-            _showed_first = True
-
-        logger.info(f"  velocity events for roi {roi_id}: {len(velEvents)}")
-        # for velEvent in velEvents:
-        #     logger.info(f"  velEvent: {velEvent}")
+    return retNeedSaving
 
 if __name__ == "__main__":
+    reply = input("[[DANGER]] This will modify existing analysis. Do you want to proceed? (y/n): ").strip().lower()
+    if reply != "y":
+        print("Aborted.")
+        raise SystemExit(0)
+
     path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis"
-    kymList = getKymFileList(path)
+    kymList = KymImageList(path, file_extension=".tif", depth=4)
     
-    # for kymImage in kymList:
-    #     _inspect_kym_event(kymImage)
+    any_changes = False
+    for kymImage in kymList:
+        image_needs_saving = False
+        ka = kymImage.get_kym_analysis()
+        for roi_id in kymImage.rois.get_roi_ids():
+            n_total_events = ka.num_velocity_events(roi_id)
+            if n_total_events == 0:
+                continue
+            logger.info("=== removing all velocity events for")
+            logger.info(f"  roi {roi_id} n_total_events:{n_total_events} in image {kymImage.get_file_name()}")
+            ka.remove_velocity_event(roi_id, remove_these="_remove_all")
+            image_needs_saving = True
+
+        if image_needs_saving:
+            logger.info(f"  saving analysis for image {kymImage.get_file_name()}")
+            ka.save_analysis()
+            any_changes = True
+
+    if any_changes:
+        logger.info("rebuilding velocity event cache and saving to CSV")
+        kymList.rebuild_velocity_event_db_and_save()

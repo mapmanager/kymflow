@@ -10,6 +10,9 @@ from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionCo
 from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
 from kymflow.gui_v2.controllers.folder_controller import FolderController
 from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
+from kymflow.gui_v2.controllers.kym_event_cache_sync_controller import (
+    KymEventCacheSyncController,
+)
 from kymflow.gui_v2.controllers.kym_event_range_controller import (
     KymEventRangeStateController,
 )
@@ -47,6 +50,7 @@ __all__ = [
     "FileTablePersistenceController",
     "FolderController",
     "ImageDisplayController",
+    "KymEventCacheSyncController",
     "KymEventRangeStateController",
     "MetadataController",
     "NextPrevFileController",

@@ -24,8 +24,9 @@ import pandas as pd
 from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers_sd, _removeOutliers_analyzeflow
 from kymflow.core.utils.logging import get_logger
-from kymflow.core.image_loaders.roi import ROI
 from kymflow.core.image_loaders.radon_report import RadonReport
+from kymflow.core.image_loaders.roi import ROI
+from kymflow.core.image_loaders.velocity_event_report import VELOCITY_EVENT_CSV_ROUND_DECIMALS
 
 # DEPRECATED: Stall analysis is deprecated
 # from kymflow.core.analysis.stall_analysis import StallAnalysis, StallAnalysisParams
@@ -1429,7 +1430,7 @@ class KymAnalysis:
             if not events:
                 continue
             for idx, event in enumerate(events):
-                event_dict = event.to_dict(round_decimals=3)
+                event_dict = event.to_dict(round_decimals=VELOCITY_EVENT_CSV_ROUND_DECIMALS)
                 # Use event._uuid as event_id (stable, doesn't change when event is updated)
                 if event._uuid is None:
                     # Defensive: assign a UUID if somehow missing
@@ -1467,7 +1468,7 @@ class KymAnalysis:
             return None
         
         event = events[idx]
-        event_dict = event.to_dict(round_decimals=3)
+        event_dict = event.to_dict(round_decimals=VELOCITY_EVENT_CSV_ROUND_DECIMALS)
         
         # Ensure event object has _uuid matching the mapping
         if not hasattr(event, '_uuid') or event._uuid != event_id:
