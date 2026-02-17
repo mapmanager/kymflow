@@ -61,7 +61,8 @@ from kymflow.gui_v2.views import (
     TaskProgressBindings,
     TaskProgressView,
 )
-from kymflow.gui_v2.window_utils import copy_to_clipboard, reveal_in_file_manager
+from nicewidgets.utils.clipboard import copy_to_clipboard
+from nicewidgets.utils.file_manager import reveal_in_file_manager
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc

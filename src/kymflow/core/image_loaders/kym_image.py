@@ -174,7 +174,9 @@ class KymImage(AcqImage):
     
     def __str__(self):
         paths_str = ", ".join([f"ch{k}:{v.name}" for k, v in self._file_path_dict.items()])
-        return f"KymImage paths={paths_str}, shape={self.img_shape}, seconds_per_line={round(self.seconds_per_line, 3)} um_per_pixel={round(self.um_per_pixel, 3)}"
+        # return f"KymImage paths={paths_str}, shape={self.img_shape}, seconds_per_line={round(self.seconds_per_line, 3)} um_per_pixel={round(self.um_per_pixel, 3)}"
+        return f"KymImage paths={paths_str}, shape={self.img_shape}"
+
 
     @property
     def num_lines(self) -> int | None:

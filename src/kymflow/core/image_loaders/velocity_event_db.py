@@ -6,7 +6,7 @@ all CRUD and I/O in this class.
 """
 
 from __future__ import annotations
-
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional
 
@@ -141,8 +141,10 @@ class VelocityEventDb:
             )
             if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
                 return
+            
             self.save()
             logger.info("Velocity event DB load complete (rebuilt from images: %s)", rebuild_reason)
+            
             if progress_cb is not None and n > 0:
                 progress_cb(
                     ProgressMessage(
@@ -170,7 +172,8 @@ class VelocityEventDb:
         if len(paths) == 1:
             return paths[0].parent
         try:
-            return Path(paths[0].commonpath(paths))
+            # return Path(paths[0].commonpath(paths))
+            return Path(os.path.commonpath([str(p) for p in paths]))
         except (ValueError, TypeError):
             return paths[0].parent
 
@@ -225,6 +228,13 @@ class VelocityEventDb:
             curr_sorted = sorted(curr_list, key=lambda x: (x[0], x[1]))
             cache_sorted = sorted(cache_list, key=lambda x: (x[0], x[1]))
             if curr_sorted != cache_sorted:
+                logger.debug('STALE')
+                logger.debug(f"  curr_sorted:")
+                for _i in curr_sorted:
+                    print(_i)
+                logger.debug(f"  cache_sorted:")
+                for _i in cache_sorted:
+                    print(_i)
                 return True
         return False
 

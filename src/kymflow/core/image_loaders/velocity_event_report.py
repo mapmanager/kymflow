@@ -23,19 +23,16 @@ class VelocityEventReport:
     accepted: KymAnalysis-level boolean indicating whether this analysis has been accepted
         by the user (True/False), or None if not available. Set at the image level,
         applies to all events in the image.
+
+    Column order: event/content fields first for easier CSV reading; _unique_row_id and
+    path are last.
     """
 
-    # Identity
-    _unique_row_id: str
-    path: Optional[str] = None
+    # Content fields (first for easier CSV reading)
     roi_id: int = 0
     rel_path: Optional[str] = None
-
-    # Folder metadata (from path structure, for grouping in plot pool)
     parent_folder: Optional[str] = None
     grandparent_folder: Optional[str] = None
-
-    # VelocityEvent fields
     event_type: Optional[str] = None
     i_start: Optional[int] = None
     i_peak: Optional[int] = None
@@ -54,6 +51,10 @@ class VelocityEventReport:
     user_type: Optional[str] = None
     note: Optional[str] = None
     accepted: Optional[bool] = None
+
+    # Identity (last for easier CSV reading)
+    _unique_row_id: str = ""
+    path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a dictionary for CSV export."""

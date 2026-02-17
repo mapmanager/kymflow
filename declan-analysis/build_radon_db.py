@@ -1,7 +1,8 @@
 """Build and inspect radon_report_db.csv for a KymImageList folder.
 
 Usage:
-    cd kymflow && uv run python declan-analysis/build_radon_db.py
+    cd kymflow
+    uv run python declan-analysis/build_radon_db.py
 
 This script:
 - Loads KymImageList from a hardcoded path

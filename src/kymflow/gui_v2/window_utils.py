@@ -6,19 +6,10 @@ such as setting window titles based on file or folder paths.
 
 from __future__ import annotations
 
-import os
-import platform
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-import sys
-try:
-    import pyperclip
-except ImportError:
-    pyperclip = None
-
-from nicegui import app, ui
+from nicegui import app
 
 from kymflow.core.utils.logging import get_logger
 
@@ -107,68 +98,3 @@ def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> No
             pass
             # perfectly fine in native=False mode
             # logger.error(f'=== main_window is None for title:{title}')
-
-def reveal_in_file_manager(path: str | os.PathLike) -> None:
-    """Reveal a path in the OS file manager (Finder/Explorer/etc).
-
-    - macOS: Finder reveals + selects the item
-    - Windows: Explorer reveals + selects the item
-    - Linux: opens the containing folder (selection support varies)
-    """
-    p = Path(path).expanduser().resolve()
-    if not p.exists():
-        raise FileNotFoundError(str(p))
-
-    system = platform.system()
-
-    if system == "Darwin":
-        # Finder reveal (select)
-        subprocess.run(["open", "-R", str(p)], check=False)
-
-    elif system == "Windows":
-        # Explorer reveal (select)
-        subprocess.run(["explorer", f'/select,"{p}"'], check=False, shell=True)
-
-    else:
-        # Linux: open folder (best-effort)
-        folder = p if p.is_dir() else p.parent
-        subprocess.run(["xdg-open", str(folder)], check=False)
-
-def copy_to_clipboard(text: str) -> None:
-    """
-    Copy text to system clipboard.
-
-    Behavior:
-    - If running NiceGUI in native=True (pywebview desktop app):
-        Uses pyperclip to access OS clipboard directly.
-    - If running in browser (native=False):
-        Uses browser navigator.clipboard via JavaScript.
-    - If pyperclip is unavailable in native mode:
-        Raises RuntimeError.
-
-    Args:
-        text: Text to copy.
-
-    Returns:
-        None
-    """
-
-    native_cfg = getattr(app, "native", None)
-    is_native_window = getattr(native_cfg, "main_window", None) is not None
-
-    if is_native_window:
-        # Desktop mode
-        if pyperclip is None:
-            raise RuntimeError(
-                "pyperclip not installed. Install it for native clipboard support."
-            )
-        pyperclip.copy(text)
-        print("[clipboard] copied via pyperclip (native)")
-    else:
-        # Browser mode
-        # Must escape backticks safely
-        escaped = text.replace("\\", "\\\\").replace("`", "\\`")
-        ui.run_javascript(f"""
-            navigator.clipboard.writeText(`{escaped}`);
-        """)
-        print("[clipboard] copied via browser navigator.clipboard")
