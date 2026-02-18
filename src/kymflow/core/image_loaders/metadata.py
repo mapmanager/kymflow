@@ -175,8 +175,6 @@ class ExperimentMetadata:
         treatment: Treatment applied.
         treatment2: Second treatment field.
         date: User-editable date (e.g., experiment date).
-        acquisition_date: Date of acquisition (read-only, from header).
-        acquisition_time: Time of acquisition (read-only, from header).
         note: Free-form notes or comments.
     """
 
@@ -297,24 +295,6 @@ class ExperimentMetadata:
             grid_span=1,
         ),
     )
-    acquisition_date: Optional[str] = field(
-        default="",
-        metadata=field_metadata(
-            editable=False,
-            label="Acquisition Date",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
-    acquisition_time: Optional[str] = field(
-        default="",
-        metadata=field_metadata(
-            editable=False,
-            label="Acquisition Time",
-            widget_type="text",
-            grid_span=1,
-        ),
-    )
     note: Optional[str] = field(
         default="",
         metadata=field_metadata(
@@ -349,15 +329,10 @@ class ExperimentMetadata:
         """Convert to dictionary with standardized key names.
 
         Returns:
-            Dictionary with all field values, using abbreviated keys (acq_date,
-            acq_time) for compatibility with external APIs. All fields are
-            included automatically, including depth and branch_order.
+            Dictionary with all field values. All fields are included
+            automatically, including depth and branch_order.
         """
-        d = asdict(self)
-        # Rename keys for compatibility with external APIs
-        d["acq_date"] = d.pop("acquisition_date", None)
-        d["acq_time"] = d.pop("acquisition_time", None)
-        return d
+        return asdict(self)
 
     @classmethod
     def form_schema(cls) -> List[Dict[str, Any]]:
@@ -424,6 +399,8 @@ class AcqImgHeader:
         voxels_units: Units for each voxel (e.g., ['s', 'um']).
         labels: Labels for each dimension (e.g., ['time (s)', 'space (um)']).
         physical_size: Physical size along each dimension (shape[i] * voxels[i]).
+        date_str: Acquisition date string from Olympus header (read-only, if available).
+        time_str: Acquisition time string from Olympus header (read-only, if available).
     """
     
     # Note: Many fields are list/tuple types; the metadata here is mainly to
@@ -478,6 +455,24 @@ class AcqImgHeader:
         metadata=field_metadata(
             editable=False,
             label="Physical Size",
+            widget_type="text",
+            grid_span=1,
+        ),
+    )
+    date_str: Optional[str] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Acquisition Date",
+            widget_type="text",
+            grid_span=1,
+        ),
+    )
+    time_str: Optional[str] = field(
+        default=None,
+        metadata=field_metadata(
+            editable=False,
+            label="Acquisition Time",
             widget_type="text",
             grid_span=1,
         ),
@@ -629,7 +624,7 @@ class AcqImgHeader:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize header to a dictionary for metadata save."""
-        return {
+        result = {
             "shape": list(self.shape) if self.shape is not None else None,
             "ndim": self.ndim,
             "voxels": self.voxels,
@@ -637,6 +632,12 @@ class AcqImgHeader:
             "labels": self.labels,
             "physical_size": self.physical_size,
         }
+        # Include date_str and time_str if they are not None
+        if self.date_str is not None:
+            result["date_str"] = self.date_str
+        if self.time_str is not None:
+            result["time_str"] = self.time_str
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AcqImgHeader":
@@ -656,6 +657,10 @@ class AcqImgHeader:
             header.labels = data["labels"]
         if "physical_size" in data:
             header.physical_size = data["physical_size"]
+        if "date_str" in data:
+            header.date_str = data["date_str"]
+        if "time_str" in data:
+            header.time_str = data["time_str"]
         # If physical_size missing but shape+voxels present, compute
         if header.physical_size is None:
             header.physical_size = header.compute_physical_size()

@@ -70,9 +70,6 @@ def test_experiment_metadata_to_dict() -> None:
     assert d["treatment"] == "drug"
     assert d["date"] == "2025-02-17"
     assert d["note"] == "Test"
-    # Check abbreviated keys
-    assert "acq_date" in d
-    assert "acq_time" in d
 
 
 def test_update_header_method() -> None:
@@ -119,10 +116,6 @@ def test_experiment_metadata_get_editable_values() -> None:
     # Should include depth (editable)
     assert "depth" in editable_values
     assert editable_values["depth"] == "100.5"  # Converted to string
-    
-    # Should NOT include non-editable fields (acquisition_date, acquisition_time)
-    assert "acquisition_date" not in editable_values
-    assert "acquisition_time" not in editable_values
     
     # Test with None values (should be empty strings)
     meta2 = ExperimentMetadata()
@@ -482,8 +475,6 @@ def test_experiment_metadata_form_schema() -> None:
     assert "treatment2" in field_names
     assert "date" in field_names
     assert "note" in field_names
-    assert "acquisition_date" in field_names
-    assert "acquisition_time" in field_names
     
     # Check schema structure
     for field in schema:
@@ -495,9 +486,4 @@ def test_experiment_metadata_form_schema() -> None:
         assert "visible" in field
         assert "field_type" in field
     
-    # Check that acquisition_date and acquisition_time are not editable
-    acq_date_field = next(f for f in schema if f["name"] == "acquisition_date")
-    acq_time_field = next(f for f in schema if f["name"] == "acquisition_time")
-    assert acq_date_field["editable"] is False
-    assert acq_time_field["editable"] is False
 

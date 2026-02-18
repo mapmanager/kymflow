@@ -69,7 +69,9 @@ class KymImage(AcqImage):
                     voxels=[seconds_per_line, um_per_pixel],
                     voxels_units=["s", "um"],
                     labels=["Time (s)", "Space (um)"],
-                    physical_size=None  # Will be computed
+                    physical_size=None,  # Will be computed
+                    date_str=_olympusDict.get("dateStr"),
+                    time_str=_olympusDict.get("timeStr"),
                 )
                 # Compute physical_size
                 self._header.physical_size = self._header.compute_physical_size()

@@ -35,8 +35,6 @@ The `experiment_metadata` section contains user-provided experimental metadata f
 | treatment        | Treatment        | ""              |               |
 | treatment2       | Treatment 2      | ""              |               |
 | date             | Date             | ""              |               |
-| acquisition_date | Acquisition Date | ""              |               |
-| acquisition_time | Acquisition Time | ""              |               |
 | note             | Note             | ""              |               |
 
 ## AnalysisParameters
