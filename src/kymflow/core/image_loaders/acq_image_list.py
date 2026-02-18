@@ -743,6 +743,35 @@ class AcqImageList(Generic[T]):
             blinded: If True, replace file names with "File {index+1}" and grandparent folder with "Blinded".
         """
         return list(self.iter_metadata(blinded=blinded))
+
+    def get_unique_metadata_values(self, field_name: str) -> List[str]:
+        """Get unique non-empty values for an experiment metadata field across all images.
+        
+        This helper is intended for UI layers (e.g., NiceGUI forms) that want to
+        populate preset options for experimental metadata fields from the currently
+        loaded file list.
+        
+        Args:
+            field_name: Name of ExperimentMetadata field (e.g., "species", "condition").
+        
+        Returns:
+            Sorted list of unique string values for the given field. Empty strings
+            and None values are excluded. Returns an empty list if there are no
+            matching values.
+        """
+        values: set[str] = set()
+        for image in self.images:
+            # All AcqImage instances own an ExperimentMetadata instance
+            meta = getattr(image, "experiment_metadata", None)
+            if meta is None:
+                continue
+            val = getattr(meta, field_name, None)
+            if val is None:
+                continue
+            s = str(val).strip()
+            if s:
+                values.add(s)
+        return sorted(values)
     
     def find_by_path(self, path: str | Path) -> Optional[T]:
         """Find an image in the list by its path.

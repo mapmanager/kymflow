@@ -461,6 +461,179 @@ def test_acq_image_list_collect_metadata_blinded() -> None:
                 # assert 'shape' in meta
 
 
+def test_acq_image_list_get_unique_metadata_values() -> None:
+    """Test AcqImageList get_unique_metadata_values() method.
+    
+    This test verifies that get_unique_metadata_values() can extract unique
+    non-empty values for experiment metadata fields across all images in the list.
+    Useful for populating UI select dropdowns with existing values.
+    """
+    logger.info("Testing AcqImageList get_unique_metadata_values()")
+    
+    from kymflow.core.image_loaders.metadata import ExperimentMetadata
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # Create test files
+        file1 = tmp_path / "file1.tif"
+        file2 = tmp_path / "file2.tif"
+        file3 = tmp_path / "file3.tif"
+        file1.touch()
+        file2.touch()
+        file3.touch()
+        
+        # Create AcqImageList
+        image_list = AcqImageList(
+            file_path_list=[str(file1), str(file2), str(file3)],
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        # Set up experiment metadata with various values
+        if len(image_list) >= 3:
+            # Image 1: species="mouse", condition="control"
+            image_list[0]._experiment_metadata = ExperimentMetadata(
+                species="mouse",
+                condition="control",
+                treatment="vehicle",
+            )
+            # Image 2: species="rat", condition="control" (duplicate condition)
+            image_list[1]._experiment_metadata = ExperimentMetadata(
+                species="rat",
+                condition="control",
+                treatment="drug",
+            )
+            # Image 3: species="mouse" (duplicate), condition="stim", empty treatment
+            image_list[2]._experiment_metadata = ExperimentMetadata(
+                species="mouse",
+                condition="stim",
+                treatment="",  # Empty string should be excluded
+            )
+            
+            # Test: get unique species values
+            species_values = image_list.get_unique_metadata_values("species")
+            assert isinstance(species_values, list)
+            assert len(species_values) == 2  # "mouse", "rat" (duplicates removed)
+            assert "mouse" in species_values
+            assert "rat" in species_values
+            assert species_values == sorted(species_values)  # Should be sorted
+            logger.info(f"  - get_unique_metadata_values('species') returned: {species_values}")
+            
+            # Test: get unique condition values
+            condition_values = image_list.get_unique_metadata_values("condition")
+            assert len(condition_values) == 2  # "control", "stim"
+            assert "control" in condition_values
+            assert "stim" in condition_values
+            assert condition_values == sorted(condition_values)
+            logger.info(f"  - get_unique_metadata_values('condition') returned: {condition_values}")
+            
+            # Test: get unique treatment values (empty string excluded)
+            treatment_values = image_list.get_unique_metadata_values("treatment")
+            assert len(treatment_values) == 2  # "vehicle", "drug" (empty excluded)
+            assert "vehicle" in treatment_values
+            assert "drug" in treatment_values
+            assert "" not in treatment_values  # Empty string should be excluded
+            logger.info(f"  - get_unique_metadata_values('treatment') returned: {treatment_values}")
+            
+            # Test: field with all empty/None values
+            empty_values = image_list.get_unique_metadata_values("genotype")
+            assert isinstance(empty_values, list)
+            assert len(empty_values) == 0  # All empty, should return empty list
+            logger.info(f"  - get_unique_metadata_values('genotype') returned: {empty_values}")
+
+
+def test_acq_image_list_get_unique_metadata_values_empty_list() -> None:
+    """Test get_unique_metadata_values() with empty image list."""
+    logger.info("Testing get_unique_metadata_values() with empty list")
+    
+    # Create empty list
+    image_list = AcqImageList(path=None, image_cls=AcqImage, file_extension=".tif")
+    
+    # Should return empty list for any field
+    values = image_list.get_unique_metadata_values("species")
+    assert isinstance(values, list)
+    assert len(values) == 0
+    logger.info(f"  - Empty list returned: {values}")
+
+
+def test_acq_image_list_get_unique_metadata_values_none_empty() -> None:
+    """Test get_unique_metadata_values() handles None and empty string values correctly."""
+    logger.info("Testing get_unique_metadata_values() with None and empty values")
+    
+    from kymflow.core.image_loaders.metadata import ExperimentMetadata
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        # Create test files
+        file1 = tmp_path / "file1.tif"
+        file2 = tmp_path / "file2.tif"
+        file3 = tmp_path / "file3.tif"
+        file1.touch()
+        file2.touch()
+        file3.touch()
+        
+        image_list = AcqImageList(
+            file_path_list=[str(file1), str(file2), str(file3)],
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        if len(image_list) >= 3:
+            # Image 1: None value
+            image_list[0]._experiment_metadata = ExperimentMetadata(species=None)
+            # Image 2: Empty string
+            image_list[1]._experiment_metadata = ExperimentMetadata(species="")
+            # Image 3: Whitespace-only string
+            image_list[2]._experiment_metadata = ExperimentMetadata(species="   ")
+            
+            # All should be excluded
+            values = image_list.get_unique_metadata_values("species")
+            assert len(values) == 0
+            logger.info(f"  - None/empty values excluded, returned: {values}")
+            
+            # Test: mix of valid and invalid
+            image_list[0]._experiment_metadata = ExperimentMetadata(species="mouse")
+            image_list[1]._experiment_metadata = ExperimentMetadata(species="")
+            image_list[2]._experiment_metadata = ExperimentMetadata(species="rat")
+            
+            values = image_list.get_unique_metadata_values("species")
+            assert len(values) == 2
+            assert "mouse" in values
+            assert "rat" in values
+            assert "" not in values
+            logger.info(f"  - Mixed valid/invalid returned: {values}")
+
+
+def test_acq_image_list_get_unique_metadata_values_nonexistent_field() -> None:
+    """Test get_unique_metadata_values() with non-existent field name."""
+    logger.info("Testing get_unique_metadata_values() with non-existent field")
+    
+    from kymflow.core.image_loaders.metadata import ExperimentMetadata
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        
+        file1 = tmp_path / "file1.tif"
+        file1.touch()
+        
+        image_list = AcqImageList(
+            file_path_list=[str(file1)],
+            image_cls=AcqImage,
+            file_extension=".tif"
+        )
+        
+        if len(image_list) >= 1:
+            image_list[0]._experiment_metadata = ExperimentMetadata(species="mouse")
+            
+            # Non-existent field should return empty list (getattr returns None)
+            values = image_list.get_unique_metadata_values("nonexistent_field")
+            assert isinstance(values, list)
+            assert len(values) == 0
+            logger.info(f"  - Non-existent field returned: {values}")
+
+
 def test_acq_image_list_reload() -> None:
     """Test AcqImageList reload() method."""
     logger.info("Testing AcqImageList reload()")

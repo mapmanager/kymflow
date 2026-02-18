@@ -186,7 +186,24 @@ class HomePage(BasePage):
             on_full_zoom=self._on_drawer_full_zoom,
         )
         # Splitter pane metadata views
-        self._drawer_metadata_experimental_view = MetadataExperimentalView(on_metadata_update=bus.emit)
+        def _get_metadata_field_options(field_name: str) -> list[str]:
+            """Get unique experimental metadata values for a field from current file list."""
+            files = self.context.app_state.files
+            if not files:
+                return []
+            try:
+                return files.get_unique_metadata_values(field_name)
+            except Exception:
+                logger.exception(
+                    "Error getting unique experimental metadata values for field '%s'",
+                    field_name,
+                )
+                return []
+
+        self._drawer_metadata_experimental_view = MetadataExperimentalView(
+            on_metadata_update=bus.emit,
+            get_field_options=_get_metadata_field_options,
+        )
         self._drawer_metadata_header_view = MetadataHeaderView(
             on_metadata_update=bus.emit,
             on_edit_physical_units=bus.emit,

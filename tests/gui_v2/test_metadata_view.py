@@ -27,18 +27,93 @@ def test_metadata_experimental_view_emits_intent(bus: EventBus) -> None:
     mock_file.experiment_metadata = ExperimentMetadata()
     view._current_file = mock_file
 
-    # Mock widget
-    widget = MagicMock()
-    widget.value = "test value"
-
-    # Simulate field blur
-    view._on_field_blur("note", widget)
+    # Simulate field change (new method signature)
+    view._on_field_change("note", "test value")
 
     assert len(received) == 1
     assert received[0].phase == "intent"
     assert received[0].metadata_type == "experimental"
     assert received[0].fields == {"note": "test value"}
     assert received[0].file == mock_file
+
+
+def test_metadata_experimental_view_with_get_field_options() -> None:
+    """Test that MetadataExperimentalView accepts and uses get_field_options callback."""
+    received: list[MetadataUpdate] = []
+
+    def on_update(event: MetadataUpdate) -> None:
+        received.append(event)
+
+    # Track calls to get_field_options
+    options_calls: list[str] = []
+
+    def get_field_options(field_name: str) -> list[str]:
+        options_calls.append(field_name)
+        if field_name == "species":
+            return ["mouse", "rat", "human"]
+        return []
+
+    view = MetadataExperimentalView(
+        on_metadata_update=on_update,
+        get_field_options=get_field_options,
+    )
+
+    # Verify callback is stored
+    assert view._get_field_options is not None
+
+    # Create a mock file
+    mock_file = MagicMock()
+    mock_file.experiment_metadata = ExperimentMetadata()
+    view._current_file = mock_file
+
+    # Simulate field change
+    view._on_field_change("species", "mouse")
+
+    assert len(received) == 1
+    assert received[0].fields == {"species": "mouse"}
+
+
+def test_metadata_experimental_view_without_get_field_options() -> None:
+    """Test that MetadataExperimentalView works without get_field_options callback."""
+    received: list[MetadataUpdate] = []
+
+    def on_update(event: MetadataUpdate) -> None:
+        received.append(event)
+
+    # Create view without callback (should default to None)
+    view = MetadataExperimentalView(on_metadata_update=on_update)
+
+    # Verify callback is None
+    assert view._get_field_options is None
+
+    # Create a mock file
+    mock_file = MagicMock()
+    mock_file.experiment_metadata = ExperimentMetadata()
+    view._current_file = mock_file
+
+    # Simulate field change (should still work)
+    view._on_field_change("note", "test note")
+
+    assert len(received) == 1
+    assert received[0].fields == {"note": "test note"}
+
+
+def test_metadata_experimental_view_no_file_selected() -> None:
+    """Test that MetadataExperimentalView does not emit events when no file is selected."""
+    received: list[MetadataUpdate] = []
+
+    def on_update(event: MetadataUpdate) -> None:
+        received.append(event)
+
+    view = MetadataExperimentalView(on_metadata_update=on_update)
+    # No file selected
+    view._current_file = None
+
+    # Simulate field change
+    view._on_field_change("note", "test value")
+
+    # Should not emit event
+    assert len(received) == 0
 
 
 def test_metadata_header_view_emits_intent(bus: EventBus) -> None:

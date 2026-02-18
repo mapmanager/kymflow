@@ -42,18 +42,28 @@ class MetadataExperimentalView:
         _widgets: Dictionary mapping field names to UI widgets (created in render()).
         _read_only_fields: Dictionary of read-only field definitions (for population).
         _current_file: Currently selected file (for populating fields).
+        _get_field_options: Optional callback to provide preset options per field.
     """
 
-    def __init__(self, *, on_metadata_update: OnMetadataUpdate) -> None:
+    def __init__(
+        self,
+        *,
+        on_metadata_update: OnMetadataUpdate,
+        get_field_options: Callable[[str], list[str]] | None = None,
+    ) -> None:
         """Initialize experimental metadata view.
 
         Args:
             on_metadata_update: Callback function that receives MetadataUpdate events.
+            get_field_options: Optional callback taking a field name and returning
+                a list of preset string options for that field. Used by the UI
+                to populate select dropdowns from the current file list.
         """
         self._on_metadata_update = on_metadata_update
+        self._get_field_options = get_field_options
 
         # UI components (created in render())
-        self._widgets: dict[str, ui.input | ui.textarea] = {}
+        self._widgets: dict[str, ui.input | ui.textarea | ui.select] = {}
         self._read_only_fields: dict[str, dict] = {}
 
         # State
@@ -93,30 +103,76 @@ class MetadataExperimentalView:
 
                 field_name = field_def["name"]
                 is_editable = field_def["editable"]
+                widget_type = field_def["widget_type"]
 
                 # Create widget based on type and editability
-                if field_def["widget_type"] == "multiline":
+                if widget_type == "multiline":
+                    # Always use textarea for multiline widgets
                     widget = ui.textarea(field_def["label"]).classes(widget_classes)
-                else:  # text, etc.
+
+                    # Register blur callback for editable textarea fields
+                    if is_editable:
+                        widget.on(
+                            "blur",
+                            lambda field=field_name, w=widget: self._on_field_change(
+                                field, w.value
+                            ),
+                        )
+                elif widget_type == "text" and is_editable:
+                    # Editable text fields: use ui.select with preset options + free entry
+                    widget = ui.select(
+                        options=[],
+                        label=field_def["label"],
+                        new_value_mode="add",
+                    ).classes(widget_classes)
+
+                    # Lazy-load options when the dropdown is opened or gains focus
+                    def _lazy_load_options(
+                        field: str = field_name, w: ui.select = widget
+                    ) -> None:
+                        if self._get_field_options is None:
+                            return
+                        try:
+                            options = self._get_field_options(field) or []
+                        except Exception:
+                            logger.exception(
+                                "Error getting field options for experimental metadata field '%s'",
+                                field,
+                            )
+                            options = []
+                        w.set_options(options)
+                        w.update()
+
+                    widget.on("popup-show", lambda _: _lazy_load_options())
+                    widget.on("focus", lambda _: _lazy_load_options())
+
+                    # Emit change on value change
+                    widget.on_value_change(
+                        lambda e, field=field_name: self._on_field_change(
+                            field, e.value
+                        )
+                    )
+                else:
+                    # Non-editable text/number fields: simple input with blur/enter handlers if editable
                     widget = ui.input(field_def["label"]).classes(widget_classes)
+
+                    if is_editable:
+                        widget.on(
+                            "blur",
+                            lambda field=field_name, w=widget: self._on_field_change(
+                                field, w.value
+                            ),
+                        )
+                        widget.on(
+                            "keydown.enter",
+                            lambda field=field_name, w=widget: self._on_field_change(
+                                field, w.value
+                            ),
+                        )
 
                 # Disable read-only fields
                 if not is_editable:
                     widget.set_enabled(False)
-
-                # Register blur/enter callbacks for editable fields
-                if is_editable:
-                    # Blur event (field loses focus)
-                    widget.on(
-                        "blur",
-                        lambda field=field_name, w=widget: self._on_field_blur(field, w),
-                    )
-                    # Enter key event (only for input, not textarea)
-                    if field_def["widget_type"] != "multiline":
-                        widget.on(
-                            "keydown.enter",
-                            lambda field=field_name, w=widget: self._on_field_blur(field, w),
-                        )
 
                 self._widgets[field_name] = widget
         self._update_widget_states()
@@ -184,21 +240,18 @@ class MetadataExperimentalView:
             else:
                 widget.set_enabled(not running)
 
-    def _on_field_blur(self, field_name: str, widget: ui.input | ui.textarea) -> None:
-        """Update metadata when field loses focus or Enter is pressed.
+    def _on_field_change(self, field_name: str, value: str | None) -> None:
+        """Update metadata when a field value changes.
 
         Emits MetadataUpdate(phase="intent") event with the field update.
 
         Args:
             field_name: Name of the field being updated.
-            widget: The widget that triggered the update.
+            value: The new value for the field.
         """
         if not self._current_file:
             # logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
             return
-
-        # Get value from widget
-        value = widget.value
 
         # logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
 
