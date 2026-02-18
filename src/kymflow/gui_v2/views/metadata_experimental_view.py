@@ -4,6 +4,10 @@ This module provides a view component that displays a form for editing
 AcqImage experimental metadata. The view emits MetadataUpdate(phase="intent")
 events when users edit fields, but does not subscribe to events (that's handled
 by MetadataExperimentalBindings).
+
+Commit-only behavior: we do not use on_value_change for editable fields.
+We use blur and keydown.enter only, so events fire when the user commits
+(Enter/Tab/click away), not on every keystroke or when set_value is called.
 """
 
 from __future__ import annotations
@@ -69,6 +73,8 @@ class MetadataExperimentalView:
         # State
         self._current_file: Optional[KymImage] = None
         self._task_state: Optional[TaskStateChanged] = None
+        # Suppress intent emissions while we are syncing form from set_selected_file/clear
+        self._suppress_field_change: bool = False
 
     def render(self) -> None:
         """Create the metadata form UI inside the current container.
@@ -146,11 +152,19 @@ class MetadataExperimentalView:
                     widget.on("popup-show", lambda _: _lazy_load_options())
                     widget.on("focus", lambda _: _lazy_load_options())
 
-                    # Emit change on value change
-                    widget.on_value_change(
-                        lambda e, field=field_name: self._on_field_change(
-                            field, e.value
-                        )
+                    # Commit-only: emit on blur/enter (not on_value_change) so we don't
+                    # fire on every keystroke or when programmatic set_value runs.
+                    widget.on(
+                        "blur",
+                        lambda field=field_name, w=widget: self._on_field_change(
+                            field, w.value
+                        ),
+                    )
+                    widget.on(
+                        "keydown.enter",
+                        lambda field=field_name, w=widget: self._on_field_change(
+                            field, w.value
+                        ),
                     )
                 else:
                     # Non-editable text/number fields: simple input with blur/enter handlers if editable
@@ -201,35 +215,42 @@ class MetadataExperimentalView:
     def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
         """Internal implementation of set_selected_file."""
         self._current_file = file
+        self._suppress_field_change = True
+        try:
+            if not file:
+                self.clear()
+                return
 
-        if not file:
-            self.clear()
-            return
+            meta = file.experiment_metadata
+            if meta is None:
+                self.clear()
+                return
 
-        meta = file.experiment_metadata
-        if meta is None:
-            self.clear()
-            return
+            # Use get_editable_values() for editable fields
+            editable_values = meta.get_editable_values()
+            for field_name, value in editable_values.items():
+                if field_name in self._widgets:
+                    self._widgets[field_name].set_value(str(value) if value is not None else "")
 
-        # Use get_editable_values() for editable fields
-        editable_values = meta.get_editable_values()
-        for field_name, value in editable_values.items():
-            if field_name in self._widgets:
-                self._widgets[field_name].set_value(str(value) if value is not None else "")
-
-        # Populate read-only fields
-        for field_name, field_def in self._read_only_fields.items():
-            if field_name in self._widgets:
-                value = getattr(meta, field_name) or ""
-                self._widgets[field_name].set_value(str(value))
+            # Populate read-only fields
+            for field_name, field_def in self._read_only_fields.items():
+                if field_name in self._widgets:
+                    value = getattr(meta, field_name) or ""
+                    self._widgets[field_name].set_value(str(value))
+        finally:
+            self._suppress_field_change = False
 
     def clear(self) -> None:
         """Clear all form fields.
 
         Called when no file is selected or file has no metadata.
         """
-        for widget in self._widgets.values():
-            widget.set_value("")
+        self._suppress_field_change = True
+        try:
+            for widget in self._widgets.values():
+                widget.set_value("")
+        finally:
+            self._suppress_field_change = False
 
     def _update_widget_states(self) -> None:
         """Enable/disable editable fields based on task running state."""
@@ -241,21 +262,30 @@ class MetadataExperimentalView:
                 widget.set_enabled(not running)
 
     def _on_field_change(self, field_name: str, value: str | None) -> None:
-        """Update metadata when a field value changes.
+        """Update metadata when a field value changes (commit-only: blur/enter).
 
-        Emits MetadataUpdate(phase="intent") event with the field update.
+        Emits MetadataUpdate(phase="intent") only when not syncing and value
+        actually changed.
 
         Args:
             field_name: Name of the field being updated.
             value: The new value for the field.
         """
         if not self._current_file:
-            # logger.debug(f'pyinstaller no current file self._current_file:{self._current_file}')
+            return
+        if self._suppress_field_change:
             return
 
-        # logger.debug(f'pyinstaller field_name={field_name} widget={widget}value={value}')
+        # Normalize for comparison: None and "" treated as empty
+        new_val = (value or "").strip() if isinstance(value, str) else (str(value).strip() if value is not None else "")
+        meta = self._current_file.experiment_metadata
+        current_val = ""
+        if meta is not None and hasattr(meta, field_name):
+            cur = getattr(meta, field_name)
+            current_val = (cur if cur is not None else "").strip() if isinstance(cur, str) else (str(cur).strip() if cur is not None else "")
+        if new_val == current_val:
+            return
 
-        # Emit intent event
         self._on_metadata_update(
             MetadataUpdate(
                 file=self._current_file,
