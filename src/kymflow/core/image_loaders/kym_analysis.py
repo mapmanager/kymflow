@@ -492,6 +492,61 @@ class KymAnalysis:
         
         return empty_df
 
+    def _try_load_v0_into_existing_roi(self) -> bool:
+        """202602_v0_flowanalysis_bug: Fallback when flow-analysis JSON missing but v0 exists.
+
+        Load v0 analysis from <parent>-analysis/<stem>.csv into the single existing ROI
+        (from metadata.json). Does not create a new ROI. Returns True if loaded, False otherwise.
+        """
+        primary_path = self._get_primary_path()
+        if primary_path is None:
+            return False
+        if self.num_rois != 1:
+            return False
+        if self._analysis_metadata:
+            return False
+
+        v0_folder = primary_path.parent / f"{primary_path.parent.name}-analysis"
+        v0_csv = v0_folder / f"{primary_path.stem}.csv"
+        if not v0_folder.exists() or not v0_csv.exists():
+            return False
+
+        roi_ids = self.acq_image.rois.get_roi_ids()
+        if len(roi_ids) != 1:
+            return False
+        existing_roi = self.acq_image.rois.get(roi_ids[0])
+        if existing_roi is None:
+            return False
+
+        try:
+            old_vel_df = pd.read_csv(v0_csv)
+        except Exception as e:
+            logger.warning(f"Failed to read v0 CSV {v0_csv}: {e}")
+            return False
+        if "velocity" not in old_vel_df.columns or "time" not in old_vel_df.columns:
+            logger.warning(f"v0 CSV {v0_csv} missing velocity/time columns")
+            return False
+
+        old_vel = old_vel_df["velocity"].values
+        old_time = old_vel_df["time"].values
+
+        logger.info(
+            "202602_v0_flowanalysis_bug: loaded v0 analysis into existing ROI for %s (flow-analysis JSON missing)",
+            primary_path.stem,
+        )
+
+        roi_df = self._make_velocity_df(old_vel, old_time, existing_roi)
+        self._df = roi_df
+        self._analysis_metadata[existing_roi.id] = RoiAnalysisMetadata(
+            roi_id=existing_roi.id,
+            algorithm="mpRadon_v0",
+            window_size=16,  # intentionally hard coded from v0 analysis
+            analyzed_at=datetime.now(timezone.utc).isoformat(),
+            roi_revision_at_analysis=existing_roi.revision,
+        )
+        self._dirty = True
+        return True
+
     def import_v0_analysis(self) -> Optional[bool]:
         """Import v0 analysis results from CSV files.
         
@@ -679,12 +734,10 @@ class KymAnalysis:
         csv_path, json_path = self._get_save_paths()
         
         # JSON is required, CSV is optional (may not exist if only accepted was saved)
+        # 202602_v0_flowanalysis_bug: fallback when flow-analysis JSON missing but v0 exists
         if not json_path.exists():
-            # if primary_path:
-            #     logger.info(f"No analysis JSON found for {primary_path.name}")
-            # else:
-            #     logger.info("No analysis JSON found (no path available)")
-            # logger.info(f"  json_path:{json_path}")
+            if self._try_load_v0_into_existing_roi():
+                return True
             return False
         
         # Load CSV if it exists
