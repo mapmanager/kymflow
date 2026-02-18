@@ -75,6 +75,10 @@ class MetadataExperimentalView:
         self._task_state: Optional[TaskStateChanged] = None
         # Suppress intent emissions while we are syncing form from set_selected_file/clear
         self._suppress_field_change: bool = False
+        # Field names that use ui.select (set in render())
+        self._select_field_names: set[str] = set()
+        # Last committed value per field; used to avoid emitting when user blurs without changing
+        self._last_committed_values: dict[str, str] = {}
 
     def render(self) -> None:
         """Create the metadata form UI inside the current container.
@@ -86,6 +90,7 @@ class MetadataExperimentalView:
         # Always reset widget references
         self._widgets = {}
         self._read_only_fields = {}
+        self._select_field_names = set()
 
         ui.label("Experimental Metadata").classes("font-semibold")
 
@@ -130,30 +135,53 @@ class MetadataExperimentalView:
                         options=[],
                         label=field_def["label"],
                         new_value_mode="add",
+                        clearable=True,
                     ).classes(widget_classes)
+                    self._select_field_names.add(field_name)
 
-                    # Lazy-load options when the dropdown is opened or gains focus
+                    # Lazy-load options when the dropdown is opened or gains focus.
+                    # Ensure current widget value stays in options so display is not wiped.
                     def _lazy_load_options(
                         field: str = field_name, w: ui.select = widget
                     ) -> None:
                         if self._get_field_options is None:
                             return
                         try:
-                            options = self._get_field_options(field) or []
+                            options = list(self._get_field_options(field) or [])
                         except Exception:
                             logger.exception(
                                 "Error getting field options for experimental metadata field '%s'",
                                 field,
                             )
                             options = []
-                        w.set_options(options)
+                        current = w.value
+                        if current is not None and str(current).strip():
+                            cur_str = str(current).strip()
+                            if cur_str not in options:
+                                options = [cur_str] + options
+                        w.set_options(options, value=current)
                         w.update()
 
                     widget.on("popup-show", lambda _: _lazy_load_options())
                     widget.on("focus", lambda _: _lazy_load_options())
 
-                    # Commit-only: emit on blur/enter (not on_value_change) so we don't
-                    # fire on every keystroke or when programmatic set_value runs.
+                    # Emit when user selects a pre-existing option from the dropdown.
+                    # Only fire if value is in preset options (selection), not when typing (blur/enter handle that).
+                    # After selection, blur the widget so it returns to display state (not edit state).
+                    def _on_select_value_change(e, field: str = field_name, w: ui.select = widget) -> None:
+                        if e.value is None:
+                            return
+                        opts = (self._get_field_options(field) or []) if self._get_field_options else []
+                        if opts and str(e.value).strip() in [str(o).strip() for o in opts]:
+                            self._on_field_change(field, e.value)
+                            try:
+                                w.run_method("blur")
+                            except Exception:
+                                pass
+
+                    widget.on_value_change(_on_select_value_change)
+
+                    # Commit-only for free-form edit: emit on blur/enter.
                     widget.on(
                         "blur",
                         lambda field=field_name, w=widget: self._on_field_change(
@@ -229,14 +257,28 @@ class MetadataExperimentalView:
             # Use get_editable_values() for editable fields
             editable_values = meta.get_editable_values()
             for field_name, value in editable_values.items():
-                if field_name in self._widgets:
-                    self._widgets[field_name].set_value(str(value) if value is not None else "")
+                if field_name not in self._widgets:
+                    continue
+                widget = self._widgets[field_name]
+                value_str = str(value) if value is not None else ""
+                normalized = (value_str.strip() if value_str else "")
+
+                if field_name in self._select_field_names:
+                    # Preload options and set value so current value is displayed
+                    options = list(self._get_field_options(field_name) or []) if self._get_field_options else []
+                    if normalized and normalized not in options:
+                        options = [normalized] + options
+                    widget.set_options(options, value=value_str or None)
+                else:
+                    widget.set_value(value_str)
+                self._last_committed_values[field_name] = normalized
 
             # Populate read-only fields
             for field_name, field_def in self._read_only_fields.items():
                 if field_name in self._widgets:
                     value = getattr(meta, field_name) or ""
                     self._widgets[field_name].set_value(str(value))
+                    self._last_committed_values[field_name] = (str(value).strip() if value else "")
         finally:
             self._suppress_field_change = False
 
@@ -247,8 +289,12 @@ class MetadataExperimentalView:
         """
         self._suppress_field_change = True
         try:
-            for widget in self._widgets.values():
-                widget.set_value("")
+            for field_name, widget in self._widgets.items():
+                if field_name in self._select_field_names:
+                    widget.set_options([], value=None)
+                else:
+                    widget.set_value("")
+                self._last_committed_values[field_name] = ""
         finally:
             self._suppress_field_change = False
 
@@ -278,12 +324,8 @@ class MetadataExperimentalView:
 
         # Normalize for comparison: None and "" treated as empty
         new_val = (value or "").strip() if isinstance(value, str) else (str(value).strip() if value is not None else "")
-        meta = self._current_file.experiment_metadata
-        current_val = ""
-        if meta is not None and hasattr(meta, field_name):
-            cur = getattr(meta, field_name)
-            current_val = (cur if cur is not None else "").strip() if isinstance(cur, str) else (str(cur).strip() if cur is not None else "")
-        if new_val == current_val:
+        # Only emit if value actually changed from last committed (avoids emit on "click away" without edit)
+        if new_val == self._last_committed_values.get(field_name, ""):
             return
 
         self._on_metadata_update(
@@ -295,3 +337,4 @@ class MetadataExperimentalView:
                 phase="intent",
             )
         )
+        self._last_committed_values[field_name] = new_val
