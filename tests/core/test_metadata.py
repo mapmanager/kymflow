@@ -134,6 +134,8 @@ def test_acq_img_header_properties() -> None:
     assert header.voxels_units is None
     assert header.labels is None
     assert header.physical_size is None
+    assert header.date_str is None
+    assert header.time_str is None
     
     # Test setting properties
     header.shape = (100, 200)
@@ -142,6 +144,8 @@ def test_acq_img_header_properties() -> None:
     header.voxels_units = ["s", "um"]
     header.labels = ["time (s)", "space (um)"]
     header.physical_size = [0.1, 56.8]
+    header.date_str = "11/02/2022"
+    header.time_str = "12:54:17"
     
     assert header.shape == (100, 200)
     assert header.ndim == 2
@@ -149,6 +153,8 @@ def test_acq_img_header_properties() -> None:
     assert header.voxels_units == ["s", "um"]
     assert header.labels == ["time (s)", "space (um)"]
     assert header.physical_size == [0.1, 56.8]
+    assert header.date_str == "11/02/2022"
+    assert header.time_str == "12:54:17"
     
     # Test 3D header
     header_3d = AcqImgHeader()
@@ -355,6 +361,8 @@ def test_acq_img_header_to_dict() -> None:
     header.voxels_units = ["s", "um"]
     header.labels = ["time (s)", "space (um)"]
     header.physical_size = [0.1, 56.8]
+    header.date_str = "11/02/2022"
+    header.time_str = "12:54:17"
     
     header_dict = header.to_dict()
     
@@ -364,12 +372,23 @@ def test_acq_img_header_to_dict() -> None:
     assert header_dict["voxels_units"] == ["s", "um"]
     assert header_dict["labels"] == ["time (s)", "space (um)"]
     assert header_dict["physical_size"] == [0.1, 56.8]
+    assert header_dict["date_str"] == "11/02/2022"
+    assert header_dict["time_str"] == "12:54:17"
     
-    # Test with None values
+    # Test with None values (date_str/time_str should not be included)
     header2 = AcqImgHeader()
     header2_dict = header2.to_dict()
     assert header2_dict["shape"] is None
     assert header2_dict["ndim"] is None
+    assert "date_str" not in header2_dict  # Should not be included when None
+    assert "time_str" not in header2_dict  # Should not be included when None
+    
+    # Test with only date_str set
+    header3 = AcqImgHeader()
+    header3.date_str = "11/02/2022"
+    header3_dict = header3.to_dict()
+    assert header3_dict["date_str"] == "11/02/2022"
+    assert "time_str" not in header3_dict  # Should not be included when None
 
 
 def test_acq_img_header_from_dict() -> None:
@@ -381,6 +400,8 @@ def test_acq_img_header_from_dict() -> None:
         "voxels_units": ["s", "um"],
         "labels": ["time (s)", "space (um)"],
         "physical_size": [0.1, 56.8],
+        "date_str": "11/02/2022",
+        "time_str": "12:54:17",
     }
     
     header = AcqImgHeader.from_dict(data)
@@ -391,11 +412,15 @@ def test_acq_img_header_from_dict() -> None:
     assert header.voxels_units == ["s", "um"]
     assert header.labels == ["time (s)", "space (um)"]
     assert header.physical_size == [0.1, 56.8]
+    assert header.date_str == "11/02/2022"
+    assert header.time_str == "12:54:17"
     
     # Test with empty dict
     header2 = AcqImgHeader.from_dict({})
     assert header2.shape is None
     assert header2.ndim is None
+    assert header2.date_str is None
+    assert header2.time_str is None
     
     # Test with missing physical_size (should compute)
     data3 = {
@@ -407,6 +432,16 @@ def test_acq_img_header_from_dict() -> None:
     assert header3.physical_size is not None
     assert header3.physical_size[0] == pytest.approx(0.1)
     assert header3.physical_size[1] == pytest.approx(56.8)
+    
+    # Test with only date_str (time_str missing)
+    data4 = {
+        "shape": [100, 200],
+        "ndim": 2,
+        "date_str": "11/02/2022",
+    }
+    header4 = AcqImgHeader.from_dict(data4)
+    assert header4.date_str == "11/02/2022"
+    assert header4.time_str is None
 
 
 def test_acq_img_header_form_schema() -> None:
@@ -424,6 +459,8 @@ def test_acq_img_header_form_schema() -> None:
     assert "voxels_units" in field_names
     assert "labels" in field_names
     assert "physical_size" in field_names
+    assert "date_str" in field_names
+    assert "time_str" in field_names
     
     # Check schema structure
     for field in schema:
@@ -434,6 +471,12 @@ def test_acq_img_header_form_schema() -> None:
         assert "grid_span" in field
         assert "visible" in field
         assert "field_type" in field
+    
+    # Check that date_str and time_str are read-only
+    date_str_field = next(f for f in schema if f["name"] == "date_str")
+    time_str_field = next(f for f in schema if f["name"] == "time_str")
+    assert date_str_field["editable"] is False
+    assert time_str_field["editable"] is False
 
 
 def test_acq_img_header_from_data() -> None:
@@ -485,5 +528,78 @@ def test_experiment_metadata_form_schema() -> None:
         assert "grid_span" in field
         assert "visible" in field
         assert "field_type" in field
+
+
+def test_experiment_metadata_backward_compatibility_old_keys() -> None:
+    """Test that ExperimentMetadata.from_dict() ignores old acq_date/acq_time keys.
     
+    This ensures backward compatibility with old JSON files that may contain
+    acq_date/acq_time keys from the previous to_dict() implementation.
+    """
+    # Old JSON format with acq_date/acq_time (should be ignored)
+    payload = {
+        "species": "mouse",
+        "condition": "control",
+        "acq_date": "11/02/2022",  # Old key name
+        "acq_time": "12:54:17",    # Old key name
+    }
+    
+    meta = ExperimentMetadata.from_dict(payload)
+    
+    # Should load valid fields
+    assert meta.species == "mouse"
+    assert meta.condition == "control"
+    
+    # Old keys should be ignored (fields no longer exist)
+    # This is expected behavior - from_dict() only loads fields that exist in the dataclass
+
+
+def test_acq_img_header_serialization_round_trip() -> None:
+    """Test that AcqImgHeader serialization round-trips correctly with date_str/time_str."""
+    header = AcqImgHeader()
+    header.shape = (100, 200)
+    header.ndim = 2
+    header.voxels = [0.001, 0.284]
+    header.voxels_units = ["s", "um"]
+    header.labels = ["time (s)", "space (um)"]
+    header.physical_size = [0.1, 56.8]
+    header.date_str = "11/02/2022"
+    header.time_str = "12:54:17"
+    
+    # Serialize and deserialize
+    header_dict = header.to_dict()
+    header_restored = AcqImgHeader.from_dict(header_dict)
+    
+    # Verify all fields round-trip correctly
+    assert header_restored.shape == header.shape
+    assert header_restored.ndim == header.ndim
+    assert header_restored.voxels == header.voxels
+    assert header_restored.voxels_units == header.voxels_units
+    assert header_restored.labels == header.labels
+    assert header_restored.physical_size == header.physical_size
+    assert header_restored.date_str == header.date_str
+    assert header_restored.time_str == header.time_str
+
+
+def test_acq_img_header_serialization_without_date_time() -> None:
+    """Test that AcqImgHeader serialization works when date_str/time_str are None."""
+    header = AcqImgHeader()
+    header.shape = (100, 200)
+    header.ndim = 2
+    header.voxels = [0.001, 0.284]
+    
+    # Serialize (date_str/time_str are None, should not appear in dict)
+    header_dict = header.to_dict()
+    
+    assert "shape" in header_dict
+    assert "ndim" in header_dict
+    assert "voxels" in header_dict
+    assert "date_str" not in header_dict  # Should not be included when None
+    assert "time_str" not in header_dict  # Should not be included when None
+    
+    # Deserialize should work fine
+    header_restored = AcqImgHeader.from_dict(header_dict)
+    assert header_restored.shape == header.shape
+    assert header_restored.date_str is None
+    assert header_restored.time_str is None
 
