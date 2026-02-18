@@ -23,6 +23,10 @@ def test_experiment_metadata_from_dict() -> None:
         "sex": "M",
         "genotype": "WT",
         "condition": "control",
+        "condition2": "stim",
+        "treatment": "drug",
+        "treatment2": "vehicle",
+        "date": "2025-02-17",
         "note": "Test sample",
     }
     meta = ExperimentMetadata.from_dict(payload)
@@ -31,6 +35,11 @@ def test_experiment_metadata_from_dict() -> None:
     assert meta.depth == 100.5
     assert meta.branch_order == 2
     assert meta.direction == "anterograde"
+    assert meta.condition == "control"
+    assert meta.condition2 == "stim"
+    assert meta.treatment == "drug"
+    assert meta.treatment2 == "vehicle"
+    assert meta.date == "2025-02-17"
 
 
 def test_experiment_metadata_unknown_fields_ignored() -> None:
@@ -49,11 +58,17 @@ def test_experiment_metadata_to_dict() -> None:
     meta = ExperimentMetadata(
         species="mouse",
         region="cortex",
+        condition2="stim",
+        treatment="drug",
+        date="2025-02-17",
         note="Test",
     )
     d = meta.to_dict()
     assert d["species"] == "mouse"
     assert d["region"] == "cortex"
+    assert d["condition2"] == "stim"
+    assert d["treatment"] == "drug"
+    assert d["date"] == "2025-02-17"
     assert d["note"] == "Test"
     # Check abbreviated keys
     assert "acq_date" in d
@@ -461,6 +476,11 @@ def test_experiment_metadata_form_schema() -> None:
     field_names = [field["name"] for field in schema]
     assert "species" in field_names
     assert "region" in field_names
+    assert "condition" in field_names
+    assert "condition2" in field_names
+    assert "treatment" in field_names
+    assert "treatment2" in field_names
+    assert "date" in field_names
     assert "note" in field_names
     assert "acquisition_date" in field_names
     assert "acquisition_time" in field_names

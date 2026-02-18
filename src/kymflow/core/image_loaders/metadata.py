@@ -171,6 +171,10 @@ class ExperimentMetadata:
         sex: Animal sex.
         genotype: Genetic background or modification.
         condition: Experimental condition or treatment.
+        condition2: Second condition field.
+        treatment: Treatment applied.
+        treatment2: Second treatment field.
+        date: User-editable date (e.g., experiment date).
         acquisition_date: Date of acquisition (read-only, from header).
         acquisition_time: Time of acquisition (read-only, from header).
         note: Free-form notes or comments.
@@ -253,6 +257,42 @@ class ExperimentMetadata:
         metadata=field_metadata(
             editable=True,
             label="Condition",
+            widget_type="text",
+            grid_span=1,
+        ),
+    )
+    condition2: Optional[str] = field(
+        default="",
+        metadata=field_metadata(
+            editable=True,
+            label="Condition 2",
+            widget_type="text",
+            grid_span=1,
+        ),
+    )
+    treatment: Optional[str] = field(
+        default="",
+        metadata=field_metadata(
+            editable=True,
+            label="Treatment",
+            widget_type="text",
+            grid_span=1,
+        ),
+    )
+    treatment2: Optional[str] = field(
+        default="",
+        metadata=field_metadata(
+            editable=True,
+            label="Treatment 2",
+            widget_type="text",
+            grid_span=1,
+        ),
+    )
+    date: Optional[str] = field(
+        default="",
+        metadata=field_metadata(
+            editable=True,
+            label="Date",
             widget_type="text",
             grid_span=1,
         ),
