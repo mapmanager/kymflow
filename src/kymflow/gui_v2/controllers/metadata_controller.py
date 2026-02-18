@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import EditPhysicalUnits, MetadataUpdate
+from kymflow.gui_v2.events_state import RadonReportUpdated
 
 from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
@@ -69,6 +70,18 @@ class MetadataController:
 
         # Notify AppState that metadata was updated
         self._app_state.update_metadata(e.file)
+
+        # Option A: On experimental metadata edit, update radon cache in memory and refresh
+        # plot pool; do not write CSV until user explicitly saves.
+        if e.metadata_type == "experimental" and self._app_state.files is not None:
+            if hasattr(self._app_state.files, "update_radon_report_cache_only") and hasattr(
+                e.file, "get_kym_analysis"
+            ):
+                try:
+                    self._app_state.files.update_radon_report_cache_only(e.file)
+                    self._bus.emit(RadonReportUpdated())
+                except Exception as ex:
+                    logger.warning("Update radon report cache after metadata edit failed: %s", ex)
     
     def _on_edit_physical_units(self, e: EditPhysicalUnits) -> None:
         """Handle EditPhysicalUnits intent event.

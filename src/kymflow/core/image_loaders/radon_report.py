@@ -41,6 +41,9 @@ class RadonReport:
         accepted: KymAnalysis-level boolean indicating whether this analysis has been accepted
             by the user (True/False), or None if not available. This is set at the image level
             and applies to all ROIs in the image.
+        treatment: From AcqImage experimental metadata (e.g. grandparent_folder concept).
+        condition: From AcqImage experimental metadata (e.g. Control, AngII).
+        date: From AcqImage experimental metadata (e.g. parent_folder concept).
     """
     
     roi_id: int
@@ -63,7 +66,10 @@ class RadonReport:
     grandparent_folder: Optional[str] = None
     rel_path: Optional[str] = None
     accepted: Optional[bool] = None
-    
+    treatment: Optional[str] = None
+    condition: Optional[str] = None
+    date: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a dictionary for JSON/CSV export.
         
@@ -120,7 +126,7 @@ class RadonReport:
                         # Convert int 1/0 or other truthy/falsy values
                         filtered_data[key] = bool(value)
                 else:
-                    # Strings (path, file_name, parent_folder, grandparent_folder, rel_path)
+                    # Strings (path, file_name, parent_folder, grandparent_folder, rel_path, treatment, condition, date)
                     filtered_data[key] = str(value) if value is not None else None
         
         if "roi_id" not in filtered_data:

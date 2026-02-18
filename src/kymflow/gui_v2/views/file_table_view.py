@@ -85,12 +85,14 @@ def _default_columns() -> list[ColumnConfig]:
         _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
         _col("Total Num Velocity Events", "Events", width=100, cell_class="ag-cell-right"),  # abb 202601
         _col("User Event", "User Event", width=100, cell_class="ag-cell-right"),
-        _col("Parent Folder", "Parent", flex=1, min_width=120),
-        _col("Grandparent Folder", "Grandparent", filterable=True, flex=1, min_width=120),
+        
+        _col("Parent Folder", "Parent", flex=1, min_width=120, hide=True),
+        _col("Grandparent Folder", "Grandparent", filterable=True, flex=1, min_width=120, hide=True),
+        
         _col("condition", "Condition", filterable=True, flex=1, min_width=100),
-        _col("condition2", "Condition 2", filterable=True, flex=1, min_width=100),
+        # _col("condition2", "Condition 2", filterable=True, flex=1, min_width=100),
         _col("treatment", "Treatment", filterable=True, flex=1, min_width=100),
-        _col("treatment2", "Treatment 2", filterable=True, flex=1, min_width=100),
+        # _col("treatment2", "Treatment 2", filterable=True, flex=1, min_width=100),
         _col("date", "Date", filterable=True, flex=1, min_width=90),
         _col("duration (s)", "Duration (s)", width=140, cell_class="ag-cell-right"),
         _col("length (um)", "Length (um)", width=140, cell_class="ag-cell-right"),

@@ -73,15 +73,37 @@ def _add_metadata_from_folder(path: str):
 
         mapping = _declan_folder_mapping.get(grandparent_folder, {})
         if mapping:
-            kymImage.experiment_metadata.condition = mapping.get("condition", "")
-            kymImage.experiment_metadata.treatment = mapping.get("treatment", "")
-            kymImage.experiment_metadata.date = parent_folder
-            kymImage.save_metadata()
+            is_changed = False
+            _condition = mapping.get("condition")
+            if kymImage.experiment_metadata.condition != _condition:
+                # logger.info(f'changing condition from "{kymImage.experiment_metadata.condition}" to "{_condition}"')
+                kymImage.experiment_metadata.condition = _condition
+                is_changed = True
+            _treatment = mapping.get("treatment", "")
+            if kymImage.experiment_metadata.treatment != _treatment:
+                # logger.info(f'changing treatment from "{kymImage.experiment_metadata.treatment}" to "{_treatment}"')
+                kymImage.experiment_metadata.treatment = _treatment
+                is_changed = True
+
+            _date = parent_folder
+            if kymImage.experiment_metadata.date != _date:
+                # logger.info(f'changing date from "{kymImage.experiment_metadata.date}" to "{_date}"')
+                kymImage.experiment_metadata.date = _date
+                is_changed = True
+            
+            if is_changed:
+                logger.info(f'saving metadata for {kymImage.path.name}')
+                # print(kymImage.experiment_metadata)
+                kymImage.save_metadata()
+            else:
+                # logger.info(f'no changes to metadata for {kymImage.path.name}')
+                pass
+
         else:
             logger.error(f' no mapping for {grandparent_folder}, expected keys are {_declan_folder_mapping.keys()}')
 
 if __name__ == "__main__":
 
-    path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v2-analysis"
+    path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v3-analysis"
 
     _add_metadata_from_folder(path)

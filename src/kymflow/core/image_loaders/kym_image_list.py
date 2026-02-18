@@ -381,6 +381,9 @@ class KymImageList(AcqImageList[KymImage]):
             )
             if cancel_event is not None and cancel_event.is_set():
                 return
+            # Note: We persist to CSV after rebuild (e.g. when schema was stale or DB missing).
+            # So first load with new code/schema writes CSV without explicit user save. Preferred
+            # behavior would be not to save unless the user explicitly saves; leaving as-is.
             self.save_radon_report_db()
             logger.info("Radon DB load complete (rebuilt from images: %s)", rebuild_reason)
             if progress_cb is not None and n > 0:

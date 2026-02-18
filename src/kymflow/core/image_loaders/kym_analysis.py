@@ -1541,6 +1541,12 @@ class KymAnalysis:
             parent_folder = self.acq_image.path.parent.name
             if self.acq_image.path.parent.parent:
                 grandparent_folder = self.acq_image.path.parent.parent.name
+
+        # Experimental metadata from AcqImage (shared by all ROIs in this image)
+        em = self.acq_image.experiment_metadata
+        treatment = getattr(em, "treatment", None) or None
+        condition = getattr(em, "condition", None) or None
+        date = getattr(em, "date", None) or None
         
         # Get accepted status once per image (shared by all ROIs)
         accepted = self.get_accepted()
@@ -1639,6 +1645,9 @@ class KymAnalysis:
                 parent_folder=parent_folder,
                 grandparent_folder=grandparent_folder,
                 accepted=accepted,
+                treatment=treatment,
+                condition=condition,
+                date=date,
             )
             
             report.append(radon_report)
