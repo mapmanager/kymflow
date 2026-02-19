@@ -590,6 +590,7 @@ def plot_image_line_plotly_v3(
         "y": dim1_arange if transpose else dim0_arange,
         "colorscale": colorscale_value,
         "showscale": False,
+        "hoverinfo": "skip",
         **({"zmin": zmin} if zmin is not None else {}),
         **({"zmax": zmax} if zmax is not None else {}),
     }
@@ -915,28 +916,29 @@ def _calculate_event_rect_coords(
     span_sec_if_no_end: float = 0.20,
 ) -> tuple[float, float]:
     """Calculate x0, x1 coordinates for an event rect.
-    
-    Uses t_start as left (x0) and t_end as right (x1), or t_start + span_sec_if_no_end
-    when t_end is None or invalid.
-    
+
+    Uses t_start as left (x0). Right edge (x1): t_end if present and valid
+    (> t_start, finite); otherwise t_start + span_sec_if_no_end. t_peak is
+    not used for rect drawing.
+
     Args:
         event: VelocityEvent to calculate coordinates for.
         time_range: Tuple of (time_min, time_max) for clamping in physical units.
-        span_sec_if_no_end: Fixed width when t_end is None.
-    
+        span_sec_if_no_end: Fixed width when t_end is missing or invalid.
+
     Returns:
         Tuple of (x0, x1) coordinates.
-    
+
     Raises:
         ValueError: If time_range is None or invalid.
     """
     if time_range is None:
         raise ValueError("time_range is None - cannot calculate event rect coordinates")
-    
+
     time_min, time_max = time_range
     if not np.isfinite(time_min) or not np.isfinite(time_max) or time_min >= time_max:
         raise ValueError(f"Invalid time_range: {time_range}")
-    
+
     t_start = float(event.t_start)
     if event.t_end is None or not np.isfinite(event.t_end) or event.t_end <= t_start:
         t_end_plot = t_start + span_sec_if_no_end
@@ -1204,7 +1206,10 @@ def select_kym_event_rect(
     row: int = 2,
 ) -> None:
     """Select a kym event rect by setting yellow outline, deselect others.
-    
+
+    Selected rect uses dotted outline when t_end is missing/invalid (span used),
+    solid outline when t_end is valid.
+
     Args:
         plotly_dict: Plotly figure dictionary to modify.
         event: VelocityEvent to select (None to deselect all).
@@ -1225,7 +1230,7 @@ def select_kym_event_rect(
     # Get target UUID from event._uuid
     target_uuid = event._uuid if event is not None and hasattr(event, '_uuid') and event._uuid else None
 
-    # Determine dash style for selected event (dashed when no t_end, e.g. user-added)
+    # Determine dash style for selected event (dotted when t_end missing/invalid)
     use_dash = False
     if event is not None:
         t_start = float(event.t_start) if event.t_start is not None else 0.0
@@ -1266,8 +1271,10 @@ def select_kym_event_rect(
             # Modify directly in plotly_dict structure
             layout['shapes'][idx]['line'] = {"width": 0}
 
+    # this happens when we have event None -> deselect all
     if not _foundTarget:
-        logger.error(f'select_kym_event_rect: no target found for event: {event} target_uuid={target_uuid}')
+        if event is not None:
+            logger.error(f'select_kym_event_rect: no target found for event: {event} target_uuid={target_uuid}')
 
 
 def update_xaxis_range(fig: go.Figure, x_range: list[float]) -> None:  # pragma: no cover

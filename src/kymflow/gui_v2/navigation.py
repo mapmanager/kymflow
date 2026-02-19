@@ -44,9 +44,15 @@ def build_header(context: AppContext, dark_mode, drawer_toggle_callback: Optiona
         context.toggle_theme(dark_mode)
         _update_theme_icon()
     
-    with ui.header().classes("items-center justify-between"):
+    # default is 53px ???
+    # with ui.header().classes("items-center justify-between").style('height: 2px'):
+
+    with ui.header().classes("items-center justify-between").props("dense").style(
+        "min-height: 28px; height: 28px; padding: 0 8px;"
+    ):
+
         # Left side: Drawer toggle, Title and navigation buttons
-        with ui.row().classes("items-center gap-4"):
+        with ui.row().classes("items-center gap-2"):
             # Drawer toggle button (always visible, enabled only on Home page)
             # drawer_button = ui.button(
             #     icon="menu",
@@ -62,20 +68,20 @@ def build_header(context: AppContext, dark_mode, drawer_toggle_callback: Optiona
             # ui.button.default_props("dense")
 
 
-            ui.button(
-                "Home",
-                on_click=lambda: _navigate("/"),
-            ).classes("!text-base").props("flat text-color=white")
-            
-            ui.button(
-                "Batch",
-                on_click=lambda: _navigate("/batch"),
-            ).classes("!text-base").props("flat text-color=white")
-            
-            ui.button(
-                "Pool",
-                on_click=lambda: _navigate("/pool"),
-            ).classes("!text-base").props("flat text-color=white")
+            # ui.button(
+            #     "Home",
+            #     on_click=lambda: _navigate("/"),
+            # ).classes("!text-base").props("flat text-color=white")
+
+            # ui.button(
+            #     "Batch",
+            #     on_click=lambda: _navigate("/batch"),
+            # ).classes("!text-base").props("flat text-color=white")
+            #
+            # ui.button(
+            #     "Pool",
+            #     on_click=lambda: _navigate("/pool"),
+            # ).classes("!text-base").props("flat text-color=white")
             
             # COMMENTED OUT: About button removed - About tab is now in drawer
             # about_button = ui.button(

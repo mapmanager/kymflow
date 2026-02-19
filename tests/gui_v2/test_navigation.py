@@ -11,6 +11,12 @@ class DummyContainer:
     def classes(self, *_args, **_kwargs):
         return self
 
+    def props(self, *_args, **_kwargs):
+        return self
+
+    def style(self, *_args, **_kwargs):
+        return self
+
     def __enter__(self):
         return self
 

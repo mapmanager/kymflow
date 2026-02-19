@@ -33,9 +33,11 @@
     "sex": "Xxxy",
     "genotype": "yyy",
     "condition": "",
-    "note": "",
-    "acq_date": "",
-    "acq_time": ""
+    "condition2": "",
+    "treatment": "",
+    "treatment2": "",
+    "date": "",
+    "note": ""
   },
   "rois": [
     {

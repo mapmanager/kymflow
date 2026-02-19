@@ -297,11 +297,14 @@ class KymImage(AcqImage):
             
             "ms/line": round(self.seconds_per_line * 1000, 2) if self.seconds_per_line is not None else "-",
             "um/pixel": self.um_per_pixel if self.um_per_pixel is not None else "-",
-            "condition": self.experiment_metadata.condition or "-",
+
+            # use blinded
+            "condition": 'blinded' if blinded else self.experiment_metadata.condition or "-",
             "condition2": self.experiment_metadata.condition2 or "-",
-            "treatment": self.experiment_metadata.treatment or "-",
+            "treatment": 'blinded' if blinded else self.experiment_metadata.treatment or "-",
             "treatment2": self.experiment_metadata.treatment2 or "-",
-            "date": self.experiment_metadata.date or "-",
+            "date": 'blinded' if blinded else self.experiment_metadata.date or "-",
+
             "note": self.experiment_metadata.note or "-",
             "accepted": self.get_kym_analysis().get_accepted(),
             "path": str(representative_path) if representative_path is not None else None,  # special case, not in any schema

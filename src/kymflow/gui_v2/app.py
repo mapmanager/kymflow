@@ -32,9 +32,9 @@ from kymflow.gui_v2.navigation import inject_global_styles
 from kymflow.gui_v2.bus import BusConfig, get_event_bus
 from kymflow.gui_v2.events_folder import SelectPathEvent
 from kymflow.gui_v2.page_cache import cache_page, get_cached_page, get_stable_session_id
-from kymflow.gui_v2.pages.batch_page import BatchPage
+# from kymflow.gui_v2.pages.batch_page import BatchPage
 from kymflow.gui_v2.pages.home_page import HomePage
-from kymflow.gui_v2.pages.pool_page import PoolPage
+# from kymflow.gui_v2.pages.pool_page import PoolPage
 
 logger = get_logger(__name__)
 
@@ -48,6 +48,16 @@ setup_logging(
 # AppContext.__init__ will check if we're in a worker process and skip initialization
 context = AppContext()
 
+# this is REQUIRED here for nicegui-pack (pyinstaller) to work
+try:
+    app.native.window_args["confirm_close"] = True
+    logger.info('app.native.window_args')
+    print(app.native.window_args)
+except Exception:
+    # Web mode or older NiceGUI internals: ignore safely.
+    logger.error('5 FAILED: app.native.window_args["confirm_close"]')
+    pass
+
 @ui.page("/")
 def home() -> None:
     """Home route for v2 GUI.
@@ -56,7 +66,15 @@ def home() -> None:
     Each browser tab/window gets its own isolated session.
     """
 
-    logger.info('xxx')
+    # try:
+    #     app.native.window_args["confirm_close"] = True
+    # except Exception:
+    #     # Web mode or older NiceGUI internals: ignore safely.
+    #     logger.error('4 FAILED: app.native.window_args["confirm_close"]')
+    #     pass
+
+
+    # logger.info('xxx')
     
     # Install native rect polling only in native mode (delayed slightly so native window exists).
     # Skip entirely in browser mode - no reason to poll native window rects.
@@ -64,7 +82,8 @@ def home() -> None:
     if native is not None:
         from kymflow.gui_v2._pywebview import install_native_rect_polling
         ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
-
+    else:
+        logger.error('native is None')
     #
     # global css styles
     # this has to be in a page function ???
@@ -180,66 +199,66 @@ def home() -> None:
 
 
 
-@ui.page("/batch")
-def batch() -> None:
-    """Batch route for v2 GUI.
+# @ui.page("/batch")
+# def batch() -> None:
+#     """Batch route for v2 GUI.
+#
+#     Uses cached page instances to prevent recreation on navigation.
+#     Each browser tab/window gets its own isolated session.
+#     """
+#     ui.page_title("KymFlow - Batch")
+#     inject_global_styles()
+#
+#     # Get stable session ID (persists across navigations)
+#     session_id = get_stable_session_id()
+#
+#     # Get or create cached page instance
+#     cached_page = get_cached_page(session_id, "/batch")
+#     if cached_page is not None:
+#         # Reuse cached page
+#         # logger.debug(f"Reusing cached BatchPage for session {session_id[:8]}...")
+#         page = cached_page
+#     else:
+#         # Create new page instance and cache it
+#         # bus = get_event_bus(BusConfig(trace=False))
+#         bus = get_event_bus()
+#         page = BatchPage(context, bus)
+#         cache_page(session_id, "/batch", page)
+#         # logger.debug(f"Created and cached new BatchPage for session {session_id[:8]}...")
+#
+#     # Render the page (creates fresh UI elements each time)
+#     page.render(page_title="KymFlow - Batch")
 
-    Uses cached page instances to prevent recreation on navigation.
-    Each browser tab/window gets its own isolated session.
-    """
-    ui.page_title("KymFlow - Batch")
-    inject_global_styles()
 
-    # Get stable session ID (persists across navigations)
-    session_id = get_stable_session_id()
-
-    # Get or create cached page instance
-    cached_page = get_cached_page(session_id, "/batch")
-    if cached_page is not None:
-        # Reuse cached page
-        # logger.debug(f"Reusing cached BatchPage for session {session_id[:8]}...")
-        page = cached_page
-    else:
-        # Create new page instance and cache it
-        # bus = get_event_bus(BusConfig(trace=False))
-        bus = get_event_bus()
-        page = BatchPage(context, bus)
-        cache_page(session_id, "/batch", page)
-        # logger.debug(f"Created and cached new BatchPage for session {session_id[:8]}...")
-
-    # Render the page (creates fresh UI elements each time)
-    page.render(page_title="KymFlow - Batch")
-
-
-@ui.page("/pool")
-def pool() -> None:
-    """Pool route for v2 GUI.
-
-    Uses cached page instances to prevent recreation on navigation.
-    Each browser tab/window gets its own isolated session.
-    """
-    ui.page_title("KymFlow - Pool")
-    inject_global_styles()
-
-    # Get stable session ID (persists across navigations)
-    session_id = get_stable_session_id()
-
-    # Get or create cached page instance
-    cached_page = get_cached_page(session_id, "/pool")
-    if cached_page is not None:
-        # Reuse cached page
-        # logger.debug(f"Reusing cached PoolPage for session {session_id[:8]}...")
-        page = cached_page
-    else:
-        # Create new page instance and cache it
-        # bus = get_event_bus(BusConfig(trace=False))
-        bus = get_event_bus()
-        page = PoolPage(context, bus)
-        cache_page(session_id, "/pool", page)
-        # logger.debug(f"Created and cached new PoolPage for session {session_id[:8]}...")
-
-    # Render the page (creates fresh UI elements each time)
-    page.render(page_title="KymFlow - Pool")
+# @ui.page("/pool")
+# def pool() -> None:
+#     """Pool route for v2 GUI.
+#
+#     Uses cached page instances to prevent recreation on navigation.
+#     Each browser tab/window gets its own isolated session.
+#     """
+#     ui.page_title("KymFlow - Pool")
+#     inject_global_styles()
+#
+#     # Get stable session ID (persists across navigations)
+#     session_id = get_stable_session_id()
+#
+#     # Get or create cached page instance
+#     cached_page = get_cached_page(session_id, "/pool")
+#     if cached_page is not None:
+#         # Reuse cached page
+#         # logger.debug(f"Reusing cached PoolPage for session {session_id[:8]}...")
+#         page = cached_page
+#     else:
+#         # Create new page instance and cache it
+#         # bus = get_event_bus(BusConfig(trace=False))
+#         bus = get_event_bus()
+#         page = PoolPage(context, bus)
+#         cache_page(session_id, "/pool", page)
+#         # logger.debug(f"Created and cached new PoolPage for session {session_id[:8]}...")
+#
+#     # Render the page (creates fresh UI elements each time)
+#     page.render(page_title="KymFlow - Pool")
 
 def _env_bool(name: str, default: bool) -> bool:
     """Parse env var as bool; if unset/invalid returns default."""
@@ -328,7 +347,23 @@ if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
     
 
     native_bool = _env_bool("KYMFLOW_GUI_NATIVE", True)
+    # configure_save_on_quit()
+
+    # try:
+    #     app.native.window_args["confirm_close"] = True
+    # except Exception:
+    #     # Web mode or older NiceGUI internals: ignore safely.
+    #     logger.error('2 FAILED: app.native.window_args["confirm_close"]')
+    #     pass
+
     if native_bool:
+        # try:
+        #     app.native.window_args["confirm_close"] = True
+        # except Exception:
+        #     # Web mode or older NiceGUI internals: ignore safely.
+        #     logger.error('3 FAILED: app.native.window_args["confirm_close"]')
+        #     pass
+
         configure_save_on_quit()
         configure_native_window_args(context)
 

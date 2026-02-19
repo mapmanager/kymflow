@@ -487,11 +487,12 @@ class UserConfig:
         """Write config to disk."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = self.data.to_json_dict()
+
         logger.info('saving user_config to disk')
         logger.info(f'  path: {self.path}')
 
-        from pprint import pprint
-        pprint(payload, sort_dicts=False, indent=4)
+        # from pprint import pprint
+        # pprint(payload, sort_dicts=False, indent=4)
         
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 

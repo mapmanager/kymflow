@@ -133,7 +133,7 @@ class VelocityEventDb:
                         need_rebuild = True
                         rebuild_reason = "cache was stale vs images"
             except Exception as e:
-                logger.warning("Failed to load velocity event DB from %s: %s", self._db_path, e)
+                logger.error("Failed to load velocity event DB from %s: %s", self._db_path, e)
                 need_rebuild = True
                 rebuild_reason = "load failed"
         else:
@@ -221,7 +221,7 @@ class VelocityEventDb:
                         for e in events
                     ]
             except Exception as e:
-                logger.warning("Failed to get velocity events for %s: %s", path_str, e)
+                logger.error("Failed to get velocity events for %s: %s", path_str, e)
                 continue
 
         # Build cache state
@@ -239,7 +239,16 @@ class VelocityEventDb:
             event_type = row.get("event_type")
             cache_by_key[key].append((t_start, t_end, event_type))
 
-        # Compare: normalize both sides before comparison
+        # Compare: normalize both sides before comparison.
+        # Sort key must handle None in t_start/t_end (from empty CSV cells) to avoid:
+        # TypeError: '<' not supported between instances of 'float' and 'NoneType'
+        def _sort_key(tup: tuple) -> tuple:
+            ts, te, _ = tup
+            return (
+                ts if ts is not None else float("-inf"),
+                te if te is not None else float("-inf"),
+            )
+
         all_keys = set(current.keys()) | set(cache_by_key.keys())
         for key in all_keys:
             curr_list = current.get(key, [])
@@ -248,16 +257,16 @@ class VelocityEventDb:
                 return True
             curr_norm = [_norm_event_tuple(x[0], x[1], x[2]) for x in curr_list]
             cache_norm = [_norm_event_tuple(x[0], x[1], x[2]) for x in cache_list]
-            curr_sorted = sorted(curr_norm, key=lambda x: (x[0], x[1]))
-            cache_sorted = sorted(cache_norm, key=lambda x: (x[0], x[1]))
+            curr_sorted = sorted(curr_norm, key=_sort_key)
+            cache_sorted = sorted(cache_norm, key=_sort_key)
             if curr_sorted != cache_sorted:
-                logger.debug("STALE")
-                logger.debug("  curr_sorted:")
-                for _i in curr_sorted:
-                    print(_i)
-                logger.debug("  cache_sorted:")
-                for _i in cache_sorted:
-                    print(_i)
+                # logger.debug("STALE")
+                # logger.debug("  curr_sorted:")
+                # for _i in curr_sorted:
+                #     print(_i)
+                # logger.debug("  cache_sorted:")
+                # for _i in cache_sorted:
+                #     print(_i)
                 return True
         return False
 
@@ -279,7 +288,7 @@ class VelocityEventDb:
             df.to_csv(self._db_path, index=False)
             return True
         except Exception as e:
-            logger.warning("Failed to save velocity event DB: %s", e)
+            logger.error("Failed to save velocity event DB: %s", e)
             return False
 
     def update_from_image(self, kym_image: "KymImage") -> None:
@@ -337,7 +346,7 @@ class VelocityEventDb:
             self._cache = [r for r in self._cache if r.get("path") != path_str]
             self._cache.extend(rows)
         except Exception as e:
-            logger.warning("Failed to update velocity event cache for %s: %s", path_str, e)
+            logger.error("Failed to update velocity event cache for %s: %s", path_str, e)
 
     def update_from_image_and_persist(self, kym_image: "KymImage") -> None:
         """Update cache from image and persist to CSV."""

@@ -411,9 +411,9 @@ class KymImageList(AcqImageList[KymImage]):
                 lambda r: f"{r['path']}|{r['roi_id']}" if pd.notna(r.get("path")) else "",
                 axis=1,
             )
-        logger.info("Saving radon report DB to:")
-        logger.info(f"  {db_path}")
-        print(df.head())
+        # logger.info("Saving radon report DB to:")
+        # logger.info(f"  {db_path}")
+        # print(df.head())
 
         df.to_csv(db_path, index=False)
         return True

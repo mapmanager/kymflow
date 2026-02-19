@@ -766,6 +766,13 @@ class KymEventView:
                 ui.button("Cancel", on_click=dialog.close)
                 ui.button("Delete", on_click=lambda: self._confirm_delete(dialog))
 
+            def on_key(e):
+                if e.key == 'Enter' and e.action.keydown:
+                    self._confirm_delete(dialog)
+
+            ui.keyboard(on_key=on_key, ignore=[])  # ignore=[] so Enter is captured even when focus is on a button
+
+
         dialog.open()
 
     def _confirm_delete(self, dialog: ui.dialog) -> None:

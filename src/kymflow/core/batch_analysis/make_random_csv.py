@@ -76,12 +76,13 @@ def makeRandomAcqImageList(_random_path: str) -> KymImageList:
     """
     df = pd.read_csv(_random_path)
     
-    print(df)
+    # print(df)
 
     path_list = df['path'].tolist()
     
     # Load from a list of paths using KymImageList API
     # Future API extension: KymImageList.load_from_csv(csv_path) could wrap this
+    logger.info(f'final sanity check ... loading {len(path_list)} images from {_random_path}')
     acqImageList = KymImageList(file_path_list=path_list, file_extension=".tif")
 
     print(acqImageList)
@@ -118,32 +119,36 @@ def subsample_from_random_csv(_random_path: str, n: int, output_folder: str | No
     
     logger.info('orig df is:')
     
-    print(df[['File Name', 'Grandparent Folder', 'path']])
+    print(df[['File Name', 'Grandparent Folder', 'treatment', 'condition', 'path']].head())
 
 
     # Log group information before subsampling
-    group_counts = df['Grandparent Folder'].value_counts()
+    group_counts = df['treatment'].value_counts()
     logger.info(f'Subsampling: {len(group_counts)} groups found')
-    logger.info(f'Group sizes: {dict(group_counts)}')
+    # logger.info(f'Group sizes: {dict(group_counts)}')
+    logger.info(f'Group sizes:')
+    print(group_counts)
     
     # Sample n rows from each group
     # If a group has fewer than n rows, sample() will return all rows from that group
-    df_sampled = df.groupby('Grandparent Folder', group_keys=False).sample(n=n, replace=False)
+    df_sampled = df.groupby('treatment', group_keys=False).sample(n=n, replace=False)
     
     # Log results after subsampling
-    sampled_counts = df_sampled['Grandparent Folder'].value_counts()
+    sampled_counts = df_sampled['treatment'].value_counts()
     logger.info(f'After subsampling: {len(df_sampled)} total rows')
-    logger.info(f'Sampled group sizes: {dict(sampled_counts)}')
+    # logger.info(f'Sampled group sizes: {dict(sampled_counts)}')
+    logger.info(f'Sampled group sizes:')
+    print(sampled_counts)
     
     # Determine output path
     if output_folder is not None:
         # Use the same filename as input but in the specified output folder
         input_filename = os.path.basename(_random_path)
-        _subsampled_filename = input_filename.replace('.csv', f'-n-{n}.csv')
+        _subsampled_filename = input_filename.replace('.csv', f'-n{n}.csv')
         _subsampled_path = os.path.join(output_folder, _subsampled_filename)
     else:
         # Save to a new CSV with '-n-{n}' suffix in same directory as input
-        _subsampled_path = _random_path.replace('.csv', f'-n-{n}.csv')
+        _subsampled_path = _random_path.replace('.csv', f'-n{n}.csv')
     
     df_sampled.to_csv(_subsampled_path, index=False)
     
@@ -191,7 +196,7 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
     # This path will be stripped from each file path to create rel_path column
     base_path = Path(path).expanduser().resolve()
 
-    logger.info('loading from raw data path:')
+    logger.info('loading from raw data path ...')
     print(path)
     
     # Load images using KymImageList API
@@ -205,7 +210,7 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
     df = pd.DataFrame(allMetadata)
 
     logger.info('original df is:')
-    print(df[['File Name', 'Parent Folder', 'Grandparent Folder', 'path']])
+    print(df[['File Name', 'Parent Folder', 'Grandparent Folder', 'treatment', 'condition', 'path']].head())
 
     # Drop columns that are not needed for analysis
     # These are analysis status columns, not needed for randomization
@@ -220,12 +225,12 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
         )
 
     # Save original (non-randomized) DataFrame to CSV
-    _original_filename = f'original-declan-data-{date_str}.csv'
+    _original_filename = f'original-kymfilelist-{date_str}.csv'
     df.to_csv(os.path.join(results_folder, _original_filename), index=False)
 
     # Determine group order based on first appearance in the DataFrame
     # drop_duplicates() preserves first-seen order, maintaining stable group ordering
-    group_order = df['Grandparent Folder'].drop_duplicates().tolist()
+    group_order = df['treatment'].drop_duplicates().tolist()
 
     nGrandparent = len(group_order)
     randomized_chunks = []  # Collect randomized group dataframes
@@ -235,12 +240,12 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
     for _idx, grandparent_folder in enumerate(group_order):
 
         # Select rows belonging to this grandparent folder
-        dfOriginalGrandparent = df[df['Grandparent Folder'] == grandparent_folder]
+        dfOriginalGrandparent = df[df['treatment'] == grandparent_folder]
 
         n = len(dfOriginalGrandparent)
         logger.info(
             f'{_idx + 1} of {nGrandparent} '
-            f'grandparent_folder:"{grandparent_folder}" '
+            f'treatment:"{grandparent_folder}" '
             f'with {n} kymograph images'
         )
 
@@ -266,7 +271,7 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
 
     # Save randomized DataFrame to CSV
     # Future API extension: AcqImageList.export_metadata_to_csv() could handle this
-    _random_filename = f'randomized-declan-data-{date_str}.csv'
+    _random_filename = f'randomized-kymfilelist-{date_str}.csv'
     _random_path = os.path.join(results_folder, _random_filename)
     df_randomized.to_csv(_random_path, index=False)
 
@@ -283,7 +288,7 @@ if __name__ == "__main__":
     
     # Determine output folder with versioning to avoid overwriting existing folders
     # Base folder name: 'declan-random-yyyymmdd'
-    base_folder_name = f'declan-random-{date_str}'
+    base_folder_name = f'random-kymfilelist-{date_str}'
     results_folder = _get_versioned_folder_name(base_folder_name)
     logger.info(f'Using output folder: {results_folder}')
     
@@ -294,7 +299,7 @@ if __name__ == "__main__":
 
     # Step 2: Subsample from randomized CSV
     # Save subsampled CSV to the same versioned folder
-    nSamplePerGrandparent = 5
+    nSamplePerGrandparent = 10
     _subsampledPath = subsample_from_random_csv(_randomPath, nSamplePerGrandparent, output_folder=results_folder)
     logger.info(f'Subsampled n={nSamplePerGrandparent} per group, saved to: "{_subsampledPath}"')
 

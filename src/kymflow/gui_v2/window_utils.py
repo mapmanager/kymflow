@@ -50,8 +50,8 @@ def set_window_title_for_path(path: Path | str, *, is_file: bool = False) -> Non
     if native is not None:
         main_window = getattr(native, "main_window", None)
         if main_window is not None:
-            logger.debug(f'=== setting window title to is_file:{is_file} title:"{title}"')
-            print(f'  path:{is_file}')
+            # logger.debug(f'=== setting window title to is_file:{is_file} title:"{title}"')
+            # print(f'  path:{is_file}')
 
             main_window.set_title(title)
         else:

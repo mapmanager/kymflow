@@ -67,8 +67,7 @@ def test_calculate_event_rect_coords_normal(sample_velocity_event: VelocityEvent
 
 
 def test_calculate_event_rect_coords_no_end(sample_velocity_event: VelocityEvent) -> None:
-    """Test _calculate_event_rect_coords returns None when event has neither t_peak nor t_end."""
-    # Create event without t_peak and without t_end (20260217_fix_t_peak: no rect drawn)
+    """Test _calculate_event_rect_coords uses span_sec_if_no_end when t_end is missing."""
     event = VelocityEvent(
         event_type="baseline_drop",
         i_start=10,
@@ -79,11 +78,12 @@ def test_calculate_event_rect_coords_no_end(sample_velocity_event: VelocityEvent
         machine_type=MachineType.STALL_CANDIDATE,
         user_type=UserType.UNREVIEWED,
     )
-    
+
     time_range = (0.0, 10.0)
-    result = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end=0.5)
-    
-    assert result is None
+    x0, x1 = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end=0.5)
+
+    assert x0 == 1.0
+    assert x1 == 1.5  # t_start + span
 
 
 def test_calculate_event_rect_coords_clamps_to_time_range(sample_velocity_event: VelocityEvent) -> None:
@@ -96,9 +96,8 @@ def test_calculate_event_rect_coords_clamps_to_time_range(sample_velocity_event:
     assert x0 < x1
 
 
-def test_calculate_event_rect_coords_uses_t_peak(sample_velocity_event: VelocityEvent) -> None:
-    """Test _calculate_event_rect_coords uses t_peak as right edge when present."""
-    # Event with t_peak (takes precedence over t_end)
+def test_calculate_event_rect_coords_ignores_t_peak(sample_velocity_event: VelocityEvent) -> None:
+    """Test _calculate_event_rect_coords uses t_end as right edge; t_peak is not used."""
     event = VelocityEvent(
         event_type="baseline_drop",
         i_start=10,
@@ -111,11 +110,9 @@ def test_calculate_event_rect_coords_uses_t_peak(sample_velocity_event: Velocity
         user_type=UserType.UNREVIEWED,
     )
     time_range = (0.0, 10.0)
-    result = _calculate_event_rect_coords(event, time_range)
-    assert result is not None
-    x0, x1 = result
+    x0, x1 = _calculate_event_rect_coords(event, time_range)
     assert x0 == 1.0
-    assert x1 == 1.5  # t_peak, not t_end
+    assert x1 == 2.0  # t_end (t_peak is ignored)
     assert x0 < x1
 
 
@@ -155,23 +152,23 @@ def test_calculate_event_rect_coords_invalid_time_range(sample_velocity_event: V
 
 
 def test_calculate_event_rect_coords_handles_invalid_t_end(sample_velocity_event: VelocityEvent) -> None:
-    """Test _calculate_event_rect_coords returns None when t_end <= t_start and no t_peak."""
-    # Create event with t_end < t_start and no t_peak (20260217_fix_t_peak: neither valid)
+    """Test _calculate_event_rect_coords uses span when t_end <= t_start (invalid)."""
     event = VelocityEvent(
         event_type="baseline_drop",
         i_start=10,
         t_start=2.0,
         i_peak=None,
         i_end=20,
-        t_end=1.0,  # Less than t_start - treated as invalid
+        t_end=1.0,  # Less than t_start - treated as invalid, use span
         machine_type=MachineType.STALL_CANDIDATE,
         user_type=UserType.UNREVIEWED,
     )
-    
+
     time_range = (0.0, 10.0)
-    result = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end=0.20)
-    
-    assert result is None
+    x0, x1 = _calculate_event_rect_coords(event, time_range, span_sec_if_no_end=0.20)
+
+    assert x0 == 2.0
+    assert x1 == 2.2  # t_start + span
 
 
 # ============================================================================
@@ -277,8 +274,8 @@ def test_add_kym_event_rect_success(
     assert shape["fillcolor"] == "rgba(255, 0, 0, 0.5)"  # Red for baseline_drop
 
 
-def test_add_kym_event_rect_skips_when_no_peak_no_end(sample_plotly_dict: dict) -> None:
-    """Test add_kym_event_rect does not add rect when event has neither t_peak nor t_end."""
+def test_add_kym_event_rect_uses_span_when_no_end(sample_plotly_dict: dict) -> None:
+    """Test add_kym_event_rect adds rect using span_sec_if_no_end when t_end is missing."""
     event = VelocityEvent(
         event_type="baseline_drop",
         i_start=10,
@@ -289,10 +286,13 @@ def test_add_kym_event_rect_skips_when_no_peak_no_end(sample_plotly_dict: dict) 
         machine_type=MachineType.STALL_CANDIDATE,
         user_type=UserType.UNREVIEWED,
     )
-    object.__setattr__(event, "_uuid", "uuid-no-peak-no-end")
+    object.__setattr__(event, "_uuid", "uuid-no-end")
     time_range = (0.0, 10.0)
-    add_kym_event_rect(sample_plotly_dict, event, time_range, row=2)
-    assert len(sample_plotly_dict["layout"]["shapes"]) == 0
+    add_kym_event_rect(sample_plotly_dict, event, time_range, row=2, span_sec_if_no_end=0.5)
+    assert len(sample_plotly_dict["layout"]["shapes"]) == 1
+    shape = sample_plotly_dict["layout"]["shapes"][0]
+    assert shape["x0"] == 1.0
+    assert shape["x1"] == 1.5  # t_start + span
 
 
 def test_add_kym_event_rect_no_uuid(
@@ -373,7 +373,7 @@ def test_add_kym_event_rect_different_event_types(
     
     shapes = sample_plotly_dict["layout"]["shapes"]
     assert len(shapes) == 2
-    assert shapes[0]["fillcolor"] == "rgba(0, 255, 0, 0.5)"  # Green
+    assert shapes[0]["fillcolor"] == "rgba(0, 255, 0, 0.4)"  # Green (baseline_rise uses 0.4)
     assert shapes[1]["fillcolor"] == "rgba(0, 0, 255, 0.5)"  # Blue
 
 
@@ -658,25 +658,23 @@ def test_select_kym_event_rect_deselects_all(
     assert shape.get("line", {}).get("width", 0) == 0
 
 
-def test_select_kym_event_rect_dash_for_no_t_peak(
+def test_select_kym_event_rect_dash_when_t_end_missing(
     sample_plotly_dict: dict,
 ) -> None:
-    """Test select_kym_event_rect uses dotted line for events with no t_peak (e.g. user-added)."""
+    """Test select_kym_event_rect uses dotted line when t_end is missing/invalid."""
     time_range = (0.0, 10.0)
 
-    # Event with t_end but no t_peak (user-added style) - rect is drawn via t_end fallback
     event = VelocityEvent(
         event_type="User Added",
         i_start=10,
         t_start=1.0,
         i_peak=None,
-        t_peak=None,
-        i_end=20,
-        t_end=2.0,
+        i_end=None,
+        t_end=None,
         machine_type=MachineType.OTHER,
         user_type=UserType.UNREVIEWED,
     )
-    object.__setattr__(event, "_uuid", "uuid-no-peak")
+    object.__setattr__(event, "_uuid", "uuid-no-end")
 
     add_kym_event_rect(sample_plotly_dict, event, time_range, row=2)
     select_kym_event_rect(sample_plotly_dict, event, row=2)
@@ -684,7 +682,7 @@ def test_select_kym_event_rect_dash_for_no_t_peak(
     shape = sample_plotly_dict["layout"]["shapes"][0]
     assert shape["line"]["color"] == "yellow"
     assert shape["line"]["width"] == 2
-    assert shape["line"]["dash"] == "dot"  # Dotted when t_peak is None (20260217_fix_t_peak)
+    assert shape["line"]["dash"] == "dot"  # Dotted when t_end is missing (span used)
 
 
 def test_select_kym_event_rect_ignores_different_row(

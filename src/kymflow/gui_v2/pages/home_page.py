@@ -537,14 +537,14 @@ class HomePage(BasePage):
                 unique_row_id_col="_unique_row_id",
                 db_type="radon_db",
                 plot_state=PlotState(
-                    xcol="grandparent_folder",
+                    xcol="treatment",
                     ycol="vel_mean",
                     pre_filter={
                         "roi_id": "1",
                         "accepted": "True",
                     },
                     plot_type=PlotType.SWARM,
-                    group_col="grandparent_folder",
+                    group_col="treatment",
                     color_grouping="roi_id",
                     use_absolute_value=False,
                     show_legend=False,

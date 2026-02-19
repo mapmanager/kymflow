@@ -38,9 +38,11 @@ def install_native_rect_polling(*, poll_sec: float = 0.5, debounce_sec: float = 
     async def _read_rect() -> Optional[Rect]:
         native = getattr(app, "native", None)
         if native is None:
+            logger.error('native is None')
             return None
         win = getattr(native, "main_window", None)
         if win is None:
+            # logger.error('main_window is None')
             return None
 
         size = await win.get_size()
@@ -357,12 +359,23 @@ def configure_save_on_quit() -> None:
     
     safe to call in __main__ and __mp_main__.
     """
-    native = getattr(app, "native", None)
-    if native is None:
-        logger.debug('not native')
-        return  # native=False (browser)
-    logger.debug('=== setting pywebview native.window_args["confirm_close"] = True')
-    native.window_args["confirm_close"] = True
+    # native = getattr(app, "native", None)
+    # if native is None:
+    #     logger.debug('not native')
+    #     return  # native=False (browser)
+    # logger.debug('=== setting pywebview native.window_args["confirm_close"] = True')
+    # native.window_args["confirm_close"] = True
+
+    # app.py (module scope; near top, after `from nicegui import app`)
+    try:
+        # This must be outside the main guard so the native subprocess sees it.
+        app.native.window_args["confirm_close"] = True
+    except Exception:
+        # Web mode or older NiceGUI internals: ignore safely.
+        logger.error('FAILED: app.native.window_args["confirm_close"]')
+        pass
+
+
 
 def configure_native_window_args(context: Optional[AppContext] = None) -> None:
     """Set pywebview window args (x, y, width, height).
@@ -375,10 +388,12 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
     """
     import multiprocessing as mp
 
+    # MainProcess
     logger.warning(f'current_process_name: {mp.current_process().name}')
 
     native = getattr(app, "native", None)
     if native is None:
+        logger.error('native is None')
         return  # browser mode or native not available
 
     # Fetch context if not provided
