@@ -1,0 +1,27 @@
+# Filename: pyproject.toml
+[project]
+name = "kymflow-zarr"
+version = "0.0.0"
+description = "Opinionated Zarr v2 wrapper for imaging + analysis artifacts"
+requires-python = ">=3.10"
+dependencies = [
+  "zarr<3",
+  "numcodecs",
+  "numpy",
+  "pandas",
+]
+
+[project.optional-dependencies]
+parquet = ["pyarrow"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
