@@ -291,7 +291,12 @@ class ZarrDataset:
         if image_id_col in existing.columns:
             existing = existing[existing[image_id_col] != image_id].copy()
 
-        merged = pd.concat([existing, df_rows], ignore_index=True)
+        if len(existing) == 0:
+            merged = df_rows.copy()
+        elif len(df_rows) == 0:
+            merged = existing
+        else:
+            merged = pd.concat([existing, df_rows], ignore_index=True)
         self.save_table(name, merged)
 
     def load_sources_index(self) -> pd.DataFrame:

@@ -95,4 +95,4 @@ def test_replace_rows_semantics(tiny_ds: ZarrDataset, caplog: pytest.LogCaptureF
     idx.metric_value = 2.0
     kd.update_index(idx, mode="incremental")
     msgs = [r.getMessage() for r in caplog.records]
-    assert any("updated=0 skipped=3 missing=0" in m for m in msgs)
+    assert any("updated=0 skipped_fresh=3 skipped_zero_rows=0" in m for m in msgs)

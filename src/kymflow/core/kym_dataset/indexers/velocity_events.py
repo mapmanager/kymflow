@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
-
 import pandas as pd
 
+from kymflow.core.utils.logging import get_logger
 from kymflow_zarr import ZarrImageRecord
 
 from ..indexer_base import BaseIndexer
 from ..provenance import params_hash as compute_params_hash
+from ..run_marker import make_run_marker, validate_run_marker
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _MARKER_KEY = "velocity_events/summary"
 _PARAMS_KEY = "velocity_events/params"
@@ -77,26 +77,44 @@ class VelocityEventIndexer(BaseIndexer):
             payload = rec.load_json(_MARKER_KEY)
         except (KeyError, FileNotFoundError):
             return None
-        if isinstance(payload, dict):
-            return dict(payload)
-        return None
+        if not isinstance(payload, dict):
+            return None
 
-    @staticmethod
+        out = dict(payload)
+        if "marker_version" not in out and "n_events" in out:
+            out = make_run_marker(
+                indexer_name=self.name,
+                params_hash=str(out.get("params_hash", "")),
+                analysis_version=str(out.get("analysis_version", "")),
+                n_rows=int(out.get("n_events", 0)),
+                ran_utc_epoch_ns=int(out.get("computed_utc_epoch_ns", 1)),
+                status=str(out.get("status", "ok")),
+            )
+
+        try:
+            validate_run_marker(out)
+        except ValueError:
+            logger.warning("Ignoring invalid velocity run marker for image_id=%s", rec.image_id)
+            return None
+        return out
+
     def write_run_marker(
+        self,
         rec: ZarrImageRecord,
         *,
         params_hash: str,
         analysis_version: str,
-        n_events: int,
+        n_rows: int,
     ) -> None:
         """Write per-record run marker used by incremental skip logic."""
         rec.save_json(
             _MARKER_KEY,
-            {
-                "analysis_version": str(analysis_version),
-                "params_hash": str(params_hash),
-                "n_events": int(n_events),
-            },
+            make_run_marker(
+                indexer_name=self.name,
+                params_hash=params_hash,
+                analysis_version=analysis_version,
+                n_rows=n_rows,
+            ),
         )
 
     def extract_rows(self, rec: ZarrImageRecord) -> pd.DataFrame:

@@ -36,3 +36,29 @@ def test_replace_rows_for_image_id(tmp_path: Path) -> None:
     out = ds.load_table("velocity_events").sort_values(["image_id", "value"]).reset_index(drop=True)
     expected = pd.DataFrame({"image_id": ["a", "b", "b"], "value": [1.0, 8.0, 9.0]})
     pd.testing.assert_frame_equal(out, expected)
+
+
+def test_replace_rows_for_image_id_existing_empty_new_non_empty(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
+    ds.save_table("velocity_events", pd.DataFrame({"image_id": [], "value": []}))
+
+    replacement = pd.DataFrame({"image_id": ["x"], "value": [3.0]})
+    ds.replace_rows_for_image_id("velocity_events", "x", replacement)
+
+    out = ds.load_table("velocity_events").reset_index(drop=True)
+    pd.testing.assert_frame_equal(out, replacement)
+
+
+def test_replace_rows_for_image_id_non_empty_new_empty_removes_rows(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
+    base = pd.DataFrame({"image_id": ["a", "b"], "value": [1.0, 2.0]})
+    ds.save_table("velocity_events", base)
+
+    replacement = pd.DataFrame(columns=["image_id", "value"])
+    ds.replace_rows_for_image_id("velocity_events", "b", replacement)
+
+    out = ds.load_table("velocity_events").reset_index(drop=True)
+    expected = pd.DataFrame({"image_id": ["a"], "value": [1.0]})
+    pd.testing.assert_frame_equal(out, expected)

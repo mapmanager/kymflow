@@ -48,7 +48,7 @@ def test_radon_indexer_incremental_recompute_on_roi_edit(tmp_path: Path) -> None
 
     kd.update_index(idx, mode="incremental")
     assert kd.last_update_stats["updated"] == 0
-    assert kd.last_update_stats["skipped"] == 1
+    assert kd.last_update_stats["skipped_fresh"] == 1
 
     md = rec.load_metadata_payload()
     roi0 = md["rois"][0]
@@ -57,4 +57,4 @@ def test_radon_indexer_incremental_recompute_on_roi_edit(tmp_path: Path) -> None
 
     kd.update_index(idx, mode="incremental")
     assert kd.last_update_stats["updated"] == 1
-    assert kd.last_update_stats["skipped"] == 0
+    assert kd.last_update_stats["skipped_fresh"] == 0
