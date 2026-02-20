@@ -10,6 +10,7 @@ import pytest
 
 from kymflow.core.kym_dataset.indexers.velocity_events import VelocityEventIndexer
 from kymflow.core.kym_dataset.kym_dataset import KymDataset
+from kymflow.core.kym_dataset.provenance import params_hash as compute_params_hash
 from kymflow_zarr import ZarrDataset
 
 
@@ -65,3 +66,42 @@ def test_velocity_event_indexer_replace_and_incremental(tmp_path: Path) -> None:
     h1 = out2[out2["image_id"] == id1]["params_hash"].iloc[0]
     h2 = out2[out2["image_id"] == id2]["params_hash"].iloc[0]
     assert h1 != h2
+
+
+def test_velocity_events_zero_rows_uses_run_marker_for_incremental_skip(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
+    rec = ds.add_image((np.random.rand(8, 8) * 255).astype(np.uint8))
+
+    params = {"threshold": 0.2, "window": 5}
+    rec.save_json("velocity_events/params", params)
+    rec.save_df_parquet(
+        "velocity_events/events",
+        pd.DataFrame(columns=["roi_id", "event_id", "t_start_s", "t_end_s", "peak_t_s", "peak_value", "score"]),
+    )
+
+    idx = VelocityEventIndexer()
+    p_hash = compute_params_hash(params)
+    VelocityEventIndexer.write_run_marker(
+        rec,
+        params_hash=p_hash,
+        analysis_version=idx.analysis_version(),
+        n_events=0,
+    )
+
+    kd = KymDataset(ds)
+    kd.update_index(idx, mode="replace")
+    out = ds.load_table("kym_velocity_events")
+    assert len(out) == 0
+    assert kd.last_update_stats["updated"] == 1
+    assert kd.last_update_stats["missing"] == 1
+
+    kd.update_index(idx, mode="incremental")
+    assert kd.last_update_stats["updated"] == 0
+    assert kd.last_update_stats["skipped"] == 1
+    assert kd.last_update_stats["missing"] == 1
+
+    rec.save_json("velocity_events/params", {"threshold": 0.9, "window": 5})
+    kd.update_index(idx, mode="incremental")
+    assert kd.last_update_stats["updated"] == 1
+    assert kd.last_update_stats["skipped"] == 0

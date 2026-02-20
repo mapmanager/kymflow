@@ -108,6 +108,16 @@ class KymDataset:
 
             if len(prev) == 0:
                 stats["missing"] += 1
+                if mode == "incremental":
+                    load_marker = getattr(indexer, "load_run_marker", None)
+                    if callable(load_marker):
+                        marker = load_marker(rec)
+                        if isinstance(marker, dict):
+                            marker_hash = str(marker.get("params_hash", ""))
+                            marker_version = str(marker.get("analysis_version", ""))
+                            if marker_hash == params_hash and marker_version == analysis_version:
+                                stats["skipped"] += 1
+                                continue
             elif mode == "incremental":
                 has_cols = {"params_hash", "analysis_version"}.issubset(prev.columns)
                 if has_cols:

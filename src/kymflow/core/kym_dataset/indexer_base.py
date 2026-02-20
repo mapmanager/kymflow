@@ -45,3 +45,15 @@ class BaseIndexer(Protocol):
         Returns:
             Version identifier for provenance.
         """
+
+    def load_run_marker(self, rec: ZarrImageRecord) -> dict[str, object] | None:
+        """Optionally load a per-record run marker for zero-row analyses.
+
+        Args:
+            rec: Image record.
+
+        Returns:
+            Marker dictionary with at least `analysis_version` and `params_hash`,
+            or `None` when no marker exists.
+        """
+        return None

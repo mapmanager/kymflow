@@ -13,6 +13,11 @@ from ..provenance import params_hash as compute_params_hash
 
 logger = logging.getLogger(__name__)
 
+_MARKER_KEY = "velocity_events/summary"
+_PARAMS_KEY = "velocity_events/params"
+_EVENTS_KEY = "velocity_events/events"
+_EVENT_COLUMNS = ["roi_id", "event_id", "t_start_s", "t_end_s", "peak_t_s", "peak_value", "score"]
+
 
 class VelocityEventIndexer(BaseIndexer):
     """Build `kym_velocity_events` table rows from per-image velocity artifacts."""
@@ -25,7 +30,7 @@ class VelocityEventIndexer(BaseIndexer):
 
     def _load_params(self, rec: ZarrImageRecord) -> dict:
         candidates = [
-            "velocity_events/params",
+            _PARAMS_KEY,
             "velocity_events_params",
             "velocity_events.params",
         ]
@@ -45,7 +50,7 @@ class VelocityEventIndexer(BaseIndexer):
 
     def _load_events_df(self, rec: ZarrImageRecord) -> pd.DataFrame:
         parquet_candidates = [
-            "velocity_events/events",
+            _EVENTS_KEY,
             "velocity_events",
         ]
         for name in parquet_candidates:
@@ -55,7 +60,7 @@ class VelocityEventIndexer(BaseIndexer):
                 continue
 
         csv_candidates = [
-            "velocity_events/events",
+            _EVENTS_KEY,
             "velocity_events",
         ]
         for name in csv_candidates:
@@ -64,7 +69,35 @@ class VelocityEventIndexer(BaseIndexer):
             except (KeyError, FileNotFoundError):
                 continue
 
-        return pd.DataFrame()
+        return pd.DataFrame(columns=list(_EVENT_COLUMNS))
+
+    def load_run_marker(self, rec: ZarrImageRecord) -> dict[str, object] | None:
+        """Load velocity event run marker from summary artifact."""
+        try:
+            payload = rec.load_json(_MARKER_KEY)
+        except (KeyError, FileNotFoundError):
+            return None
+        if isinstance(payload, dict):
+            return dict(payload)
+        return None
+
+    @staticmethod
+    def write_run_marker(
+        rec: ZarrImageRecord,
+        *,
+        params_hash: str,
+        analysis_version: str,
+        n_events: int,
+    ) -> None:
+        """Write per-record run marker used by incremental skip logic."""
+        rec.save_json(
+            _MARKER_KEY,
+            {
+                "analysis_version": str(analysis_version),
+                "params_hash": str(params_hash),
+                "n_events": int(n_events),
+            },
+        )
 
     def extract_rows(self, rec: ZarrImageRecord) -> pd.DataFrame:
         """Extract velocity event rows for one image.
@@ -79,7 +112,7 @@ class VelocityEventIndexer(BaseIndexer):
         out = self._load_events_df(rec).copy()
 
         # Normalize some expected event columns when absent.
-        event_cols = ["roi_id", "event_id", "t_start_s", "t_end_s", "peak_t_s", "peak_value", "score"]
+        event_cols = list(_EVENT_COLUMNS)
         for col in event_cols:
             if col not in out.columns:
                 out[col] = pd.NA
@@ -87,4 +120,6 @@ class VelocityEventIndexer(BaseIndexer):
         out["image_id"] = rec.image_id
         out["analysis_version"] = self.analysis_version()
         out["params_hash"] = self.params_hash(rec)
-        return out
+        extra_cols = [c for c in out.columns if c not in (event_cols + ["image_id", "analysis_version", "params_hash"])]
+        ordered = event_cols + extra_cols + ["image_id", "analysis_version", "params_hash"]
+        return out[ordered]
