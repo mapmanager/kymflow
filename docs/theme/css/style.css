@@ -13,3 +13,16 @@ div.doc-contents:not(.first) {
 .md-button--myred:not([disabled]):hover {
     background: rgba(154, 30, 30, 0.8);
 }
+
+.img-small {
+    width: 400px;
+}
+
+.img-medium {
+    max-width: 300px;
+    width: 300px;
+}
+
+.img-50 {
+    width: 50%;
+}

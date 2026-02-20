@@ -1,3 +1,0 @@
-# core.repository
-
-::: core.repository

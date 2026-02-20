@@ -30,6 +30,7 @@ from kymflow.core.image_loaders.acq_image import AcqImage
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
+
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound=AcqImage)

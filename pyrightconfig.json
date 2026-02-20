@@ -2,7 +2,7 @@
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["src"]
+      "extraPaths": ["src", "src/kymflow/core/zarr/src"]
     }
   ]
 }

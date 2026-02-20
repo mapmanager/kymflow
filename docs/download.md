@@ -2,6 +2,12 @@
 
 KymFlow is available as a one-click desktop application for macOS.
 
+
+## System Requirements
+
+- **macOS**: 10.13 (High Sierra) or later
+- **Architecture**: Apple Silicon (ARM)
+
 ## Download
 
 Download the latest release from the [GitHub Releases page](https://github.com/mapmanager/kymflow/releases).
@@ -29,48 +35,17 @@ macOS may show a warning about an "unknown developer" when you first try to open
 !!! note "First Time Only"
     You only need to do this once. After the first time, you can double-click `KymFlow.app` normally and it will open without any warnings.
 
-### Alternative Method
+When you double-click the downloaded app, if you see this
 
-If you prefer using Terminal:
+![macOS Open Warning](images/macos-open-warning.png){.img-medium }
 
-```bash
-# Navigate to the folder containing KymFlow.app
-cd /path/to/KymFlow.app
+Try these two things:
 
-# Remove the quarantine attribute
-xattr -d com.apple.quarantine KymFlow.app
+1. option + double-click the app
 
-# Now you can open it normally
-open KymFlow.app
-```
+or
 
-## System Requirements
+2. option + right-click the app and select 'Open...'
 
-- **macOS**: 10.13 (High Sierra) or later
-- **Architecture**: Intel (x86_64)
-- **Python**: Included in the app bundle (no separate installation needed)
+![macOS Open Warning](images/option-right-click-open.png){.img-medium }
 
-## Troubleshooting
-
-### App Won't Open
-
-If the app still won't open after following the steps above:
-
-1. Check System Preferences → Security & Privacy
-2. Look for a message about KymFlow being blocked
-3. Click "Open Anyway" if available
-
-### App Crashes on Launch
-
-- Check the Console app (Applications → Utilities → Console) for error messages
-- Ensure you're running a supported macOS version
-- Try downloading the latest release
-
-## Alternative: Install from Source
-
-If you prefer to install from source or need the latest development version, see the [Installation Guide](user-guide/installation.md) for instructions on installing via `uv` or `pip`.
-
-## Getting Help
-
-- **Issues**: Report problems on [GitHub Issues](https://github.com/mapmanager/kymflow/issues)
-- **Documentation**: See the [User Guide](user-guide/getting-started.md) for usage instructions
