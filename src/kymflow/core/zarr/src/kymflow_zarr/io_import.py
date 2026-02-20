@@ -9,8 +9,10 @@ logger = logging.getLogger(__name__)
 from pathlib import Path
 import json
 from typing import TYPE_CHECKING
+from io import BytesIO
 
 import pandas as pd
+import numpy as np
 
 if TYPE_CHECKING:
     from .dataset import ZarrDataset
@@ -47,6 +49,8 @@ def _artifact_name_for_sidecar(tif_path: Path, sidecar_path: Path) -> str | None
         return body[: -len(".csv")]
     if body.endswith(".parquet"):
         return body[: -len(".parquet")]
+    if body.endswith(".npy"):
+        return body[: -len(".npy")]
     return None
 
 
@@ -85,6 +89,13 @@ def ingest_legacy_file(
     )
 
     if include_sidecars:
+        # Exported-folder compatibility: metadata.json in the same folder.
+        exported_md = tif.parent / "metadata.json"
+        if exported_md.exists() and exported_md.is_file():
+            payload = json.loads(exported_md.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                rec.save_metadata_payload(payload)
+
         for sidecar in sorted(tif.parent.glob(f"{tif.stem}.*")):
             if sidecar == tif or not sidecar.is_file():
                 continue
@@ -104,6 +115,17 @@ def ingest_legacy_file(
             elif sidecar.name.endswith(".parquet"):
                 df = pd.read_parquet(sidecar)
                 rec.save_df_parquet(name, df)
+            elif sidecar.name.endswith(".npy"):
+                arr = np.load(BytesIO(sidecar.read_bytes()), allow_pickle=False)
+                rec.save_array_artifact(name, arr)
+
+        # Exported-folder compatibility: array_artifacts/<name>.npy
+        array_dir = tif.parent / "array_artifacts"
+        if array_dir.exists() and array_dir.is_dir():
+            for npy_path in sorted(array_dir.glob("*.npy")):
+                name = npy_path.stem
+                arr = np.load(BytesIO(npy_path.read_bytes()), allow_pickle=False)
+                rec.save_array_artifact(name, arr)
 
     return rec.image_id, _source_row_for_image(tif, rec.image_id)
 

@@ -62,8 +62,12 @@ def main() -> None:
             note="",
         )
         src_img.edit_roi(rid, name="roi1_edited")
+        roi_pixels = src_img.get_roi_pixels(rid)
+        roi_stats = src_img.roi_stats(rid)
         src_img.save_metadata_objects(auto_header_from_pixels=True)
         print("ROI id:", rid)
+        print("ROI pixels:", roi_pixels.shape)
+        print("ROI stats:", roi_stats)
 
     ds = ZarrDataset(str(ds_path), mode="a")
     rec = ds.ingest_image(src_img)

@@ -78,3 +78,19 @@ def test_load_json_reads_legacy_json_gz(tmp_path: Path) -> None:
 
     out = rec.load_json("legacy_payload")
     assert out["legacy"] is True
+
+
+def test_array_artifact_roundtrip(tmp_path: Path) -> None:
+    ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
+    rec = ds.add_image((np.random.rand(8, 8) * 255).astype(np.uint8))
+
+    arr = np.arange(3 * 5, dtype=np.int16).reshape(3, 5)
+    rec.save_array_artifact("roi_mask_1", arr, axes=["y", "x"])
+
+    names = rec.list_array_artifacts()
+    assert names == ["roi_mask_1"]
+
+    loaded = rec.load_array_artifact("roi_mask_1")
+    assert loaded.shape == (3, 5)
+    assert loaded.dtype == np.int16
+    assert np.array_equal(loaded, arr)

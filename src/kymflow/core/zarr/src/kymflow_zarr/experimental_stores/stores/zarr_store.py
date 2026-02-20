@@ -54,3 +54,23 @@ class ZarrStore:
     def save_dict(self, key: str, name: str, dct):
         rec = self.ds.record(key)
         rec.save_json(name, dct)
+
+    def save_array_artifact(
+        self,
+        key: str,
+        name: str,
+        arr: np.ndarray,
+        *,
+        axes: list[str] | None = None,
+        chunks: tuple[int, ...] | None = None,
+    ) -> None:
+        rec = self.ds.record(key)
+        rec.save_array_artifact(name, arr, axes=axes, chunks=chunks)
+
+    def load_array_artifact(self, key: str, name: str) -> np.ndarray:
+        rec = self.ds.record(key)
+        return rec.load_array_artifact(name)
+
+    def list_array_artifacts(self, key: str) -> list[str]:
+        rec = self.ds.record(key)
+        return rec.list_array_artifacts()

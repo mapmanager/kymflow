@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 from pathlib import Path
 import json
 from typing import TYPE_CHECKING
+from io import BytesIO
+
+import numpy as np
 
 if TYPE_CHECKING:
     from .dataset import ZarrDataset
@@ -72,6 +75,17 @@ def export_legacy_folder(
                 name = fn[: -len(".csv.gz")]
                 df = rec.load_df_csv_gz(name)
                 df.to_csv(rec_dir / f"{name}.csv", index=False)
+
+        # v0.1 array artifacts are exported as NPY (lossless, arbitrary ndim)
+        array_names = rec.list_array_artifacts()
+        if array_names:
+            array_dir = rec_dir / "array_artifacts"
+            array_dir.mkdir(parents=True, exist_ok=True)
+            for name in array_names:
+                arr = rec.load_array_artifact(name)
+                buf = BytesIO()
+                np.save(buf, arr, allow_pickle=False)
+                (array_dir / f"{name}.npy").write_bytes(buf.getvalue())
 
     if include_tables:
         for table_name in ds.list_table_names():

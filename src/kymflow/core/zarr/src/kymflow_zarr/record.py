@@ -406,6 +406,81 @@ class ZarrImageRecord:
         raw = gunzip_bytes(self.store[key]).decode("utf-8")
         return pd.read_csv(StringIO(raw))
 
+    # ---- N-D array artifacts ----
+    def save_array_artifact(
+        self,
+        name: str,
+        arr: np.ndarray,
+        *,
+        axes: list[str] | None = None,
+        chunks: tuple[int, ...] | None = None,
+    ) -> None:
+        """Save an array artifact under `images/<id>/analysis_arrays/<name>/data`.
+
+        Args:
+            name: Logical artifact name.
+            arr: N-dimensional numpy array.
+            axes: Optional axis labels. If omitted, reuse image axis policy for
+                ndim 2..5 and fallback to `a0..aN` for other ndim values.
+            chunks: Optional chunk shape. If omitted, inferred from shape + axes.
+        """
+        grp = self.require_group()
+        arrays_grp = grp.require_group("analysis_arrays")
+        safe_name = normalize_id(name)
+        artifact_grp = arrays_grp.require_group(safe_name)
+
+        if axes is None:
+            try:
+                axes_l = _infer_axes(arr.ndim)
+            except ValueError:
+                axes_l = [f"a{i}" for i in range(arr.ndim)]
+        else:
+            axes_l = list(axes)
+            if len(axes_l) != arr.ndim:
+                raise ValueError(f"axes length {len(axes_l)} does not match arr.ndim {arr.ndim}")
+
+        if chunks is None:
+            chunks_t = _infer_chunks(tuple(arr.shape), axes_l)
+        else:
+            chunks_t = tuple(chunks)
+            if len(chunks_t) != arr.ndim:
+                raise ValueError(f"chunks length {len(chunks_t)} does not match arr.ndim {arr.ndim}")
+
+        if "data" in artifact_grp:
+            del artifact_grp["data"]
+
+        z = artifact_grp.create_dataset(
+            "data",
+            shape=arr.shape,
+            dtype=arr.dtype,
+            chunks=chunks_t,
+            compressor=default_image_compressor(),
+            overwrite=True,
+        )
+        z[:] = arr
+        artifact_grp.attrs["axes"] = list(axes_l)
+        artifact_grp.attrs["updated_utc"] = utc_now_iso()
+        self._touch_updated()
+
+    def load_array_artifact(self, name: str) -> np.ndarray:
+        """Load an array artifact from `images/<id>/analysis_arrays/<name>/data`."""
+        safe_name = normalize_id(name)
+        key = self.parts.analysis_array_data(safe_name)
+        if key not in self.root:
+            raise FileNotFoundError(f"Missing array artifact: {safe_name}")
+        return np.asarray(self.root[key][:])
+
+    def list_array_artifacts(self) -> list[str]:
+        """List array artifact names stored under `analysis_arrays/`."""
+        try:
+            grp = self.open_group()
+        except KeyError:
+            return []
+        if "analysis_arrays" not in grp:
+            return []
+        arrays_grp = grp["analysis_arrays"]
+        return sorted(arrays_grp.group_keys())
+
     def list_analysis_keys(self) -> list[str]:
         """List all analysis blob keys for this image."""
         prefix = self.parts.analysis_prefix

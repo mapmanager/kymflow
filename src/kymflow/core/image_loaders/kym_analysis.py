@@ -380,37 +380,7 @@ class KymAnalysis:
         drew_velocity = drew_velocity / 1000  # mm/s
         
         roi_df = self._make_velocity_df(drew_velocity, drew_time, roi)
-
-        # # Apply filtering
-        # clean_velocity = _removeOutliers_sd(drew_velocity)
-        # clean_velocity = _medianFilter(clean_velocity, window_size=3)
-        
-        # # Create DataFrame for this ROI's analysis
-        # primary_path = self._get_primary_path()
-        # parent_name = primary_path.parent.name if primary_path is not None else ""
-        # file_name = primary_path.name if primary_path is not None else ""
-        
-        # # Get shape for numLines and pntsPerLine
-        # shape = self.acq_image.img_shape
-        # num_lines = shape[0] if shape is not None else 0
-        # pixels_per_line = shape[1] if shape is not None else 0
-        
-        # roi_df = pd.DataFrame({
-        #     "roi_id": roi_id,
-        #     "channel": roi.channel,
-        #     "time": drew_time,
-        #     "velocity": drew_velocity,
-        #     "parentFolder": parent_name,
-        #     "file": file_name,
-        #     "algorithm": "mpRadon",
-        #     "delx": um_per_pixel,
-        #     "delt": seconds_per_line,
-        #     "numLines": num_lines,
-        #     "pntsPerLine": pixels_per_line,
-        #     "cleanVelocity": clean_velocity,
-        #     "absVelocity": abs(clean_velocity),
-        # })
-        
+   
         # Append to main DataFrame (or create if first analysis)
         if self._df is None:
             self._df = roi_df

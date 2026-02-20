@@ -73,3 +73,29 @@ def test_ingest_legacy_folder_imports_tiff_and_sidecars(tmp_path: Path) -> None:
 
     sources = ds.load_sources_index()
     assert len(sources) == 1
+
+
+def test_array_artifact_export_import_roundtrip(tmp_path: Path) -> None:
+    _require_tifffile()
+
+    src_ds = ZarrDataset(str(tmp_path / "src_ds.zarr"), mode="a")
+    rec = src_ds.add_image((np.random.rand(6, 7) * 255).astype(np.uint8))
+    arr_art = np.arange(2 * 3 * 4, dtype=np.uint16).reshape(2, 3, 4)
+    rec.save_array_artifact("roi_mask_7", arr_art)
+
+    export_dir = tmp_path / "export"
+    src_ds.export_legacy_folder(export_dir)
+
+    artifact_path = export_dir / "images" / rec.image_id / "array_artifacts" / "roi_mask_7.npy"
+    assert artifact_path.exists()
+
+    dst_ds = ZarrDataset(str(tmp_path / "dst_ds.zarr"), mode="a")
+    dst_ds.ingest_legacy_folder(export_dir)
+
+    ids = dst_ds.list_image_ids()
+    assert len(ids) == 1
+    dst_rec = dst_ds.record(ids[0])
+    loaded = dst_rec.load_array_artifact("roi_mask_7")
+    assert loaded.shape == arr_art.shape
+    assert loaded.dtype == arr_art.dtype
+    assert np.array_equal(loaded, arr_art)

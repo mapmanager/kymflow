@@ -123,6 +123,20 @@ class PathParts:
     def analysis_key(self, filename: str) -> str:
         return f"{self.analysis_prefix}{filename}"
 
+    @property
+    def analysis_arrays_group(self) -> str:
+        return f"{self.group}/analysis_arrays"
+
+    @property
+    def analysis_arrays_prefix(self) -> str:
+        return f"{self.analysis_arrays_group}/"
+
+    def analysis_array_group(self, name: str) -> str:
+        return f"{self.analysis_arrays_group}/{normalize_id(name)}"
+
+    def analysis_array_data(self, name: str) -> str:
+        return f"{self.analysis_array_group(name)}/data"
+
 
 def is_json_serializable(obj: Any) -> bool:
     """Best-effort check for JSON serializability."""

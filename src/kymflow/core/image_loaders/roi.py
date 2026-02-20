@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict, field
-from typing import TYPE_CHECKING, Any, Iterable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, ClassVar, Iterable
 
 import numpy as np
 
@@ -112,39 +112,37 @@ class ImageSize:
     height: int     # dim0 (rows)
 
 @dataclass
-class ROI:
-    """Axis-aligned rectangular ROI in full-image pixel coordinates.
-
-    Coordinates are expressed in the coordinate system of the full image
-    (not the zoomed view). By convention:
-
-    * bounds.dim0_start <= bounds.dim0_stop
-    * bounds.dim1_start <= bounds.dim1_stop
-
-    These invariants are enforced by `clamp_to_image` (or `clamp_to_bounds`).
-    
-    For a 2D image with shape (H, W):
-    - bounds.dim0_start/dim0_stop: start/stop indices in dimension 0 (rows/height)
-    - bounds.dim1_start/dim1_stop: start/stop indices in dimension 1 (columns/width)
-    
-    Each ROI is associated with a specific channel and z (plane/slice) coordinate.
-    For 2D images, z is always 0. For 3D images, z is in [0, num_slices-1].
-    """
+class BaseROI:
+    """Base ROI schema shared by all ROI shapes."""
 
     id: int
     channel: int = 1
     z: int = 0
     name: str = ""
     note: str = ""
-    bounds: RoiBounds = field(default_factory=lambda: RoiBounds(dim0_start=0, dim0_stop=0, dim1_start=0, dim1_stop=0))
-    # Increments when ROI geometry (or channel/z) changes. Used to mark analysis as stale.
     revision: int = 0
-    # Image statistics (calculated from ROI region in image data)
-    # None if not calculated yet (e.g., for old ROIs loaded from JSON)
     img_min: int | None = None
     img_max: int | None = None
     img_mean: float | None = None
     img_std: float | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    roi_type: ClassVar[str] = "base"
+    schema_version: ClassVar[str] = "1.0"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable envelope."""
+        raise NotImplementedError
+
+
+@dataclass
+class RectROI(BaseROI):
+    """Axis-aligned rectangular ROI in full-image pixel coordinates."""
+
+    bounds: RoiBounds = field(default_factory=lambda: RoiBounds(dim0_start=0, dim0_stop=0, dim1_start=0, dim1_stop=0))
+
+    roi_type: ClassVar[str] = "rect"
+    schema_version: ClassVar[str] = "1.0"
 
     def clamp_to_image(self, img: np.ndarray) -> None:
         """Clamp ROI to be fully inside the given image.
@@ -241,53 +239,163 @@ class ROI:
         self.img_std = float(np.std(roi_region))
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable dictionary representation of this ROI."""
-        result = asdict(self)
-        # Flatten bounds for JSON serialization (convert RoiBounds to dict)
-        bounds_dict = result.pop('bounds')
-        result.update(bounds_dict)
-        return result
+        """Return a JSON-serializable envelope representation of this RectROI."""
+        meta = dict(self.meta)
+        if self.revision:
+            meta["revision"] = int(self.revision)
+        if self.img_min is not None:
+            meta["img_min"] = int(self.img_min)
+        if self.img_max is not None:
+            meta["img_max"] = int(self.img_max)
+        if self.img_mean is not None:
+            meta["img_mean"] = float(self.img_mean)
+        if self.img_std is not None:
+            meta["img_std"] = float(self.img_std)
+
+        return {
+            "roi_id": int(self.id),
+            "roi_type": self.roi_type,
+            "version": self.schema_version,
+            "name": self.name,
+            "note": self.note,
+            "channel": int(self.channel),
+            "z": int(self.z),
+            "data": {
+                "x0": int(self.bounds.dim1_start),
+                "x1": int(self.bounds.dim1_stop),
+                "y0": int(self.bounds.dim0_start),
+                "y1": int(self.bounds.dim0_stop),
+            },
+            "meta": meta,
+        }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ROI":
-        """Create a ROI from a dictionary produced by to_dict().
+    def from_dict(cls, data: dict[str, Any]) -> "RectROI":
+        """Create a RectROI from either envelope or legacy flattened payload."""
+        d = dict(data)
 
-        Args:
-            data: Dictionary with flattened bounds fields (dim0_start, dim0_stop, etc.).
-                Float coordinates will be converted to int.
-                Missing channel/z will default to 1/0.
+        # Envelope format (v1)
+        if "roi_type" in d or "data" in d or "roi_id" in d:
+            roi_type = str(d.get("roi_type", "rect")).lower()
+            if roi_type != "rect":
+                raise NotImplementedError(f"RectROI.from_dict only supports roi_type='rect'; got '{roi_type}'")
+            roi_id = int(d.get("roi_id", d.get("id", 0)))
+            data_block = d.get("data", {}) or {}
+            bounds = RoiBounds(
+                dim0_start=int(data_block.get("y0", data_block.get("dim0_start", 0))),
+                dim0_stop=int(data_block.get("y1", data_block.get("dim0_stop", 0))),
+                dim1_start=int(data_block.get("x0", data_block.get("dim1_start", 0))),
+                dim1_stop=int(data_block.get("x1", data_block.get("dim1_stop", 0))),
+            )
+            meta = d.get("meta", {})
+            if not isinstance(meta, dict):
+                meta = {}
+            revision = int(meta.get("revision", d.get("revision", 0)))
+            img_min = meta.get("img_min", d.get("img_min"))
+            img_max = meta.get("img_max", d.get("img_max"))
+            img_mean = meta.get("img_mean", d.get("img_mean"))
+            img_std = meta.get("img_std", d.get("img_std"))
 
-        Returns:
-            A new ROI instance initialized from the dictionary.
-        """
-        # Work on a copy so we don't mutate the caller's dict.
-        data = dict(data)
+            return cls(
+                id=roi_id,
+                channel=int(d.get("channel", 1)),
+                z=int(d.get("z", 0)),
+                name=str(d.get("name", "")),
+                note=str(d.get("note", "")),
+                bounds=bounds,
+                revision=revision,
+                img_min=int(img_min) if img_min is not None else None,
+                img_max=int(img_max) if img_max is not None else None,
+                img_mean=float(img_mean) if img_mean is not None else None,
+                img_std=float(img_std) if img_std is not None else None,
+                meta=dict(meta),
+            )
 
-        # Extract flattened bounds fields
+        # Legacy flattened format
         bounds = RoiBounds(
-            dim0_start=int(data.pop('dim0_start', 0)),
-            dim0_stop=int(data.pop('dim0_stop', 0)),
-            dim1_start=int(data.pop('dim1_start', 0)),
-            dim1_stop=int(data.pop('dim1_stop', 0)),
+            dim0_start=int(d.get("dim0_start", 0)),
+            dim0_stop=int(d.get("dim0_stop", 0)),
+            dim1_start=int(d.get("dim1_start", 0)),
+            dim1_stop=int(d.get("dim1_stop", 0)),
         )
-        
-        # Convert float channel/z to int if present
-        for field_name in ['channel', 'z']:
-            if field_name in data and isinstance(data[field_name], float):
-                data[field_name] = int(data[field_name])
-        
-        # Default channel=1, z=0 if not present
-        if 'channel' not in data:
-            data['channel'] = 1
-        if 'z' not in data:
-            data['z'] = 0
+        return cls(
+            id=int(d.get("id", d.get("roi_id", 0))),
+            channel=int(d.get("channel", 1)),
+            z=int(d.get("z", 0)),
+            name=str(d.get("name", "")),
+            note=str(d.get("note", "")),
+            bounds=bounds,
+            revision=int(d.get("revision", 0)),
+            img_min=int(d["img_min"]) if d.get("img_min") is not None else None,
+            img_max=int(d["img_max"]) if d.get("img_max") is not None else None,
+            img_mean=float(d["img_mean"]) if d.get("img_mean") is not None else None,
+            img_std=float(d["img_std"]) if d.get("img_std") is not None else None,
+            meta=dict(d.get("meta", {})) if isinstance(d.get("meta"), dict) else {},
+        )
 
-        # Default revision to 0 if not present
-        if 'revision' not in data:
-            data['revision'] = 0
-        
-        data['bounds'] = bounds
-        return cls(**data)
+
+@dataclass
+class MaskROI(BaseROI):
+    """Lightweight ROI object that references a persisted mask artifact."""
+
+    mask_ref: str = ""
+
+    roi_type: ClassVar[str] = "mask"
+    schema_version: ClassVar[str] = "1.0"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable envelope representation of this MaskROI."""
+        meta = dict(self.meta)
+        if self.revision:
+            meta["revision"] = int(self.revision)
+        return {
+            "roi_id": int(self.id),
+            "roi_type": self.roi_type,
+            "version": self.schema_version,
+            "name": self.name,
+            "note": self.note,
+            "channel": int(self.channel),
+            "z": int(self.z),
+            "data": {"mask_ref": str(self.mask_ref)},
+            "meta": meta,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MaskROI":
+        """Create a MaskROI from envelope data."""
+        d = dict(data)
+        data_block = d.get("data", {}) or {}
+        if not isinstance(data_block, dict):
+            data_block = {}
+        meta = d.get("meta", {})
+        if not isinstance(meta, dict):
+            meta = {}
+        return cls(
+            id=int(d.get("roi_id", d.get("id", 0))),
+            channel=int(d.get("channel", 1)),
+            z=int(d.get("z", 0)),
+            name=str(d.get("name", "")),
+            note=str(d.get("note", "")),
+            revision=int(meta.get("revision", d.get("revision", 0))),
+            mask_ref=str(data_block.get("mask_ref", "")),
+            meta=dict(meta),
+        )
+
+
+def roi_from_dict(data: dict[str, Any]) -> BaseROI:
+    """Build ROI object from persisted payload."""
+    roi_type = str(data.get("roi_type", "rect")).lower() if isinstance(data, dict) else "rect"
+    if roi_type == "rect":
+        return RectROI.from_dict(data)
+    if roi_type == "mask":
+        return MaskROI.from_dict(data)
+    if roi_type in {"line", "polygon"}:
+        raise NotImplementedError(f"roi_type='{roi_type}' is not implemented in v0.1")
+    raise ValueError(f"Unknown roi_type '{roi_type}'. Supported: rect, mask (line/polygon reserved)")
+
+
+# Backward-compatible alias while the codebase transitions to RectROI naming.
+ROI = RectROI
 
 
 class RoiSet:
@@ -632,7 +740,12 @@ class RoiSet:
         """
         s = cls(acq_image)
         for d in data:
-            roi = ROI.from_dict(d)
+            roi_obj = roi_from_dict(d)
+            if not isinstance(roi_obj, RectROI):
+                raise NotImplementedError(
+                    f"RoiSet currently supports RectROI only, got {type(roi_obj).__name__}"
+                )
+            roi = roi_obj
             s._rois[roi.id] = roi
             s._next_id = max(s._next_id, roi.id + 1)
         return s

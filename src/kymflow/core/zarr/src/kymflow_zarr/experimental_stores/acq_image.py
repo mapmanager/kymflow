@@ -13,9 +13,9 @@ Notes:
 
 from __future__ import annotations
 
-import logging
+from kymflow.core.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,6 +90,153 @@ class AcqImageV01:
     def get_channel(self, channel: int = 1) -> np.ndarray:
         """Return pixels for a channel."""
         return self.getChannelData(channel)
+
+    def _get_slice_2d(self, z: int, channel: int, t: int = 0) -> np.ndarray:
+        """Return a 2D `(y, x)` slice from 2D..5D arrays.
+
+        Axis convention:
+            2D: `(y, x)`
+            3D: `(z, y, x)`
+            4D: `(z, y, x, c)`
+            5D: `(t, z, y, x, c)`
+
+        Notes:
+            For v0.1, when `t` exists and no selector is provided, callers should use `t=0`.
+        """
+        arr = self.getChannelData(channel)
+        info = self.pixel_store.describe(self.source_key)
+
+        axes: list[str] | None = None
+        if info.axes is not None and len(info.axes) in (arr.ndim, arr.ndim + 1):
+            axes = list(info.axes)
+            # Some stores return channel-selected arrays with one less dim than describe().
+            if len(axes) == arr.ndim + 1 and "c" in axes:
+                axes.remove("c")
+        if axes is None:
+            fallback_axes = {
+                2: ["y", "x"],
+                3: ["z", "y", "x"],
+                4: ["z", "y", "x", "c"],
+                5: ["t", "z", "y", "x", "c"],
+            }
+            if arr.ndim not in fallback_axes:
+                raise ValueError(f"Unsupported image ndim for 2D slice extraction: {arr.ndim}")
+            axes = fallback_axes[arr.ndim]
+
+        if "y" not in axes or "x" not in axes:
+            raise ValueError(f"Cannot derive 2D slice; axes missing y/x: {axes}")
+
+        index: list[Any] = []
+        for ax, dim in zip(axes, arr.shape):
+            if ax == "t":
+                if t < 0 or t >= dim:
+                    raise ValueError(f"t index out of range: {t} for dim {dim}")
+                index.append(t)
+            elif ax == "z":
+                if z < 0 or z >= dim:
+                    raise ValueError(f"z index out of range: {z} for dim {dim}")
+                index.append(z)
+            elif ax == "c":
+                c_idx = channel - 1
+                if c_idx < 0 or c_idx >= dim:
+                    raise ValueError(f"channel out of range: {channel} for dim {dim}")
+                index.append(c_idx)
+            elif ax in ("y", "x"):
+                index.append(slice(None))
+            else:
+                # Unknown axis: default to first index to preserve 2D output contract.
+                index.append(0)
+
+        out = np.asarray(arr[tuple(index)])
+        if out.ndim != 2:
+            raise ValueError(f"Expected 2D slice after indexing, got ndim={out.ndim} with axes={axes}")
+        return out
+
+    def get_roi_pixels(self, roi_id: int) -> np.ndarray:
+        """Return ROI crop pixels for a RectROI id."""
+        roi = self.get_roi(roi_id)
+        if roi is None:
+            raise KeyError(f"ROI not found: {roi_id}")
+        if not hasattr(roi, "bounds"):
+            raise NotImplementedError(f"ROI id={roi_id} is not a RectROI")
+
+        slice_2d = self._get_slice_2d(z=int(roi.z), channel=int(roi.channel), t=0)
+        y0 = max(0, min(int(roi.bounds.dim0_start), slice_2d.shape[0]))
+        y1 = max(0, min(int(roi.bounds.dim0_stop), slice_2d.shape[0]))
+        x0 = max(0, min(int(roi.bounds.dim1_start), slice_2d.shape[1]))
+        x1 = max(0, min(int(roi.bounds.dim1_stop), slice_2d.shape[1]))
+        if y0 > y1:
+            y0, y1 = y1, y0
+        if x0 > x1:
+            x0, x1 = x1, x0
+        return np.asarray(slice_2d[y0:y1, x0:x1])
+
+    def get_roi_mask(self, roi_id: int) -> np.ndarray:
+        """Return a boolean mask aligned with `get_roi_pixels(roi_id)` output."""
+        pix = self.get_roi_pixels(roi_id)
+        return np.ones(pix.shape, dtype=bool)
+
+    def roi_stats(self, roi_id: int) -> dict[str, float]:
+        """Compute simple reduction stats for one ROI."""
+        pix = self.get_roi_pixels(roi_id)
+        mask = self.get_roi_mask(roi_id)
+        values = pix[mask]
+        if values.size == 0:
+            return {"mean": float("nan"), "std": float("nan"), "min": float("nan"), "max": float("nan"), "n": 0.0}
+        return {
+            "mean": float(np.mean(values)),
+            "std": float(np.std(values)),
+            "min": float(np.min(values)),
+            "max": float(np.max(values)),
+            "n": float(values.size),
+        }
+
+    def materialize_rect_roi_mask(self, roi_id: int, *, name: str | None = None) -> str:
+        """Materialize a RectROI mask to array-artifact storage and return a mask ref.
+
+        The mask is generated on the ROI's 2D slice shape and persisted via the backing
+        artifact store if it supports array artifacts.
+        """
+        roi = self.get_roi(roi_id)
+        if roi is None:
+            raise KeyError(f"ROI not found: {roi_id}")
+        if not hasattr(roi, "bounds"):
+            raise NotImplementedError(f"ROI id={roi_id} is not a RectROI")
+
+        mask = self.get_roi_mask(roi_id).astype(bool)
+        artifact_name = name or f"roi_mask_{int(roi_id)}"
+
+        save_array = getattr(self.artifact_store, "save_array_artifact", None)
+        if not callable(save_array):
+            raise NotImplementedError("Artifact store does not support array artifacts")
+        save_array(self.source_key, artifact_name, mask, axes=["y", "x"], chunks=None)
+
+        mask_ref = f"analysis_arrays/{artifact_name}"
+
+        # Keep JSON metadata aware of this mask reference.
+        payload = self.load_metadata_payload()
+        rois_raw = payload.get("rois", [])
+        if isinstance(rois_raw, list):
+            for item in rois_raw:
+                if not isinstance(item, dict):
+                    continue
+                item_id = item.get("roi_id", item.get("id"))
+                if item_id is None or int(item_id) != int(roi_id):
+                    continue
+                roi_type = str(item.get("roi_type", "rect")).lower()
+                if roi_type == "mask":
+                    data_block = item.setdefault("data", {})
+                    if isinstance(data_block, dict):
+                        data_block["mask_ref"] = mask_ref
+                else:
+                    meta = item.setdefault("meta", {})
+                    if isinstance(meta, dict):
+                        meta["mask_ref"] = mask_ref
+                break
+            payload["rois"] = rois_raw
+            self.save_metadata_payload(payload)
+
+        return mask_ref
 
     def channels_available(self) -> list[int]:
         """Return available channel keys for this image."""
