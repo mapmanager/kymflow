@@ -10,13 +10,13 @@ A small, opinionated Zarr v2 dataset wrapper for:
 Intended as a starting point you can adapt into kymflow.
 """
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
 from .dataset import ZarrDataset
 from .record import MetadataNotFoundError, ZarrImageRecord
 from .schema import DatasetSchema, SchemaValidationError
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ZarrDataset",

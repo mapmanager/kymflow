@@ -6,7 +6,8 @@ Notes:
     Analysis artifacts are stored as compressed byte blobs in the underlying store.
 
     Blob naming convention (examples):
-        images/<image_id>/analysis/events.json.gz
+        images/<image_id>/analysis/events.json
+        images/<image_id>/analysis/events.json.gz   (legacy read compatibility)
         images/<image_id>/analysis/roi_table.parquet
         images/<image_id>/analysis/roi_table.csv.gz  (fallback / compatibility)
 
@@ -16,9 +17,9 @@ Notes:
 
 from __future__ import annotations
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 from io import BytesIO

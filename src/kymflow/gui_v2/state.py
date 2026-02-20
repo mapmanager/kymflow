@@ -215,7 +215,7 @@ class AppState:
         # Initialize selected_roi_id to first ROI if available
         if kym_file is not None:
             # Load all available channels (idempotent - safe to call multiple times)
-            channel_keys = kym_file.getChannelKeys()
+            channel_keys = kym_file.channels_available()
             for channel in channel_keys:
                 try:
                     kym_file.load_channel(channel)

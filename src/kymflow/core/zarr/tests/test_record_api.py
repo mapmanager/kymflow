@@ -27,6 +27,15 @@ def test_missing_metadata_payload_raises_clear_error(tmp_path: Path) -> None:
         rec_ro.load_metadata_payload()
 
 
+def test_save_json_writes_uncompressed_json_key(tmp_path: Path) -> None:
+    ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
+    rec = ds.add_image((np.random.rand(8, 8) * 255).astype(np.uint8))
+
+    key = rec.save_json("events", {"n": 1})
+    assert key.endswith(".json")
+    assert not key.endswith(".json.gz")
+
+
 def test_open_group_missing_record_does_not_create(tmp_path: Path) -> None:
     ds_path = tmp_path / "ds.zarr"
     ds = ZarrDataset(str(ds_path), mode="a")
@@ -50,9 +59,22 @@ def test_delete_analysis_with_suffix_filter(tmp_path: Path) -> None:
     rec.save_json("quality", {"ok": True})
     rec.save_df_csv_gz("roi_table", pd.DataFrame({"roi_id": [1, 2], "peak": [0.2, 0.4]}))
 
-    deleted = rec.delete_analysis(suffixes=(".json.gz",))
+    deleted = rec.delete_analysis(suffixes=(".json",))
     assert deleted == 2
 
     keys = rec.list_analysis_keys()
     assert len(keys) == 1
     assert keys[0].endswith("roi_table.csv.gz")
+
+
+def test_load_json_reads_legacy_json_gz(tmp_path: Path) -> None:
+    from kymflow_zarr.utils import gzip_bytes, json_dumps
+
+    ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
+    rec = ds.add_image((np.random.rand(8, 8) * 255).astype(np.uint8))
+
+    key = f"images/{rec.image_id}/analysis/legacy_payload.json.gz"
+    ds.store[key] = gzip_bytes(json_dumps({"legacy": True}))
+
+    out = rec.load_json("legacy_payload")
+    assert out["legacy"] is True

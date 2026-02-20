@@ -19,9 +19,9 @@ Notes:
 
 from __future__ import annotations
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 from io import BytesIO, StringIO
@@ -232,11 +232,15 @@ class ZarrImageRecord:
 
     # ---- Metadata convenience (optional kymflow) ----
     def save_metadata_payload(self, payload: dict[str, Any]) -> str:
-        """Save the canonical metadata payload under analysis/metadata.json.gz."""
+        """Save the canonical metadata payload under analysis/metadata.json."""
         return self.save_json("metadata", payload)
 
     def load_metadata_payload(self) -> dict[str, Any]:
-        """Load the canonical metadata payload from analysis/metadata.json.gz."""
+        """Load the canonical metadata payload from analysis/metadata.json.
+
+        Backward compatibility:
+            Falls back to legacy analysis/metadata.json.gz if needed.
+        """
         try:
             return dict(self.load_json("metadata"))
         except KeyError as e:
@@ -341,19 +345,30 @@ class ZarrImageRecord:
 
     # ---- JSON analysis blobs ----
     def save_json(self, name: str, obj: Any, *, indent: int = 2) -> str:
-        """Save gzipped JSON analysis blob under analysis/."""
-        filename = f"{normalize_id(name)}.json.gz"
+        """Save JSON analysis blob under analysis/ (canonical *.json, uncompressed)."""
+        filename = f"{normalize_id(name)}.json"
         key = self.parts.analysis_key(filename)
-        self.store[key] = gzip_bytes(json_dumps(obj, indent=indent))
+        self.store[key] = json_dumps(obj, indent=indent)
         self._touch_updated()
         return key
 
     def load_json(self, name: str) -> Any:
-        """Load gzipped JSON analysis blob."""
-        filename = f"{normalize_id(name)}.json.gz"
-        key = self.parts.analysis_key(filename)
-        raw = gunzip_bytes(self.store[key])
-        return json_loads(raw)
+        """Load JSON analysis blob.
+
+        Read order:
+            1) analysis/<name>.json
+            2) legacy analysis/<name>.json.gz
+        """
+        base = normalize_id(name)
+        key_json = self.parts.analysis_key(f"{base}.json")
+        if key_json in self.store:
+            return json_loads(self.store[key_json])
+
+        key_gz = self.parts.analysis_key(f"{base}.json.gz")
+        if key_gz in self.store:
+            raw = gunzip_bytes(self.store[key_gz])
+            return json_loads(raw)
+        raise KeyError(key_json)
 
     # ---- Tabular analysis blobs ----
     def save_df_parquet(self, name: str, df: pd.DataFrame, *, compression: str = "zstd") -> str:

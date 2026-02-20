@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 import numpy as np

@@ -36,9 +36,10 @@ def main() -> None:
         raise RuntimeError(f"No TIFF files found under: {tif_folder}")
 
     src_img = next(iter(src_list))
-    print("Selected TIFF:", src_img.key)
+    print("Selected TIFF:", src_img.source_key)
 
     # Load pixels
+    print("Channels available:", src_img.channels_available())
     arr = src_img.getChannelData(1)
     print("Pixels:", arr.shape, arr.dtype)
 

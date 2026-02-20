@@ -52,7 +52,7 @@ def test_metadata_and_roi_roundtrip_through_ingest(tmp_path: Path) -> None:
 
     arr = (np.random.rand(100, 30) * 255).astype(np.uint16)
     src = AcqImageV01(
-        key="img001",
+        source_key="img001",
         pixel_store=_FakePixelStore(arr=arr),
         artifact_store=_FakeArtifactStore(payloads={}),
     )
@@ -78,7 +78,7 @@ def test_malformed_rois_payload_raises_in_acqimage() -> None:
 
     arr = (np.random.rand(20, 20) * 255).astype(np.uint16)
     src = AcqImageV01(
-        key="img001",
+        source_key="img001",
         pixel_store=_FakePixelStore(arr=arr),
         artifact_store=_FakeArtifactStore(payloads={("img001", "metadata"): {"version": "2.0", "rois": {"bad": 1}}}),
     )

@@ -10,9 +10,9 @@ The goal is to catch issues early, and allow safe evolution by bumping schema_ve
 
 from __future__ import annotations
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 from typing import Any, Optional

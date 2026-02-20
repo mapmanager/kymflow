@@ -110,7 +110,7 @@ def main() -> None:
     print("AcqImageListV01 over zarr records:", len(lst))
     for img in lst:
         arr = img.getChannelData(1)
-        print("  image key:", img.key, "shape:", arr.shape, "dtype:", arr.dtype)
+        print("  image key:", img.source_key, "shape:", arr.shape, "dtype:", arr.dtype)
 
     # 6) Cleanup example operations: delete one analysis type + one image.
     deleted = rec_a.delete_analysis(suffixes=(".csv.gz",))

@@ -15,22 +15,27 @@ Design notes:
 
 from __future__ import annotations
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
+from io import BytesIO
+from pathlib import Path
 from typing import Any, Iterator, Optional, Sequence, Literal
 from uuid import uuid4
 
 import numpy as np
+import pandas as pd
 import zarr
 from zarr.storage import DirectoryStore
 
+from .io_export import export_legacy_folder as _export_legacy_folder
+from .io_import import SOURCES_COLUMNS, ingest_legacy_file as _ingest_legacy_file, ingest_legacy_folder as _ingest_legacy_folder
 from .manifest import Manifest, load_manifest, rebuild_manifest, save_manifest
 from .record import ZarrImageRecord
 from .schema import DatasetSchema
-from .utils import utc_now_iso
+from .utils import normalize_id, require_pyarrow, utc_now_iso
 
 
 OrderBy = Literal["image_id", "created_utc", "acquired_local_epoch_ns"]
@@ -235,6 +240,177 @@ class ZarrDataset:
         m = self.rebuild_manifest(include_analysis_keys=include_analysis_keys)
         self.save_manifest(m)
         return m
+
+    # ---- Dataset-level tables ----
+    def _table_key(self, name: str) -> str:
+        safe = normalize_id(name)
+        return f"tables/{safe}.parquet"
+
+    def list_table_names(self) -> list[str]:
+        """List dataset-level table names stored under tables/*.parquet."""
+        out: list[str] = []
+        for k in self.store.keys():
+            if not k.startswith("tables/") or not k.endswith(".parquet"):
+                continue
+            out.append(k[len("tables/") : -len(".parquet")])
+        return sorted(out)
+
+    def load_table(self, name: str) -> pd.DataFrame:
+        """Load a dataset-level Parquet table."""
+        require_pyarrow()
+        key = self._table_key(name)
+        if key not in self.store:
+            raise FileNotFoundError(f"Missing dataset table: {name}")
+        return pd.read_parquet(BytesIO(self.store[key]))
+
+    def save_table(self, name: str, df: pd.DataFrame) -> None:
+        """Save a dataset-level table as Parquet bytes."""
+        require_pyarrow()
+        key = self._table_key(name)
+        buf = BytesIO()
+        df.to_parquet(buf, index=False)
+        self.store[key] = buf.getvalue()
+        self._touch_updated()
+
+    def replace_rows_for_image_id(
+        self,
+        name: str,
+        image_id: str,
+        df_rows: pd.DataFrame,
+        *,
+        image_id_col: str = "image_id",
+    ) -> None:
+        """Replace rows in a dataset table for a specific image_id."""
+        if image_id_col not in df_rows.columns:
+            raise ValueError(f"df_rows must contain column '{image_id_col}'")
+        try:
+            existing = self.load_table(name)
+        except FileNotFoundError:
+            existing = pd.DataFrame(columns=list(df_rows.columns))
+
+        if image_id_col in existing.columns:
+            existing = existing[existing[image_id_col] != image_id].copy()
+
+        merged = pd.concat([existing, df_rows], ignore_index=True)
+        self.save_table(name, merged)
+
+    def load_sources_index(self) -> pd.DataFrame:
+        """Load dataset sources index table.
+
+        Returns:
+            DataFrame with columns:
+                source_primary_path, image_id, source_mtime_ns, source_size_bytes, ingested_epoch_ns
+            Returns empty DataFrame with required columns if the table does not exist yet.
+        """
+        try:
+            df = self.load_table("sources")
+        except FileNotFoundError:
+            return pd.DataFrame(columns=SOURCES_COLUMNS)
+
+        for col in SOURCES_COLUMNS:
+            if col not in df.columns:
+                df[col] = pd.Series(dtype="object")
+        return df[SOURCES_COLUMNS].copy()
+
+    def save_sources_index(self, df: pd.DataFrame) -> None:
+        """Save dataset sources index table."""
+        for col in SOURCES_COLUMNS:
+            if col not in df.columns:
+                raise ValueError(f"sources index missing required column: {col}")
+        self.save_table("sources", df[SOURCES_COLUMNS].copy())
+
+    def refresh_from_folder(
+        self,
+        folder: str | Path,
+        pattern: str = "*.tif",
+        *,
+        mode: str = "skip",
+    ) -> list[str]:
+        """Refresh ingest from a folder by adding only new (or changed) TIFF files.
+
+        Args:
+            folder: Legacy folder to scan recursively.
+            pattern: Glob pattern for TIFF files.
+            mode: Ingest behavior.
+                - "skip": ingest files not present in sources index.
+                - "reingest_if_changed": ingest files that are new or whose mtime/size changed.
+
+        Returns:
+            List of newly ingested image_id values.
+        """
+        if mode not in {"skip", "reingest_if_changed"}:
+            raise ValueError(f"Unsupported refresh mode: {mode}")
+
+        source_df = self.load_sources_index()
+        existing_paths = set(source_df["source_primary_path"].astype(str)) if len(source_df) else set()
+
+        ingested_ids: list[str] = []
+        new_rows: list[dict[str, int | str]] = []
+
+        root = Path(folder).resolve()
+        for tif_path in sorted(root.rglob(pattern)):
+            if not tif_path.is_file():
+                continue
+            src_path = str(tif_path.resolve())
+
+            should_ingest = False
+            if src_path not in existing_paths:
+                should_ingest = True
+            elif mode == "reingest_if_changed":
+                stat = tif_path.stat()
+                mtime_ns = int(getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000)))
+                size_b = int(stat.st_size)
+                latest = source_df[source_df["source_primary_path"] == src_path].tail(1)
+                if len(latest) == 0:
+                    should_ingest = True
+                else:
+                    old_mtime = int(latest.iloc[0]["source_mtime_ns"])
+                    old_size = int(latest.iloc[0]["source_size_bytes"])
+                    should_ingest = (mtime_ns != old_mtime) or (size_b != old_size)
+
+            if not should_ingest:
+                continue
+
+            image_id, row = _ingest_legacy_file(self, tif_path, include_sidecars=True)
+            ingested_ids.append(image_id)
+            new_rows.append(row)
+
+        if new_rows:
+            new_df = pd.DataFrame(new_rows, columns=SOURCES_COLUMNS)
+            merged = pd.concat([source_df, new_df], ignore_index=True)
+            self.save_sources_index(merged)
+            self.update_manifest()
+
+        return ingested_ids
+
+    # ---- Import / export ----
+    def export_legacy_folder(
+        self,
+        export_dir: str | Path,
+        *,
+        include_tiff: bool = True,
+        include_tables: bool = True,
+    ) -> None:
+        """Export dataset records/artifacts/tables to TIFF+CSV+JSON folder layout."""
+        _export_legacy_folder(self, export_dir, include_tiff=include_tiff, include_tables=include_tables)
+
+    def ingest_legacy_folder(
+        self,
+        legacy_root: str | Path,
+        *,
+        pattern: str = "*.tif",
+        include_sidecars: bool = True,
+    ) -> None:
+        """One-time ingest from legacy TIFF + sidecar folder structure."""
+        rows = _ingest_legacy_folder(self, legacy_root, pattern=pattern, include_sidecars=include_sidecars)
+        if not rows:
+            return
+
+        source_df = self.load_sources_index()
+        new_df = pd.DataFrame([r for _, r in rows], columns=SOURCES_COLUMNS)
+        merged = pd.concat([source_df, new_df], ignore_index=True)
+        self.save_sources_index(merged)
+        self.update_manifest()
 
     # ---- Internals ----
     def _touch_updated(self) -> None:

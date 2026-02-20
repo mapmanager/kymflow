@@ -406,6 +406,13 @@ class AcqImage:
         # For synthetic images: _imgData contains the channels
         all_keys = set(self._file_path_dict.keys()) | set(self._imgData.keys())
         return sorted(list(all_keys))
+
+    def channels_available(self) -> list[int]:
+        """Return available channel keys.
+
+        This is the preferred API name. It mirrors getChannelKeys().
+        """
+        return self.getChannelKeys()
     
     def get_img_slice(self, slice_num: int = 0, channel: int = 1) -> np.ndarray | None:
         """Get image slice from specified channel.

@@ -19,9 +19,9 @@ Design:
 
 from __future__ import annotations
 
-from kymflow.core.utils.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 import json
@@ -80,12 +80,21 @@ def save_manifest(store: Any, manifest: Manifest) -> None:
 
 
 def _extract_acquired_ns_from_metadata(store: Any, image_id: str) -> int | None:
-    """Extract acquired_local_epoch_ns from analysis/metadata.json.gz if present."""
-    key = f"images/{image_id}/analysis/metadata.json.gz"
-    if key not in store:
-        return None
+    """Extract acquired_local_epoch_ns from metadata artifact if present.
+
+    Read order:
+        1) analysis/metadata.json
+        2) legacy analysis/metadata.json.gz
+    """
+    key_json = f"images/{image_id}/analysis/metadata.json"
+    key_gz = f"images/{image_id}/analysis/metadata.json.gz"
     try:
-        payload = json_loads(gunzip_bytes(store[key]))
+        if key_json in store:
+            payload = json_loads(store[key_json])
+        elif key_gz in store:
+            payload = json_loads(gunzip_bytes(store[key_gz]))
+        else:
+            return None
         hdr = payload.get("header", {})
         val = hdr.get("acquired_local_epoch_ns")
         if val is None:

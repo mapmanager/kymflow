@@ -17,8 +17,8 @@ def test_manifest_rebuild_tolerates_malformed_metadata_payload(tmp_path: Path) -
     ds = ZarrDataset(str(tmp_path / "ds.zarr"), mode="a")
     rec = ds.add_image((np.random.rand(8, 8) * 255).astype(np.uint8))
 
-    bad_key = f"images/{rec.image_id}/analysis/metadata.json.gz"
-    ds.store[bad_key] = b"not gzip bytes"
+    bad_key = f"images/{rec.image_id}/analysis/metadata.json"
+    ds.store[bad_key] = b"{not valid json"
 
     m = ds.update_manifest()
     out = [x for x in m.images if x["image_id"] == rec.image_id][0]

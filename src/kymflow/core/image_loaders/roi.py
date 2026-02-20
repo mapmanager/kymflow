@@ -200,10 +200,30 @@ class ROI:
         Raises:
             ValueError: If channel doesn't exist or image data isn't loaded.
         """
-        # Get 2D image slice for this ROI's channel and z
-        img_slice = acq_image.get_img_slice(slice_num=self.z, channel=self.channel)
-        if img_slice is None:
-            raise ValueError("Image data not available")
+        # Get 2D image slice for this ROI's channel and z.
+        # Prefer explicit get_img_slice; fall back to channel arrays.
+        if hasattr(acq_image, "get_img_slice"):
+            img_slice = acq_image.get_img_slice(slice_num=self.z, channel=self.channel)
+            if img_slice is None:
+                raise ValueError("Image data not available")
+        else:
+            arr: np.ndarray | None
+            if hasattr(acq_image, "get_channel"):
+                arr = acq_image.get_channel(self.channel)
+            elif hasattr(acq_image, "getChannelData"):
+                arr = acq_image.getChannelData(self.channel)
+            else:
+                raise ValueError("AcqImage does not provide a channel accessor")
+            if arr is None:
+                raise ValueError("Image data not available")
+            if arr.ndim == 2:
+                img_slice = arr
+            elif arr.ndim >= 3:
+                if self.z < 0 or self.z >= arr.shape[0]:
+                    raise ValueError(f"z index out of range: {self.z}")
+                img_slice = arr[self.z]
+            else:
+                raise ValueError(f"Unsupported image ndim for ROI stats: {arr.ndim}")
         
         # Extract ROI region from the image
         # ROI bounds: dim0 = rows (height), dim1 = cols (width)
@@ -310,7 +330,7 @@ class RoiSet:
         Raises:
             ValueError: If channel doesn't exist.
         """
-        channel_keys = self.acq_image.getChannelKeys()
+        channel_keys = self.acq_image.channels_available()
         if channel_keys and channel in channel_keys:
             return
         
@@ -318,6 +338,16 @@ class RoiSet:
             f"Channel {channel} does not exist. "
             f"Available channels: {channel_keys if channel_keys else 'none'}"
         )
+
+    def _mark_metadata_dirty(self) -> None:
+        """Mark metadata dirty when supported by the backing image object."""
+        mark = getattr(self.acq_image, "mark_metadata_dirty", None)
+        if callable(mark):
+            mark()
+            return
+        mark = getattr(self.acq_image, "mark_dirty", None)
+        if callable(mark):
+            mark()
 
     def create_roi(
         self,
@@ -386,7 +416,7 @@ class RoiSet:
         
         self._rois[roi.id] = roi
         self._next_id += 1
-        self.acq_image.mark_metadata_dirty()
+        self._mark_metadata_dirty()
         return roi
 
     def edit_roi(
@@ -476,7 +506,7 @@ class RoiSet:
                 logger.warning(f"Could not recalculate image stats for ROI {roi_id}: {e}")
         
         if changed:
-            self.acq_image.mark_metadata_dirty()
+            self._mark_metadata_dirty()
     
     def delete(self, roi_id: int) -> None:
         """Remove the ROI with the given id, if it exists.
@@ -486,7 +516,7 @@ class RoiSet:
         """
         removed = self._rois.pop(roi_id, None)
         if removed is not None:
-            self.acq_image.mark_metadata_dirty()
+            self._mark_metadata_dirty()
 
     def clear(self) -> int:
         """Delete all ROIs and reset internal id counter.
@@ -498,7 +528,7 @@ class RoiSet:
         self._rois.clear()
         self._next_id = 1
         if n > 0:
-            self.acq_image.mark_metadata_dirty()
+            self._mark_metadata_dirty()
         return n
 
     def get(self, roi_id: int) -> ROI | None:
@@ -786,4 +816,3 @@ def hit_test_rois(
             return roi, "moving"
 
     return None, None
-
