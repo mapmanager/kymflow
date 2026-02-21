@@ -90,12 +90,12 @@ Test intent:
 
 Update:
 
-- `src/kymflow/core/zarr/prompts/codex_run_ticket.md`
+- `src/kymflow/core/zarr/prompts/runners/codex_run_ticket.md`
   - Add a requirement: if ticket changes public API or read/write semantics, update docs (`docs/api.md` + relevant docs files).
   - Add a checklist line in the final response: “Docs updated? yes/no (files)”
 
 Also update (if present/used):
-- `src/kymflow/core/zarr/prompts/codex_implement_ticket_and_gen_report_prompt.md`
+- `src/kymflow/core/zarr/prompts/runners/codex_implement_ticket_and_gen_report_prompt.md`
   - Add the same docs-update rule (short form)
 
 ---

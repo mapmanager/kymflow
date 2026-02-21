@@ -6,7 +6,7 @@ You will do BOTH:
 
 Inputs:
 - Ticket file path: <TICKET_MD_PATH>
-- Change report spec: codex_change_report_prompt.md
+- Change report spec: prompts/runners/codex_change_report_prompt.md
 
 Steps:
 1) Read and understand <TICKET_MD_PATH>.
@@ -18,6 +18,7 @@ Steps:
 3) Run the required commands listed in the ticket (at minimum: the relevant pytest command; run any demo scripts explicitly requested).
 4) If tests fail, fix until they pass.
 5) Generate a change report that EXACTLY follows the format/sections in codex_change_report_prompt.md.
+   (Use `prompts/runners/codex_change_report_prompt.md`.)
 6) Save the report as:
    - <ticket_basename>_change_report.md
    - In the same directory as the ticket file, unless the repo already has a standard prompts/reports directory.

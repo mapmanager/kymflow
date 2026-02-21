@@ -9,7 +9,7 @@
 
 ## 3) Files modified (full relative paths) with per-file details
 
-### `src/kymflow/core/zarr/prompts/codex_run_ticket.md`
+### `src/kymflow/core/zarr/prompts/runners/codex_run_ticket.md`
 - What changed:
   - Strengthened docs contract rule by adding: if docs are required and not updated, ticket is incomplete.
   - Clarified final checklist line to require explicit docs status and justification if not required.
@@ -18,7 +18,7 @@
 - Behavior change vs refactor-only:
   - **Behavior change** in workflow instructions (agent execution policy), no runtime code path impact.
 
-### `src/kymflow/core/zarr/prompts/codex_implement_ticket_and_gen_report_prompt.md`
+### `src/kymflow/core/zarr/prompts/runners/codex_implement_ticket_and_gen_report_prompt.md`
 - What changed:
   - Added docs-update rule for API/semantics/layout/exception changes under `src/kymflow/core/zarr/docs/`.
   - Added final response checklist line: docs updated yes/no with files.

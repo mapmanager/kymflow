@@ -223,7 +223,7 @@ The following files were changed to replace `get_logger` import/usage with stdli
 
 1. `src/kymflow/core/zarr/tests/test_sources_refresh.py`
 2. `src/kymflow/core/zarr/prompts/codex_ticket_template.md`
-3. `src/kymflow/core/zarr/prompts/codex_change_report_prompt.md`
+3. `src/kymflow/core/zarr/prompts/runners/codex_change_report_prompt.md`
 
 ## 5) Files deleted
 - None.

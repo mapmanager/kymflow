@@ -1,16 +1,16 @@
-# filename: prompts/codex_run_ticket.md
+# filename: prompts/runners/codex_run_ticket.md
 
 # Codex Unified Ticket Runner
 
 You will implement a ticket AND generate its change report in one pass.
 
 INPUT:
-- Ticket filename (relative to prompts/ folder): <TICKET_FILENAME>
+- Ticket markdown path (workspace-relative): <TICKET_MD_PATH>
 
 WORKFLOW:
 
 1) Read:
-   prompts/<TICKET_FILENAME>
+   <TICKET_MD_PATH>
 
 2) Implement all tasks described in that ticket on the current branch.
 
@@ -44,10 +44,12 @@ WORKFLOW:
    - Fix implementation until tests pass.
 
 5) Generate a strict change report following:
-   prompts/codex_change_report_prompt.md
+   prompts/runners/codex_change_report_prompt.md
 
 6) Save the report as:
-   prompts/<TICKET_FILENAME_without_.md>_change_report.md
+   Next to the ticket file path.
+   - If ticket is `prompts/tickets/codex_ticket_39_40.md`
+   - Save report as `prompts/tickets/codex_ticket_39_40_change_report.md`
 
 7) In your final message include:
    - Path to saved change report
