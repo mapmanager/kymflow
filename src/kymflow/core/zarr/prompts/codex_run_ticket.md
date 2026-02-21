@@ -1,3 +1,5 @@
+# filename: prompts/codex_run_ticket.md
+
 # Codex Unified Ticket Runner
 
 You will implement a ticket AND generate its change report in one pass.
@@ -7,10 +9,10 @@ INPUT:
 
 WORKFLOW:
 
-1. Read:
+1) Read:
    prompts/<TICKET_FILENAME>
 
-2. Implement all tasks described in that ticket on the current branch.
+2) Implement all tasks described in that ticket on the current branch.
 
    Implementation Rules:
    - Respect architectural boundaries.
@@ -21,23 +23,36 @@ WORKFLOW:
    - Preserve test stability.
    - Keep changes minimal and scoped to ticket goals.
 
-3. Run required commands:
+   Docs Contract Rule (NEW):
+   - The folder `src/kymflow/core/zarr/docs/` is a living API contract.
+   - If your changes impact ANY of the following, you MUST update the docs in the same ticket:
+       • public API surface (new/removed/renamed public functions/classes)
+       • method signatures
+       • read/write semantics
+       • on-disk data layout
+       • ingest/export workflows
+       • exception behavior that callers depend on
+   - At minimum, update `docs/api.md` and any relevant doc pages (workflows/layout/incremental).
+   - If docs are not updated when required, treat the ticket as incomplete.
+
+3) Run required commands:
    - At minimum:
        uv run pytest src/kymflow/core/zarr/tests -q
    - Also run any demo scripts referenced in the ticket.
 
-4. If tests fail:
+4) If tests fail:
    - Fix implementation until tests pass.
 
-5. Generate a strict change report following:
+5) Generate a strict change report following:
    prompts/codex_change_report_prompt.md
 
-6. Save the report as:
+6) Save the report as:
    prompts/<TICKET_FILENAME_without_.md>_change_report.md
 
-7. In your final message include:
+7) In your final message include:
    - Path to saved change report
    - Commands executed and results
+   - Docs updated? yes/no (list files changed under docs/ if yes, or state why not required)
    - Known limitations or TODOs introduced
 
 Proceed.

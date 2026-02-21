@@ -14,6 +14,7 @@ Steps:
    - Follow architectural boundaries in the ticket.
    - Prefer targeted exceptions; do not introduce broad `except Exception` unless immediately re-raised.
    - Keep typed signatures and Google-style docstrings for new/changed public APIs.
+   - If public API/read-write semantics/on-disk layout/exception behavior changes, update docs under `src/kymflow/core/zarr/docs/` in the same ticket (at minimum `docs/api.md` + relevant pages).
 3) Run the required commands listed in the ticket (at minimum: the relevant pytest command; run any demo scripts explicitly requested).
 4) If tests fail, fix until they pass.
 5) Generate a change report that EXACTLY follows the format/sections in codex_change_report_prompt.md.
@@ -23,6 +24,7 @@ Steps:
 7) In your final response, include:
    - The path to the saved change report
    - The commands run and their outcomes (brief)
+   - Docs updated? yes/no (list docs files changed if yes)
    - Any known limitations/TODOs
 
 Now proceed using:
