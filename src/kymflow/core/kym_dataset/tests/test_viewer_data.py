@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from kymflow.core.kym_dataset.viewer_data import build_viewer_dataframe
+from kymflow.core.kym_dataset.viewer_table import build_dataset_view_table
 from kymflow_zarr import ZarrDataset
 
 
@@ -29,3 +30,18 @@ def test_build_viewer_dataframe_smoke(tmp_path: Path) -> None:
     assert "original_path" in df.columns
     assert "acquired_local_epoch_ns" in df.columns
     assert "velocity_event_count" in df.columns
+
+
+def test_build_viewer_dataframe_is_wrapper(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    ds = ZarrDataset(str(tmp_path / "ds2.zarr"), mode="a")
+    rec = ds.add_image((np.random.rand(4, 5) * 255).astype(np.uint8))
+    ds.save_table("kym_velocity_events", pd.DataFrame({"image_id": [rec.image_id]}))
+
+    wrapper = build_viewer_dataframe(ds)
+    direct = build_dataset_view_table(ds, include_tables=["kym_velocity_events"]).copy()
+    if "n_rows_kym_velocity_events" in direct.columns:
+        direct["velocity_event_count"] = direct["n_rows_kym_velocity_events"]
+
+    assert list(wrapper.columns) == list(direct.columns)
+    pd.testing.assert_frame_equal(wrapper.reset_index(drop=True), direct.reset_index(drop=True))

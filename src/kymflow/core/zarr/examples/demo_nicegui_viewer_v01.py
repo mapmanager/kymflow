@@ -15,11 +15,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from nicegui import ui
+
 from kymflow.core.kym_dataset.viewer_data import build_viewer_dataframe
 from kymflow_zarr import ZarrDataset
 
+_ds: ZarrDataset | None = None
 
-def plot_heatmap_dict(arr: np.ndarray, *, title: str = "") -> dict:
+def plot_heatmap_dict(arr: np.ndarray, *,  transpose:bool = False, title: str = "") -> dict:
     """Build a Plotly heatmap figure dictionary.
 
     Args:
@@ -29,6 +32,8 @@ def plot_heatmap_dict(arr: np.ndarray, *, title: str = "") -> dict:
     Returns:
         Plotly-compatible figure dictionary.
     """
+    if transpose:
+        arr = arr.transpose()
     return {
         "data": [
             {
@@ -58,6 +63,11 @@ def _row_metadata(ds: ZarrDataset, image_id: str) -> dict[str, Any]:
         md = rec.load_metadata_payload()
     except FileNotFoundError:
         md = {}
+    
+    from pprint import pprint
+    print('got md:')
+    pprint(md, sort_dicts=False, indent=4)
+    
     rois = md.get("rois", []) if isinstance(md, dict) else []
     n_rois = len(rois) if isinstance(rois, list) else 0
     header = md.get("header", {}) if isinstance(md, dict) else {}
@@ -65,10 +75,16 @@ def _row_metadata(ds: ZarrDataset, image_id: str) -> dict[str, Any]:
     return {"n_rois": n_rois, "header": header, "experiment_metadata": exp}
 
 
-def _run_ui(ds: ZarrDataset) -> None:
-    from nicegui import ui
+# def _run_ui(ds: ZarrDataset) -> None:
 
-    df = build_viewer_dataframe(ds)
+@ui.page("/")
+def home() -> None:
+
+    global _ds
+    if _ds is None:
+        raise ValueError("Dataset not initialized")
+
+    df = build_viewer_dataframe(_ds)
     if len(df) == 0:
         df = pd.DataFrame(columns=["image_id", "original_path", "acquired_local_epoch_ns"])
 
@@ -78,7 +94,7 @@ def _run_ui(ds: ZarrDataset) -> None:
 
     selected = {"image_id": None}
     with ui.row().classes("w-full items-start"):
-        with ui.column().classes("w-2/5 h-full min-h-0") as grid_container:
+        with ui.column().classes("w-full h-full min-h-0") as grid_container:
             # Required AG Grid construction pattern.
             aggrid = ui.aggrid.from_pandas(df).classes("w-full aggrid-compact")
             aggrid.options["columnDefs"] = [{"headerName": c, "field": c, "sortable": True, "resizable": True} for c in df.columns]
@@ -86,12 +102,12 @@ def _run_ui(ds: ZarrDataset) -> None:
             aggrid.options[":getRowId"] = "(params) => params.data && String(params.data['image_id'])"
             aggrid.update()
 
-            with ui.context_menu():
-                for c in df.columns:
-                    ui.menu_item(c)
+            # with ui.context_menu():
+            #     for c in df.columns:
+            #         ui.menu_item(c)
 
-        with ui.column().classes("w-3/5 h-full min-h-0"):
-            plot = ui.plotly(plot_heatmap_dict(np.zeros((8, 8)), title="Select a row")).classes("w-full h-96")
+        with ui.column().classes("w-full h-full min-h-0"):
+            plot = ui.plotly(plot_heatmap_dict(np.zeros((8, 8)), transpose=True, title="Select a row")).classes("w-full h-96")
             meta_label = ui.label("metadata: none")
 
     def on_row_selected(e: Any) -> None:
@@ -102,15 +118,17 @@ def _run_ui(ds: ZarrDataset) -> None:
         if not image_id:
             return
         selected["image_id"] = image_id
-        rec = ds.record(image_id)
-        arr2d = _slice_to_2d(rec.load_array())
-        plot.figure = plot_heatmap_dict(arr2d, title=image_id)
-        md = _row_metadata(ds, image_id)
+        rec = _ds.record(image_id)
+        _arr = rec.load_array()
+        print(f'got arr: {_arr.shape}')
+        arr2d = _slice_to_2d(_arr)
+        plot.figure = plot_heatmap_dict(arr2d, transpose=True, title=image_id)
+        md = _row_metadata(_ds, image_id)
         meta_label.text = f"n_rois={md['n_rois']} header_keys={len(md['header'])} exp_keys={len(md['experiment_metadata'])}"
         plot.update()
 
     aggrid.on("rowSelected", on_row_selected)
-    ui.run(reload=False)
+
 
 
 def main() -> None:
@@ -119,15 +137,23 @@ def main() -> None:
     parser.add_argument("--smoke", action="store_true", default=False)
     args = parser.parse_args()
 
-    ds = ZarrDataset(str(Path(args.dataset).resolve()), mode="a")
+    _path = args.dataset
+    # _path = "src/kymflow/core/zarr/examples/demo_nicegui_viewer_v01.py --dataset /Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/zarr-data/tmp-dataset"
+
+    ds = ZarrDataset(str(Path(_path).resolve()), mode="a")
+    global _ds
+    _ds = ds
+
     if args.smoke:
         df = build_viewer_dataframe(ds)
         print("rows:", len(df))
         print("columns:", list(df.columns))
         return
 
-    _run_ui(ds)
+    # _run_ui(ds)
+    _native = True
+    ui.run(reload=False, native=_native)
 
 
-if __name__ == "__main__":
+if __name__ in {"__main__", "__mp_main__"}:
     main()
