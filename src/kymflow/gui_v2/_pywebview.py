@@ -435,6 +435,12 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
         logger.warning(f'window rect too small; ignoring: {(x, y, w, h)}')
         return
 
+    # omit rect if position is off-screen (e.g. secondary display disconnected);
+    # let OS choose placement to avoid pywebview Cocoa AttributeError
+    if x < 0 or y < 0:
+        logger.warning(f'window rect has off-screen position (x={x}, y={y}); omitting rect, OS will place window')
+        return
+
     logger.warning(f'setting initial pywebview window: x={x} y={y} w={w} h={h}')
 
     native.window_args.update({
