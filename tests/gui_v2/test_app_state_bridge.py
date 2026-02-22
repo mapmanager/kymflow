@@ -26,6 +26,10 @@ class DummyKymImage:
     def getChannelKeys(self):
         return []
 
+    def channels_available(self):
+        """AppState.select_file() calls this; return [] for no channels."""
+        return []
+
     def load_channel(self, _channel):
         return None
 

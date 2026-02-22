@@ -41,52 +41,67 @@
   },
   "rois": [
     {
-      "id": 1,
-      "channel": 1,
-      "z": 0,
+      "roi_id": 1,
+      "roi_type": "rect",
+      "version": "1.0",
       "name": "",
       "note": "Full Image",
-      "revision": 0,
-      "img_min": 105,
-      "img_max": 400,
-      "img_mean": 209.7716701754386,
-      "img_std": 55.3394825318662,
-      "dim0_start": 0,
-      "dim0_stop": 30000,
-      "dim1_start": 0,
-      "dim1_stop": 38
-    },
-    {
-      "id": 2,
       "channel": 1,
       "z": 0,
+      "data": {
+        "x0": 0,
+        "x1": 38,
+        "y0": 0,
+        "y1": 30000
+      },
+      "meta": {
+        "img_min": 105,
+        "img_max": 400,
+        "img_mean": 209.7716701754386,
+        "img_std": 55.3394825318662
+      }
+    },
+    {
+      "roi_id": 2,
+      "roi_type": "rect",
+      "version": "1.0",
       "name": "",
       "note": "Center Region",
-      "revision": 0,
-      "img_min": 106,
-      "img_max": 373,
-      "img_mean": 209.2418947368421,
-      "img_std": 49.596099867066236,
-      "dim0_start": 7500,
-      "dim0_stop": 22500,
-      "dim1_start": 9,
-      "dim1_stop": 28
-    },
-    {
-      "id": 3,
       "channel": 1,
       "z": 0,
+      "data": {
+        "x0": 9,
+        "x1": 28,
+        "y0": 7500,
+        "y1": 22500
+      },
+      "meta": {
+        "img_min": 106,
+        "img_max": 373,
+        "img_mean": 209.2418947368421,
+        "img_std": 49.596099867066236
+      }
+    },
+    {
+      "roi_id": 3,
+      "roi_type": "rect",
+      "version": "1.0",
       "name": "",
       "note": "Left Region",
-      "revision": 0,
-      "img_min": 111,
-      "img_max": 395,
-      "img_mean": 243.44011666666665,
-      "img_std": 63.523783057894065,
-      "dim0_start": 10000,
-      "dim0_stop": 30000,
-      "dim1_start": 0,
-      "dim1_stop": 12
+      "channel": 1,
+      "z": 0,
+      "data": {
+        "x0": 0,
+        "x1": 12,
+        "y0": 10000,
+        "y1": 30000
+      },
+      "meta": {
+        "img_min": 111,
+        "img_max": 395,
+        "img_mean": 243.44011666666665,
+        "img_std": 63.523783057894065
+      }
     }
   ]
 }

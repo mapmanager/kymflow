@@ -47,18 +47,20 @@ def test_roi_with_channel_and_z() -> None:
 
 
 def test_roi_to_dict_from_dict() -> None:
-    """Test ROI serialization with channel and z."""
+    """Test ROI serialization with channel and z (new envelope format)."""
     logger.info("Testing ROI to_dict/from_dict with channel and z")
     
     bounds = RoiBounds(dim0_start=20, dim0_stop=80, dim1_start=10, dim1_stop=50)
     roi = ROI(id=1, channel=2, z=5, bounds=bounds, name="test", note="note")
     
-    # Serialize
+    # Serialize (new envelope format: roi_id, data, meta)
     roi_dict = roi.to_dict()
-    assert roi_dict["id"] == 1
+    assert roi_dict["roi_id"] == 1
     assert roi_dict["channel"] == 2
     assert roi_dict["z"] == 5
-    assert roi_dict["dim1_start"] == 10
+    # Bounds in data block: x0/x1=dim1, y0/y1=dim0
+    assert roi_dict["data"]["x0"] == 10  # dim1_start
+    assert roi_dict["data"]["y0"] == 20  # dim0_start
     
     # Deserialize
     roi2 = ROI.from_dict(roi_dict)
@@ -67,7 +69,7 @@ def test_roi_to_dict_from_dict() -> None:
     assert roi2.z == 5
     assert roi2.bounds.dim1_start == 10
     
-    # Test defaults (missing channel/z)
+    # Test defaults (missing channel/z) via legacy format
     roi_dict_minimal = {"id": 1, "dim0_start": 20, "dim0_stop": 80, "dim1_start": 10, "dim1_stop": 50}
     roi3 = ROI.from_dict(roi_dict_minimal)
     assert roi3.channel == 1  # Default
@@ -1321,7 +1323,7 @@ def test_roiset_edit_roi_no_recalc_when_name_changes() -> None:
 
 
 def test_roi_image_stats_serialization() -> None:
-    """Test that ROI image stats are serialized to/from JSON."""
+    """Test that ROI image stats are serialized to/from JSON (new envelope format)."""
     logger.info("Testing ROI image stats serialization")
     
     test_image = np.array([[10, 20], [30, 40]], dtype=np.uint8)
@@ -1331,14 +1333,15 @@ def test_roi_image_stats_serialization() -> None:
     bounds = RoiBounds(dim0_start=0, dim0_stop=2, dim1_start=0, dim1_stop=2)
     roi = acq_image.rois.create_roi(bounds=bounds, channel=1, z=0)
     
-    # Serialize
+    # Serialize (stats in meta sub-dict)
     roi_dict = roi.to_dict()
-    assert "img_min" in roi_dict
-    assert "img_max" in roi_dict
-    assert "img_mean" in roi_dict
-    assert "img_std" in roi_dict
-    assert roi_dict["img_min"] == 10
-    assert roi_dict["img_max"] == 40
+    assert "meta" in roi_dict
+    assert "img_min" in roi_dict["meta"]
+    assert "img_max" in roi_dict["meta"]
+    assert "img_mean" in roi_dict["meta"]
+    assert "img_std" in roi_dict["meta"]
+    assert roi_dict["meta"]["img_min"] == 10
+    assert roi_dict["meta"]["img_max"] == 40
     
     # Deserialize
     roi2 = ROI.from_dict(roi_dict)
@@ -1350,10 +1353,10 @@ def test_roi_image_stats_serialization() -> None:
 
 
 def test_roi_image_stats_backward_compatibility() -> None:
-    """Test that old JSON files without image stats load correctly."""
+    """Test that old JSON files without image stats load correctly (legacy flat format)."""
     logger.info("Testing ROI image stats backward compatibility")
     
-    # Simulate old JSON format (no image stats fields)
+    # Simulate old JSON format (legacy flat: no image stats, no meta block)
     old_roi_dict = {
         "id": 1,
         "channel": 1,
@@ -1376,6 +1379,73 @@ def test_roi_image_stats_backward_compatibility() -> None:
     assert roi.img_std is None
     
     logger.info("  - ROI backward compatibility works correctly")
+
+
+def test_roi_from_dict_envelope_format() -> None:
+    """Test from_dict with new envelope format (roi_id, data, meta)."""
+    logger.info("Testing ROI from_dict with envelope format")
+    
+    envelope_dict = {
+        "roi_id": 42,
+        "roi_type": "rect",
+        "version": "1.0",
+        "name": "test",
+        "note": "note",
+        "channel": 2,
+        "z": 1,
+        "data": {"x0": 10, "x1": 50, "y0": 20, "y1": 80},
+        "meta": {"revision": 1, "img_min": 5, "img_max": 200, "img_mean": 100.0, "img_std": 50.0},
+    }
+    
+    roi = ROI.from_dict(envelope_dict)
+    assert roi.id == 42
+    assert roi.channel == 2
+    assert roi.z == 1
+    assert roi.name == "test"
+    assert roi.bounds.dim0_start == 20
+    assert roi.bounds.dim0_stop == 80
+    assert roi.bounds.dim1_start == 10
+    assert roi.bounds.dim1_stop == 50
+    assert roi.img_min == 5
+    assert roi.img_max == 200
+    assert roi.img_mean == pytest.approx(100.0)
+    assert roi.img_std == pytest.approx(50.0)
+    
+    logger.info("  - ROI from_dict envelope format works correctly")
+
+
+def test_roi_from_dict_legacy_flat_format() -> None:
+    """Test from_dict with legacy flat format (id, dim0_start, etc. at top level)."""
+    logger.info("Testing ROI from_dict with legacy flat format")
+    
+    legacy_dict = {
+        "id": 7,
+        "channel": 1,
+        "z": 0,
+        "name": "legacy",
+        "note": "",
+        "revision": 0,
+        "dim0_start": 5,
+        "dim0_stop": 95,
+        "dim1_start": 15,
+        "dim1_stop": 85,
+        "img_min": 10,
+        "img_max": 255,
+    }
+    
+    roi = ROI.from_dict(legacy_dict)
+    assert roi.id == 7
+    assert roi.channel == 1
+    assert roi.z == 0
+    assert roi.name == "legacy"
+    assert roi.bounds.dim0_start == 5
+    assert roi.bounds.dim0_stop == 95
+    assert roi.bounds.dim1_start == 15
+    assert roi.bounds.dim1_stop == 85
+    assert roi.img_min == 10
+    assert roi.img_max == 255
+    
+    logger.info("  - ROI from_dict legacy flat format works correctly")
 
 
 def test_roi_image_stats_round_trip() -> None:
