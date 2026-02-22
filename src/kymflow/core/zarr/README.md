@@ -22,3 +22,16 @@ uv run python examples/ingest_example.py
 - Images stored at: `images/<image_id>/data`
 - Analysis blobs stored under: `images/<image_id>/analysis/`
 - Manifest stored at: `index/manifest.json.gz`
+
+## Developer Note (Split Repo)
+When working against the extracted standalone sibling repo `../acqstore`:
+
+```bash
+uv pip install -e ../acqstore
+```
+
+Run acqstore tests from the `acqstore/` repo:
+
+```bash
+uv run pytest -q
+```
