@@ -27,7 +27,8 @@ _COLUMN_VISIBLE_PREFIX = "✓ "
 FILE_TABLE_CONTEXT_MENU_ITEMS = [
     {"id": "reveal_in_finder", "label": "Reveal In Finder"},
     {"id": "copy_file_table", "label": "Copy File Table"},
-    {"id": "other", "label": "Other..."},
+    {"id": "copy_radon_report", "label": "Copy Radon Report"},
+    {"id": "copy_kym_event_report", "label": "Copy Kym Event Report"},
 ]
 
 
