@@ -6,34 +6,40 @@ Simple, reliable logging utilities for the kymflow application.
 - Reconfigure anytime by calling `setup_logging(...)` again.
 
 This uses the *root logger* so it plays nicely with most frameworks.
-Logs automatically go to ~/.kymflow/logs/kymflow.log by default.
+Log file is written under the same per-user app directory as user_config/app_config
+(platformdirs, app name "kymflow"), in a "logs" subfolder: e.g. kymflow.log.
 """
 
 from __future__ import annotations
 
 import logging
 import logging.handlers
-import os
 import sys
 from pathlib import Path
 from typing import Optional, Union
+
+from platformdirs import user_config_dir
+
+# App name used for config/log paths; must match user_config.py and app_config.py.
+_APP_NAME = "kymflow"
+_LOG_FILENAME = "kymflow.log"
 
 # Store the log file path for retrieval
 _LOG_FILE_PATH: Optional[Path] = None
 
 
-def _expand_path(path: Union[str, Path]) -> Path:
-    return Path(os.path.expanduser(str(path))).resolve()
-
-
 def setup_logging(
     level: Union[str, int] = "DEBUG",
-    log_file: Optional[Union[str, Path]] = "~/.kymflow/logs/kymflow.log",
     max_bytes: int = 5_000_000,
     backup_count: int = 5,
 ) -> None:
     """
-    Configure root logging with console + optional rotating file handler.
+    Configure root logging with console and rotating file handler.
+
+    Console and file both receive the same formatter. Console uses the given
+    level; file captures everything at DEBUG. Log file is always written to the
+    platformdirs-based kymflow config directory (same location as user_config
+    and app_config JSON files), in a "logs" subfolder.
 
     Calling this multiple times will reconfigure logging (removes old handlers first).
 
@@ -41,9 +47,6 @@ def setup_logging(
     ----------
     level:
         Logging level for console (e.g. "DEBUG", "INFO").
-    log_file:
-        Path to a log file. Defaults to "~/.kymflow/logs/kymflow.log".
-        Set to None to disable file logging (console only).
     max_bytes:
         Max size in bytes for rotating log file.
     backup_count:
@@ -54,46 +57,41 @@ def setup_logging(
         level = getattr(logging, level.upper(), logging.INFO)
 
     root = logging.getLogger()
-    
+
     # Remove existing handlers to allow reconfiguration
-    # This prevents duplicate handlers while allowing logging to be reconfigured
     for handler in root.handlers[:]:
         handler.close()
         root.removeHandler(handler)
-    
+
     root.setLevel(level)
 
     # -------- Formatter --------
-    # fmt = "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d:%(funcName)s: %(message)s"    # Shorter format: removed line number and function name to reduce log line length
-    fmt = "[%(levelname)s] %(name)s:%(funcName)s:%(lineno)d: %(message)s"    # Shorter format: removed line number and function name to reduce log line length
+    fmt = "[%(levelname)s] %(name)s:%(funcName)s:%(lineno)d: %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
     formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
 
-    # -------- Console handler --------
+    # -------- Console handler (unchanged) --------
     console = logging.StreamHandler(sys.stderr)
     console.setLevel(level)
     console.setFormatter(formatter)
     root.addHandler(console)
 
-    # -------- File handler (optional) --------
+    # -------- File handler (platformdirs-based path, same folder as user_config) --------
     global _LOG_FILE_PATH
-    if log_file is not None:
-        log_path = _expand_path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        _LOG_FILE_PATH = log_path
+    log_dir = Path(user_config_dir(_APP_NAME)) / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / _LOG_FILENAME
+    _LOG_FILE_PATH = log_path
 
-        file_handler = logging.handlers.RotatingFileHandler(
-            filename=log_path,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding="utf-8",
-        )
-        file_handler.setLevel(logging.DEBUG)  # capture everything to file
-        file_handler.setFormatter(formatter)
-        root.addHandler(file_handler)
-    else:
-        # Clear log file path when file logging is disabled
-        _LOG_FILE_PATH = None
+    file_handler = logging.handlers.RotatingFileHandler(
+        filename=log_path,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)  # capture everything to file
+    file_handler.setFormatter(formatter)
+    root.addHandler(file_handler)
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -114,11 +112,11 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 
 def get_log_file_path() -> Optional[Path]:
     """
-    Get the path to the log file, if file logging is configured.
+    Get the path to the log file (always set after setup_logging).
 
     Returns
     -------
-    Path to the log file, or None if file logging is not configured.
+    Path to the log file.
 
     Examples
     --------

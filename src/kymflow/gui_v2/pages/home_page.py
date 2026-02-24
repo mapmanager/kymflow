@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from nicegui import ui
 
@@ -68,8 +68,6 @@ from kymflow.gui_v2.views import (
     TaskProgressBindings,
     TaskProgressView,
 )
-from nicewidgets.utils.clipboard import copy_to_clipboard
-from nicewidgets.utils.file_manager import reveal_in_file_manager
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.utils.lazy_section import LazySection, LazySectionConfig  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc
@@ -151,10 +149,13 @@ class HomePage(BasePage):
         )
         # Right-click context menu is built by FileTableContextMenu and wired into the grid.
         _file_table_menu = FileTableContextMenu(
-            on_action=self._on_context_menu,
+            get_selected_file=lambda: self.context.app_state.selected_file,
+            get_table_text=lambda: self._file_table_view.get_table_as_text(),
             get_grid=lambda: self._file_table_view._grid,
             toggleable_columns=get_file_table_toggleable_column_fields(),
             initial_visibility=get_file_table_initial_column_visibility(),
+            get_radon_report_text=lambda: self._dataframe_to_csv_text(self._get_radon_report_df_safe()),
+            get_kym_event_report_text=lambda: self._dataframe_to_csv_text(self._get_velocity_event_df_safe()),
         )
         self._file_table_view.set_context_menu_builder(_file_table_menu.build)
         self._image_line_viewer = ImageLineViewerView(
@@ -749,36 +750,38 @@ class HomePage(BasePage):
             )
         )
 
-    def _on_context_menu(self, action: str) -> None:
-        """Handle context menu actions for file table.
-        
-        Args:
-            action: Action identifier ('reveal_in_finder' or 'other')
-        """
-        if action == 'reveal_in_finder':
+    def _dataframe_to_csv_text(self, df: Any) -> str:
+        """Return DataFrame as CSV string for clipboard; empty string if None or empty."""
+        if df is None:
+            return ""
+        try:
+            if getattr(df, "empty", True):
+                return ""
+            return df.to_csv(index=False, sep="\t")
+        except Exception:
+            return ""
 
-            selected_file = self.context.app_state.selected_file
-            if selected_file is None:
-                logger.warning(f"No file selected for context menu action: {action}")
-                return
+    def _get_radon_report_df_safe(self) -> Any:
+        """Return radon report DataFrame from app_state.files, or None if unavailable."""
+        app_state = self.context.app_state
+        if app_state.files is None or not hasattr(app_state.files, "get_radon_report_df"):
+            return None
+        try:
+            return app_state.files.get_radon_report_df()
+        except Exception as ex:
+            logger.warning("get_radon_report_df failed: %s", ex)
+            return None
 
-            # TODO: Implement reveal in Finder functionality
-            # Example: subprocess.run(['open', '-R', str(selected_file.path)])
-            logger.info(f"Reveal In Finder: {selected_file.path}")
-            
-            reveal_in_file_manager(selected_file.path)
-        elif action == 'copy_file_table':
-            table_text = self._file_table_view.get_table_as_text()
-            if table_text:
-                copy_to_clipboard(table_text)
-                logger.info("File table copied to clipboard")
-            else:
-                logger.warning("No table data to copy")
-        elif action == 'other':
-            # TODO: Implement other action functionality
-            logger.info(f"Other action:")
-        else:
-            logger.warning(f"Unknown context menu action: '{action}'")
+    def _get_velocity_event_df_safe(self) -> Any:
+        """Return velocity event DataFrame from app_state.files, or None if unavailable."""
+        app_state = self.context.app_state
+        if app_state.files is None or not hasattr(app_state.files, "get_velocity_event_df"):
+            return None
+        try:
+            return app_state.files.get_velocity_event_df()
+        except Exception as ex:
+            logger.warning("get_velocity_event_df failed: %s", ex)
+            return None
 
     def _register_save_selected_shortcut(self) -> None:
         """Register global Command+S/Ctrl+S shortcut for save selected (unless editing)."""
@@ -1069,7 +1072,7 @@ class HomePage(BasePage):
             if self._persistence is not None:
                 restored = self._persistence.restore_selection()
                 if restored:
-                    logger.error(f'=== CALLING self._file_table_view.set_selected_paths')
+                    logger.error("=== CALLING self._file_table_view.set_selected_paths")
                     self._file_table_view.set_selected_paths(
                         restored, origin=SelectionOrigin.RESTORE
                     )

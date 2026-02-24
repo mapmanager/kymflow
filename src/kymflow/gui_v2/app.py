@@ -39,10 +39,7 @@ from kymflow.gui_v2.pages.home_page import HomePage
 logger = get_logger(__name__)
 
 # Configure logging at module import (runs in uvicorn worker)
-setup_logging(
-    level="DEBUG",
-    log_file=Path.home() / ".kymflow" / "logs" / "kymflow.log",
-)
+setup_logging(level="DEBUG")
 
 # Shared application context (singleton, process-level)
 # AppContext.__init__ will check if we're in a worker process and skip initialization
