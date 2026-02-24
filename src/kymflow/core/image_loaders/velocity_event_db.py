@@ -18,6 +18,10 @@ from kymflow.core.image_loaders.velocity_event_report import (
     VelocityEventReport,
 )
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.utils.hidden_cache_paths import (
+    ensure_hidden_cache_dir,
+    get_hidden_cache_path,
+)
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
 if TYPE_CHECKING:
@@ -106,12 +110,14 @@ class VelocityEventDb:
         if self._db_path is None:
             return
 
+        load_path = get_hidden_cache_path(self._db_path)
+
         need_rebuild = False
         rebuild_reason = ""
 
-        if self._db_path.exists():
+        if load_path.exists():
             try:
-                df = pd.read_csv(self._db_path)
+                df = pd.read_csv(load_path)
                 missing = _EXPECTED_COLS - set(df.columns)
                 if missing:
                     need_rebuild = True
@@ -134,7 +140,7 @@ class VelocityEventDb:
                         need_rebuild = True
                         rebuild_reason = "cache was stale vs images"
             except Exception as e:
-                logger.error("Failed to load velocity event DB from %s: %s", self._db_path, e)
+                logger.error("Failed to load velocity event DB from %s: %s", load_path, e)
                 need_rebuild = True
                 rebuild_reason = "load failed"
         else:
@@ -161,11 +167,10 @@ class VelocityEventDb:
             if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
                 return
 
-            # Rebuild in-memory cache only. Do NOT persist to CSV here.
-            # CSV is saved only when user explicitly saves (Save Selected / Save All)
-            # via update_velocity_event_for_image -> update_from_image_and_persist.
+            # Persist to both visible and hidden CSV so they exist after first run or recovery.
+            self.save()
             logger.info("Velocity event DB load complete (rebuilt from images: %s)", rebuild_reason)
-            
+
             if progress_cb is not None and n > 0:
                 progress_cb(
                     ProgressMessage(
@@ -287,6 +292,13 @@ class VelocityEventDb:
                 df = pd.DataFrame(columns=col_order)
             logger.info("Saving velocity event DB to: %s", self._db_path)
             df.to_csv(self._db_path, index=False)
+
+            # Also save a hidden copy under .kymflow_hidden for robust loading
+            hidden_dir = ensure_hidden_cache_dir(self._db_path)
+            hidden_path = hidden_dir / self._db_path.name
+            df.to_csv(hidden_path, index=False)
+            logger.warning("Saving velocity event DB to hidden path: %s", hidden_path)
+
             return True
         except Exception as e:
             logger.error("Failed to save velocity event DB: %s", e)

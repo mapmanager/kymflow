@@ -28,6 +28,10 @@ from kymflow.core.image_loaders.radon_report import RadonReport
 from kymflow.core.image_loaders.velocity_event_db import VelocityEventDb
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
+from kymflow.core.utils.hidden_cache_paths import (
+    ensure_hidden_cache_dir,
+    get_hidden_cache_path,
+)
 
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import (
@@ -329,11 +333,13 @@ class KymImageList(AcqImageList[KymImage]):
         if db_path is None:
             return
 
+        load_path = get_hidden_cache_path(db_path)
+
         need_rebuild = False
         rebuild_reason = ""
-        if db_path.exists():
+        if load_path.exists():
             try:
-                df = pd.read_csv(db_path)
+                df = pd.read_csv(load_path)
                 expected_cols = {f.name for f in fields(RadonReport)}
                 missing = expected_cols - set(df.columns)
                 if missing:
@@ -357,7 +363,7 @@ class KymImageList(AcqImageList[KymImage]):
                         cache[path_str].append(report)
                     self._radon_report_cache = cache
             except Exception as e:
-                logger.warning(f"Failed to load radon report DB from {db_path}: {e}")
+                logger.warning(f"Failed to load radon report DB from {load_path}: {e}")
                 need_rebuild = True
                 rebuild_reason = "load failed"
         else:
@@ -401,6 +407,7 @@ class KymImageList(AcqImageList[KymImage]):
         db_path = self._get_radon_db_path()
         if db_path is None:
             return False
+
         reports = self.get_radon_report()
         if not reports:
             return False
@@ -415,7 +422,15 @@ class KymImageList(AcqImageList[KymImage]):
         # logger.info(f"  {db_path}")
         # print(df.head())
 
+        # Save to visible path (existing behavior)
         df.to_csv(db_path, index=False)
+
+        # Also save a hidden copy under .kymflow_hidden for robust loading
+        hidden_dir = ensure_hidden_cache_dir(db_path)
+        hidden_path = hidden_dir / db_path.name
+        df.to_csv(hidden_path, index=False)
+        logger.warning("Saving radon report DB to hidden path: %s", hidden_path)
+
         return True
 
     def update_radon_report_cache_only(self, kym_image: KymImage) -> None:

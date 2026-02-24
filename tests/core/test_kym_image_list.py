@@ -22,6 +22,7 @@ from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.utils import get_data_folder
 from kymflow.core.utils.logging import get_logger, setup_logging
+from kymflow.core.utils.hidden_cache_paths import get_hidden_cache_path
 
 setup_logging()
 logger = get_logger(__name__)
@@ -534,6 +535,12 @@ def test_kym_image_list_load_and_save_radon_report_db() -> None:
         saved_df = pd.read_csv(db_path)
         assert "_unique_row_id" in saved_df.columns
 
+        # Hidden copy should also exist and match schema
+        hidden_path = get_hidden_cache_path(db_path)
+        assert hidden_path.exists()
+        hidden_df = pd.read_csv(hidden_path)
+        assert set(hidden_df.columns) == set(saved_df.columns)
+
         image_list2 = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
         assert len(image_list2._radon_report_cache) >= 1
         assert len(image_list2.get_radon_report()) >= 1
@@ -585,6 +592,12 @@ def test_save_analysis_updates_radon_db_csv() -> None:
         assert "vel_mean" in df.columns and pd.notna(row["vel_mean"])
         assert "vel_cv" in df.columns  # may be NaN if mean was 0
 
+        # Hidden copy should also exist and have at least the same columns
+        hidden_path = get_hidden_cache_path(db_path)
+        assert hidden_path.exists()
+        hidden_df = pd.read_csv(hidden_path)
+        assert set(df.columns).issubset(set(hidden_df.columns))
+
 
 def test_radon_db_no_file_build_and_save() -> None:
     """No DB file on load: build entire DB and save (same worker, progress)."""
@@ -616,6 +629,10 @@ def test_radon_db_no_file_build_and_save() -> None:
         assert "vel_cv" in df.columns
         assert len(df) >= 1
         assert df.iloc[0]["roi_id"] == roi.id
+
+        # Hidden copy should also exist after rebuild-and-save
+        hidden_path = get_hidden_cache_path(db_path)
+        assert hidden_path.exists()
 
 
 def test_radon_db_stale_rebuild_and_save() -> None:

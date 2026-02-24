@@ -20,6 +20,7 @@ from kymflow.core.image_loaders.velocity_event_report import VelocityEventReport
 from dataclasses import fields
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.utils.logging import get_logger, setup_logging
+from kymflow.core.utils.hidden_cache_paths import get_hidden_cache_path
 
 setup_logging()
 logger = get_logger(__name__)
@@ -127,6 +128,12 @@ def test_velocity_event_db_save_and_load() -> None:
         assert "roi_id" in df.columns
         assert len(df) == 1
 
+        # Hidden copy should also exist and match schema
+        hidden_path = get_hidden_cache_path(db_path)
+        assert hidden_path.exists()
+        hidden_df = pd.read_csv(hidden_path)
+        assert set(hidden_df.columns) == set(df.columns)
+
 
 def test_velocity_event_db_roundtrip_cache_csv_load() -> None:
     """Roundtrip: runtime cache → save CSV → load CSV → loaded cache.
@@ -216,6 +223,12 @@ def test_velocity_event_db_save_empty_cache_roundtrip() -> None:
         loaded_cache = df_after.to_dict("records")
         assert loaded_cache == [], "Loaded cache from empty CSV should be []"
 
+        # Hidden copy should also exist and have the same columns
+        hidden_path = get_hidden_cache_path(db_path)
+        assert hidden_path.exists()
+        hidden_df = pd.read_csv(hidden_path)
+        assert set(hidden_df.columns) == set(df_after.columns)
+
 
 def test_velocity_event_db_rebuild_from_images() -> None:
     """Test rebuild_from_images replaces cache."""
@@ -292,6 +305,29 @@ def test_kym_image_list_update_velocity_event_for_image() -> None:
         assert "_unique_row_id" in df.columns
         db_path = tmp_path / "kym_event_db.csv"
         assert db_path.exists()
+
+
+def test_kym_event_db_no_hidden_rebuild_saves_both_visible_and_hidden() -> None:
+    """When hidden kym event CSV is missing, load triggers rebuild then saves both visible and hidden."""
+    expected_cols = {f.name for f in fields(VelocityEventReport)}
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "a.tif").touch()
+        # No visible or hidden kym_event_db.csv yet
+        visible_path = tmp_path / "kym_event_db.csv"
+        hidden_path = get_hidden_cache_path(visible_path)
+        assert not visible_path.exists()
+        assert not hidden_path.exists()
+
+        # KymImageList init triggers _velocity_event_db.load(); no hidden -> rebuild -> save()
+        KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+
+        assert visible_path.exists()
+        assert hidden_path.exists()
+        df_visible = pd.read_csv(visible_path)
+        df_hidden = pd.read_csv(hidden_path)
+        assert set(df_visible.columns) == set(df_hidden.columns)
+        assert expected_cols.issubset(set(df_visible.columns))
 
 
 # ---------------------------------------------------------------------------
