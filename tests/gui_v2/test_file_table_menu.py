@@ -8,7 +8,10 @@ from kymflow.gui_v2.menus.file_table_menu import (
     FILE_TABLE_CONTEXT_MENU_ITEMS,
     FileTableContextMenu,
 )
-from kymflow.gui_v2.views.file_table_view import get_file_table_toggleable_column_fields
+from kymflow.gui_v2.views.file_table_view import (
+    get_file_table_initial_column_visibility,
+    get_file_table_toggleable_column_fields,
+)
 
 
 def test_file_table_context_menu_items_config() -> None:
@@ -111,3 +114,18 @@ def test_file_table_context_menu_visible_cache_initialized() -> None:
         toggleable_columns=toggleable,
     )
     assert menu._visible_cache == {"a": True, "b": True}
+
+
+def test_file_table_context_menu_initial_visibility_seeded_from_config() -> None:
+    """Visible cache honors initial_visibility mapping when provided."""
+    toggleable = ["File Name", "Parent Folder"]
+    visibility = get_file_table_initial_column_visibility()
+    menu = FileTableContextMenu(
+        on_action=lambda a: None,
+        get_grid=lambda: None,
+        toggleable_columns=toggleable,
+        initial_visibility=visibility,
+    )
+    # "Parent Folder" has hide=True in the default columns, so should start hidden.
+    assert menu._visible_cache["File Name"] is True
+    assert menu._visible_cache["Parent Folder"] is False

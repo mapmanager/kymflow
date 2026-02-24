@@ -37,7 +37,10 @@ from kymflow.gui_v2.events import FileSelection, NextPrevFileEvent, SaveSelected
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.utils.splitter_handle import add_splitter_handle
 from kymflow.gui_v2.menus import FileTableContextMenu
-from kymflow.gui_v2.views.file_table_view import get_file_table_toggleable_column_fields
+from kymflow.gui_v2.views.file_table_view import (
+    get_file_table_initial_column_visibility,
+    get_file_table_toggleable_column_fields,
+)
 from kymflow.gui_v2.views import (
     AboutTabView,
     AnalysisToolbarBindings,
@@ -151,6 +154,7 @@ class HomePage(BasePage):
             on_action=self._on_context_menu,
             get_grid=lambda: self._file_table_view._grid,
             toggleable_columns=get_file_table_toggleable_column_fields(),
+            initial_visibility=get_file_table_initial_column_visibility(),
         )
         self._file_table_view.set_context_menu_builder(_file_table_menu.build)
         self._image_line_viewer = ImageLineViewerView(

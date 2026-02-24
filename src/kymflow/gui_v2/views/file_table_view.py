@@ -113,6 +113,23 @@ def get_file_table_toggleable_column_fields() -> list[str]:
     return [c.field for c in _default_columns()]
 
 
+def get_file_table_initial_column_visibility() -> dict[str, bool]:
+    """Return initial visibility for each toggleable column based on default config.
+
+    Uses the same ``hide`` flag that seeds AG Grid ``columnDefs`` so the context
+    menu's initial checkmarks match the configured file table column visibility.
+
+    Returns:
+        Mapping from column field name to ``True`` (visible) or ``False`` (hidden).
+    """
+    visibility: dict[str, bool] = {}
+    for col in _default_columns():
+        extra = col.extra_grid_options or {}
+        hidden = bool(extra.get("hide", False))
+        visibility[col.field] = not hidden
+    return visibility
+
+
 class FileTableView:
     """File table view component using CustomAgGrid.
 

@@ -48,6 +48,7 @@ class FileTableContextMenu:
         on_action: Callable[[str], None],
         get_grid: Callable[[], Any],
         toggleable_columns: list[str],
+        initial_visibility: dict[str, bool] | None = None,
     ) -> None:
         """Create a file table context menu builder.
 
@@ -58,12 +59,21 @@ class FileTableContextMenu:
                 if the grid is not yet created). Used for column visibility toggles.
             toggleable_columns: List of column field ids that can be shown/hidden.
                 Typically from get_file_table_toggleable_column_fields().
+            initial_visibility: Optional mapping from column field name to initial
+                visibility (True for visible, False for hidden). When provided, the
+                internal visibility cache is seeded from this config-only state.
         """
         self._on_action = on_action
         self._get_grid = get_grid
         self._toggleable_columns = list(toggleable_columns)
-        # Cache visibility per column; start with all visible.
-        self._visible_cache: dict[str, bool] = {c: True for c in self._toggleable_columns}
+        # Cache visibility per column; seed from config-only initial visibility if provided,
+        # otherwise start with all columns visible.
+        if initial_visibility is not None:
+            self._visible_cache: dict[str, bool] = {
+                c: bool(initial_visibility.get(c, True)) for c in self._toggleable_columns
+            }
+        else:
+            self._visible_cache: dict[str, bool] = {c: True for c in self._toggleable_columns}
 
     def build(self) -> None:
         """Populate the current context menu (call only from grid's contextmenu handler).
