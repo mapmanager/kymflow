@@ -36,6 +36,8 @@ from kymflow.gui_v2.controllers import (
 from kymflow.gui_v2.events import FileSelection, NextPrevFileEvent, SaveSelected, SelectionOrigin
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.utils.splitter_handle import add_splitter_handle
+from kymflow.gui_v2.menus import FileTableContextMenu
+from kymflow.gui_v2.views.file_table_view import get_file_table_toggleable_column_fields
 from kymflow.gui_v2.views import (
     AboutTabView,
     AnalysisToolbarBindings,
@@ -144,6 +146,13 @@ class HomePage(BasePage):
             on_analysis_update=bus.emit,
             selection_mode="single",
         )
+        # Right-click context menu is built by FileTableContextMenu and wired into the grid.
+        _file_table_menu = FileTableContextMenu(
+            on_action=self._on_context_menu,
+            get_grid=lambda: self._file_table_view._grid,
+            toggleable_columns=get_file_table_toggleable_column_fields(),
+        )
+        self._file_table_view.set_context_menu_builder(_file_table_menu.build)
         self._image_line_viewer = ImageLineViewerView(
             on_kym_event_x_range=bus.emit,
             on_set_roi_bounds=bus.emit,
@@ -942,23 +951,9 @@ class HomePage(BasePage):
                         with ui.column().classes("w-full flex-none"):
                             self._folder_view.render(initial_folder=self.context.app_state.folder)
 
-                        # File table gets all remaining height
+                        # File table gets all remaining height. Context menu is provided by
+                        # FileTableContextMenu via the grid's on_build_context_menu (Phase 1).
                         with ui.column().classes("w-full flex-1 min-h-0"):
-                            # Context menu for file table actions
-                            with ui.context_menu():
-                                ui.menu_item(
-                                    'Reveal In Finder',
-                                    on_click=lambda: self._on_context_menu('reveal_in_finder')
-                                )
-                                ui.menu_item(
-                                    'Copy File Table',
-                                    on_click=lambda: self._on_context_menu('copy_file_table')
-                                )
-                                ui.menu_item(
-                                    'Other...',
-                                    on_click=lambda: self._on_context_menu('other')
-                                )
-                            
                             self._file_table_view.render()
                             self._file_table_view.set_files(list(self.context.app_state.files))
                 

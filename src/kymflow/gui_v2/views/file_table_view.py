@@ -100,6 +100,19 @@ def _default_columns() -> list[ColumnConfig]:
         _col("accepted", "Accepted", width=100, editable=True, cell_class="ag-cell-center", editor="checkbox"),
     ]
 
+
+def get_file_table_toggleable_column_fields() -> list[str]:
+    """Return column field ids that can be toggled in the file table context menu.
+
+    Excludes the row index column (handled by the grid separately). Used by
+    FileTableContextMenu for the column visibility section.
+
+    Returns:
+        List of field names from the default file table columns.
+    """
+    return [c.field for c in _default_columns()]
+
+
 class FileTableView:
     """File table view component using CustomAgGrid.
 
@@ -129,13 +142,16 @@ class FileTableView:
         on_metadata_update: OnMetadataUpdate | None = None,
         on_analysis_update: OnAnalysisUpdate | None = None,
         selection_mode: SelectionMode = "single",
+        on_build_context_menu: Optional[Callable[[], None]] = None,
     ) -> None:
         self._app_context = app_context
         self._on_selected = on_selected
         self._on_metadata_update = on_metadata_update
         self._on_analysis_update = on_analysis_update
         self._selection_mode = selection_mode
+        self._on_build_context_menu: Optional[Callable[[], None]] = on_build_context_menu
 
+        # Grid and context menu (builder set later via set_context_menu_builder if needed).
         # self._grid: CustomAgGrid | None = None
         self._grid: CustomAgGrid_v2 | None = None
         self._grid_container: Optional[ui.element] = None  # pyinstaller table view
@@ -184,6 +200,19 @@ class FileTableView:
         self._create_grid(self._pending_rows)
         self._update_interaction_state()
 
+    def set_context_menu_builder(self, builder: Optional[Callable[[], None]]) -> None:
+        """Set the callback used to build the grid's right-click context menu.
+
+        Must be called before the first render() so the grid receives the builder.
+        If the grid was already created (e.g. after navigation), the next render()
+        will use the new builder.
+
+        Args:
+            builder: Called when the user opens the context menu; it should add
+                ui.menu_item(...) and ui.separator() to the current menu context.
+        """
+        self._on_build_context_menu = builder
+
     def _create_grid(self, rows: Rows) -> None:
         """Create a fresh grid instance inside the current container."""
         # if self._grid_container is None:
@@ -204,6 +233,7 @@ class FileTableView:
             grid_config=grid_cfg,
             parent=self._grid_container,
             runtimeWidgetName="FileTableView",
+            on_build_context_menu=self._on_build_context_menu,
         )
         self._grid.on_row_selected(self._on_row_selected)
         self._grid.on_cell_edited(self._on_cell_edited)
