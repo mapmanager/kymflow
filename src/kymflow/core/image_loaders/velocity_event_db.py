@@ -30,6 +30,7 @@ _EXPECTED_COLS = {
     "_unique_row_id",
     "path",
     "roi_id",
+    "channel",
     "rel_path",
     "parent_folder",
     "grandparent_folder",
@@ -326,6 +327,8 @@ class VelocityEventDb:
             accepted = ka.get_accepted()
             rows: List[dict] = []
             for roi_id in kym_image.rois.get_roi_ids():
+                roi = kym_image.rois.get(roi_id)
+                channel = roi.channel if roi is not None else None
                 events = ka.get_velocity_events(roi_id)
                 if events is None:
                     events = []
@@ -339,6 +342,7 @@ class VelocityEventDb:
                         parent_folder=parent_folder,
                         grandparent_folder=grandparent_folder,
                         accepted=accepted,
+                        channel=channel,
                     )
                     rows.append(report.to_dict())
 

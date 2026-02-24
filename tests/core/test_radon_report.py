@@ -54,6 +54,31 @@ def test_radon_report_from_dict_handles_nan() -> None:
     assert r.path == "/a.tif"
 
 
+def test_radon_report_channel_field() -> None:
+    """Test that RadonReport has channel field and it serializes."""
+    r = RadonReport(roi_id=1, channel=2, path="/a/b/file.tif")
+    assert r.channel == 2
+    d = r.to_dict()
+    assert "channel" in d
+    assert d["channel"] == 2
+
+
+def test_radon_report_from_dict_with_channel() -> None:
+    """Test RadonReport.from_dict with channel."""
+    data = {"roi_id": 1, "channel": 2, "path": "/a/b/file.tif"}
+    r = RadonReport.from_dict(data)
+    assert r.roi_id == 1
+    assert r.channel == 2
+
+
+def test_radon_report_from_dict_without_channel() -> None:
+    """Test RadonReport.from_dict without channel (backward compatibility)."""
+    data = {"roi_id": 1, "path": "/a.tif"}
+    r = RadonReport.from_dict(data)
+    assert r.roi_id == 1
+    assert r.channel is None
+
+
 def test_radon_report_vel_cv_field() -> None:
     """Test that RadonReport has vel_cv field (coefficient of variation)."""
     r = RadonReport(roi_id=1, vel_mean=1.0, vel_std=0.2, vel_cv=0.2)
@@ -74,6 +99,7 @@ def test_radon_report_to_dict_roundtrip() -> None:
     """Test to_dict -> from_dict roundtrip."""
     r = RadonReport(
         roi_id=2,
+        channel=1,
         vel_min=0.1,
         vel_max=2.0,
         vel_mean=1.0,
@@ -86,6 +112,7 @@ def test_radon_report_to_dict_roundtrip() -> None:
     d = r.to_dict()
     r2 = RadonReport.from_dict(d)
     assert r2.roi_id == r.roi_id
+    assert r2.channel == r.channel
     assert r2.vel_mean == r.vel_mean
     assert r2.vel_cv == r.vel_cv
     assert r2.path == r.path

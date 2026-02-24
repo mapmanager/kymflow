@@ -576,7 +576,7 @@ def test_save_analysis_updates_radon_db_csv() -> None:
         assert db_path.exists()
 
         df = pd.read_csv(db_path)
-        expected_cols = {"roi_id", "vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "vel_cv", "rel_path"}
+        expected_cols = {"roi_id", "channel", "vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "vel_cv", "rel_path"}
         assert expected_cols.issubset(set(df.columns)), f"Missing columns: {expected_cols - set(df.columns)}"
         assert len(df) >= 1
 

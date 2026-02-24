@@ -20,8 +20,9 @@ if TYPE_CHECKING:
 class VelocityEventReport:
     """Immutable dataclass representing a single velocity event row for kym_event_db.csv.
 
-    Combines identity (path, roi, rel_path) with all VelocityEvent attributes.
-    Used when building/loading the velocity event database cache.
+    Combines identity (path, roi, rel_path, channel) with all VelocityEvent attributes.
+    channel is populated from the ROI's channel attribute. Used when building/loading
+    the velocity event database cache.
     accepted: KymAnalysis-level boolean indicating whether this analysis has been accepted
         by the user (True/False), or None if not available. Set at the image level,
         applies to all events in the image.
@@ -32,6 +33,7 @@ class VelocityEventReport:
 
     # Content fields (first for easier CSV reading)
     roi_id: int = 0
+    channel: Optional[int] = None
     rel_path: Optional[str] = None
     parent_folder: Optional[str] = None
     grandparent_folder: Optional[str] = None
@@ -73,6 +75,7 @@ class VelocityEventReport:
         parent_folder: Optional[str] = None,
         grandparent_folder: Optional[str] = None,
         accepted: Optional[bool] = None,
+        channel: Optional[int] = None,
         round_decimals: Optional[int] = None,
     ) -> "VelocityEventReport":
         """Build a VelocityEventReport from a VelocityEvent and DB metadata."""
@@ -84,6 +87,7 @@ class VelocityEventReport:
             _unique_row_id=_unique_row_id,
             path=path_str,
             roi_id=roi_id,
+            channel=channel,
             rel_path=rel_path,
             parent_folder=parent_folder,
             grandparent_folder=grandparent_folder,
@@ -130,6 +134,8 @@ class VelocityEventReport:
                     value = None
                 if key == "roi_id":
                     filtered_data[key] = int(value) if value is not None else 0
+                elif key == "channel":
+                    filtered_data[key] = int(value) if value is not None else None
                 elif key in ["i_start", "i_peak", "i_end", "n_valid_in_event"]:
                     filtered_data[key] = int(value) if value is not None else None
                 elif key in [

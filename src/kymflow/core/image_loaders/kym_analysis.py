@@ -1624,7 +1624,7 @@ class KymAnalysis:
                     else:
                         vel_n_big = None
             
-            # Fetch ROI image statistics from the ROI object
+            # Fetch ROI image statistics and channel from the ROI object
             roi = self.acq_image.rois.get(roi_id)
             if roi is None:
                 logger.warning(f"ROI {roi_id} not found in rois collection")
@@ -1632,13 +1632,14 @@ class KymAnalysis:
                 img_max = None
                 img_mean = None
                 img_std = None
+                channel = None
             else:
                 # Get image statistics (may be None for old ROIs)
                 img_min = roi.img_min
                 img_max = roi.img_max
                 img_mean = float(roi.img_mean) if roi.img_mean is not None else None
                 img_std = float(roi.img_std) if roi.img_std is not None else None
-                
+                channel = roi.channel
                 # Log warning if any image stats are None (indicates they need to be calculated)
                 if any(stat is None for stat in [img_min, img_max, img_mean, img_std]):
                     logger.warning(
@@ -1650,6 +1651,7 @@ class KymAnalysis:
             # Create RadonReport instance
             radon_report = RadonReport(
                 roi_id=roi_id,
+                channel=channel,
                 vel_min=vel_min,
                 vel_max=vel_max,
                 vel_mean=vel_mean,

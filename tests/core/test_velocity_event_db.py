@@ -82,6 +82,25 @@ def test_velocity_event_db_update_from_image_with_events() -> None:
     assert events[1]["t_start"] == 2.0
 
 
+def test_velocity_event_db_update_from_image_includes_channel() -> None:
+    """Test that update_from_image populates channel from ROI.channel."""
+    kym_image = KymImage(img_data=np.zeros((50, 50), dtype=np.uint16), load_image=False)
+    kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
+    bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
+    # create_roi uses channel=1 by default; image has only channel 1
+    roi = kym_image.rois.create_roi(bounds=bounds, channel=1)
+    kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_image._file_path_dict[1] = Path("/tmp/test.tif")
+
+    db = VelocityEventDb(db_path=None)
+    db.update_from_image(kym_image)
+
+    events = db.get_all_events()
+    assert len(events) == 1
+    assert events[0]["channel"] == 1
+    assert events[0]["roi_id"] == roi.id
+
+
 def test_velocity_event_db_save_and_load() -> None:
     """Test save() persists to CSV and load() restores."""
     with TemporaryDirectory() as tmpdir:

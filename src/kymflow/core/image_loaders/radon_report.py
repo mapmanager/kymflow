@@ -20,6 +20,7 @@ class RadonReport:
     
     Attributes:
         roi_id: ROI identifier.
+        channel: Channel index from the ROI (roi.channel), or None if not available.
         vel_min: Minimum velocity value (mm/s), or None if not available.
         vel_max: Maximum velocity value (mm/s), or None if not available.
         vel_mean: Mean velocity value (mm/s), or None if not available.
@@ -47,6 +48,7 @@ class RadonReport:
     """
     
     roi_id: int
+    channel: Optional[int] = None
     vel_min: Optional[float] = None
     vel_max: Optional[float] = None
     vel_mean: Optional[float] = None
@@ -109,6 +111,8 @@ class RadonReport:
                     value = None
                 # Type conversions for robustness
                 if key == "roi_id":
+                    filtered_data[key] = int(value) if value is not None else None
+                elif key == "channel":
                     filtered_data[key] = int(value) if value is not None else None
                 elif key in ["img_min", "img_max", "vel_n_nan", "vel_n_zero", "vel_n_big"]:
                     filtered_data[key] = int(value) if value is not None else None
