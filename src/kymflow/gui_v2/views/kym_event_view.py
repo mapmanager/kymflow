@@ -17,6 +17,7 @@ from kymflow.gui_v2.events import (
     EventSelection,
     EventSelectionOptions,
     FileSelection,
+    KymScrollXEvent,
     NextPrevFileEvent,
     SelectionOrigin,
     SetKymEventRangeState,
@@ -35,6 +36,7 @@ OnRangeState = Callable[[SetKymEventRangeState], None]
 OnAddEvent = Callable[[AddKymEvent], None]
 OnDeleteEvent = Callable[[DeleteKymEvent], None]
 OnNextPrevFile = Callable[[NextPrevFileEvent], None]
+OnKymScrollX = Callable[[KymScrollXEvent], None]
 
 logger = get_logger(__name__)
 
@@ -117,6 +119,7 @@ class KymEventView:
         on_add_event: OnAddEvent | None = None,
         on_delete_event: OnDeleteEvent | None = None,
         on_next_prev_file: OnNextPrevFile | None = None,
+        on_kym_scroll_x: OnKymScrollX | None = None,
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._app_context = app_context
@@ -127,6 +130,7 @@ class KymEventView:
         self._on_add_event = on_add_event
         self._on_delete_event = on_delete_event
         self._on_next_prev_file = on_next_prev_file
+        self._on_kym_scroll_x = on_kym_scroll_x
         self._selection_mode = selection_mode
         self._grid: CustomAgGrid_v2 | None = None
         self._grid_container: ui.element | None = None  # pyinstaller event table
@@ -144,6 +148,8 @@ class KymEventView:
         self._delete_event_button: ui.button | None = None
         self._prev_file_button: ui.button | None = None
         self._next_file_button: ui.button | None = None
+        self._prev_window_button: ui.button | None = None
+        self._next_window_button: ui.button | None = None
         self._range_notification: ui.notification | None = None
         self._dismissing_programmatically: bool = False  # Flag to track programmatic dismiss
         self._selected_event_id: str | None = None
@@ -197,6 +203,18 @@ class KymEventView:
                         icon="keyboard_double_arrow_down",
                     ).props("dense").classes('text-sm')
                     self._next_file_button.tooltip("Next File")
+                    self._prev_window_button = ui.button(
+                        "",
+                        on_click=self._on_prev_window_clicked,
+                        icon="chevron_left",
+                    ).props("dense").classes('text-sm')
+                    self._prev_window_button.tooltip("Previous window")
+                    self._next_window_button = ui.button(
+                        "",
+                        on_click=self._on_next_window_clicked,
+                        icon="chevron_right",
+                    ).props("dense").classes('text-sm')
+                    self._next_window_button.tooltip("Next window")
 
                 # self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")  # Commented out - aggrid has 'file' column
 
@@ -794,7 +812,7 @@ class KymEventView:
     def _on_prev_file_clicked(self) -> None:
         """Handle Previous File button click."""
         if self._on_next_prev_file is None:
-            logger.warning("Previous File: on_next_prev_file callback not set")
+            # logger.warning("Previous File: on_next_prev_file callback not set")
             return
         self._on_next_prev_file(
             NextPrevFileEvent(
@@ -807,11 +825,37 @@ class KymEventView:
     def _on_next_file_clicked(self) -> None:
         """Handle Next File button click."""
         if self._on_next_prev_file is None:
-            logger.warning("Next File: on_next_prev_file callback not set")
+            # logger.warning("Next File: on_next_prev_file callback not set")
             return
         self._on_next_prev_file(
             NextPrevFileEvent(
                 direction="Next File",
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
+
+    def _on_prev_window_clicked(self) -> None:
+        """Handle Previous window (scroll x left) button click."""
+        if self._on_kym_scroll_x is None:
+            # logger.warning("Previous window: on_kym_scroll_x callback not set")
+            return
+        self._on_kym_scroll_x(
+            KymScrollXEvent(
+                direction="prev",
+                origin=SelectionOrigin.EXTERNAL,
+                phase="intent",
+            )
+        )
+
+    def _on_next_window_clicked(self) -> None:
+        """Handle Next window (scroll x right) button click."""
+        if self._on_kym_scroll_x is None:
+            # logger.warning("Next window: on_kym_scroll_x callback not set")
+            return
+        self._on_kym_scroll_x(
+            KymScrollXEvent(
+                direction="next",
                 origin=SelectionOrigin.EXTERNAL,
                 phase="intent",
             )

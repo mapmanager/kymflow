@@ -706,3 +706,26 @@ class NextPrevFileEvent:
     direction: Literal["Next File", "Prev File"]
     origin: SelectionOrigin = SelectionOrigin.EXTERNAL
     phase: EventPhase = "intent"
+
+
+@dataclass(frozen=True, slots=True)
+class KymScrollXEvent:
+    """Scroll the kym image/line plot x-axis to previous or next window (intent phase only).
+
+    Purpose:
+        Shift the current x-axis view window left (prev) or right (next) by one
+        window width, with clamping to data time bounds.
+    Triggered by:
+        - Intent: KymEventView chevron buttons (Previous window / Next window).
+    Consumed by:
+        - ImageLineViewerBindings (intent → calls view.scroll_x(direction)).
+
+    Attributes:
+        direction: "prev" (shift left) or "next" (shift right).
+        origin: SelectionOrigin (EXTERNAL for button clicks).
+        phase: Event phase - "intent" only.
+    """
+
+    direction: Literal["prev", "next"]
+    origin: SelectionOrigin = SelectionOrigin.EXTERNAL
+    phase: EventPhase = "intent"

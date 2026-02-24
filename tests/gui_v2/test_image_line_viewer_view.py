@@ -266,3 +266,87 @@ def test_set_event_filter_deselects_when_filtered_out(image_line_viewer_view: Im
     # Verify ui_plotly_update_figure was called
     image_line_viewer_view.ui_plotly_update_figure.assert_called_once()
 
+
+def test_scroll_x_no_op_when_no_figure_dict(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that scroll_x is a no-op when _current_figure_dict is None."""
+    image_line_viewer_view._current_figure_dict = None
+    image_line_viewer_view._plot = MagicMock()
+    image_line_viewer_view.ui_plotly_update_figure = MagicMock()
+    image_line_viewer_view.scroll_x("prev")
+    image_line_viewer_view.scroll_x("next")
+    # No exception; ui_plotly_update_figure not called because _scroll_x_impl returns early
+    image_line_viewer_view.ui_plotly_update_figure.assert_not_called()
+
+
+def test_scroll_x_prev_shifts_window_left(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that scroll_x('prev') shifts the x-axis window left by one window width."""
+    image_line_viewer_view._current_figure_dict = {
+        "layout": {
+            "xaxis": {"range": [2.0, 5.0]},
+            "xaxis2": {"range": [2.0, 5.0]},
+        },
+    }
+    image_line_viewer_view._plot = MagicMock()
+    image_line_viewer_view._current_file = MagicMock()
+    image_line_viewer_view._current_roi_id = 1
+    mock_analysis = MagicMock()
+    mock_analysis.get_time_bounds.return_value = (0.0, 10.0)
+    image_line_viewer_view._current_file.get_kym_analysis.return_value = mock_analysis
+    image_line_viewer_view.ui_plotly_update_figure = MagicMock()
+
+    image_line_viewer_view._scroll_x_impl("prev")
+
+    # Window was [2, 5], width=3. Prev -> [2-3, 2] = [-1, 2], clamped to [0, 3]
+    layout = image_line_viewer_view._current_figure_dict["layout"]
+    assert layout["xaxis"]["range"] == [0.0, 3.0]
+    assert layout["xaxis2"]["range"] == [0.0, 3.0]
+    image_line_viewer_view.ui_plotly_update_figure.assert_called_once()
+
+
+def test_scroll_x_next_shifts_window_right(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that scroll_x('next') shifts the x-axis window right by one window width."""
+    image_line_viewer_view._current_figure_dict = {
+        "layout": {
+            "xaxis": {"range": [2.0, 5.0]},
+            "xaxis2": {"range": [2.0, 5.0]},
+        },
+    }
+    image_line_viewer_view._plot = MagicMock()
+    image_line_viewer_view._current_file = MagicMock()
+    image_line_viewer_view._current_roi_id = 1
+    mock_analysis = MagicMock()
+    mock_analysis.get_time_bounds.return_value = (0.0, 10.0)
+    image_line_viewer_view._current_file.get_kym_analysis.return_value = mock_analysis
+    image_line_viewer_view.ui_plotly_update_figure = MagicMock()
+
+    image_line_viewer_view._scroll_x_impl("next")
+
+    # Window was [2, 5], width=3. Next -> [5, 8]
+    layout = image_line_viewer_view._current_figure_dict["layout"]
+    assert layout["xaxis"]["range"] == [5.0, 8.0]
+    assert layout["xaxis2"]["range"] == [5.0, 8.0]
+    image_line_viewer_view.ui_plotly_update_figure.assert_called_once()
+
+
+def test_scroll_x_next_clamps_at_right_edge(image_line_viewer_view: ImageLineViewerView) -> None:
+    """Test that scroll_x('next') clamps when the new window would go past time_max."""
+    image_line_viewer_view._current_figure_dict = {
+        "layout": {
+            "xaxis": {"range": [5.0, 10.0]},
+            "xaxis2": {"range": [5.0, 10.0]},
+        },
+    }
+    image_line_viewer_view._plot = MagicMock()
+    image_line_viewer_view._current_file = MagicMock()
+    image_line_viewer_view._current_roi_id = 1
+    mock_analysis = MagicMock()
+    mock_analysis.get_time_bounds.return_value = (0.0, 10.0)
+    image_line_viewer_view._current_file.get_kym_analysis.return_value = mock_analysis
+    image_line_viewer_view.ui_plotly_update_figure = MagicMock()
+
+    image_line_viewer_view._scroll_x_impl("next")
+
+    # Window was [5, 10], width=5. Next -> [10, 15] but time_max=10, so clamp to [5, 10]
+    layout = image_line_viewer_view._current_figure_dict["layout"]
+    assert layout["xaxis"]["range"] == [5.0, 10.0]
+    assert layout["xaxis2"]["range"] == [5.0, 10.0]

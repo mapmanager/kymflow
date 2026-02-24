@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kymflow.gui_v2.events import SetKymEventRangeState
+from kymflow.gui_v2.events import KymScrollXEvent, SetKymEventRangeState
 from kymflow.gui_v2.views.kym_event_view import KymEventView
 
 
@@ -32,7 +32,34 @@ def kym_event_view(mock_app_context) -> KymEventView:
         on_add_event=lambda e: None,
         on_delete_event=lambda e: None,
         on_next_prev_file=lambda e: None,
+        on_kym_scroll_x=lambda e: None,
     )
+
+
+def test_prev_window_button_emits_kym_scroll_x_event(kym_event_view: KymEventView) -> None:
+    """Test that clicking Previous window button emits KymScrollXEvent(direction='prev')."""
+    received: list[KymScrollXEvent] = []
+
+    def on_kym_scroll_x(event: KymScrollXEvent) -> None:
+        received.append(event)
+
+    kym_event_view._on_kym_scroll_x = on_kym_scroll_x
+    kym_event_view._on_prev_window_clicked()
+    assert len(received) == 1
+    assert received[0].direction == "prev"
+
+
+def test_next_window_button_emits_kym_scroll_x_event(kym_event_view: KymEventView) -> None:
+    """Test that clicking Next window button emits KymScrollXEvent(direction='next')."""
+    received: list[KymScrollXEvent] = []
+
+    def on_kym_scroll_x(event: KymScrollXEvent) -> None:
+        received.append(event)
+
+    kym_event_view._on_kym_scroll_x = on_kym_scroll_x
+    kym_event_view._on_next_window_clicked()
+    assert len(received) == 1
+    assert received[0].direction == "next"
 
 
 def test_notification_cancel_button_cancels_state(kym_event_view: KymEventView) -> None:

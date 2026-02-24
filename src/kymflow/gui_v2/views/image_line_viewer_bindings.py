@@ -15,6 +15,7 @@ from kymflow.gui_v2.events import (
     EditRoi,
     EventSelection,
     FileSelection,
+    KymScrollXEvent,
     ROISelection,
     ImageDisplayChange,
     SetKymEventRangeState,
@@ -87,6 +88,7 @@ class ImageLineViewerBindings:
         bus.subscribe_state(EditRoi, self._on_roi_edited)
         bus.subscribe_state(DeleteRoi, self._on_roi_deleted)
         bus.subscribe_intent(SetRoiBounds, self._on_roi_bounds)
+        bus.subscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = True
 
         self._logger = get_logger(__name__)
@@ -117,6 +119,7 @@ class ImageLineViewerBindings:
         self._bus.unsubscribe_state(EditRoi, self._on_roi_edited)
         self._bus.unsubscribe_state(DeleteRoi, self._on_roi_deleted)
         self._bus.unsubscribe_intent(SetRoiBounds, self._on_roi_bounds)
+        self._bus.unsubscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -574,6 +577,10 @@ class ImageLineViewerBindings:
                 phase="intent",
             )
         )
+
+    def _on_kym_scroll_x(self, e: KymScrollXEvent) -> None:
+        """Handle KymScrollXEvent intent - scroll x-axis to prev/next window."""
+        safe_call(self._view.scroll_x, e.direction)
 
     def _on_roi_edited(self, e: EditRoi) -> None:
         """Handle ROI edited state event - refresh plot."""

@@ -171,6 +171,7 @@ class HomePage(BasePage):
             on_add_event=bus.emit,
             on_delete_event=bus.emit,
             on_next_prev_file=bus.emit,
+            on_kym_scroll_x=bus.emit,
             selection_mode="single",
         )
         self._table_bindings: FileTableBindings | None = None
@@ -816,6 +817,23 @@ class HomePage(BasePage):
             """
         )
 
+    # abb 20260224 implementing pre/next kym image window
+    def _on_key(self, e):
+        action = e.action
+        if action.keyup:
+            return
+        # KeyEventArguments
+        # logger.info(f'action:{action}')
+        # logger.info(f'e.key:{e.key}')
+        if e.key == 'ArrowRight':
+            # scroll the image line viewer to the right
+            if self._image_line_viewer is not None:
+                self._image_line_viewer.scroll_x('next')
+        elif e.key == 'ArrowLeft':
+            # scroll the image line viewer to the left
+            if self._image_line_viewer is not None:
+                self._image_line_viewer.scroll_x('prev')
+
     def render(self, *, page_title: str) -> None:
         """Override render to create splitter layout at page level.
 
@@ -841,6 +859,9 @@ class HomePage(BasePage):
         CLOSED = 6
         OPEN_DEFAULT = 28
         last_open = {'value': OPEN_DEFAULT}
+
+        # ui.keyboard(on_key=self._on_key, ignore=['input', 'select', 'button', 'textarea'])
+        ui.keyboard(on_key=self._on_key)  # no ignore will ignore when defaults active
 
         # Create splitter layout
         with ui.splitter(value=CLOSED, limits=(CLOSED, 70)).classes('w-full h-screen') as splitter:

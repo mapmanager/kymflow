@@ -8,7 +8,7 @@ by ImageLineViewerBindings).
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Dict, Any, Literal, Optional
 
 import plotly.graph_objects as go
 from nicegui import ui
@@ -177,6 +177,8 @@ class ImageLineViewerView:
         then a new selection is created like [1], [2], [3], ... etc.
         """
 
+        # logger.info(f'  e:{e}')
+
         payload: Dict[str, Any] = e.args  # <-- dict
 
         # logger.debug('=== in on_relayout() plotly_relayout received:')
@@ -184,6 +186,19 @@ class ImageLineViewerView:
         # logger.debug('  payload:')
         # from pprint import pprint
         # pprint(payload)
+
+        # abb, check if payload has 'xaxis2' and 'xaxis'
+        if 'xaxis2.range[0]' in payload.keys() and 'xaxis2.range[1]' in payload.keys():
+            # set the x range for prev/next window
+            x0 = payload['xaxis2.range[0]']
+            x1 = payload['xaxis2.range[1]']
+            logger.warning(f'setting x range for _scroll_x_impl() prev/next window: [{x0}, {x1}]')
+            # needed for _scroll_x_impl()
+            update_xaxis_range_v2(self._current_figure_dict, [x0, x1])
+            # be careful here, this should be ok but leave out in case we need 
+            # user set xaxis range for kym event
+            # return
+
 
         x0, x1, y0, y1 = None, None, None, None  # default to no selection
         if 'selections[0].x0' in payload.keys():
@@ -194,7 +209,7 @@ class ImageLineViewerView:
             y1  = payload.get('selections[0].y1')
             logger.info(f"  -> update Selection: x-range = [{x0}, {x1}], y-range = [{y0}, {y1}]")
         elif 'selections' not in payload.keys():
-            # print('  no selection found')
+            print('  no selection found')
             return
 
         # on new selection ?
@@ -861,6 +876,99 @@ class ImageLineViewerView:
         the image zoom to full scale.
         """
         safe_call(self._reset_zoom, force_new_uirevision=True)
+
+    def scroll_x(self, direction: Literal["prev", "next"]) -> None:
+        """Scroll the x-axis view to the previous or next window.
+
+        Shifts the current x-axis range left (prev) or right (next) by one
+        window width. Clamps to data time bounds so the view never goes
+        out of range.
+
+        Args:
+            direction: "prev" to shift left, "next" to shift right.
+        """
+        safe_call(self._scroll_x_impl, direction)
+
+    def _get_scroll_x_time_bounds(self) -> Optional[tuple[float, float]]:
+        """Return (time_min, time_max) for the current file/ROI, or None if unavailable."""
+        if self._current_file is None:
+            return None
+        if self._current_roi_id is not None:
+            time_bounds = self._current_file.get_kym_analysis().get_time_bounds(
+                self._current_roi_id
+            )
+            if time_bounds is not None:
+                return time_bounds
+        duration = self._current_file.image_dur
+        if duration is not None:
+            return (0.0, float(duration))
+        return None
+
+    def _scroll_x_impl(self, direction: Literal["prev", "next"]) -> None:
+        """Internal implementation of scroll_x. Early returns log a reason for debugging."""
+        # 1. Require figure and plot
+        if self._current_figure_dict is None or self._plot is None:
+            # logger.debug("scroll_x: no figure dict or plot, skipping")
+            return
+        # 2. Read current x range from layout
+        layout = self._current_figure_dict.get("layout") or {}
+        
+        # logger.debug(f'_current_figure_dict:{self._current_figure_dict.keys()}')
+        # logger.debug(f'layout.keys():{layout.keys()}')
+
+        # if empty, force full range and try again
+        # self._reset_zoom(force_new_uirevision=False)
+
+        _x_axis_name = 'xaxis2'
+        xaxis = layout.get(_x_axis_name) or {}  # abb in (2,1) subplot, we need xaxis2
+        range_ = xaxis.get("range")
+        # logger.debug(f'xaxis:{xaxis}')
+        # logger.debug(f'range_:{range_}')
+
+        # # if empty, force full range and try again
+        # self._reset_zoom(force_new_uirevision=False)
+
+        if not isinstance(range_, (list, tuple)) or len(range_) != 2:
+            # logger.debug("scroll_x: invalid or missing xaxis range, skipping")
+            return
+        try:
+            x_min = float(range_[0])
+            x_max = float(range_[1])
+        except (TypeError, ValueError):
+            # logger.debug("scroll_x: xaxis range values not convertible to float, skipping")
+            return
+        width = x_max - x_min
+        if width <= 0:
+            # logger.debug("scroll_x: non-positive window width, skipping")
+            return
+        # 3. Get time bounds for clamping
+        time_bounds = self._get_scroll_x_time_bounds()
+        if time_bounds is None:
+            # logger.debug("scroll_x: no time bounds (file/roi/duration), skipping")
+            return
+        time_min, time_max = time_bounds
+
+        # 4. Compute new window (prev = shift left, next = shift right) and clamp
+        if direction == "prev":
+            new_min = x_min - width
+            new_max = x_min
+            if new_min < time_min:
+                new_min = time_min
+                new_max = min(new_min + width, time_max)
+        else:
+            new_min = x_max
+            new_max = x_max + width
+            if new_max > time_max:
+                new_max = time_max
+                new_min = max(new_max - width, time_min)
+
+        # 5. Apply and push to client
+        update_xaxis_range_v2(self._current_figure_dict, [new_min, new_max])
+        try:
+            self.ui_plotly_update_figure()
+        except RuntimeError as e:
+            if "deleted" not in str(e).lower():
+                raise
 
     def _update_contrast_partial(self) -> None:
         """Update only colorscale/zmin/zmax when contrast changes, preserving zoom."""
