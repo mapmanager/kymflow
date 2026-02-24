@@ -66,7 +66,7 @@ from kymflow.gui_v2.views import (
 from nicewidgets.utils.clipboard import copy_to_clipboard
 from nicewidgets.utils.file_manager import reveal_in_file_manager
 from kymflow.core.utils.logging import get_logger
-from nicewidgets.plot_pool_widget.lazy_section import LazySectionConfig  # 20260213ppc
+from nicewidgets.utils.lazy_section import LazySection, LazySectionConfig  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_pool_controller import PlotPoolConfig, PlotPoolController  # 20260213ppc
 from nicewidgets.plot_pool_widget.plot_state import PlotState, PlotType
 
@@ -464,8 +464,6 @@ class HomePage(BasePage):
                     ctrl.build(container=container)
                     self._plot_pool_controller_ref["value"] = ctrl
 
-                from nicewidgets.plot_pool_widget.lazy_section import LazySection
-
                 LazySection(
                     "Pool Plot (Radon)",
                     render_fn=render_radon_fn,
@@ -508,8 +506,6 @@ class HomePage(BasePage):
                     ctrl = PlotPoolController(df_vel, config=cfg)
                     ctrl.build(container=container)
                     self._plot_pool_velocity_controller_ref["value"] = ctrl
-
-                from nicewidgets.plot_pool_widget.lazy_section import LazySection
 
                 LazySection(
                     "Pool Plot (Velocity Events)",
@@ -965,23 +961,6 @@ class HomePage(BasePage):
                             
                             self._file_table_view.render()
                             self._file_table_view.set_files(list(self.context.app_state.files))
-
-                    # Flex container ensures layout constraints work at all window sizes
-                    # with ui.column().classes("w-full h-full flex flex-col"):
-                    #     # Folder selector FIRST (renders first in DOM)
-                    #     self._folder_view.render(initial_folder=self.context.app_state.folder)
-                    #     self._file_table_view.render()
-
-                    #     # Populate with current state (if already loaded, shows immediately)
-                    #     self._file_table_view.set_files(list(self.context.app_state.files))
-
-                    #     # Restore current selection from AppState (ensures visibility on navigation back)
-                    #     # This handles both initial load and navigation back scenarios
-                    #     current_file = self.context.app_state.selected_file
-                    #     if current_file is not None and hasattr(current_file, "path"):
-                    #         self._file_table_view.set_selected_paths(
-                    #             [str(current_file.path)], origin=SelectionOrigin.EXTERNAL
-                    #         )
                 
                 # BOTTOM: Image/line viewer + event table in a nested splitter
                 # abb turned off expansion

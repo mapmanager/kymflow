@@ -68,7 +68,7 @@ def histogram_plot_plotly(
     log_scale: bool = True,
     theme: Optional[ThemeMode] = None,
     bins: int = 256,
-) -> go.Figure:
+) -> dict:
     """Create a histogram plot of image pixel intensities.
 
     Args:
@@ -80,7 +80,7 @@ def histogram_plot_plotly(
         bins: Number of bins for histogram (default: 256)
 
     Returns:
-        Plotly Figure with histogram ready for display
+        Plotly figure dict ready for ui.plotly / update_figure
     """
     # Default to LIGHT theme
     if theme is None:
@@ -99,7 +99,7 @@ def histogram_plot_plotly(
             plot_bgcolor=bg_color,
             font=dict(color=fg_color),
         )
-        return fig
+        return fig.to_dict()
 
     # Compute histogram of entire image (always full range)
     flat_image = image.flatten()
@@ -164,4 +164,4 @@ def histogram_plot_plotly(
         showlegend=False,
     )
 
-    return fig
+    return fig.to_dict()

@@ -23,7 +23,7 @@ from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import ImageDisplayChange, SelectionOrigin
 from kymflow.core.utils.logging import get_logger
-from nicewidgets.plot_pool_widget.lazy_section import LazySection, LazySectionConfig
+from nicewidgets.utils.lazy_section import LazySection, LazySectionConfig
 
 logger = get_logger(__name__)
 
@@ -114,9 +114,11 @@ class ContrastView:
             self._log_checkbox.on("update:model-value", self._on_log_toggle)
 
         # Row 2: Histogram plot (lazy-loaded; expensive to create and update)
+        _empty_histogram_dict = go.Figure().to_dict()
+
         def _render_histogram(container: ui.element) -> None:
             with container:
-                self._histogram_plot = ui.plotly(go.Figure()).classes("w-full h-48")
+                self._histogram_plot = ui.plotly(_empty_histogram_dict).classes("w-full h-48")
             self._update_histogram()
 
         LazySection(
@@ -295,7 +297,7 @@ class ContrastView:
         log_scale = self._log_checkbox.value if self._log_checkbox is not None else True
         theme = self._theme
 
-        fig = histogram_plot_plotly(
+        fig_dict = histogram_plot_plotly(
             image=image,
             zmin=zmin,
             zmax=zmax,
@@ -303,7 +305,7 @@ class ContrastView:
             theme=theme,
         )
         try:
-            self._histogram_plot.update_figure(fig)
+            self._histogram_plot.update_figure(fig_dict)
         except RuntimeError as e:
             if "deleted" not in str(e).lower():
                 raise
