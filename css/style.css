@@ -13,3 +13,22 @@ div.doc-contents:not(.first) {
 .md-button--myred:not([disabled]):hover {
     background: rgba(154, 30, 30, 0.8);
 }
+
+.img-small {
+    max-width: 250px;
+    width: 250px;
+}
+
+.img-medium {
+    max-width: 600px;
+    width: 600px;
+}
+
+.img-large {
+    max-width: 800px;
+    width: 800px;
+}
+
+.img-50 {
+    width: 50%;
+}
