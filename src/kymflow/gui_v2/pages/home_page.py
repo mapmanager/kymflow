@@ -817,8 +817,8 @@ class HomePage(BasePage):
         if action.keyup:
             return
         # KeyEventArguments
-        logger.info(f'e:{e}')
-        logger.info(f'action:{action}')
+        # logger.info(f'e:{e}')
+        # logger.info(f'action:{action}')
         # logger.info(f'e.key:{e.key}')
         if e.key == 'ArrowRight':
             # scroll the image line viewer to the right

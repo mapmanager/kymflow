@@ -26,23 +26,35 @@ class AboutTabView:
     def __init__(self, *, max_log_lines: int = 300) -> None:
         self._max_log_lines = max_log_lines
 
+    def _open_config_in_window(self, config_path: str) -> None:
+        """reveal user config kymflow path in finder."""
+        from nicewidgets.utils.file_manager import reveal_in_file_manager
+        reveal_in_file_manager(config_path)
+
+    def _copy_version_info(self, version_info: dict ) -> None:
+        """copy version info to clipboard."""
+        from nicewidgets.utils.clipboard import copy_to_clipboard
+        version_info_str = "\n".join([f"{key}: {value}" for key, value in version_info.items()])
+        copy_to_clipboard(version_info_str)
+
     def render(self) -> None:
         """Create the About tab UI inside the current container."""
         
         # Version information card
         version_info = getVersionInfo_gui()
-        # with ui.card().classes("w-full p-4 gap-2"):
-        if 1:
+
+        with ui.row().classes("items-center gap-2"):
             ui.label("Version info").classes("text-lg font-semibold")
+            ui.button('Copy', on_click=lambda: self._copy_version_info(version_info)).classes("text-blue-500")
+        if 1:
             for key, value in version_info.items():
                 with ui.row().classes("items-center gap-2"):
                     ui.label(f"{key}:").classes("text-gray-500")
-                    # if key == 'User Config':
-                    #     ui.link(value, value).classes("text-blue-500")
-                    # else:
-                    #     ui.label(str(value))
                     ui.label(str(value))
 
+                    if key == 'User Config':
+                        _config = value
+                        ui.button('Open', on_click=lambda: self._open_config_in_window(_config)).classes("text-blue-500")
 
 
         # Log file viewer
@@ -73,6 +85,8 @@ class AboutTabView:
 
 def getVersionInfo_gui() -> dict:
     """Get version info with GUI-specific details included."""
+    
+    # get pure python info
     version_info = getVersionInfo()
 
     import nicegui

@@ -79,7 +79,8 @@ class PlotPoolBindings:
             subs.extend(["VelocityEventDbUpdated", "FileListChanged"])
         if app_state and refresh_callback:
             subs.append("AnalysisCompleted")
-        logger.info("20260213ppc PlotPoolBindings subscribed to %s", ", ".join(subs))
+
+        # logger.info("20260213ppc PlotPoolBindings subscribed to %s", ", ".join(subs))
 
     def teardown(self) -> None:
         """Unsubscribe from events."""
@@ -150,6 +151,6 @@ class PlotPoolBindings:
         row_id = f"{path}|{roi_id}"
         try:
             ctrl.select_points_by_row_id(row_id)
-            logger.debug("20260213ppc select_points_by_row_id(%s)", row_id)
+            # logger.debug("20260213ppc select_points_by_row_id(%s)", row_id)
         except Exception as ex:
-            logger.warning("20260213ppc select_points_by_row_id failed: %s", ex)
+            logger.error("select_points_by_row_id failed: %s", ex)

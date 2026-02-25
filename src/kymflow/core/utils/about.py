@@ -16,10 +16,15 @@ def getVersionInfo() -> dict:
     retDict["KymFlow Core version"] = kymflow_core.__version__  # noqa
     # retDict["KymFlow GUI version"] = kymflow_gui.__version__  # noqa
     retDict["KymFlow GUI version"] = "N/A (GUI not imported in core)"  # GUI import commented out
-    retDict["Python version"] = platform.python_version()
-    retDict["Python platform"] = platform.machine()  # platform.platform()
     # retDict["NiceGUI version"] = nicegui.__version__
     retDict["NiceGUI version"] = "N/A (GUI not imported in core)"  # GUI import commented out
+
+    retDict["Python version"] = platform.python_version()
+    retDict["System"] = platform.system()
+    retDict["Release"] = platform.release()
+    retDict["Machine"] = platform.machine()
+    retDict["Processor"] = platform.processor()
+
     
     _user_config_file = UserConfig.default_config_path()
     _user_config_path = _user_config_file.parent

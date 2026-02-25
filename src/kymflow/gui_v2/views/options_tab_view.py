@@ -35,16 +35,6 @@ class OptionsTabView:
     def render(self) -> None:
         """Create the Options tab UI inside the current container."""
         ui.label("App Settings").classes("text-lg font-semibold")
-        ui.label("Changes require app restart to take effect.").classes("text-sm text-gray-500 mb-2")
-        
-        # Save Settings button at top
-        ui.button(
-            "Save Settings",
-            on_click=self._on_save_settings,
-            icon="save"
-        ).classes("mb-4")
-        
-        ui.separator().classes("mb-4")
 
         # Get all fields with metadata
         fields_info = self._app_config.get_all_fields_with_metadata()
@@ -52,7 +42,7 @@ class OptionsTabView:
         for field_name, field_info in fields_info.items():
             metadata = field_info["metadata"]
             current_value = field_info["value"]
-            widget_type = metadata.get("widget_type", "input")
+            # widget_type = metadata.get("widget_type", "input")
             label = metadata.get("label", field_name.replace("_", " ").title())
 
             with ui.row().classes("w-full items-center gap-4 mb-4"):
@@ -65,8 +55,16 @@ class OptionsTabView:
                 widget.classes("flex-1")
 
                 # Show restart notification if required
-                if metadata.get("requires_restart", False):
-                    ui.label("(restart required)").classes("text-xs text-gray-400")
+                # if metadata.get("requires_restart", False):
+                #     ui.label("(restart required)").classes("text-xs text-gray-400")
+
+        ui.button(
+            "Save Settings",
+            on_click=self._on_save_settings,
+            icon="save"
+        ).classes("mb-4")
+
+        # ui.label("(restart required)").classes("text-xs text-gray-400")
 
     def _create_widget_from_metadata(
         self, field_name: str, metadata: dict[str, Any], current_value: Any

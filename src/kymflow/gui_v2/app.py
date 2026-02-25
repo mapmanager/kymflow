@@ -48,11 +48,10 @@ context = AppContext()
 # this is REQUIRED here for nicegui-pack (pyinstaller) to work
 try:
     app.native.window_args["confirm_close"] = True
-    logger.info('app.native.window_args')
-    print(app.native.window_args)
+    logger.info(f'global app.native.window_args: {app.native.window_args}')
 except Exception:
     # Web mode or older NiceGUI internals: ignore safely.
-    logger.error('5 FAILED: app.native.window_args["confirm_close"]')
+    logger.error('FAILED: app.native.window_args["confirm_close"]')
     pass
 
 @ui.page("/")

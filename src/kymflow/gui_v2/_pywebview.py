@@ -450,5 +450,5 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
         "height": h,
     })
 
-    logger.warning(f'native.window_args now: {native.window_args}')
+    # logger.warning(f'native.window_args now: {native.window_args}')
     
