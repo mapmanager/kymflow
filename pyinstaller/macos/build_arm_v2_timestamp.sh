@@ -7,6 +7,8 @@
 # Build stamp metadata
 # -----------------------------------------------------------------------------
 BUILD_LOCAL="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+BUILD_BUNDLE_VERSION="$(date '+%Y%m%d.%H%M%S')"
+
 ARCH="$(uname -m 2>/dev/null || echo 'unknown')"
 
 GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
@@ -49,6 +51,7 @@ cat > "$BUILD_INFO_PATH" <<EOF
 # Auto-generated at build time. DO NOT EDIT.
 
 BUILD_TIMESTAMP = "${BUILD_LOCAL}"
+BUILD_BUNDLE_VERSION = "${BUILD_BUNDLE_VERSION}"
 
 GIT_INFO = "SHA:${GIT_SHA} STATE:${GIT_DIRTY}"
 

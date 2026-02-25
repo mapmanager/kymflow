@@ -10,9 +10,6 @@ cd "$SCRIPT_DIR"
 
 echo "[build_arm] CWD: $(pwd)"
 
-# ---- abb 20260225 - include nicegui-pack build time ----
-source ./build_arm_v2_timestamp.sh
-
 # Cleanup on exit (success or failure)
 cleanup_build_info() {
     if [ -n "${BUILD_INFO_PATH:-}" ] && [ -f "$BUILD_INFO_PATH" ]; then
@@ -84,6 +81,9 @@ python -m pip install 'nicegui==3.7.1'
 echo "[build_arm] Installing pyinstaller..."
 python -m pip install pyinstaller
 
+# ---- abb 20260225 - include nicegui-pack build time ----
+source ./build_arm_v2_timestamp.sh
+
 # -----------------------------------------------------------------------------
 # Post-install sanity: prove matplotlib didn’t get pulled in by any dependency.
 # -----------------------------------------------------------------------------
@@ -94,23 +94,39 @@ python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('m
 # -----------------------------------------------------------------------------
 # Clean build artifacts (in this script dir)
 # -----------------------------------------------------------------------------
+
+_remove_dir_with_retries() {
+    local d="$1"
+    local attempts="${2:-6}"
+    local delay="${3:-0.2}"
+
+    [ -d "$d" ] || return 0
+
+    for i in $(seq 1 "$attempts"); do
+        # best-effort hardening for macOS
+        xattr -c -r "$d" 2>/dev/null || true
+        chmod -N "$d" 2>/dev/null || true
+        chmod -R u+rwX "$d" 2>/dev/null || true
+        chflags -R nouchg,noschg "$d" 2>/dev/null || true
+
+        # remove contents first to reduce ENOTEMPTY races on the parent dir
+        rm -rf "$d"/* 2>/dev/null || true
+        rm -rf "$d"/.[!.]* 2>/dev/null || true
+        rm -rf "$d"/..?* 2>/dev/null || true
+        rm -rf "$d" 2>/dev/null || true
+
+        [ -d "$d" ] || return 0
+        sleep "$delay"
+    done
+
+    echo "ERROR: failed to remove '$d' after ${attempts} attempts." >&2
+    exit 1
+}
+
 echo "[build_arm] Cleaning dist/ and build/ (if present) under: $(pwd)"
 
-if [ -d "dist" ]; then
-    # Remove extended attributes (the @ symbol) recursively
-    xattr -c -r dist 2>/dev/null || true
-    # Remove ACLs
-    chmod -N dist 2>/dev/null || true
-    rm -rf dist
-fi
-
-if [ -d "build" ]; then
-    # Remove extended attributes recursively
-    xattr -c -r build 2>/dev/null || true
-    # Remove ACLs
-    chmod -N build 2>/dev/null || true
-    rm -rf build
-fi
+_remove_dir_with_retries "dist"
+_remove_dir_with_retries "build"
 
 # Disable dev reload when packaging to avoid watchdog in the bundle
 export KYMFLOW_GUI_RELOAD=0
@@ -134,5 +150,8 @@ nicegui-pack --version 2>/dev/null || true
 # -----------------------------------------------------------------------------
 echo "[build_arm] Running nicegui-pack..."
 nicegui-pack --windowed --clean --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/gui_v2/app.py
+
+# Patch Info.plist (About dialog version/build)
+source ./build_arm_v2_set_plist.sh
 
 echo "[build_arm] Done."
