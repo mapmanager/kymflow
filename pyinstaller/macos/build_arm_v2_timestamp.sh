@@ -10,10 +10,11 @@ BUILD_INFO_PATH="../../src/kymflow/_build_info.py"
 
 cat > "$BUILD_INFO_PATH" <<EOF
 # Auto-generated at build time. DO NOT EDIT.
-BUILD_TIMESTAMP_UTC = "${BUILD_TS_UTC}"
-BUILD_TIMESTAMP_LOCAL = "${BUILD_LOCAL}"
-GIT_SHA = "${GIT_SHA}"
-GIT_STATE = "${GIT_DIRTY}"
+BUILD_TIMESTAMP = "${BUILD_LOCAL}"
+BUILD_GIT_STATUS = "SHA:${GIT_SHA} STATUS:${GIT_DIRTY}"
 EOF
 
 echo "[build_arm] Wrote build info: $BUILD_INFO_PATH"
+echo "[build_arm] ---- _build_info.py ----"
+cat "$BUILD_INFO_PATH"
+echo "[build_arm] ------------------------"
