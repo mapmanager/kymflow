@@ -43,18 +43,26 @@ class AboutTabView:
         # Version information card
         version_info = getVersionInfo_gui()
 
-        with ui.row().classes("items-center gap-2"):
-            ui.label("Version info").classes("text-lg font-semibold")
-            ui.button('Copy', on_click=lambda: self._copy_version_info(version_info)).classes("text-blue-500")
-        if 1:
+        with ui.column().classes("items-left gap-2"):
+            with ui.row().classes("items-center gap-2"):
+                ui.label("Version info").classes("text-lg font-semibold")
+                ui.button('Copy', on_click=lambda: self._copy_version_info(version_info)).classes("text-blue-500")
+
             for key, value in version_info.items():
                 with ui.row().classes("items-center gap-2"):
                     ui.label(f"{key}:").classes("text-gray-500")
-                    ui.label(str(value))
+                    
+                    if key == 'Build info':
+                        # build info is a dict from build_info()
+                        with ui.row().classes("items-center gap-2"):
+                            for subkey, subvalue in value.items():
+                                ui.label(f"{subkey}: {subvalue}")
+                    else:
+                        ui.label(str(value))
 
-                    if key == 'User Config':
-                        _config = value
-                        ui.button('Open', on_click=lambda: self._open_config_in_window(_config)).classes("text-blue-500")
+                        if key == 'User Config':
+                            _config = value
+                            ui.button('Open', on_click=lambda: self._open_config_in_window(_config)).classes("text-blue-500")
 
 
         # Log file viewer
@@ -92,8 +100,8 @@ def getVersionInfo_gui() -> dict:
     import nicegui
     import kymflow.gui_v2 as kymflow_gui
 
-    version_info["KymFlow GUI version"] = kymflow_gui.__version__  # noqa: SLF001
-    version_info["NiceGUI version"] = nicegui.__version__
+    version_info["KymFlow GUI"] = kymflow_gui.__version__  # noqa: SLF001
+    version_info["NiceGUI"] = nicegui.__version__
         
     return version_info
 
