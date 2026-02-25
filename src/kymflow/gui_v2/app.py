@@ -15,7 +15,16 @@ from multiprocessing import freeze_support
 from pathlib import Path
 
 #
-from platformdirs import user_cache_dir
+# from platformdirs import user_cache_dir
+
+from platformdirs import user_config_dir
+
+# abb 20260225, fixing frozen nicegui runtime error `OSError: [Errno 30] Read-only file system: '/.nicegui'`
+# NiceGUI persistence: use platformdirs app dir so path is writable when .app runs with CWD=/
+os.environ["NICEGUI_STORAGE_PATH"] = str(Path(user_config_dir("kymflow", None)) / ".nicegui")
+
+from nicegui import ui, app
+
 
 from nicegui import ui, app
 
@@ -70,8 +79,8 @@ def home() -> None:
     #     pass
 
 
-    # logger.info('xxx')
-    
+    logger.info("20260225 NICEGUI_STORAGE_PATH=%s", os.environ.get("NICEGUI_STORAGE_PATH", "(not set)"))
+
     # Install native rect polling only in native mode (delayed slightly so native window exists).
     # Skip entirely in browser mode - no reason to poll native window rects.
     native = getattr(app, "native", None)

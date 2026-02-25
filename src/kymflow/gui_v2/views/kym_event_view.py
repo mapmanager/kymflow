@@ -195,25 +195,26 @@ class KymEventView:
                         "",
                         on_click=self._on_prev_file_clicked,
                         icon="keyboard_double_arrow_up",
-                    ).props("dense").classes('text-sm')
+                    ).props("dense size=sm")
+                    # ).props("dense size=xs").classes('text-sm !p-1')
                     self._prev_file_button.tooltip("Previous File")
                     self._next_file_button = ui.button(
                         "",
                         on_click=self._on_next_file_clicked,
                         icon="keyboard_double_arrow_down",
-                    ).props("dense").classes('text-sm')
+                    ).props("dense size=sm")
                     self._next_file_button.tooltip("Next File")
                     self._prev_window_button = ui.button(
                         "",
                         on_click=self._on_prev_window_clicked,
                         icon="chevron_left",
-                    ).props("dense").classes('text-sm')
+                    ).props("dense size=sm")
                     self._prev_window_button.tooltip("Previous window")
                     self._next_window_button = ui.button(
                         "",
                         on_click=self._on_next_window_clicked,
                         icon="chevron_right",
-                    ).props("dense").classes('text-sm')
+                    ).props("dense size=sm")
                     self._next_window_button.tooltip("Next window")
 
                 # self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")  # Commented out - aggrid has 'file' column

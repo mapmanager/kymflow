@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import SelectionOrigin, VelocityEventUpdate
+from kymflow.gui_v2.events import FileChanged, SelectionOrigin, VelocityEventUpdate
 from kymflow.gui_v2.state import AppState
 
 logger = get_logger(__name__)
@@ -76,5 +76,12 @@ class VelocityEventUpdateController:
                 updates=updates,
                 origin=e.origin,
                 phase="state",
+            )
+        )
+        self._bus.emit(
+            FileChanged(
+                file=kym_file,
+                change_type="analysis",
+                origin=SelectionOrigin.EXTERNAL,
             )
         )

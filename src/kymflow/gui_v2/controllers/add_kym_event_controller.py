@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import AddKymEvent, SelectionOrigin
+from kymflow.gui_v2.events import AddKymEvent, FileChanged, SelectionOrigin
 from kymflow.gui_v2.state import AppState
 
 logger = get_logger(__name__)
@@ -46,6 +46,13 @@ class AddKymEventController:
                     t_end=e.t_end,
                     origin=e.origin,
                     phase="state",
+                )
+            )
+            self._bus.emit(
+                FileChanged(
+                    file=kym_file,
+                    change_type="analysis",
+                    origin=SelectionOrigin.EXTERNAL,
                 )
             )
         except ValueError as exc:

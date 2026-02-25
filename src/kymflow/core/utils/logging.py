@@ -65,15 +65,20 @@ def setup_logging(
 
     root.setLevel(level)
 
-    # -------- Formatter --------
-    fmt = "[%(levelname)s] %(name)s:%(funcName)s:%(lineno)d: %(message)s"
+    # -------- Formatters --------
+    # Console: keep existing format, no timestamp
+    console_fmt = "[%(levelname)s] %(name)s:%(funcName)s:%(lineno)d: %(message)s"
+    # File: prepend timestamp using the same date format
+    file_fmt = "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d: %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
-    formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
+
+    console_formatter = logging.Formatter(fmt=console_fmt)
+    file_formatter = logging.Formatter(fmt=file_fmt, datefmt=datefmt)
 
     # -------- Console handler (unchanged) --------
     console = logging.StreamHandler(sys.stderr)
     console.setLevel(level)
-    console.setFormatter(formatter)
+    console.setFormatter(console_formatter)
     root.addHandler(console)
 
     # -------- File handler (platformdirs-based path, same folder as user_config) --------
@@ -90,7 +95,7 @@ def setup_logging(
         encoding="utf-8",
     )
     file_handler.setLevel(logging.DEBUG)  # capture everything to file
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(file_formatter)
     root.addHandler(file_handler)
 
 

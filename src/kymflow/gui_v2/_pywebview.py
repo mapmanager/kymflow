@@ -99,7 +99,7 @@ def install_native_rect_polling(*, poll_sec: float = 0.5, debounce_sec: float = 
         gate = getattr(ctx, "native_ui_gate", None)
         if gate is not None and gate.is_busy():
             busy, reason, seconds = gate.status()
-            logger.debug(f"[rect] skip tick (gate busy reason={reason} for {seconds:0.2f}s)")
+            # logger.debug(f"[rect] skip tick (gate busy reason={reason} for {seconds:0.2f}s)")
             return
 
         asyncio.create_task(_poll_once())
