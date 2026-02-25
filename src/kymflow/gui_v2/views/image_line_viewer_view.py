@@ -708,9 +708,13 @@ class ImageLineViewerView:
         duration_seconds = kf.image_dur
         if duration_seconds is None:
             return
-        pixels_per_line = kf.pixels_per_line
-        if pixels_per_line is None:
+
+        space_um = kf.image_space
+        if space_um is None:
             return
+        # pixels_per_line = kf.pixels_per_line
+        # if pixels_per_line is None:
+        #     return
 
         # Update uirevision in dict if requested (forces Plotly to accept new ranges)
         if force_new_uirevision:
@@ -723,7 +727,7 @@ class ImageLineViewerView:
         update_xaxis_range_v2(self._current_figure_dict, x_range)
 
         # Reset y-axis (position) for image subplot only (row 1)
-        y_range = [0.0, float(pixels_per_line - 1)]
+        y_range = [0.0, space_um]
         update_yaxis_range_v2(self._current_figure_dict, y_range, row=1)
 
         try:

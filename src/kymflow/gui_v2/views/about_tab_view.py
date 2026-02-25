@@ -37,8 +37,8 @@ class AboutTabView:
             for key, value in version_info.items():
                 with ui.row().classes("items-center gap-2"):
                     ui.label(f"{key}:").classes("text-gray-500")
-                    # if key == 'GitHub':
-                    #     ui.link(str(value), value).classes("text-blue-500")
+                    # if key == 'User Config':
+                    #     ui.link(value, value).classes("text-blue-500")
                     # else:
                     #     ui.label(str(value))
                     ui.label(str(value))

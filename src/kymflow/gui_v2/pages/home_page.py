@@ -689,17 +689,7 @@ class HomePage(BasePage):
             """
         )
 
-    def _on_next_file_shortcut(self, _event) -> None:
-        """Handle Shift+Down next file shortcut when not editing."""
-        self.bus.emit(
-            NextPrevFileEvent(
-                direction="Next File",
-                origin=SelectionOrigin.EXTERNAL,
-                phase="intent",
-            )
-        )
-
-    def _on_prev_file_shortcut(self, _event) -> None:
+    def _on_prev_next_file_shortcut(self, prev_next:str) -> None:
         """Handle Shift+Up previous file shortcut when not editing."""
         self.bus.emit(
             NextPrevFileEvent(
@@ -711,6 +701,9 @@ class HomePage(BasePage):
 
     def _register_next_prev_file_shortcuts(self) -> None:
         """Register global Shift+Up/Down shortcuts for file navigation (unless editing)."""
+        logger.warning('turned off to implement ui.keyboard() shortcuts')
+        return
+
         if self._next_prev_file_shortcut_registered:
             return
         self._next_prev_file_shortcut_registered = True
@@ -820,10 +813,12 @@ class HomePage(BasePage):
     # abb 20260224 implementing pre/next kym image window
     def _on_key(self, e):
         action = e.action
+        modifiers = e.modifiers
         if action.keyup:
             return
         # KeyEventArguments
-        # logger.info(f'action:{action}')
+        logger.info(f'e:{e}')
+        logger.info(f'action:{action}')
         # logger.info(f'e.key:{e.key}')
         if e.key == 'ArrowRight':
             # scroll the image line viewer to the right
@@ -833,6 +828,22 @@ class HomePage(BasePage):
             # scroll the image line viewer to the left
             if self._image_line_viewer is not None:
                 self._image_line_viewer.scroll_x('prev')
+        
+        if e.key == 'ArrowUp' and modifiers.shift:
+            # previous file
+            if self._file_table_view is not None:
+                # self._file_table_view.previous_file()
+                self._on_prev_next_file_shortcut("prev")
+        elif e.key == 'ArrowDown':
+            # next file
+            if self._file_table_view is not None:
+                # self._file_table_view.next_file()
+                self._on_prev_next_file_shortcut("next")
+
+        elif e.key == 'Enter':
+            # full zoom
+            if self._image_line_viewer is not None:
+                self._on_full_zoom_shortcut(None)
 
     def render(self, *, page_title: str) -> None:
         """Override render to create splitter layout at page level.
@@ -851,8 +862,8 @@ class HomePage(BasePage):
         
         # Build header without drawer toggle (no drawer needed with splitter)
         build_header(self.context, dark_mode, drawer_toggle_callback=None)
-        self._register_full_zoom_shortcut()
-        self._register_next_prev_file_shortcuts()
+        # self._register_full_zoom_shortcut()
+        # self._register_next_prev_file_shortcuts()
         self._register_save_selected_shortcut()
 
         # Snap positions are percentages for the LEFT pane (before)

@@ -23,9 +23,14 @@ def getVersionInfo() -> dict:
     
     _user_config_file = UserConfig.default_config_path()
     _user_config_path = _user_config_file.parent
+    # _link = f'<a href="file://{_user_config_path}">{_user_config_path}</a>'
+    # retDict["User Config"] = str(_link)
+    # _link = f'file://{_user_config_path}'
+    # retDict["User Config"] = _link
     retDict["User Config"] = str(_user_config_path)
     
-    retDict["Log file"] = str(get_log_file_path())
+    # retDict["Log file"] = str(get_log_file_path())
+
     # retDict['PyQt version'] = QtCore.__version__  # when using import qtpy
     # retDict['Bundle folder'] = sanpy._util.getBundledDir()
     # retDict['Log file'] = sanpy.sanpyLogger.getLoggerFile()

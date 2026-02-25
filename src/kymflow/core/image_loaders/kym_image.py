@@ -232,6 +232,16 @@ class KymImage(AcqImage):
             return None
         return self.num_lines * self.seconds_per_line
     
+    @property
+    def image_space(self) -> float | None:
+        """Length of line scan in um.
+        
+        Returns None if pixels_per_line is not available.
+        """
+        if self.pixels_per_line is None:
+            return None
+        return self.pixels_per_line * self.um_per_pixel
+    
     def getRowDict(self, *, blinded: bool = False, file_index: int | None = None) -> dict:
         """Get dictionary with header, file, and analysis information for table/row display.
         
