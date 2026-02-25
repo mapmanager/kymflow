@@ -34,6 +34,7 @@ from kymflow.gui_v2.controllers import (
     VelocityEventUpdateController,
 )
 from kymflow.gui_v2.events import FileSelection, NextPrevFileEvent, SaveSelected, SelectionOrigin
+from kymflow.gui_v2.events_state import FileListChanged
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.utils.splitter_handle import add_splitter_handle
 from kymflow.gui_v2.menus import FileTableContextMenu
@@ -229,7 +230,13 @@ class HomePage(BasePage):
             context,
         )
         self._drawer_about_tab_view = AboutTabView()
-        self._drawer_options_tab_view = OptionsTabView(context.app_config, context)
+        self._drawer_options_tab_view = OptionsTabView(
+            context.app_config,
+            context,
+            on_blinded_change=lambda: self.bus.emit(
+                FileListChanged(files=list(self.context.app_state.files))
+            ),
+        )
         # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
             analysis_toolbar_view=self._drawer_analysis_toolbar_view,

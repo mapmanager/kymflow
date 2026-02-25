@@ -10,17 +10,19 @@ KymFlow is available as a one-click desktop application for macOS.
 
 ## Download
 
-Download the latest release from the [GitHub Releases page](https://github.com/mapmanager/kymflow/releases).
+<!-- Download the latest release from the [GitHub Releases page](https://github.com/mapmanager/kymflow/releases). -->
+
+Robert will provide you with a download link ...
 
 The macOS application is provided as a `.zip` file containing `KymFlow.app`.
 
-## Installation (macOS)
+## Running the KymFlow app (macOS)
 
 ### Step 1: Download and Extract
 
-1. Download the `KymFlow-macos-intel-*.zip` file from the releases page
-2. Uncompress the zip file (double-click or use `unzip` in Terminal)
-3. You should now have a `KymFlow.app` file
+1. Download the `KymFlow.app.zip` file.
+2. Uncompress the zip file (double-click)
+3. You should now have a `KymFlow.app` macOS app
 
 ### Step 2: Run the Application (First Time)
 
@@ -37,7 +39,7 @@ macOS may show a warning about an "unknown developer" when you first try to open
 
 When you double-click the downloaded app, if you see this
 
-![macOS Open Warning](images/macos-open-warning.png){.img-medium }
+![macOS Open Warning](images/macos-open-warning.png){.img-small }
 
 Try these two things:
 
@@ -47,5 +49,5 @@ or
 
 2. option + right-click the app and select 'Open...'
 
-![macOS Open Warning](images/option-right-click-open.png){.img-medium }
+![macOS Open Warning](images/option-right-click-open.png){.img-small }
 

@@ -75,7 +75,7 @@ def _col(
 
 def _default_columns() -> list[ColumnConfig]:
     return [
-        _col("File Name", "File Name", filterable=True, flex=2, width=180, min_width=180),
+        _col("File Name", "File Name", filterable=True, flex=2, width=180, min_width=180, extra_grid_options={"maxWidth": 250}),
         _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center", extra_grid_options={
             ":cellRenderer": "(params) => params.value === 'True' ? '✓' : ''"
         }),

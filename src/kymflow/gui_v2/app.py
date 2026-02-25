@@ -19,7 +19,7 @@ from pathlib import Path
 
 from platformdirs import user_config_dir
 
-# abb 20260225, fixing frozen nicegui runtime error `OSError: [Errno 30] Read-only file system: '/.nicegui'`
+# abb declan 20260225, fixing frozen nicegui runtime error `OSError: [Errno 30] Read-only file system: '/.nicegui'`
 # NiceGUI persistence: use platformdirs app dir so path is writable when .app runs with CWD=/
 os.environ["NICEGUI_STORAGE_PATH"] = str(Path(user_config_dir("kymflow", None)) / ".nicegui")
 
@@ -105,6 +105,8 @@ def home() -> None:
 
     # Get or create cached page instance
     cached_page = get_cached_page(session_id, "/")
+    logger.warning(f'cached_page:{cached_page}')
+
     if cached_page is not None:
         # Reuse cached page
         # logger.debug(f"Reusing cached HomePage for session {session_id[:8]}...")
@@ -119,31 +121,6 @@ def home() -> None:
 
     # Render the page (creates fresh UI elements each time and ensures setup)
     page.render(page_title="KymFlow")
-
-    # original before bootstrap from gpt for web render
-    
-    # Bootstrap folder loading once per session (if enabled)
-    # MUST be after render() so controllers are set up via _ensure_setup()
-    # Only bootstrap if this is a new page instance (cached_page is None)
-    # and no folder is already loaded
-    # if cached_page is None and context.app_state.folder is None:
-    #     # Try to load last path from user config
-    #     last_path, last_depth = context.user_config.get_last_path()
-    #     if last_path:
-    #         last_path_obj = Path(last_path)
-    #         if last_path_obj.exists():
-    #             # Emit event - FolderController will auto-detect CSV from path
-    #             logger.info(
-    #                 f"Loading last path from config: {last_path} (depth={last_depth}) "
-    #                 f"for session {session_id[:8]}..."
-    #             )
-    #             page.bus.emit(SelectPathEvent(
-    #                 new_path=last_path,
-    #                 depth=last_depth,
-    #                 phase="intent",
-    #             ))
-    #         else:
-    #             logger.debug(f"Last path from config does not exist: {last_path}")
 
     # Bootstrap folder loading once per session (if enabled)
     # NOTE: determine web/native from the same env var used by main(), NOT from app.native/main_window.
@@ -201,69 +178,6 @@ def home() -> None:
                 logger.warning(f"[bootstrap] Bootstrap path does not exist: {chosen_path!r}")
         else:
             logger.info("[bootstrap] No chosen_path (nothing to bootstrap)")
-
-
-
-# @ui.page("/batch")
-# def batch() -> None:
-#     """Batch route for v2 GUI.
-#
-#     Uses cached page instances to prevent recreation on navigation.
-#     Each browser tab/window gets its own isolated session.
-#     """
-#     ui.page_title("KymFlow - Batch")
-#     inject_global_styles()
-#
-#     # Get stable session ID (persists across navigations)
-#     session_id = get_stable_session_id()
-#
-#     # Get or create cached page instance
-#     cached_page = get_cached_page(session_id, "/batch")
-#     if cached_page is not None:
-#         # Reuse cached page
-#         # logger.debug(f"Reusing cached BatchPage for session {session_id[:8]}...")
-#         page = cached_page
-#     else:
-#         # Create new page instance and cache it
-#         # bus = get_event_bus(BusConfig(trace=False))
-#         bus = get_event_bus()
-#         page = BatchPage(context, bus)
-#         cache_page(session_id, "/batch", page)
-#         # logger.debug(f"Created and cached new BatchPage for session {session_id[:8]}...")
-#
-#     # Render the page (creates fresh UI elements each time)
-#     page.render(page_title="KymFlow - Batch")
-
-
-# @ui.page("/pool")
-# def pool() -> None:
-#     """Pool route for v2 GUI.
-#
-#     Uses cached page instances to prevent recreation on navigation.
-#     Each browser tab/window gets its own isolated session.
-#     """
-#     ui.page_title("KymFlow - Pool")
-#     inject_global_styles()
-#
-#     # Get stable session ID (persists across navigations)
-#     session_id = get_stable_session_id()
-#
-#     # Get or create cached page instance
-#     cached_page = get_cached_page(session_id, "/pool")
-#     if cached_page is not None:
-#         # Reuse cached page
-#         # logger.debug(f"Reusing cached PoolPage for session {session_id[:8]}...")
-#         page = cached_page
-#     else:
-#         # Create new page instance and cache it
-#         # bus = get_event_bus(BusConfig(trace=False))
-#         bus = get_event_bus()
-#         page = PoolPage(context, bus)
-#         cache_page(session_id, "/pool", page)
-#         # logger.debug(f"Created and cached new PoolPage for session {session_id[:8]}...")
-#
-#     # Render the page (creates fresh UI elements each time)
-#     page.render(page_title="KymFlow - Pool")
 
 def _env_bool(name: str, default: bool) -> bool:
     """Parse env var as bool; if unset/invalid returns default."""

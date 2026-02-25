@@ -406,8 +406,9 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
     try:
         if getattr(context, "app_config", None) is not None:
             rect = context.app_config.get_window_rect()
+            logger.warning(f'loaded rect via context.app_config: {rect}')
     except Exception as e:
-        logger.warning(f'context.app_config.get_window_rect failed: {e}')
+        logger.error(f'context.app_config.get_window_rect failed: {e}')
         rect = None
 
     # 2) Fallback: load AppConfig directly (works in __mp_main__/Process-1)
@@ -425,23 +426,27 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
             rect = None
 
     if rect is None:
-        logger.warning('no window rect available; using default placement')
+        logger.error('no window rect available; using default placement')
         return
 
     x, y, w, h = map(int, rect)
 
     # guard against garbage
     if w < 200 or h < 200:
-        logger.warning(f'window rect too small; ignoring: {(x, y, w, h)}')
+        logger.error(f'window rect too small; ignoring: {(x, y, w, h)}')
         return
 
     # omit rect if position is off-screen (e.g. secondary display disconnected);
     # let OS choose placement to avoid pywebview Cocoa AttributeError
     if x < 0 or y < 0:
-        logger.warning(f'window rect has off-screen position (x={x}, y={y}); omitting rect, OS will place window')
+        logger.error(f'window rect has off-screen position (x={x}, y={y}); omitting rect, OS will place window')
         return
 
-    logger.warning(f'setting initial pywebview window: x={x} y={y} w={w} h={h}')
+    if w > 1920:
+        logger.warning(f'last ditch effort: window width too large; setting to 1920: {w}')
+        w = 1920
+
+    logger.warning(f'setting initial pywebview native.window_args: x={x} y={y} w={w} h={h}')
 
     native.window_args.update({
         "x": x,

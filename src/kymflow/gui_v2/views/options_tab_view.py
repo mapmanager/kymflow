@@ -6,7 +6,7 @@ with dynamically generated widgets based on AppConfig field metadata.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable, Optional
 
 from nicegui import ui
 
@@ -22,15 +22,24 @@ logger = get_logger(__name__)
 class OptionsTabView:
     """Options tab view component (app configuration editor)."""
 
-    def __init__(self, app_config: AppConfig, context: AppContext) -> None:
+    def __init__(
+        self,
+        app_config: AppConfig,
+        context: AppContext,
+        *,
+        on_blinded_change: Optional[Callable[[], None]] = None,
+    ) -> None:
         """Initialize options tab view.
 
         Args:
             app_config: AppConfig instance to read/write settings.
             context: AppContext instance for saving configs.
+            on_blinded_change: Optional callback invoked when Blinded Analysis is toggled.
+                Use to refresh views that display blinded data (e.g. file table).
         """
         self._app_config = app_config
         self._context = context
+        self._on_blinded_change = on_blinded_change
 
     def render(self) -> None:
         """Create the Options tab UI inside the current container."""
@@ -167,6 +176,8 @@ class OptionsTabView:
             # Use specialized methods if available, otherwise use generic set_attribute
             if field_name == "blinded":
                 self._app_config.set_blinded(new_value)
+                if self._on_blinded_change is not None:
+                    self._on_blinded_change()
             else:
                 self._app_config.set_attribute(field_name, new_value)
             logger.info(f"App config updated: {field_name} = {new_value}")
