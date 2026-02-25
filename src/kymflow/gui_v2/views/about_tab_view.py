@@ -94,13 +94,6 @@ def getVersionInfo_gui() -> dict:
 
     version_info["KymFlow GUI version"] = kymflow_gui.__version__  # noqa: SLF001
     version_info["NiceGUI version"] = nicegui.__version__
-
-    # get build info
-    from kymflow.build_info import get_build_info
-    build_info = get_build_info()
-    # version_info["Build info"] = build_info
-    for key, value in build_info.items():
-        version_info[key] = value
         
     return version_info
 

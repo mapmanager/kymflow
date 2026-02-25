@@ -26,6 +26,13 @@ def getVersionInfo() -> dict:
     retDict["Processor"] = platform.processor()
 
     
+    # get build info
+    from kymflow.build_info import get_build_info
+    build_info = get_build_info()
+    # version_info["Build info"] = build_info
+    for key, value in build_info.items():
+        retDict[key] = value
+
     _user_config_file = UserConfig.default_config_path()
     _user_config_path = _user_config_file.parent
     # _link = f'<a href="file://{_user_config_path}">{_user_config_path}</a>'
