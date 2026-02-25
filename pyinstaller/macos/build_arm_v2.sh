@@ -10,6 +10,20 @@ cd "$SCRIPT_DIR"
 
 echo "[build_arm] CWD: $(pwd)"
 
+# ---- abb 20260225 - include nicegui-pack build time ----
+source ./build_arm_v2_timestamp.sh
+
+# Cleanup on exit (success or failure)
+cleanup_build_info() {
+    if [ -n "${BUILD_INFO_PATH:-}" ] && [ -f "$BUILD_INFO_PATH" ]; then
+        rm -f "$BUILD_INFO_PATH"
+        echo "[build_arm] Cleanup: removed $BUILD_INFO_PATH"
+    fi
+}
+trap cleanup_build_info EXIT
+# ---- END abb 20260225 - include nicegui-pack build time ----
+
+
 # ---- make conda shell functions available ----
 CONDA_BASE="${HOME}/opt/miniconda3"
 
