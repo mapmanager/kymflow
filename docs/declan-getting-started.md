@@ -18,10 +18,21 @@ Now that you have a local copy of `declan-stall-v1/`. Run the KymFlow app ...
 
 The first time you run the kymflow app you need to do this.
 
- - Option + Right-click (or Control + Click) on KymFlow.app and select 'Open' from the context menu
+ - [[[THIS NO LONGER WORKS]]] Option + Right-click (or Control + Click) on KymFlow.app and select 'Open' from the context menu
 
 This gets you around the initial warning of "KymFlow.app Not opened".
 
+### Do this
+
+ 1. Download the zip into your Downloads folder
+ 2. Double-click the KymFlow.zip to extract KymFlow.app
+ 2. Open a terminal window and type (copy and paste this to get it correct)
+ 
+```
+   xattr -dr com.apple.quarantine ~/Downloads/KymFlow.app
+```
+
+After that little hoop, the app should run normally.
 
 If you have any problems with this, email and I will get back asap. This is a one time 'first run' thing. Next time you open (double-click), this is not needed.
 
