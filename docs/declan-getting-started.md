@@ -12,31 +12,6 @@ Always work locally, **DO NOT** work on files that are on box.
 
 Now that you have a local copy of `declan-stall-v1/`. Run the KymFlow app ...
 
-## First time run of KymFlow app
-
-![macOS Open Warning](images/macos-open-warning.png){.img-small align=right }
-
-The first time you run the kymflow app you need to do this.
-
- - [[[THIS NO LONGER WORKS]]] Option + Right-click (or Control + Click) on KymFlow.app and select 'Open' from the context menu
-
-This gets you around the initial warning of "KymFlow.app Not opened".
-
-### Do this
-
- 1. Download the zip into your Downloads folder
- 2. Double-click the KymFlow.zip to extract KymFlow.app
- 2. Open a terminal window and type (copy and paste this to get it correct)
- 
-```
-   xattr -dr com.apple.quarantine ~/Downloads/KymFlow.app
-```
-
-After that little hoop, the app should run normally.
-
-If you have any problems with this, email and I will get back asap. This is a one time 'first run' thing. Next time you open (double-click), this is not needed.
-
-
 ## Once the KymFlow app is running ...
 
 Click 'open csv', find you local `declan-stall-v1/` folder and open the provided `declan-random-v1.csv`
@@ -72,11 +47,12 @@ Single click a file will:
 ## Some GUI niceties
 
  - Keyboard `enter` will always set the view to full scale. You can also double-click on the plot to set full scale.
- - When you are zoomed in, use the '<' and '>' buttons to scroll throught the kymograph.
+ - When you are zoomed in, use the '<' and '>' buttons or keyboard left-arrow and right-arrow to scroll throught the kymograph.
+ - You can always go to the previous and next file in the list with keyboard shift + up-arrow and down-arrow.
 
 ## Blind analysis
 
-To turn on blind analysis. Go to the options toolbar, by clicking the gear icon in the left toolbar. Click on the 'Blinded Analysis' checkbox.
+To turn on blind analysis. Go to the options toolbar and click on the 'Blinded Analysis' checkbox.
 
 **Important.** Blinded analysis is a honesty contract. The gui will in general blind your analysis by not showing filenames, dates, treatments, conditions, etc. There are plenty of ways around it. Be honest!!!
 
@@ -98,7 +74,5 @@ If you still need to save, click Cancel, save your work, and then quit again.
 This is just the first step.
 
 Score all 50 files in `declan-stall-v1/` `declan-random-v1.csv`. Zip the `declan-stall-v1/` and put the zip into a new folder on box.
-
-I have scripts to test the null hypothesis, 'number of stalls is significantly different between condiitons`.
 
 This little tutorial is really the beginning of a lot of fun with GUIs. There is a ton more but I will leave it at that for now.

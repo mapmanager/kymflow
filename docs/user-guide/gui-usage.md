@@ -30,26 +30,7 @@ The main page provides a complete workflow for analyzing individual kymograph fi
 - **Cancel**: Stop running analysis
 - **Save**: Save analysis results to disk
 
-## Batch Page
-
-The batch page allows processing multiple files sequentially.
-
-### Multi-Selection
-
-- **Select Multiple Files**: Click multiple rows to select them
-- **Selection Counter**: Shows number of selected files
-- **Analyze Selected**: Process only selected files
-- **Progress Tracking**: See progress for both individual files and overall batch
-
-### Batch Controls
-
-- **Window Size**: Set analysis window size for all files
-- **Analyze Flow**: Start batch processing
-- **Cancel**: Stop batch processing at any time
-
 ## Tips
 
 - Use the folder selector to switch between different data directories
 - Analysis results are saved in a `-analysis` subfolder alongside your TIFF files
-- The GUI preserves your file selections when navigating between pages
-- Use the contrast controls to better visualize flow patterns in the image

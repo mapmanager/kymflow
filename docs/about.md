@@ -9,13 +9,11 @@ KymFlow provides both a desktop GUI application and a Python API for working wit
 - Load and visualize kymograph images
 - Edit experimental metadata
 - Perform Radon-based flow analysis to detect flow direction and velocity
-- Process multiple files in batch mode
 - Export analysis results for further processing
 
 ## Features
 
 - **Intuitive GUI**: Browse, analyze, and manage kymograph files with an easy-to-use interface
-- **Batch Processing**: Analyze multiple files sequentially with progress tracking
 - **Metadata Management**: Edit and save experimental metadata alongside analysis results
 - **Python API**: Use the backend programmatically in scripts and Jupyter notebooks
 - **Radon Flow Analysis**: Detect flow direction and velocity using Radon transforms
@@ -52,6 +50,3 @@ Contributions are welcome! Please see the [Contributing Guide](contributing.md) 
 - **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/mapmanager/kymflow/issues)
 - **Documentation**: Full documentation is available at [https://mapmanager.github.io/kymflow/](https://mapmanager.github.io/kymflow/)
 
-## Acknowledgments
-
-KymFlow is designed for analyzing kymograph data from in vivo blood flow imaging experiments, particularly those using laser scanning microscopy techniques.

@@ -2,7 +2,7 @@
 
 ## First Steps
 
-1. **Launch KymFlow**: Run `kymflow-gui` from your terminal
+1. **Launch KymFlow**: Run `KymFlow.app` with a double-click
 2. **Select a Folder**: Use the folder selector to choose a directory containing kymograph TIFF files
 3. **Browse Files**: The file table shows all TIFF files found in the selected folder
 4. **Select a File**: Click on a file in the table to view its metadata and image
@@ -29,15 +29,7 @@
 4. Wait for analysis to complete
 5. Click "Save" to persist results
 
-### Batch Processing
-
-1. Navigate to the Batch page
-2. Select multiple files (hold Ctrl/Cmd to multi-select)
-3. Set window size
-4. Click "Analyze Flow" to process all selected files sequentially
-
 ## Next Steps
 
 - See [GUI Usage](gui-usage.md) for detailed interface documentation
-- See [Batch Processing](batch-processing.md) for batch analysis workflows
 - See [API Reference](../api/kym_file.md) for programmatic access
