@@ -1,0 +1,1040 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Kymograph blood flow analysis tool">
+      
+      
+        <meta name="author" content="Robert H. Cudmore">
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../images/kymflow.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
+    
+    
+      
+        <title>Plan: Add error_cb to AcqImageList Load Pipeline - KymFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../theme/css/style.css">
+    
+      <link rel="stylesheet" href="../../theme/css/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="blue" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#plan-add-error_cb-to-acqimagelist-load-pipeline" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="KymFlow" class="md-header__button md-logo" aria-label="KymFlow" data-md-component="logo">
+      
+  <img src="../../images/kymflow.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            KymFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plan: Add error_cb to AcqImageList Load Pipeline
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="blue" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mapmanager/kymflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    KymFlow Repository
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="KymFlow" class="md-nav__button md-logo" aria-label="KymFlow" data-md-component="logo">
+      
+  <img src="../../images/kymflow.png" alt="logo">
+
+    </a>
+    KymFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mapmanager/kymflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    KymFlow Repository
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../download/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Download
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../declan-getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Declan Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/gui-usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GUI Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/batch-processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../file-formats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Formats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/notebooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notebooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../about/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#error_cb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        error_cb
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#does-error_cb-stop-the-load" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does error_cb stop the load?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-uinotify-is-called" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where ui.notify() is Called
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-to-modify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files to Modify
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Files to Modify">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-srckymflowcoreutilsprogresspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. src/kymflow/core/utils/progress.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-srckymflowcoreimage_loadersacq_image_listpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. src/kymflow/core/image_loaders/acq_image_list.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-srckymflowcoreimage_loaderskym_image_listpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. src/kymflow/core/image_loaders/kym_image_list.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-srckymflowgui_v2statepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. src/kymflow/gui_v2/state.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-srckymflowgui_v2controllersfolder_controllerpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. src/kymflow/gui_v2/controllers/folder_controller.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-checklist-run-in-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation checklist (run in order)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="plan-add-error_cb-to-acqimagelist-load-pipeline">Plan: Add error_cb to AcqImageList Load Pipeline<a class="headerlink" href="#plan-add-error_cb-to-acqimagelist-load-pipeline" title="Permanent link">¤</a></h1>
+<p><strong>Implementation order:</strong> Follow the "Files to Modify" section in order (1 → 5). Each file path is relative to the <strong>kymflow</strong> project root (the directory containing <code>src/kymflow</code> and <code>tests/</code>).</p>
+<p><strong>Conventions:</strong> Add <code>error_cb</code> as an optional parameter after <code>progress_cb</code> in every signature. Use keyword-only args where the rest of the API does (e.g. after <code>*</code>). Line numbers in the plan (~L...) are approximate; use method and call-site descriptions to locate the correct spots if the code has changed.</p>
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">¤</a></h2>
+<p>Add an optional <code>error_cb</code> callback to signal when individual files fail to load (e.g., permission denied on macOS). The callback mirrors <code>cancel_event</code> and <code>progress_cb</code> and allows the GUI to surface non-fatal load errors to the user.</p>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">¤</a></h2>
+<p>When loading a path (folder, file list, or CSV), <code>AcqImageList._instantiate_image()</code> constructs <code>image_cls(**kwargs)</code> (e.g., <code>KymImage(path=file_path)</code>). KymImage can fail when it calls <code>_readOlympusHeader(path_obj)</code>, which reads the companion <code>.txt</code> file via <code>with open(olympusTxtPath) as f:</code> in <code>read_olympus_header.py</code> (line 350). On some systems (e.g., macOS Sequoia) the app may lack permission, raising:</p>
+<div class="highlight"><pre><span></span><code>[Errno 1] Operation not permitted: &#39;/Users/.../20251114_A114_0008.txt&#39;
+</code></pre></div>
+<p>The exception propagates:</p>
+<ol>
+<li><code>read_olympus_header.py:350</code> – <code>open(olympusTxtPath)</code> raises <code>OSError</code></li>
+<li><code>_readOlympusHeader</code> – no try/except, propagates</li>
+<li><code>KymImage.__init__:53</code> – <code>_olympusDict = _readOlympusHeader(path_obj)</code> propagates</li>
+<li><code>AcqImageList._instantiate_image:303</code> – <code>return self.image_cls(**kwargs)</code> propagates</li>
+<li><strong>Caught</strong> by <code>except Exception as e:</code> in <code>_instantiate_image</code> (lines 304–307)</li>
+</ol>
+<p><code>_instantiate_image</code> logs the error and returns <code>None</code>. <code>_wrap_paths</code> receives <code>None</code> and skips the file. No upstream notification occurs; the user only sees logs and may not realize files were skipped.</p>
+<h2 id="design">Design<a class="headerlink" href="#design" title="Permanent link">¤</a></h2>
+<h3 id="error_cb">error_cb<a class="headerlink" href="#error_cb" title="Permanent link">¤</a></h3>
+<ul>
+<li><strong>Signature</strong>: <code>Callable[[Path, Exception], None] | None</code></li>
+<li><strong>Invocation</strong>: Called when <code>_instantiate_image</code> catches an exception, before returning <code>None</code></li>
+<li><strong>Threading</strong>: Invoked on the worker thread (same as <code>progress_cb</code>); UI updates must happen elsewhere (e.g., in <code>on_done</code>)</li>
+</ul>
+<h3 id="does-error_cb-stop-the-load">Does error_cb stop the load?<a class="headerlink" href="#does-error_cb-stop-the-load" title="Permanent link">¤</a></h3>
+<p><strong>No.</strong> <code>error_cb</code> is a reporting hook. When a file fails:</p>
+<ol>
+<li><code>_instantiate_image</code> catches the exception</li>
+<li>Calls <code>error_cb(file_path, e)</code> if provided</li>
+<li>Returns <code>None</code></li>
+<li><code>_wrap_paths</code> does not append the failed file but continues to the next one</li>
+</ol>
+<p>The load proceeds for all other files. Only the failed file(s) are skipped. If you want “abort on first error,” that would be a separate design (e.g., <code>error_cb</code> sets <code>cancel_event</code>, or returns a boolean to abort).</p>
+<h2 id="where-uinotify-is-called">Where ui.notify() is Called<a class="headerlink" href="#where-uinotify-is-called" title="Permanent link">¤</a></h2>
+<p><code>ui.notify()</code> runs on the main thread. <code>error_cb</code> runs on the worker thread, so it should not call <code>ui.notify()</code> directly.</p>
+<p>The correct place for <code>ui.notify()</code> is in <strong><code>FolderController._start_threaded_load</code></strong> inside the <code>on_done</code> callback (around lines 266–293):</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">on_done</span><span class="p">(</span><span class="n">result</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="s2">&quot;KymImageList&quot;</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">dialog</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">files</span><span class="p">,</span> <span class="n">selected_path</span> <span class="o">=</span> <span class="n">result</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_app_state</span><span class="o">.</span><span class="n">_apply_loaded_files</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">selected_path</span><span class="p">)</span>
+    <span class="c1"># ... persist config, set title, emit event ...</span>
+
+    <span class="c1"># Show success notification</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">is_csv</span><span class="p">:</span>
+            <span class="n">ui</span><span class="o">.</span><span class="n">notify</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded CSV: </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;positive&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ui</span><span class="o">.</span><span class="n">notify</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded: </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;positive&quot;</span><span class="p">)</span>
+
+        <span class="c1"># NEW: If any files failed to load, show warning</span>
+        <span class="k">if</span> <span class="n">load_errors</span><span class="p">:</span>
+            <span class="n">ui</span><span class="o">.</span><span class="n">notify</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">load_errors</span><span class="p">)</span><span class="si">}</span><span class="s2"> file(s) could not be loaded (e.g., permission denied)&quot;</span><span class="p">,</span>
+                <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;warning&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># ... existing exception handling ...</span>
+</code></pre></div>
+<p>Flow:</p>
+<ol>
+<li>Worker runs, calls <code>error_cb(path, exc)</code> for each failed file; <code>error_cb</code> appends to <code>load_errors</code>.</li>
+<li>Worker completes and puts <code>DoneMsg</code> into the queue.</li>
+<li>Timer on the main thread drains the queue and calls <code>on_done</code>.</li>
+<li><code>on_done</code> runs on the main thread → safe to call <code>ui.notify()</code>.</li>
+</ol>
+<p><code>load_errors</code> is defined in the closure around <code>worker_fn</code> / <code>on_done</code> and is populated by the worker before <code>on_done</code> runs.</p>
+<h2 id="files-to-modify">Files to Modify<a class="headerlink" href="#files-to-modify" title="Permanent link">¤</a></h2>
+<p>All paths below are relative to the <strong>kymflow</strong> project root (e.g. <code>kymflow/</code> when you are in the repo).</p>
+<h3 id="1-srckymflowcoreutilsprogresspy">1. <code>src/kymflow/core/utils/progress.py</code><a class="headerlink" href="#1-srckymflowcoreutilsprogresspy" title="Permanent link">¤</a></h3>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Imports</td>
+<td>Ensure <code>Path</code> is in scope (already used by <code>ProgressMessage</code>).</td>
+</tr>
+<tr>
+<td>After line <code>ProgressCallback = Callable[[ProgressMessage], None]</code></td>
+<td>Add: <code>ErrorCallback = Callable[[Path, Exception], None]</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-srckymflowcoreimage_loadersacq_image_listpy">2. <code>src/kymflow/core/image_loaders/acq_image_list.py</code><a class="headerlink" href="#2-srckymflowcoreimage_loadersacq_image_listpy" title="Permanent link">¤</a></h3>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Imports</td>
+<td>Add <code>ErrorCallback</code> to the import from <code>kymflow.core.utils.progress</code>.</td>
+</tr>
+<tr>
+<td><code>__init__</code> (signature ~L79–81)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> into both <code>_load_files(...)</code> calls (file_path_list branch ~L151–155, path branch ~L177–181).</td>
+</tr>
+<tr>
+<td><code>_load_files</code> (signature ~L312–315)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> into every <code>_wrap_paths(...)</code> call (3 places: ~L322–326, ~L343–347, ~L367–374).</td>
+</tr>
+<tr>
+<td><code>_wrap_paths</code> (signature ~L690–696)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. In the loop, change <code>_instantiate_image(file_path, blind_index=index)</code> to <code>_instantiate_image(file_path, blind_index=index, error_cb=error_cb)</code>.</td>
+</tr>
+<tr>
+<td><code>_instantiate_image</code> (signature ~L283)</td>
+<td>Add parameter <code>error_cb: ErrorCallback \| None = None</code> (after <code>blind_index</code>). In the <code>except Exception as e:</code> block, before <code>return None</code>, add: <code>if error_cb is not None: error_cb(file_path, e)</code>. (Keep existing <code>logger.error</code> calls; call <code>error_cb</code> before <code>return None</code>.)</td>
+</tr>
+<tr>
+<td><code>load</code> (signature ~L378–384)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> to <code>_load_files(...)</code> (~L399–403).</td>
+</tr>
+<tr>
+<td><code>reload</code> (signature ~L405–410)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> to <code>load(...)</code> (~L413–417).</td>
+</tr>
+<tr>
+<td><code>load_from_path</code> (signature ~L428–439)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> into each of the four <code>return cls(...)</code> calls only (do <strong>not</strong> add error_cb to <code>collect_paths_from_csv</code>). <strong>Exact call sites:</strong> (1) path=None branch: <code>return cls(path=None, ..., progress_cb=progress_cb, error_cb=error_cb)</code> (~L453–461). (2) CSV branch: <code>return cls(file_path_list=..., ..., progress_cb=progress_cb, error_cb=error_cb)</code> (~L471–479). (3) Single-file branch: <code>return cls(path=path_obj, ..., progress_cb=progress_cb, error_cb=error_cb)</code> (~L482–490). (4) Folder branch: <code>return cls(path=path_obj, ..., progress_cb=progress_cb, error_cb=error_cb)</code> (~L493–502).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="3-srckymflowcoreimage_loaderskym_image_listpy">3. <code>src/kymflow/core/image_loaders/kym_image_list.py</code><a class="headerlink" href="#3-srckymflowcoreimage_loaderskym_image_listpy" title="Permanent link">¤</a></h3>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Imports</td>
+<td>Add <code>ErrorCallback</code> to the import from <code>kymflow.core.utils.progress</code> (same line as <code>CancelledError</code>, <code>ProgressCallback</code>, <code>ProgressMessage</code>).</td>
+</tr>
+<tr>
+<td><code>__init__</code> (signature ~L78–80)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> in <code>super().__init__(..., progress_cb=progress_cb, error_cb=error_cb)</code> (~L104–115).</td>
+</tr>
+<tr>
+<td><code>load_from_path</code> (signature ~L136–139)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> in every <code>return cls(...)</code>: (1) path=None branch (~L164–166), (2) CSV branch (~L174–181), (3) single-file branch (~L184–191), (4) folder branch (~L193–200).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="4-srckymflowgui_v2statepy">4. <code>src/kymflow/gui_v2/state.py</code><a class="headerlink" href="#4-srckymflowgui_v2statepy" title="Permanent link">¤</a></h3>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Imports</td>
+<td>Add <code>ErrorCallback</code> to the import from <code>kymflow.core.utils.progress</code> (e.g. <code>from kymflow.core.utils.progress import ProgressCallback, ErrorCallback</code>).</td>
+</tr>
+<tr>
+<td><code>_build_files_for_path</code> (signature ~L153–161)</td>
+<td>Add <code>error_cb: ErrorCallback \| None = None</code> after <code>progress_cb</code>. Pass <code>error_cb=error_cb</code> into <code>KymImageList.load_from_path(..., progress_cb=progress_cb, error_cb=error_cb)</code> (~L175–182).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="5-srckymflowgui_v2controllersfolder_controllerpy">5. <code>src/kymflow/gui_v2/controllers/folder_controller.py</code><a class="headerlink" href="#5-srckymflowgui_v2controllersfolder_controllerpy" title="Permanent link">¤</a></h3>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_start_threaded_load</code></td>
+<td>Before defining <code>worker_fn</code>, define <code>load_errors: list[tuple[Path, Exception]] = []</code> and <code>def capture_error(path: Path, exc: Exception) -&gt; None: load_errors.append((path, exc))</code>. At start of <code>worker_fn</code>, add <code>load_errors.clear()</code>. Pass <code>error_cb=capture_error</code> into <code>_build_files_for_path(...)</code>. Inside <code>on_done</code>, after the existing success <code>ui.notify</code> block (and inside the same <code>try</code>), add: <code>if load_errors: ui.notify(f"{len(load_errors)} file(s) could not be loaded (e.g., permission denied)", type="warning")</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Worker closure sketch:</p>
+<div class="highlight"><pre><span></span><code><span class="n">load_errors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">capture_error</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">load_errors</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">path</span><span class="p">,</span> <span class="n">exc</span><span class="p">))</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">worker_fn</span><span class="p">(</span><span class="n">cancel_event</span><span class="p">,</span> <span class="n">progress_cb</span><span class="p">):</span>
+    <span class="n">load_errors</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_app_state</span><span class="o">.</span><span class="n">_build_files_for_path</span><span class="p">(</span>
+        <span class="n">path</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span>
+        <span class="n">cancel_event</span><span class="o">=</span><span class="n">cancel_event</span><span class="p">,</span>
+        <span class="n">progress_cb</span><span class="o">=</span><span class="n">progress_cb</span><span class="p">,</span>
+        <span class="n">error_cb</span><span class="o">=</span><span class="n">capture_error</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># ...</span>
+</code></pre></div>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">¤</a></h2>
+<p>Add tests in <strong><code>tests/core/test_acq_image_list.py</code></strong>:</p>
+<ul>
+<li><code>error_cb</code> is called when <code>_instantiate_image</code> fails (e.g. mock <code>image_cls</code> to raise).</li>
+<li><code>error_cb</code> is not called when load succeeds.</li>
+<li>Load continues after a failure; other files are still loaded.</li>
+</ul>
+<h2 id="implementation-checklist-run-in-order">Implementation checklist (run in order)<a class="headerlink" href="#implementation-checklist-run-in-order" title="Permanent link">¤</a></h2>
+<ol>
+<li><strong>progress.py</strong> – Add <code>ErrorCallback</code> type alias.</li>
+<li><strong>acq_image_list.py</strong> – Import <code>ErrorCallback</code>; add <code>error_cb</code> param to <code>__init__</code>, <code>_load_files</code>, <code>_wrap_paths</code>, <code>_instantiate_image</code>, <code>load</code>, <code>reload</code>, <code>load_from_path</code>; thread through all call sites; in <code>_instantiate_image</code> except block call <code>error_cb(file_path, e)</code> when <code>error_cb</code> is not None.</li>
+<li><strong>kym_image_list.py</strong> – Import <code>ErrorCallback</code>; add <code>error_cb</code> to <code>__init__</code> and <code>load_from_path</code>; pass through to <code>super().__init__</code> and all <code>cls(...)</code> returns.</li>
+<li><strong>state.py</strong> – Import <code>ErrorCallback</code>; add <code>error_cb</code> to <code>_build_files_for_path</code> and pass to <code>KymImageList.load_from_path</code>.</li>
+<li><strong>folder_controller.py</strong> – In <code>_start_threaded_load</code>: add <code>load_errors</code> and <code>capture_error</code>; pass <code>error_cb=capture_error</code> to <code>_build_files_for_path</code>; in <code>on_done</code> add <code>ui.notify</code> when <code>load_errors</code> is non-empty.</li>
+<li><strong>tests</strong> – Add tests in <code>tests/core/test_acq_image_list.py</code> as above.</li>
+</ol>
+<h2 id="out-of-scope">Out of Scope<a class="headerlink" href="#out-of-scope" title="Permanent link">¤</a></h2>
+<ul>
+<li>Changing <code>read_olympus_header.py</code> to catch/handle permission errors locally (current design: let exceptions propagate to <code>_instantiate_image</code>)</li>
+<li>Aborting the load on first error (would require an additional design decision)</li>
+<li>ThreadJobRunner changes (worker still receives only <code>cancel_event</code> and <code>progress_cb</code>; <code>error_cb</code> is captured in the closure)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        All material is Copyright 2011-2023 Robert H. Cudmore
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.instant"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
