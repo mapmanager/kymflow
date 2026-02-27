@@ -1,3 +1,6 @@
+# uv env used in build_arm_v2.sh
+.venv-build
+
 src/kymflow/_build_info.py
 
 site/
