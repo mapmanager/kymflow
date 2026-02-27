@@ -301,8 +301,9 @@ class AcqImageList(Generic[T]):
             
             return self.image_cls(**kwargs)
         except Exception as e:
-            logger.warning(f"AcqImageList: could not load file: {file_path}")
-            logger.warning(f"  -->> e:{e}")
+            # declan 202602 fail
+            logger.error(f"AcqImageList: could not load file: {file_path}")
+            logger.error(f"  -->> e:{e}")
             return None
 
     def _load_files(

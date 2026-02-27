@@ -73,7 +73,7 @@ echo "[build_arm] Installing kymflow (editable) with [gui]..."
 python -m pip install -e '../../.[gui]'
 
 echo "[build_arm] Installing nicewidgets (editable) with [no_mpl]..."
-python -m pip install -e '../../../nicewidgets/.[no_mpl]'  # abb 2026
+python -m pip install -e '../../../nicewidgets/.[no_mpl]'
 
 echo "[build_arm] Pinning nicegui==3.7.1 for clarity..."
 python -m pip install 'nicegui==3.7.1'
@@ -149,7 +149,17 @@ nicegui-pack --version 2>/dev/null || true
 # Build
 # -----------------------------------------------------------------------------
 echo "[build_arm] Running nicegui-pack..."
-nicegui-pack --windowed --clean --name "KymFlow" --icon "kymflow.icns" ../../src/kymflow/gui_v2/app.py
+# todo, add
+# --osx-bundle-identifier com.robertcudmore.kymflow
+# nicegui-pack --windowed --clean --name "KymFlow" --icon "kymflow.icns" --osx-bundle-identifier com.robertcudmore.kymflow ../../src/kymflow/gui_v2/app.py
+
+nicegui-pack \
+  --windowed \
+  --clean \
+  --name "KymFlow" \
+  --icon "kymflow.icns" \
+  --osx-bundle-identifier "com.robertcudmore.kymflow" \
+  ../../src/kymflow/gui_v2/app.py
 
 # Patch Info.plist (About dialog version/build)
 source ./build_arm_v2_set_plist.sh

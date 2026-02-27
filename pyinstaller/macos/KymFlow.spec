@@ -47,5 +47,5 @@ app = BUNDLE(
     coll,
     name='KymFlow.app',
     icon='kymflow.icns',
-    bundle_identifier=None,
+    bundle_identifier='com.robertcudmore.kymflow',
 )
