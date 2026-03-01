@@ -32,5 +32,8 @@ R3: ...
 - Any “do not change” constraints
 
 ## Codex implementation report
-Save:
-- `tickets/<ticket_name>_codex_report.md`
+Save report as:
+- `tickets/<this_ticket_filename_without_.md>_codex_report.md`
+If that file exists, save as:
+- `tickets/<this_ticket_filename_without_.md>_codex_report_v2.md` (or higher)
+Never overwrite an existing report.

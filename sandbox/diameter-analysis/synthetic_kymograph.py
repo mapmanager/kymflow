@@ -12,32 +12,43 @@ def generate_synthetic_kymograph(
     um_per_pixel: float = 0.5,
     polarity: str = "bright_on_dark",
     seed: int = 0,
+    noise_sigma: float = 0.02,
 ) -> dict[str, Any]:
-    """Generate a simple synthetic vessel-like kymograph and edge ground truth."""
-    if n_time <= 0 or n_space <= 4:
-        raise ValueError("n_time must be > 0 and n_space must be > 4")
+    """Generate a deterministic synthetic vessel-like kymograph with truth diameter.
+
+    `truth['truth_diameter_px']` is aligned to time rows.
+    """
+    if n_time <= 0 or n_space <= 8:
+        raise ValueError("n_time must be > 0 and n_space must be > 8")
 
     rng = np.random.default_rng(seed)
     t = np.arange(n_time, dtype=float)
     x = np.arange(n_space, dtype=float)
 
-    center = (n_space / 2.0) + 2.5 * np.sin(2.0 * np.pi * t / max(20.0, n_time / 3.0))
-    diameter = (n_space * 0.25) + (n_space * 0.06) * np.sin(2.0 * np.pi * t / max(10.0, n_time / 7.0))
+    center = (n_space / 2.0) + 3.0 * np.sin(2.0 * np.pi * t / max(25.0, n_time / 4.0))
+    diameter = (n_space * 0.28) + (n_space * 0.07) * np.sin(
+        2.0 * np.pi * t / max(12.0, n_time / 8.0)
+    )
+    diameter = np.clip(diameter, 8.0, n_space * 0.6)
 
-    kym = np.empty((n_time, n_space), dtype=float)
     left = center - (diameter / 2.0)
     right = center + (diameter / 2.0)
 
+    kym = np.empty((n_time, n_space), dtype=float)
+    edge_softness = 1.5
     for i in range(n_time):
-        sigma = max(1.0, diameter[i] / 6.0)
-        intensity = np.exp(-((x - center[i]) ** 2) / (2.0 * sigma * sigma))
-        kym[i] = intensity
+        left_sigmoid = 1.0 / (1.0 + np.exp(-(x - left[i]) / edge_softness))
+        right_sigmoid = 1.0 / (1.0 + np.exp((x - right[i]) / edge_softness))
+        profile = left_sigmoid * right_sigmoid
+        kym[i] = profile
 
-    kym += 0.05 * rng.standard_normal(kym.shape)
+    if noise_sigma > 0:
+        kym += noise_sigma * rng.standard_normal(kym.shape)
+
     kym -= np.min(kym)
-    max_val = np.max(kym)
-    if max_val > 0:
-        kym /= max_val
+    kmax = np.max(kym)
+    if kmax > 0:
+        kym /= kmax
 
     if polarity == "dark_on_bright":
         kym = 1.0 - kym
@@ -51,4 +62,9 @@ def generate_synthetic_kymograph(
         "seconds_per_line": float(seconds_per_line),
         "um_per_pixel": float(um_per_pixel),
         "polarity": polarity,
+        "truth": {
+            "truth_diameter_px": diameter.copy(),
+            "truth_left_edge_px": left.copy(),
+            "truth_right_edge_px": right.copy(),
+        },
     }

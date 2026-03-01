@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+import sys
 from typing import Iterable
 
 import pandas as pd
@@ -115,6 +117,8 @@ def generate_hr_report(folder_path:str) -> pd.DataFrame:
     kym_images = KymImageList(path=folder_path)
     logger.info(f'{len(kym_images)} kym images')
 
+    logger.warning('  running run_roi() on all images .. SLOW ..')
+
     # one hr config for all roi
     cfg = HRAnalysisConfig()
 
@@ -132,6 +136,7 @@ def generate_hr_report(folder_path:str) -> pd.DataFrame:
         analysis = HeartRateAnalysis.from_csv(csv_path)
         for roi_id in kym_image.rois.get_roi_ids():
         
+            logger.warning(f'  {_idx+1}:{len(kym_images)} run_roi() on roi_id:{roi_id} file:{kym_image.path.name}')
             _ = analysis.run_roi(roi_id, cfg=cfg)
             
             mini_summary = analysis.get_roi_summary(roi_id, minimal="mini")
@@ -144,30 +149,142 @@ def generate_hr_report(folder_path:str) -> pd.DataFrame:
 
     df = pd.DataFrame(summary_list)
     
-    # logger.info(f'saving {len(df)} to hr_summary_db.csv')
-    # df.to_csv('hr_summary_db.csv', index=False)
+    _savePath = 'hr_summary_v2_db.csv'
+    logger.info(f'saving {len(df)} to {_savePath}')
+    df.to_csv(_savePath, index=False)
 
     # print(df[['file', 'roi_id', 'lomb_bpm']].head())
     # print(df.columns)
 
     return df
 
-if __name__ == "__main__":
-    # path = "/Users/cudmore/Downloads/kymflow_app/declan-stall-v1/14d Saline"
-    path = "/Users/cudmore/Downloads/kymflow_app/declan-stall-v1"
+# def test_hr_save():
+#     oneCsv = '/Users/cudmore/Downloads/kymflow_app/declan-stall-v1/28d AngII/20250708/flow-analysis/20250708_A85_0002_kymanalysis.csv'
+#     analysis = HeartRateAnalysis.from_csv(oneCsv)
+#     roi_id = 1
+#     analysis.run_roi(roi_id, cfg=HRAnalysisConfig())
+#     json_path = analysis.save_results_json()
+
+#     analysis2 = HeartRateAnalysis.from_csv(oneCsv)
+#     analysis2.load_results_json(json_path)
+
+#     from pprint import pprint
     
-    df_hr = generate_hr_report(path)
+#     summary = analysis.get_roi_summary(roi_id, minimal="mini")
+#     pprint(summary)
+#     summary2 = analysis2.get_roi_summary(roi_id, minimal="mini")
+#     pprint(summary2)
 
+def _make_unique_file(row):
+    parts = str(row['rel_path']).split('/')
+    treatment_val = str(row['treatment'])
+    parts_no_treatment = [p for p in parts if p != treatment_val]
+    parts_clean = [p for p in parts_no_treatment if p]
+    return '/'.join(parts_clean)
+
+def _merge_declan_summary_cols():
+    """
+    TODO: read declan xls and merge hand entered columns:
+    Genotype	Sex	Age	Order	Direction	Depth
+
+    merge into existing hr_ csv
+    """
+    # this is old
+    # declanSummaryPath = '/Users/cudmore/Downloads/kymflow_app/declan-stall-v1/declan-orig-summary/Baseline_Bloodflow_Master.csv'
+    # this is new jan 2026 (from email)
+    # /Users/cudmore/Downloads/kymflow_app/declan-stall-v1/declan-orig-summary/from-email-new/Baseline_Bloodflow_Master.xlsx
+    declanSummaryPath = '/Users/cudmore/Downloads/kymflow_app/declan-stall-v1/declan-orig-summary/from-email-new/Baseline_Bloodflow_Master.csv'
+
+    df_declan = pd.read_csv(declanSummaryPath)
+    _cols = ['Genotype', 'Sex', 'Age', 'Order', 'Direction', 'Depth']
+    logger.info('loaded declan xls/csv is like:')
+    print(df_declan[_cols+['uniqueFile']].head())
+    # uniqueFile is like: '20221102/Capillary1_0001.tif' 
+
+    # current working hr summary
+    hr_summary_path = '/Users/cudmore/Downloads/kymflow_app/declan-stall-v1/hr_report_db.csv'
+    df_hr = pd.read_csv(hr_summary_path)
+    # print(f'columns of {hr_summary_path} are:')
+    # print(df_hr.columns)
+    _hr_cols = ['treatment', 'rel_path']
+    # rel_path is like '14d Saline/20251014/20251014_A98_0002.tif'
+    # print(df_hr[_hr_cols].head())
+    df_hr['_tmp_uniqueFile'] = df_hr.apply(_make_unique_file, axis=1)
+    logger.info(f'_tmp_uniqueFile is now:')
+    _tmp_printCol = ['roi_id', 'rel_path', '_tmp_uniqueFile']
+    print(df_hr[_tmp_printCol].head())
+    # _tmp_uniqueFile should match df_declan uniqueFile
+    
+
+    # first, add all _cols to df_hr, make sure they do not exist:
+    for col in _cols:
+        if col in df_hr.columns:
+            raise ValueError(f'column {col} already exists in df_hr')
+        df_hr[col] = None
+
+    # step through each row of df_declan:
+    #  - grab uniqueFile
+    #  - find corresponding row in df_hr (if it exists)
+    #  - append _cols from df_declan to that row in df_declan
+    for index, row in df_declan.iterrows():
+        uniqueFile = row['uniqueFile']
+        # print(f' search for {uniqueFile} in df_hr')
+        # find corresponding row in df_hr (if it exists)
+
+        # we will get a number of matching rows across roi_id
+        matching_row = df_hr[df_hr['_tmp_uniqueFile'] == uniqueFile]
+        if len(matching_row) == 0:
+            # raise ValueError(f'expected 1 row, got {len(matching_row)} for {uniqueFile}')
+            # lots of master declanSummaryPath has rows (tif) not in our current working hr database
+            logger.error(f'  expected row(s) from df_hr, got {len(matching_row)} for xls uniqueFile:"{uniqueFile}"')
+            # print(matching_row)
+            continue
+        # print(matching_row)
+        # append _cols from df_declan to that row in df_declan
+        for col in _cols:
+            # logger.info(f'  !! assigning df_hr at matching_row.index:{matching_row.index} col:{col} value:{row[col]}')
+            # df_hr.at[matching_row.index, col] = row[col]
+            df_hr.loc[matching_row.index, col] = row[col]
+
+    # drop _tmp_uniqueFile column
+    df_hr = df_hr.drop(columns=['_tmp_uniqueFile'])
+    
+    # print(df_hr.columns)
+    # save df_hr to new csv, use hr_summary_path as base name
+    base_name = Path(hr_summary_path).stem
+    new_path = Path(hr_summary_path).parent / f'{base_name}_declan_merged.csv'
+    df_hr.to_csv(new_path, index=False)
+    logger.info(f'saved merged to {new_path}.csv')
+
+if __name__ == "__main__":
+    _merge_declan_summary_cols()
     sys.exit(1)
+    
+    # test_hr_save()
+    # sys.exit(1)
 
-    # original radon analysis, each row is (rel_path, roi_id)
-    df_src_path = '/Users/cudmore/Sites/kymflow_outer/nicewidgets/data/radon_report_db.csv'
-    df_src = pd.read_csv(df_src_path)
+    """Purpose:
+        Generate all hr analysis for a folder
+        - save df with one row per (rel_path, roi_id)
+        - merge these new hr_ columns into an existing radon report db
+    """
+    
+    if 0:
+        # path = "/Users/cudmore/Downloads/kymflow_app/declan-stall-v1/14d Saline"
+        path = "/Users/cudmore/Downloads/kymflow_app/declan-stall-v1"
+        
+        df_hr = generate_hr_report(path)
 
-    df_merged = _append_hr_columns(df_src, df_hr)
+        # original radon analysis, each row is (rel_path, roi_id)
+        # df_src_path = '/Users/cudmore/Sites/kymflow_outer/nicewidgets/data/radon_report_db.csv'
+        df_src_path = os.path.join(path, 'radon_report_db.csv')
+        df_src = pd.read_csv(df_src_path)
 
-    # print(df_merged.head())
-    # save merged to new csv
-    hr_merged_csv = Path(df_src_path).parent / 'hr_report_db.csv' 
-    df_merged.to_csv(hr_merged_csv, index=False)
-    logger.info(f'saved merged to {hr_merged_csv}')
+        df_merged = _append_hr_columns(df_src, df_hr)
+
+        # print(df_merged.head())
+        # save merged to new csv
+        hr_merged_csv = Path(df_src_path).parent / 'hr_report_db.csv' 
+        df_merged.to_csv(hr_merged_csv, index=False)
+        logger.info(f'saved merged to {hr_merged_csv}')
+

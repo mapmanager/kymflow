@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import MISSING, dataclass, field, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 import json
 from pathlib import Path
-from typing import Any, Literal, Optional, Sequence
+from types import UnionType
+from typing import Any, Literal, Mapping, Optional, Sequence, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,150 @@ from heart_rate_analysis import (
 
 AGREE_TOL_BPM_DEFAULT = 30.0
 RESULTS_JSON_SCHEMA_VERSION = 1
+T = TypeVar("T")
+
+
+def dataclass_to_jsonable(obj: Any) -> Any:
+    """Convert dataclasses and nested values to JSON-compatible primitives.
+
+    Args:
+        obj: Input object to convert.
+
+    Returns:
+        Any: JSON-compatible object composed of dict/list/primitive values.
+
+    Raises:
+        TypeError: If an unsupported value type is encountered.
+    """
+    if is_dataclass(obj):
+        out: dict[str, Any] = {}
+        for f in fields(obj):
+            out[f.name] = dataclass_to_jsonable(getattr(obj, f.name))
+        return out
+    if isinstance(obj, Enum):
+        return obj.value
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        out_map: dict[str, Any] = {}
+        for k, v in obj.items():
+            if not isinstance(k, (str, int, float, bool)):
+                raise TypeError(f"Unsupported mapping key type {type(k).__name__} for JSON serialization.")
+            out_map[str(k)] = dataclass_to_jsonable(v)
+        return out_map
+    if isinstance(obj, (list, tuple)):
+        return [dataclass_to_jsonable(x) for x in obj]
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    raise TypeError(f"Unsupported type for JSON serialization: {type(obj).__name__}")
+
+
+def dataclass_from_dict(cls: type[T], payload: Mapping[str, Any]) -> T:
+    """Deserialize a dataclass from a mapping with forward/backward compatibility.
+
+    Unknown keys are ignored. Missing keys are left to dataclass defaults.
+
+    Args:
+        cls: Target dataclass type.
+        payload: Serialized mapping to parse.
+
+    Returns:
+        T: Deserialized dataclass instance.
+
+    Raises:
+        TypeError: If ``cls`` is not a dataclass type or payload is invalid.
+    """
+    if not isinstance(payload, Mapping):
+        raise TypeError(f"Expected Mapping for {cls.__name__} deserialization.")
+    if not is_dataclass(cls):
+        raise TypeError(f"{cls!r} is not a dataclass type.")
+
+    type_hints = get_type_hints(cls)
+    kwargs: dict[str, Any] = {}
+    for f in fields(cls):
+        if f.name not in payload:
+            continue
+        hinted_type = type_hints.get(f.name, f.type)
+        kwargs[f.name] = _convert_value_for_type(payload[f.name], hinted_type)
+
+    for f in fields(cls):
+        if f.name in kwargs:
+            continue
+        has_default = f.default is not MISSING or f.default_factory is not MISSING  # type: ignore[attr-defined]
+        if not has_default:
+            raise TypeError(f"Missing required field {f.name!r} for {cls.__name__}.")
+
+    return cls(**kwargs)
+
+
+def _convert_value_for_type(value: Any, annotation: Any) -> Any:
+    """Convert one value according to an annotated dataclass field type."""
+    if value is None:
+        return None
+
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin in (Union, UnionType):
+        non_none = [a for a in args if a is not type(None)]
+        for sub_t in non_none:
+            try:
+                return _convert_value_for_type(value, sub_t)
+            except Exception:
+                continue
+        return value
+
+    if origin is Literal:
+        return value
+
+    if origin in (list, Sequence):
+        elem_t = args[0] if args else Any
+        if not isinstance(value, list):
+            return value
+        return [_convert_value_for_type(v, elem_t) for v in value]
+
+    if origin is tuple:
+        if not isinstance(value, list):
+            return value
+        if len(args) == 2 and args[1] is Ellipsis:
+            return tuple(_convert_value_for_type(v, args[0]) for v in value)
+        if args and len(args) == len(value):
+            return tuple(_convert_value_for_type(v, t) for v, t in zip(value, args))
+        return tuple(value)
+
+    if origin in (dict, Mapping):
+        key_t = args[0] if len(args) > 0 else Any
+        val_t = args[1] if len(args) > 1 else Any
+        if not isinstance(value, Mapping):
+            return value
+        out: dict[Any, Any] = {}
+        for k, v in value.items():
+            out[_convert_scalar(k, key_t)] = _convert_value_for_type(v, val_t)
+        return out
+
+    if isinstance(annotation, type):
+        if issubclass(annotation, Enum):
+            if isinstance(value, annotation):
+                return value
+            return annotation(value)
+        if issubclass(annotation, Path):
+            return Path(value)
+        if is_dataclass(annotation):
+            return dataclass_from_dict(annotation, value)
+
+    return value
+
+
+def _convert_scalar(value: Any, annotation: Any) -> Any:
+    """Convert scalar mapping keys when a concrete scalar type is known."""
+    if isinstance(annotation, type):
+        if issubclass(annotation, int):
+            return int(value)
+        if issubclass(annotation, float):
+            return float(value)
+        if issubclass(annotation, str):
+            return str(value)
+    return value
 
 
 @dataclass(frozen=True)
@@ -104,21 +249,7 @@ class HRAnalysisConfig:
         Returns:
             dict[str, Any]: Plain-JSON config payload.
         """
-        return {
-            "bpm_band": [float(self.bpm_band[0]), float(self.bpm_band[1])],
-            "use_abs": bool(self.use_abs),
-            "outlier_k_mad": float(self.outlier_k_mad),
-            "lomb_n_freq": int(self.lomb_n_freq),
-            "interp_max_gap_sec": float(self.interp_max_gap_sec),
-            "bandpass_order": int(self.bandpass_order),
-            "nperseg_sec": float(self.nperseg_sec),
-            "edge_margin_hz": None if self.edge_margin_hz is None else float(self.edge_margin_hz),
-            "peak_half_width_hz": float(self.peak_half_width_hz),
-            "do_segments": bool(self.do_segments),
-            "seg_win_sec": float(self.seg_win_sec),
-            "seg_step_sec": float(self.seg_step_sec),
-            "seg_min_valid_frac": float(self.seg_min_valid_frac),
-        }
+        return dataclass_to_jsonable(self)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "HRAnalysisConfig":
@@ -130,7 +261,7 @@ class HRAnalysisConfig:
         Returns:
             HRAnalysisConfig: Parsed config object.
         """
-        return cls.from_any(payload)
+        return dataclass_from_dict(cls, payload)
 
 
 @dataclass(frozen=True)
@@ -234,22 +365,8 @@ class HeartRateResults:
         Returns:
             dict[str, Any]: Serializable method-level output.
         """
-        return {
-            "method": self.method,
-            "bpm": None if self.bpm is None else float(self.bpm),
-            "f_hz": None if self.f_hz is None else float(self.f_hz),
-            "snr": None if self.snr is None else float(self.snr),
-            "t_start": None if self.t_start is None else float(self.t_start),
-            "t_end": None if self.t_end is None else float(self.t_end),
-            "n_samples": None if self.n_samples is None else int(self.n_samples),
-            "n_valid": None if self.n_valid is None else int(self.n_valid),
-            "status": self.status.value,
-            "status_note": self.status_note,
-            "reason": self.reason,
-            "edge_flag": self.edge_flag,
-            "edge_hz_distance": None if self.edge_hz_distance is None else float(self.edge_hz_distance),
-            "band_concentration": None if self.band_concentration is None else float(self.band_concentration),
-        }
+        payload = replace(self, debug={})
+        return dataclass_to_jsonable(payload)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "HeartRateResults":
@@ -261,23 +378,8 @@ class HeartRateResults:
         Returns:
             HeartRateResults: Parsed method payload.
         """
-        return cls(
-            method=str(payload["method"]),
-            bpm=None if payload.get("bpm") is None else float(payload["bpm"]),
-            f_hz=None if payload.get("f_hz") is None else float(payload["f_hz"]),
-            snr=None if payload.get("snr") is None else float(payload["snr"]),
-            t_start=None if payload.get("t_start") is None else float(payload["t_start"]),
-            t_end=None if payload.get("t_end") is None else float(payload["t_end"]),
-            n_samples=None if payload.get("n_samples") is None else int(payload["n_samples"]),
-            n_valid=None if payload.get("n_valid") is None else int(payload["n_valid"]),
-            status=_coerce_hr_status(payload.get("status"), default=HRStatus.OTHER_ERROR),
-            status_note=str(payload.get("status_note", "")),
-            reason=payload.get("reason"),
-            edge_flag=payload.get("edge_flag"),
-            edge_hz_distance=None if payload.get("edge_hz_distance") is None else float(payload["edge_hz_distance"]),
-            band_concentration=None if payload.get("band_concentration") is None else float(payload["band_concentration"]),
-            debug={},
-        )
+        out = dataclass_from_dict(cls, payload)
+        return replace(out, debug={})
 
 
 @dataclass(frozen=True)
@@ -360,25 +462,7 @@ class HeartRatePerRoiResults:
         Returns:
             HeartRatePerRoiResults: Parsed per-ROI result.
         """
-        lomb_payload = payload.get("lomb")
-        welch_payload = payload.get("welch")
-        time_range_payload = payload.get("time_range")
-        time_range: Optional[tuple[float, float]] = None
-        if time_range_payload is not None:
-            time_range = (float(time_range_payload[0]), float(time_range_payload[1]))
-
-        return cls(
-            roi_id=int(payload["roi_id"]),
-            lomb=None if lomb_payload is None else HeartRateResults.from_dict(lomb_payload),
-            welch=None if welch_payload is None else HeartRateResults.from_dict(welch_payload),
-            agreement=payload.get("agreement"),
-            n_total=int(payload["n_total"]),
-            n_valid=int(payload["n_valid"]),
-            valid_fraction=float(payload["valid_fraction"]),
-            time_range=time_range,
-            analysis_cfg=HRAnalysisConfig.from_dict(payload["analysis_cfg"]),
-            segments=payload.get("segments"),
-        )
+        return dataclass_from_dict(cls, payload)
 
 
 class HeartRateAnalysis:
@@ -551,6 +635,9 @@ class HeartRateAnalysis:
                 raise ValueError(f"ROI key mismatch: key={rid} payload={roi_result.roi_id}.")
             if rid not in self.roi_ids:
                 raise ValueError(f"Loaded roi_id={rid} not present in dataframe roi_ids={self.roi_ids}.")
+            # Persistence schema keeps cfg in two places for compatibility:
+            # per_roi[roi]["cfg"] and per_roi[roi]["results"]["analysis_cfg"].
+            # Treat the top-level per-roi cfg as the source of truth.
             if roi_result.analysis_cfg != cfg_obj:
                 roi_result = replace(roi_result, analysis_cfg=cfg_obj)
             loaded[rid] = roi_result

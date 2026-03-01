@@ -342,3 +342,42 @@ def plot_hr_segment_series(
         plt.tight_layout()
         plt.show()
     return ax
+
+def plot_summary(
+    time_s: Sequence[float],
+    velocity: Sequence[float],
+    *,
+    cfg: HRPlotConfig = HRPlotConfig(),
+    title: str = "",
+) -> tuple[plt.Figure, plt.Axes]:
+
+    fig, axs = plt.subplots(3,1)
+
+    plot_velocity_hr_overview(
+        time_s,
+        velocity,
+        cfg=cfg,
+        title=title,
+        ax=axs[0],
+    )
+    
+    plot_hr_psd_welch(
+        time_s,
+        velocity,
+        cfg=cfg,
+        title=title,
+        ax=axs[1],
+    )
+    
+    plot_hr_periodogram_lombscargle(
+        time_s,
+        velocity,
+        cfg=cfg,
+        title=title,
+        ax=axs[2],
+    )
+    
+    plt.tight_layout()  
+    plt.show()
+    return fig, axs
+

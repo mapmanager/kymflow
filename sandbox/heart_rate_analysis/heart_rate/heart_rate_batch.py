@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import Literal, Optional, Sequence
 
@@ -13,6 +14,8 @@ from heart_rate_pipeline import (
     HeartRatePerRoiResults,
     build_roi_summary_from_result,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,23 @@ class HeartRateFileResult:
 
     source_id: str
     per_roi: dict[int, HeartRatePerRoiResults]
+
+
+@dataclass(frozen=True)
+class HRBatchSaveResult:
+    """Per-file save result for ``batch_run_and_save``.
+
+    Args:
+        csv_path: Source CSV path processed.
+        ok: True when analysis/save completed or was skipped due to overwrite=False.
+        saved_json_path: Path to persisted JSON when available.
+        error: Error message for failed files.
+    """
+
+    csv_path: Path
+    ok: bool
+    saved_json_path: Optional[Path]
+    error: str = ""
 
 
 def compute_hr_for_df(
@@ -229,3 +249,116 @@ def batch_results_to_dataframe(
         return pd.DataFrame(rows).reindex(columns=mini_cols)
 
     return pd.DataFrame(rows)
+
+
+def _run_and_save_one_csv(
+    csv_path: Path,
+    *,
+    roi_ids: Optional[Sequence[int]],
+    cfg: Optional[HRAnalysisConfig],
+    overwrite: bool,
+) -> HRBatchSaveResult:
+    """Run analysis and persist one CSV file to ``*_heart_rate.json``.
+
+    Args:
+        csv_path: Source CSV path.
+        roi_ids: Optional ROI ids to analyze; defaults to all in the file.
+        cfg: Optional shared config. Defaults to ``HRAnalysisConfig()``.
+        overwrite: Whether to recompute/overwrite existing JSON output.
+
+    Returns:
+        HRBatchSaveResult: Success/failure record for this CSV.
+    """
+    csv_path = Path(csv_path)
+    try:
+        analysis = HeartRateAnalysis.from_csv(csv_path)
+        out_path = analysis.default_results_json_path()
+        if (not overwrite) and out_path.exists():
+            return HRBatchSaveResult(csv_path=csv_path, ok=True, saved_json_path=out_path, error="")
+
+        selected_roi_ids: list[int]
+        if roi_ids is None:
+            selected_roi_ids = list(analysis.roi_ids)
+        else:
+            selected_roi_ids = [int(x) for x in roi_ids]
+            missing = [rid for rid in selected_roi_ids if rid not in analysis.roi_ids]
+            if missing:
+                return HRBatchSaveResult(
+                    csv_path=csv_path,
+                    ok=False,
+                    saved_json_path=None,
+                    error=f"Requested roi_ids not found in file: {missing}; available={analysis.roi_ids}",
+                )
+
+        cfg_obj = HRAnalysisConfig() if cfg is None else HRAnalysisConfig.from_any(cfg)
+        for rid in selected_roi_ids:
+            analysis.run_roi(rid, cfg=cfg_obj)
+        saved = analysis.save_results_json(out_path)
+        return HRBatchSaveResult(csv_path=csv_path, ok=True, saved_json_path=saved, error="")
+    except Exception as e:
+        logger.warning("HR batch failed for %s: %s", csv_path, e)
+        return HRBatchSaveResult(csv_path=csv_path, ok=False, saved_json_path=None, error=str(e))
+
+
+def _run_and_save_worker(payload: tuple[str, Optional[list[int]], Optional[dict], bool]) -> HRBatchSaveResult:
+    """Top-level process worker for ``batch_run_and_save``."""
+    csv_path_str, roi_ids, cfg_payload, overwrite = payload
+    cfg = None if cfg_payload is None else HRAnalysisConfig.from_dict(cfg_payload)
+    return _run_and_save_one_csv(Path(csv_path_str), roi_ids=roi_ids, cfg=cfg, overwrite=overwrite)
+
+
+def batch_run_and_save(
+    csv_paths: Sequence[Path],
+    *,
+    roi_ids: Optional[Sequence[int]] = None,
+    cfg: Optional[HRAnalysisConfig] = None,
+    overwrite: bool = True,
+    backend: Literal["process", "thread", "serial"] = "process",
+    n_workers: int = 0,
+) -> list[HRBatchSaveResult]:
+    """Run HR analysis for each CSV and save JSON next to each source file.
+
+    Args:
+        csv_paths: Source CSV paths to process.
+        roi_ids: Optional ROI ids to analyze. When ``None``, analyzes all rois
+            found in each file.
+        cfg: Optional shared config used for every ROI in every file.
+        overwrite: When False and output JSON exists, skip recomputation.
+        backend: ``"serial"``, ``"thread"``, or ``"process"``.
+        n_workers: Worker count for thread/process backends. Non-positive values
+            use executor defaults.
+
+    Returns:
+        list[HRBatchSaveResult]: Per-input CSV save result in input order.
+
+    Raises:
+        ValueError: If input list is empty or backend is unsupported.
+    """
+    if not csv_paths:
+        raise ValueError("csv_paths must contain at least one path.")
+    if backend not in {"process", "thread", "serial"}:
+        raise ValueError(f"Unsupported backend={backend!r}.")
+
+    csv_list = [Path(p) for p in csv_paths]
+    rid_list = None if roi_ids is None else [int(x) for x in roi_ids]
+    cfg_obj = None if cfg is None else HRAnalysisConfig.from_any(cfg)
+    max_workers = None if int(n_workers) <= 0 else int(n_workers)
+
+    if backend == "serial":
+        return [
+            _run_and_save_one_csv(path, roi_ids=rid_list, cfg=cfg_obj, overwrite=overwrite)
+            for path in csv_list
+        ]
+
+    if backend == "thread":
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = [
+                pool.submit(_run_and_save_one_csv, path, roi_ids=rid_list, cfg=cfg_obj, overwrite=overwrite)
+                for path in csv_list
+            ]
+            return [f.result() for f in futures]
+
+    cfg_payload = None if cfg_obj is None else cfg_obj.to_dict()
+    payloads = [(str(path), rid_list, cfg_payload, bool(overwrite)) for path in csv_list]
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        return list(pool.map(_run_and_save_worker, payloads))
