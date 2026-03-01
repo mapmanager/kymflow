@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
 from enum import Enum
+import json
 from pathlib import Path
 from typing import Any, Literal, Optional, Sequence
 
@@ -16,6 +18,7 @@ from heart_rate_analysis import (
 )
 
 AGREE_TOL_BPM_DEFAULT = 30.0
+RESULTS_JSON_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,18 @@ class HRAnalysisConfig:
             "seg_step_sec": float(self.seg_step_sec),
             "seg_min_valid_frac": float(self.seg_min_valid_frac),
         }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "HRAnalysisConfig":
+        """Create config from a serialized dictionary.
+
+        Args:
+            payload: Serialized config mapping produced by ``to_dict``.
+
+        Returns:
+            HRAnalysisConfig: Parsed config object.
+        """
+        return cls.from_any(payload)
 
 
 @dataclass(frozen=True)
@@ -236,6 +251,34 @@ class HeartRateResults:
             "band_concentration": None if self.band_concentration is None else float(self.band_concentration),
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "HeartRateResults":
+        """Create method-level results from a serialized dictionary.
+
+        Args:
+            payload: Serialized method result dictionary.
+
+        Returns:
+            HeartRateResults: Parsed method payload.
+        """
+        return cls(
+            method=str(payload["method"]),
+            bpm=None if payload.get("bpm") is None else float(payload["bpm"]),
+            f_hz=None if payload.get("f_hz") is None else float(payload["f_hz"]),
+            snr=None if payload.get("snr") is None else float(payload["snr"]),
+            t_start=None if payload.get("t_start") is None else float(payload["t_start"]),
+            t_end=None if payload.get("t_end") is None else float(payload["t_end"]),
+            n_samples=None if payload.get("n_samples") is None else int(payload["n_samples"]),
+            n_valid=None if payload.get("n_valid") is None else int(payload["n_valid"]),
+            status=_coerce_hr_status(payload.get("status"), default=HRStatus.OTHER_ERROR),
+            status_note=str(payload.get("status_note", "")),
+            reason=payload.get("reason"),
+            edge_flag=payload.get("edge_flag"),
+            edge_hz_distance=None if payload.get("edge_hz_distance") is None else float(payload["edge_hz_distance"]),
+            band_concentration=None if payload.get("band_concentration") is None else float(payload["band_concentration"]),
+            debug={},
+        )
+
 
 @dataclass(frozen=True)
 class HeartRatePerRoiResults:
@@ -307,6 +350,36 @@ class HeartRatePerRoiResults:
             out["segments"] = self.segments
         return out
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "HeartRatePerRoiResults":
+        """Create per-ROI result payload from a serialized dictionary.
+
+        Args:
+            payload: Serialized per-ROI mapping produced by ``to_dict``.
+
+        Returns:
+            HeartRatePerRoiResults: Parsed per-ROI result.
+        """
+        lomb_payload = payload.get("lomb")
+        welch_payload = payload.get("welch")
+        time_range_payload = payload.get("time_range")
+        time_range: Optional[tuple[float, float]] = None
+        if time_range_payload is not None:
+            time_range = (float(time_range_payload[0]), float(time_range_payload[1]))
+
+        return cls(
+            roi_id=int(payload["roi_id"]),
+            lomb=None if lomb_payload is None else HeartRateResults.from_dict(lomb_payload),
+            welch=None if welch_payload is None else HeartRateResults.from_dict(welch_payload),
+            agreement=payload.get("agreement"),
+            n_total=int(payload["n_total"]),
+            n_valid=int(payload["n_valid"]),
+            valid_fraction=float(payload["valid_fraction"]),
+            time_range=time_range,
+            analysis_cfg=HRAnalysisConfig.from_dict(payload["analysis_cfg"]),
+            segments=payload.get("segments"),
+        )
+
 
 class HeartRateAnalysis:
     """Per-ROI heart-rate analysis pipeline over a full CSV dataframe.
@@ -328,6 +401,7 @@ class HeartRateAnalysis:
         time_col: str = "time",
         vel_col: str = "velocity",
         roi_col: str = "roi_id",
+        source_path: Optional[Path] = None,
         source: Optional[str] = None,
     ) -> None:
         """Initialize with a full dataframe containing one or more ROI values.
@@ -337,7 +411,8 @@ class HeartRateAnalysis:
             time_col: Name of time column.
             vel_col: Name of velocity column.
             roi_col: Name of ROI id column. Must exist.
-            source: Optional source identifier (e.g., csv path).
+            source_path: Optional CSV source path used for persistence naming.
+            source: Optional source identifier (backward-compatible alias).
 
         Raises:
             ValueError: If required columns are missing or roi_id cannot be integer-coerced.
@@ -356,7 +431,15 @@ class HeartRateAnalysis:
         self.time_col = time_col
         self.vel_col = vel_col
         self.roi_col = roi_col
-        self.source = source
+        if source_path is not None:
+            self.source_path: Optional[Path] = Path(source_path)
+            self.source = str(self.source_path)
+        elif source is not None:
+            self.source_path = None
+            self.source = source
+        else:
+            self.source_path = None
+            self.source = None
         self.roi_ids: list[int] = sorted(int(x) for x in np.unique(local_df[roi_col].to_numpy(dtype=int)))
         self.results_by_roi: dict[int, HeartRatePerRoiResults] = {}
 
@@ -387,7 +470,92 @@ class HeartRateAnalysis:
         """
         csv_path = Path(path)
         df = pd.read_csv(csv_path, **read_csv_kwargs)
-        return cls(df, time_col=time_col, vel_col=vel_col, roi_col=roi_col, source=str(csv_path))
+        return cls(df, time_col=time_col, vel_col=vel_col, roi_col=roi_col, source_path=csv_path)
+
+    def default_results_json_path(self) -> Path:
+        """Return the default JSON persistence path for this analysis object.
+
+        Returns:
+            Path: ``<csv_stem>_heart_rate.json`` next to the source CSV.
+
+        Raises:
+            ValueError: If this analysis object has no associated source path.
+        """
+        if self.source_path is None:
+            raise ValueError("default_results_json_path requires source_path to be set.")
+        return self.source_path.with_name(f"{self.source_path.stem}_heart_rate.json")
+
+    def save_results_json(self, path: Optional[Path] = None) -> Path:
+        """Persist analyzed per-ROI results and config to a JSON artifact.
+
+        Args:
+            path: Optional explicit destination path. When omitted, uses
+                ``default_results_json_path()``.
+
+        Returns:
+            Path: The written JSON path.
+        """
+        out_path = Path(path) if path is not None else self.default_results_json_path()
+        per_roi_payload: dict[str, Any] = {}
+        for roi_id in sorted(self.results_by_roi.keys()):
+            roi_result = self.results_by_roi[roi_id]
+            per_roi_payload[str(roi_id)] = {
+                "cfg": roi_result.analysis_cfg.to_dict(),
+                "results": roi_result.to_dict(compact=False),
+            }
+
+        payload = {
+            "schema_version": int(RESULTS_JSON_SCHEMA_VERSION),
+            "source_csv": None if self.source_path is None else str(self.source_path),
+            "saved_at_iso": datetime.now(timezone.utc).isoformat(),
+            "per_roi": per_roi_payload,
+        }
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        return out_path
+
+    def load_results_json(self, path: Optional[Path] = None) -> None:
+        """Load persisted per-ROI results/config from a JSON artifact.
+
+        Args:
+            path: Optional explicit source path. When omitted, uses
+                ``default_results_json_path()``.
+
+        Raises:
+            ValueError: If schema or required keys are invalid.
+        """
+        in_path = Path(path) if path is not None else self.default_results_json_path()
+        raw = json.loads(in_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("Results JSON root must be an object.")
+        if int(raw.get("schema_version", -1)) != int(RESULTS_JSON_SCHEMA_VERSION):
+            raise ValueError(f"Unsupported schema_version={raw.get('schema_version')!r}.")
+        if "per_roi" not in raw or not isinstance(raw["per_roi"], dict):
+            raise ValueError("Results JSON requires object key 'per_roi'.")
+
+        source_csv = raw.get("source_csv")
+        if self.source_path is None and source_csv:
+            self.source_path = Path(source_csv)
+            self.source = str(self.source_path)
+
+        loaded: dict[int, HeartRatePerRoiResults] = {}
+        for roi_key, entry in raw["per_roi"].items():
+            if not isinstance(entry, dict):
+                raise ValueError(f"Invalid per_roi entry for key={roi_key!r}.")
+            if "cfg" not in entry or "results" not in entry:
+                raise ValueError(f"per_roi[{roi_key!r}] requires keys 'cfg' and 'results'.")
+            cfg_obj = HRAnalysisConfig.from_dict(entry["cfg"])
+            roi_result = HeartRatePerRoiResults.from_dict(entry["results"])
+            rid = int(roi_key)
+            if roi_result.roi_id != rid:
+                raise ValueError(f"ROI key mismatch: key={rid} payload={roi_result.roi_id}.")
+            if rid not in self.roi_ids:
+                raise ValueError(f"Loaded roi_id={rid} not present in dataframe roi_ids={self.roi_ids}.")
+            if roi_result.analysis_cfg != cfg_obj:
+                roi_result = replace(roi_result, analysis_cfg=cfg_obj)
+            loaded[rid] = roi_result
+
+        self.results_by_roi = loaded
 
     def run_roi(
         self,
@@ -601,70 +769,13 @@ class HeartRateAnalysis:
             KeyError: If ROI has no cached results.
         """
         result = self.get_roi_results(roi_id)
-        if minimal is False:
-            return result.to_dict(compact=False)
-
-        lomb = result.lomb
-        welch = result.welch
         file_label = self.source if self.source is not None else "<arrays>"
-
-        lomb_bpm = None if lomb is None else lomb.bpm
-        welch_bpm = None if welch is None else welch.bpm
-        delta_bpm = None
-        agree_ok = None
-        if (lomb_bpm is not None) and (welch_bpm is not None):
-            delta_bpm = float(abs(float(lomb_bpm) - float(welch_bpm)))
-            agree_ok = bool(delta_bpm <= float(agree_tol_bpm))
-
-        status, status_note = _classify_status(result, agree_tol_bpm=float(agree_tol_bpm))
-
-        if minimal == "mini":
-            out_mini: dict[str, Any] = {
-                "file": Path(file_label).name,
-                "roi_id": int(result.roi_id),
-                "valid_frac": float(result.valid_fraction),
-                "lomb_bpm": None if lomb is None else lomb.bpm,
-                "lomb_hz": None if lomb is None else lomb.f_hz,
-                "lomb_snr": None if lomb is None else lomb.snr,
-                "welch_bpm": None if welch is None else welch.bpm,
-                "welch_hz": None if welch is None else welch.f_hz,
-                "welch_snr": None if welch is None else welch.snr,
-                "agree_delta_bpm": delta_bpm,
-                "agree_ok": agree_ok,
-                "status": status.value,
-                "status_note": status_note if status_note else "",
-            }
-            return out_mini
-
-        t_min = None
-        t_max = None
-        if result.time_range is not None:
-            t_min = float(result.time_range[0])
-            t_max = float(result.time_range[1])
-
-        return {
-            "file": file_label,
-            "roi_id": int(result.roi_id),
-            "n_total": int(result.n_total),
-            "n_valid": int(result.n_valid),
-            "valid_frac": float(result.valid_fraction),
-            "t_min": t_min,
-            "t_max": t_max,
-            "lomb_bpm": None if lomb is None else lomb.bpm,
-            "lomb_hz": None if lomb is None else lomb.f_hz,
-            "lomb_snr": None if lomb is None else lomb.snr,
-            "welch_bpm": None if welch is None else welch.bpm,
-            "welch_hz": None if welch is None else welch.f_hz,
-            "welch_snr": None if welch is None else welch.snr,
-            "lomb_edge": None if lomb is None else lomb.edge_flag,
-            "welch_edge": None if welch is None else welch.edge_flag,
-            "lomb_bc": None if lomb is None else lomb.band_concentration,
-            "welch_bc": None if welch is None else welch.band_concentration,
-            "agree_delta_bpm": delta_bpm,
-            "agree_ok": agree_ok,
-            "status": status.value,
-            "status_note": status_note,
-        }
+        return build_roi_summary_from_result(
+            result,
+            file_label=file_label,
+            minimal=minimal,
+            agree_tol_bpm=agree_tol_bpm,
+        )
 
     def run_all_rois(
         self,
@@ -819,6 +930,87 @@ def run_hr_analysis(
         analysis.run_roi(selected_roi, cfg=cfg, methods=methods)
 
     return analysis
+
+
+def build_roi_summary_from_result(
+    result: HeartRatePerRoiResults,
+    *,
+    file_label: str,
+    minimal: bool | Literal["mini"] = True,
+    agree_tol_bpm: float = AGREE_TOL_BPM_DEFAULT,
+) -> dict[str, Any]:
+    """Build a summary dictionary from one per-ROI result payload.
+
+    Args:
+        result: Per-ROI analysis payload.
+        file_label: Source identifier/path label for this ROI result.
+        minimal: ``True`` for compact stable schema, ``"mini"`` for batch-table
+            schema, or ``False`` for full per-ROI payload.
+        agree_tol_bpm: Agreement threshold for Lomb-vs-Welch delta in bpm.
+
+    Returns:
+        dict[str, Any]: JSON-serializable summary dictionary.
+    """
+    if minimal is False:
+        return result.to_dict(compact=False)
+
+    lomb = result.lomb
+    welch = result.welch
+    lomb_bpm = None if lomb is None else lomb.bpm
+    welch_bpm = None if welch is None else welch.bpm
+    delta_bpm = None
+    agree_ok = None
+    if (lomb_bpm is not None) and (welch_bpm is not None):
+        delta_bpm = float(abs(float(lomb_bpm) - float(welch_bpm)))
+        agree_ok = bool(delta_bpm <= float(agree_tol_bpm))
+
+    status, status_note = _classify_status(result, agree_tol_bpm=float(agree_tol_bpm))
+    if minimal == "mini":
+        return {
+            "file": Path(file_label).name,
+            "roi_id": int(result.roi_id),
+            "valid_frac": float(result.valid_fraction),
+            "lomb_bpm": None if lomb is None else lomb.bpm,
+            "lomb_hz": None if lomb is None else lomb.f_hz,
+            "lomb_snr": None if lomb is None else lomb.snr,
+            "welch_bpm": None if welch is None else welch.bpm,
+            "welch_hz": None if welch is None else welch.f_hz,
+            "welch_snr": None if welch is None else welch.snr,
+            "agree_delta_bpm": delta_bpm,
+            "agree_ok": agree_ok,
+            "status": status.value,
+            "status_note": status_note if status_note else "",
+        }
+
+    t_min = None
+    t_max = None
+    if result.time_range is not None:
+        t_min = float(result.time_range[0])
+        t_max = float(result.time_range[1])
+
+    return {
+        "file": file_label,
+        "roi_id": int(result.roi_id),
+        "n_total": int(result.n_total),
+        "n_valid": int(result.n_valid),
+        "valid_frac": float(result.valid_fraction),
+        "t_min": t_min,
+        "t_max": t_max,
+        "lomb_bpm": None if lomb is None else lomb.bpm,
+        "lomb_hz": None if lomb is None else lomb.f_hz,
+        "lomb_snr": None if lomb is None else lomb.snr,
+        "welch_bpm": None if welch is None else welch.bpm,
+        "welch_hz": None if welch is None else welch.f_hz,
+        "welch_snr": None if welch is None else welch.snr,
+        "lomb_edge": None if lomb is None else lomb.edge_flag,
+        "welch_edge": None if welch is None else welch.edge_flag,
+        "lomb_bc": None if lomb is None else lomb.band_concentration,
+        "welch_bc": None if welch is None else welch.band_concentration,
+        "agree_delta_bpm": delta_bpm,
+        "agree_ok": agree_ok,
+        "status": status.value,
+        "status_note": status_note,
+    }
 
 
 def _coerce_roi_to_int(series: pd.Series, *, roi_col: str) -> pd.Series:
