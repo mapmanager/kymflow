@@ -34,6 +34,7 @@ class Polarity(str, Enum):
 
 class DiameterMethod(str, Enum):
     THRESHOLD_WIDTH = "threshold_width"
+    GRADIENT_EDGES = "gradient_edges"
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,9 @@ class DiameterDetectionParams:
     diameter_method: DiameterMethod = DiameterMethod.THRESHOLD_WIDTH
     threshold_mode: str = "half_max"
     threshold_value: float | None = None
+    gradient_sigma: float = 1.5
+    gradient_kernel: str = "central_diff"
+    gradient_min_edge_strength: float = 0.02
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +61,9 @@ class DiameterDetectionParams:
             "diameter_method": self.diameter_method.value,
             "threshold_mode": self.threshold_mode,
             "threshold_value": self.threshold_value,
+            "gradient_sigma": float(self.gradient_sigma),
+            "gradient_kernel": self.gradient_kernel,
+            "gradient_min_edge_strength": float(self.gradient_min_edge_strength),
         }
 
     @classmethod
@@ -83,6 +90,9 @@ class DiameterDetectionParams:
                 if payload.get("threshold_value") is None
                 else float(payload.get("threshold_value"))
             ),
+            gradient_sigma=float(payload.get("gradient_sigma", 1.5)),
+            gradient_kernel=str(payload.get("gradient_kernel", "central_diff")),
+            gradient_min_edge_strength=float(payload.get("gradient_min_edge_strength", 0.02)),
         )
 
 
@@ -95,6 +105,8 @@ class DiameterResult:
     diameter_px: float
     peak: float
     baseline: float
+    edge_strength_left: float
+    edge_strength_right: float
     qc_score: float
     qc_flags: list[str]
 
@@ -110,6 +122,8 @@ class DiameterResult:
             "diameter_um": float(self.diameter_px * um_per_pixel),
             "peak": float(self.peak),
             "baseline": float(self.baseline),
+            "edge_strength_left": float(self.edge_strength_left),
+            "edge_strength_right": float(self.edge_strength_right),
             "qc_score": float(self.qc_score),
             "qc_flags": "|".join(self.qc_flags),
         }
@@ -125,6 +139,8 @@ class DiameterResult:
             diameter_px=float(row["diameter_px"]),
             peak=float(row["peak"]),
             baseline=float(row["baseline"]),
+            edge_strength_left=float(row.get("edge_strength_left", "nan")),
+            edge_strength_right=float(row.get("edge_strength_right", "nan")),
             qc_score=float(row["qc_score"]),
             qc_flags=[f for f in qc_flags.split("|") if f],
         )
@@ -231,10 +247,32 @@ class DiameterAnalyzer:
 
         baseline = float(np.nanpercentile(profile_proc, 10))
         peak = float(np.nanpercentile(profile_proc, 90))
-        contrast = peak - baseline
 
-        left_edge, right_edge, diameter, edge_flags = self._threshold_width(profile_proc, params, x0)
-        qc_score, qc_flags = self._qc_metrics(profile_proc, baseline, peak, edge_flags)
+        if params.diameter_method == DiameterMethod.THRESHOLD_WIDTH:
+            left_edge, right_edge, diameter, edge_flags = self._threshold_width(profile_proc, params, x0)
+            edge_strength_left = math.nan
+            edge_strength_right = math.nan
+        elif params.diameter_method == DiameterMethod.GRADIENT_EDGES:
+            (
+                left_edge,
+                right_edge,
+                diameter,
+                edge_strength_left,
+                edge_strength_right,
+                edge_flags,
+            ) = self._gradient_edges(profile_proc, params, x0)
+        else:
+            raise ValueError(f"Unsupported diameter_method={params.diameter_method!r}")
+
+        qc_score, qc_flags = self._qc_metrics(
+            profile=profile_proc,
+            baseline=baseline,
+            peak=peak,
+            edge_flags=edge_flags,
+            edge_strength_left=edge_strength_left,
+            edge_strength_right=edge_strength_right,
+            edge_strength_threshold=params.gradient_min_edge_strength,
+        )
 
         return DiameterResult(
             center_row=int(center_row),
@@ -244,6 +282,8 @@ class DiameterAnalyzer:
             diameter_px=float(diameter),
             peak=peak,
             baseline=baseline,
+            edge_strength_left=float(edge_strength_left),
+            edge_strength_right=float(edge_strength_right),
             qc_score=qc_score,
             qc_flags=qc_flags,
         )
@@ -290,12 +330,88 @@ class DiameterAnalyzer:
 
         return left_edge, right_edge, diameter, flags
 
+    def _gradient_edges(
+        self,
+        profile: np.ndarray,
+        params: DiameterDetectionParams,
+        x0: int,
+    ) -> tuple[float, float, float, float, float, list[str]]:
+        if profile.size == 0 or not np.any(np.isfinite(profile)):
+            return math.nan, math.nan, math.nan, math.nan, math.nan, ["empty_profile"]
+
+        finite_profile = self._fill_nan_1d(profile)
+        smooth = self._smooth_profile(finite_profile, sigma=params.gradient_sigma)
+
+        if params.gradient_kernel != "central_diff":
+            raise ValueError("gradient_kernel must be 'central_diff'")
+        deriv = np.gradient(smooth)
+
+        left_idx = int(np.argmax(deriv))
+        right_idx = int(np.argmin(deriv))
+        edge_strength_left = float(max(0.0, deriv[left_idx]))
+        edge_strength_right = float(max(0.0, -deriv[right_idx]))
+
+        flags: list[str] = []
+        if left_idx >= right_idx:
+            flags.append("gradient_invalid_order")
+            return (
+                math.nan,
+                math.nan,
+                math.nan,
+                edge_strength_left,
+                edge_strength_right,
+                flags,
+            )
+
+        if (
+            edge_strength_left < params.gradient_min_edge_strength
+            or edge_strength_right < params.gradient_min_edge_strength
+        ):
+            flags.append("gradient_low_edge_strength")
+
+        left_edge = float(left_idx + x0)
+        right_edge = float(right_idx + x0)
+        diameter = float(right_edge - left_edge)
+        return left_edge, right_edge, diameter, edge_strength_left, edge_strength_right, flags
+
+    @staticmethod
+    def _fill_nan_1d(values: np.ndarray) -> np.ndarray:
+        out = np.asarray(values, dtype=float).copy()
+        mask = np.isfinite(out)
+        if np.all(mask):
+            return out
+        if not np.any(mask):
+            return np.zeros_like(out)
+
+        x = np.arange(out.size, dtype=float)
+        out[~mask] = np.interp(x[~mask], x[mask], out[mask])
+        return out
+
+    @staticmethod
+    def _smooth_profile(profile: np.ndarray, sigma: float) -> np.ndarray:
+        if sigma <= 0:
+            return profile.copy()
+
+        try:
+            from scipy.ndimage import gaussian_filter1d  # type: ignore
+
+            return gaussian_filter1d(profile, sigma=sigma, mode="nearest")
+        except Exception:
+            radius = max(1, int(round(3.0 * sigma)))
+            x = np.arange(-radius, radius + 1, dtype=float)
+            kernel = np.exp(-0.5 * (x / sigma) ** 2)
+            kernel /= np.sum(kernel)
+            return np.convolve(profile, kernel, mode="same")
+
     @staticmethod
     def _qc_metrics(
         profile: np.ndarray,
         baseline: float,
         peak: float,
         edge_flags: list[str],
+        edge_strength_left: float,
+        edge_strength_right: float,
+        edge_strength_threshold: float,
     ) -> tuple[float, list[str]]:
         flags = list(edge_flags)
         contrast = peak - baseline
@@ -318,6 +434,16 @@ class DiameterAnalyzer:
         if double_peak:
             flags.append("double_peak")
 
+        if np.isfinite(edge_strength_left) and np.isfinite(edge_strength_right):
+            min_strength = min(edge_strength_left, edge_strength_right)
+            if min_strength < edge_strength_threshold:
+                flags.append("gradient_low_edge_strength")
+
+            if np.isfinite(contrast) and contrast > 0:
+                strength_ratio = min_strength / (contrast + 1e-12)
+                if strength_ratio < 0.2:
+                    flags.append("gradient_low_edge_strength")
+
         score = 1.0
         if "low_contrast" in flags:
             score -= 0.55
@@ -325,6 +451,10 @@ class DiameterAnalyzer:
             score -= 0.25
         if "missing_right_edge" in flags:
             score -= 0.25
+        if "gradient_invalid_order" in flags:
+            score -= 0.35
+        if "gradient_low_edge_strength" in flags:
+            score -= 0.2
         if "saturation" in flags:
             score -= 0.1
         if "double_peak" in flags:
@@ -350,6 +480,12 @@ class DiameterAnalyzer:
             raise ValueError("window_rows_odd must be odd and >= 1")
         if params.stride < 1:
             raise ValueError("stride must be >= 1")
+        if params.gradient_sigma < 0:
+            raise ValueError("gradient_sigma must be >= 0")
+        if params.gradient_min_edge_strength < 0:
+            raise ValueError("gradient_min_edge_strength must be >= 0")
+        if params.gradient_kernel != "central_diff":
+            raise ValueError("gradient_kernel must be 'central_diff'")
         return params
 
     @staticmethod
@@ -383,6 +519,8 @@ class DiameterAnalyzer:
             "diameter_um",
             "peak",
             "baseline",
+            "edge_strength_left",
+            "edge_strength_right",
             "qc_score",
             "qc_flags",
         ]
@@ -441,12 +579,22 @@ class DiameterAnalyzer:
 
     def plot(self, results: list[DiameterResult], *, backend: str = "matplotlib") -> Any:
         if backend == "matplotlib":
-            fig1 = plot_kymograph_with_edges_mpl(self.kymograph, results)
+            fig1 = plot_kymograph_with_edges_mpl(
+                self.kymograph,
+                results,
+                seconds_per_line=self.seconds_per_line,
+                um_per_pixel=self.um_per_pixel,
+            )
             fig2 = plot_diameter_vs_time_mpl(results, um_per_pixel=self.um_per_pixel)
             return {"kymograph": fig1, "diameter": fig2}
 
         if backend == "plotly_dict":
-            fig1 = plot_kymograph_with_edges_plotly_dict(self.kymograph, results)
+            fig1 = plot_kymograph_with_edges_plotly_dict(
+                self.kymograph,
+                results,
+                seconds_per_line=self.seconds_per_line,
+                um_per_pixel=self.um_per_pixel,
+            )
             fig2 = plot_diameter_vs_time_plotly_dict(results, um_per_pixel=self.um_per_pixel)
             return {"kymograph": fig1, "diameter": fig2}
 
