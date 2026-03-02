@@ -49,7 +49,8 @@ def test_kym_image_list_initialization() -> None:
     # Create with a non-existent folder (should handle gracefully)
     image_list = KymImageList(
         path="/nonexistent/folder",
-        file_extension=".tif"
+        file_extension=".tif",
+        depth=1,
     )
     
     # For non-existent paths, folder is set to resolved path (which may resolve to parent)

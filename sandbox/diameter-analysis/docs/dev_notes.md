@@ -15,3 +15,6 @@
 - Replace placeholder width estimator with robust edge detection.
 - Add synthetic scenarios with motion artifacts and polarity edge cases.
 - Add parameter validation constraints and schema version headers for saved artifacts.
+
+## Serialization guidance
+- Prefer serialization helper over hand-written to_dict/from_dict for params dataclasses.

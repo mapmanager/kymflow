@@ -1,4 +1,4 @@
-# CODEX_RULES.md (Template)
+# CODEX_RULES.md
 
 These are the **hard rules** for the Executor LLM (Codex). They apply to every ticket.
 
@@ -11,53 +11,71 @@ Before editing anything:
 ## 1) Scope constraints (HARD)
 - Only edit files explicitly allowed by the ticket.
 - Do not modify files outside scope.
-- If a change outside scope is required, stop and follow ESCALATION_PROTOCOL.md.
+- If a change outside scope is required, stop and follow `ESCALATION_PROTOCOL.md`.
 
 ## 2) No guessing
 - If a requirement is ambiguous, stop and ask (via report) rather than invent behavior.
 - Do not invent new APIs unless the ticket explicitly requests it.
 
 ## 3) Report required (HARD)
-For every ticket, create:
+For every ticket, create an implementation report.
+
+### 3.1 Derive report name from ticket filename (HARD)
 - Let the ticket file be: `tickets/<ticket_file>.md` (basename without extension = `<ticket_file>`).
 - Default report path MUST be: `tickets/<ticket_file>_codex_report.md`
   - Example: ticket `ticket_002_hardened.md` -> report `ticket_002_hardened_codex_report.md`.
 - If that report path already exists, DO NOT overwrite it.
-  - Write `tickets/<ticket_file>_codex_report_v2.md`, or `..._v3.md`, `..._v4.md`, etc. until unused.
+  - Write `tickets/<ticket_file>_codex_report_v2.md`, or `..._v3.md`, `..._v4.md`, etc. until you find an unused path.
 - Report content MUST include the final report path that was written.
+
+### 3.2 Never overwrite a real report (HARD)
+- Never overwrite an existing non-empty report file.
+- If the target report exists but is **0 bytes**, it is considered a **partial/failed write**:
+  - You MAY reuse/overwrite that 0-byte file, OR delete it and write the base report path.
+  - If you choose not to reuse it, then write `_v2` as usual.
+
+### 3.3 Atomic write rule (HARD)
+To prevent 0-byte partial reports:
+- Always write the report to a temporary file first, then rename to the final path.
+- Procedure:
+  1) Determine final report path per 3.1/3.2 (base or `_vN`).
+  2) Write to: `<final_report_path>.tmp`
+  3) Verify the tmp file is non-empty (size > 0) and appears to be valid Markdown text.
+  4) Rename/move the tmp file to the final report path **atomically** (same folder).
+  5) If rename fails, stop and report the failure (do not silently continue).
 
 Operator notes:
 - If you rename a ticket file, the report name changes accordingly.
-- Do not copy/paste report paths into tickets; rely on this rule.
+- Do not copy/paste report paths into tickets; rely on these rules.
+- If you see a leftover 0-byte base report, it is safe to delete; `_v2` (or higher) is authoritative.
 
-The report must include:
-
-### A) Modified code files
+### Report content MUST include
+#### A) Modified code files
 List only code files edited (exclude the report file itself).
 
-### B) Artifacts created
+#### B) Artifacts created
 List report files and any non-code artifacts (docs, generated files).
 
-### C) Unified diff
+#### C) Unified diff
 Paste a short unified diff for each code file edited.
 Prefer `git diff --unified=3` if available.
 
-### D) Search confirmation
+#### D) Search confirmation
 State what you searched for (patterns) and whether you changed other occurrences.
 
-### E) Validation commands run
+#### E) Validation commands run
 List exact commands you ran and their outcomes.
 Examples:
 - `uv run pytest -q`
 - `uv run python run_example.py`
 
-### F) Summary of changes
+#### F) Summary of changes
 Short bullet list.
 
-### G) Risks / tradeoffs
+#### G) Risks / tradeoffs
 What could break? What was not tested?
 
-### H) Self-critique
+#### H) Self-critique
 Pros/cons, drift risk, red flags, and what you’d do differently.
 
 ## 4) Tests and docs

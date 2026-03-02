@@ -11,6 +11,7 @@ from typing import Any, Iterable, Optional
 
 import numpy as np
 
+from serialization import dataclass_from_dict, dataclass_to_dict
 from diameter_plots import (
     plot_diameter_vs_time_mpl,
     plot_diameter_vs_time_plotly_dict,
@@ -37,6 +38,11 @@ class DiameterMethod(str, Enum):
     GRADIENT_EDGES = "gradient_edges"
 
 
+class PostFilterType(str, Enum):
+    MEDIAN = "median"
+    HAMPEL = "hampel"
+
+
 @dataclass(frozen=True)
 class DiameterDetectionParams:
     roi: tuple[int, int, int, int] | None = None
@@ -52,47 +58,54 @@ class DiameterDetectionParams:
     gradient_min_edge_strength: float = 0.02
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "roi": list(self.roi) if self.roi is not None else None,
-            "window_rows_odd": int(self.window_rows_odd),
-            "stride": int(self.stride),
-            "binning_method": self.binning_method.value,
-            "polarity": self.polarity.value,
-            "diameter_method": self.diameter_method.value,
-            "threshold_mode": self.threshold_mode,
-            "threshold_value": self.threshold_value,
-            "gradient_sigma": float(self.gradient_sigma),
-            "gradient_kernel": self.gradient_kernel,
-            "gradient_min_edge_strength": float(self.gradient_min_edge_strength),
-        }
+        return dataclass_to_dict(self)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DiameterDetectionParams":
-        roi_payload = payload.get("roi")
-        roi: tuple[int, int, int, int] | None
-        if roi_payload is None:
-            roi = None
-        else:
-            if len(roi_payload) != 4:
-                raise ValueError("roi must have four entries (t0, t1, x0, x1)")
-            roi = tuple(int(v) for v in roi_payload)  # type: ignore[assignment]
+        obj = dataclass_from_dict(cls, payload)
+        if obj.roi is not None and len(obj.roi) != 4:
+            raise ValueError("roi must have four entries (t0, t1, x0, x1)")
+        return obj
 
+
+@dataclass(frozen=True)
+class PostFilterParams:
+    enabled: bool = False
+    filter_type: PostFilterType = PostFilterType.MEDIAN
+    kernel_size: int = 3
+    hampel_n_sigma: float = 3.0
+    hampel_scale: str = "mad"
+
+    def to_dict(self) -> dict[str, Any]:
+        return dataclass_to_dict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PostFilterParams":
+        return dataclass_from_dict(cls, payload)
+
+
+@dataclass(frozen=True)
+class KymographPayload:
+    kymograph: np.ndarray
+    seconds_per_line: float
+    um_per_pixel: float
+    polarity: str = "bright_on_dark"
+    source: str = "synthetic"
+    path: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return dataclass_to_dict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "KymographPayload":
+        obj = dataclass_from_dict(cls, payload)
         return cls(
-            roi=roi,
-            window_rows_odd=int(payload.get("window_rows_odd", 5)),
-            stride=int(payload.get("stride", 1)),
-            binning_method=BinningMethod(payload.get("binning_method", "mean")),
-            polarity=Polarity(payload.get("polarity", "bright_on_dark")),
-            diameter_method=DiameterMethod(payload.get("diameter_method", "threshold_width")),
-            threshold_mode=str(payload.get("threshold_mode", "half_max")),
-            threshold_value=(
-                None
-                if payload.get("threshold_value") is None
-                else float(payload.get("threshold_value"))
-            ),
-            gradient_sigma=float(payload.get("gradient_sigma", 1.5)),
-            gradient_kernel=str(payload.get("gradient_kernel", "central_diff")),
-            gradient_min_edge_strength=float(payload.get("gradient_min_edge_strength", 0.02)),
+            kymograph=np.asarray(obj.kymograph),
+            seconds_per_line=float(obj.seconds_per_line),
+            um_per_pixel=float(obj.um_per_pixel),
+            polarity=str(obj.polarity),
+            source=str(obj.source),
+            path=None if obj.path is None else str(obj.path),
         )
 
 
@@ -107,6 +120,8 @@ class DiameterResult:
     baseline: float
     edge_strength_left: float
     edge_strength_right: float
+    diameter_px_filt: float
+    diameter_was_filtered: bool
     qc_score: float
     qc_flags: list[str]
 
@@ -124,6 +139,9 @@ class DiameterResult:
             "baseline": float(self.baseline),
             "edge_strength_left": float(self.edge_strength_left),
             "edge_strength_right": float(self.edge_strength_right),
+            "diameter_px_filt": float(self.diameter_px_filt),
+            "diameter_um_filt": float(self.diameter_px_filt * um_per_pixel),
+            "diameter_was_filtered": int(bool(self.diameter_was_filtered)),
             "qc_score": float(self.qc_score),
             "qc_flags": "|".join(self.qc_flags),
         }
@@ -141,6 +159,8 @@ class DiameterResult:
             baseline=float(row["baseline"]),
             edge_strength_left=float(row.get("edge_strength_left", "nan")),
             edge_strength_right=float(row.get("edge_strength_right", "nan")),
+            diameter_px_filt=float(row.get("diameter_px_filt", row["diameter_px"])),
+            diameter_was_filtered=bool(int(row.get("diameter_was_filtered", "0"))),
             qc_score=float(row["qc_score"]),
             qc_flags=[f for f in qc_flags.split("|") if f],
         )
@@ -180,9 +200,11 @@ class DiameterAnalyzer:
         params: Optional[DiameterDetectionParams] = None,
         *,
         backend: str = "serial",
+        post_filter_params: Optional[PostFilterParams] = None,
     ) -> list[DiameterResult]:
         cfg = params or DiameterDetectionParams(polarity=self.polarity)
         cfg = self._validated_params(cfg)
+        pf_cfg = self._validated_post_filter_params(post_filter_params or PostFilterParams())
 
         t0, t1, x0, x1 = self._resolve_roi(cfg.roi)
         centers = list(range(t0, t1, cfg.stride))
@@ -195,6 +217,8 @@ class DiameterAnalyzer:
             raise ValueError("backend must be 'serial' or 'threads'")
 
         results.sort(key=lambda r: r.center_row)
+        if pf_cfg.enabled:
+            self._apply_post_filter(results=results, params=pf_cfg)
         return results
 
     def _analyze_threads(
@@ -241,6 +265,7 @@ class DiameterAnalyzer:
         else:
             profile = np.nanmedian(window, axis=0)
 
+        # Analysis operates on float profiles and does not assume normalized [0,1] intensity.
         profile_proc = np.asarray(profile, dtype=float)
         if params.polarity == Polarity.DARK_ON_BRIGHT:
             profile_proc = np.nanmax(profile_proc) - profile_proc
@@ -284,9 +309,86 @@ class DiameterAnalyzer:
             baseline=baseline,
             edge_strength_left=float(edge_strength_left),
             edge_strength_right=float(edge_strength_right),
+            diameter_px_filt=float(diameter),
+            diameter_was_filtered=False,
             qc_score=qc_score,
             qc_flags=qc_flags,
         )
+
+    @staticmethod
+    def _nan_safe_median_filter(series: np.ndarray, kernel_size: int) -> np.ndarray:
+        x = np.asarray(series, dtype=float)
+        out = x.copy()
+        n = x.size
+        half = kernel_size // 2
+        for i in range(n):
+            if not np.isfinite(x[i]):
+                continue
+            i0 = max(0, i - half)
+            i1 = min(n, i + half + 1)
+            win = x[i0:i1]
+            valid = win[np.isfinite(win)]
+            if valid.size > 0:
+                out[i] = float(np.median(valid))
+        return out
+
+    @staticmethod
+    def _nan_safe_hampel_filter(
+        series: np.ndarray,
+        kernel_size: int,
+        n_sigma: float,
+        scale: str = "mad",
+    ) -> tuple[np.ndarray, np.ndarray]:
+        x = np.asarray(series, dtype=float)
+        out = x.copy()
+        replaced = np.zeros(x.size, dtype=bool)
+        half = kernel_size // 2
+
+        for i in range(x.size):
+            xi = x[i]
+            if not np.isfinite(xi):
+                continue
+            i0 = max(0, i - half)
+            i1 = min(x.size, i + half + 1)
+            win = x[i0:i1]
+            valid = win[np.isfinite(win)]
+            if valid.size < 2:
+                continue
+            med = float(np.median(valid))
+            if scale == "mad":
+                mad = float(np.median(np.abs(valid - med)))
+                sigma_est = 1.4826 * mad
+            else:
+                raise ValueError("hampel_scale must be 'mad'")
+
+            if sigma_est <= 0:
+                continue
+            if abs(xi - med) > (n_sigma * sigma_est):
+                out[i] = med
+                replaced[i] = True
+        return out, replaced
+
+    @classmethod
+    def _apply_post_filter(cls, results: list[DiameterResult], params: PostFilterParams) -> None:
+        if not results:
+            return
+        raw = np.asarray([r.diameter_px for r in results], dtype=float)
+        if params.filter_type == PostFilterType.MEDIAN:
+            filtered = cls._nan_safe_median_filter(raw, kernel_size=params.kernel_size)
+            replaced = np.isfinite(raw) & np.isfinite(filtered) & (~np.isclose(raw, filtered))
+        elif params.filter_type == PostFilterType.HAMPEL:
+            filtered, replaced = cls._nan_safe_hampel_filter(
+                raw,
+                kernel_size=params.kernel_size,
+                n_sigma=params.hampel_n_sigma,
+                scale=params.hampel_scale,
+            )
+        else:
+            raise ValueError(f"Unsupported PostFilterType={params.filter_type!r}")
+
+        for i, r in enumerate(results):
+            r.diameter_px_filt = float(filtered[i])
+            r.diameter_was_filtered = bool(replaced[i])
 
     def _threshold_width(
         self,
@@ -421,7 +523,15 @@ class DiameterAnalyzer:
 
         pmin = float(np.nanmin(profile))
         pmax = float(np.nanmax(profile))
-        saturated = bool(pmin <= 0.005 or pmax >= 0.995)
+        dynamic_range = pmax - pmin
+        if dynamic_range > 0:
+            p01 = float(np.nanpercentile(profile, 1))
+            p99 = float(np.nanpercentile(profile, 99))
+            low_tail = (p01 - pmin) / dynamic_range
+            high_tail = (pmax - p99) / dynamic_range
+            saturated = bool(low_tail < 0.01 or high_tail < 0.01)
+        else:
+            saturated = True
         if saturated:
             flags.append("saturation")
 
@@ -489,12 +599,23 @@ class DiameterAnalyzer:
         return params
 
     @staticmethod
+    def _validated_post_filter_params(params: PostFilterParams) -> PostFilterParams:
+        if params.kernel_size < 3 or params.kernel_size % 2 == 0:
+            raise ValueError("PostFilterParams.kernel_size must be odd and >= 3")
+        if params.hampel_n_sigma <= 0:
+            raise ValueError("PostFilterParams.hampel_n_sigma must be > 0")
+        if params.hampel_scale != "mad":
+            raise ValueError("PostFilterParams.hampel_scale must be 'mad'")
+        return params
+
+    @staticmethod
     def save_analysis(
         output_dir: str | Path,
         params_by_roi: dict[int, DiameterDetectionParams],
         results_by_roi: dict[int, list[DiameterResult]],
         *,
         um_per_pixel: float,
+        post_filter_params_by_roi: Optional[dict[int, PostFilterParams]] = None,
     ) -> tuple[Path, Path]:
         output = Path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
@@ -502,9 +623,11 @@ class DiameterAnalyzer:
         params_path = output / "analysis_params.json"
         results_path = output / "analysis_results.csv"
 
+        pf_map = post_filter_params_by_roi or {}
         params_payload = {
             "schema_version": ANALYSIS_SCHEMA_VERSION,
             "rois": {str(k): v.to_dict() for k, v in sorted(params_by_roi.items())},
+            "post_filter_params": {str(k): v.to_dict() for k, v in sorted(pf_map.items())},
         }
         params_path.write_text(json.dumps(params_payload, indent=2), encoding="utf-8")
 
@@ -521,6 +644,9 @@ class DiameterAnalyzer:
             "baseline",
             "edge_strength_left",
             "edge_strength_right",
+            "diameter_px_filt",
+            "diameter_um_filt",
+            "diameter_was_filtered",
             "qc_score",
             "qc_flags",
         ]
@@ -557,6 +683,12 @@ class DiameterAnalyzer:
             int(roi_id): DiameterDetectionParams.from_dict(cfg)
             for roi_id, cfg in rois_raw.items()
         }
+        pf_raw = params_payload.get("post_filter_params", {})
+        if not isinstance(pf_raw, dict):
+            raise ValueError("analysis_params.json 'post_filter_params' must be an object")
+        post_filter_params_by_roi = {
+            int(roi_id): PostFilterParams.from_dict(cfg) for roi_id, cfg in pf_raw.items()
+        }
 
         results_by_roi: dict[int, list[DiameterResult]] = {}
         with results_path.open("r", encoding="utf-8", newline="") as f:
@@ -574,10 +706,18 @@ class DiameterAnalyzer:
         return {
             "schema_version": ANALYSIS_SCHEMA_VERSION,
             "params_by_roi": params_by_roi,
+            "post_filter_params_by_roi": post_filter_params_by_roi,
             "results_by_roi": results_by_roi,
         }
 
-    def plot(self, results: list[DiameterResult], *, backend: str = "matplotlib") -> Any:
+    def plot(
+        self,
+        results: list[DiameterResult],
+        *,
+        backend: str = "matplotlib",
+        use_filtered: bool = True,
+        show_raw: bool = False,
+    ) -> Any:
         if backend == "matplotlib":
             fig1 = plot_kymograph_with_edges_mpl(
                 self.kymograph,
@@ -585,7 +725,12 @@ class DiameterAnalyzer:
                 seconds_per_line=self.seconds_per_line,
                 um_per_pixel=self.um_per_pixel,
             )
-            fig2 = plot_diameter_vs_time_mpl(results, um_per_pixel=self.um_per_pixel)
+            fig2 = plot_diameter_vs_time_mpl(
+                results,
+                um_per_pixel=self.um_per_pixel,
+                use_filtered=use_filtered,
+                show_raw=show_raw,
+            )
             return {"kymograph": fig1, "diameter": fig2}
 
         if backend == "plotly_dict":
@@ -595,7 +740,12 @@ class DiameterAnalyzer:
                 seconds_per_line=self.seconds_per_line,
                 um_per_pixel=self.um_per_pixel,
             )
-            fig2 = plot_diameter_vs_time_plotly_dict(results, um_per_pixel=self.um_per_pixel)
+            fig2 = plot_diameter_vs_time_plotly_dict(
+                results,
+                um_per_pixel=self.um_per_pixel,
+                use_filtered=use_filtered,
+                show_raw=show_raw,
+            )
             return {"kymograph": fig1, "diameter": fig2}
 
         raise ValueError("backend must be 'matplotlib' or 'plotly_dict'")

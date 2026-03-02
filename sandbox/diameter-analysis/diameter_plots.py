@@ -109,6 +109,8 @@ def plot_diameter_vs_time_mpl(
     *,
     um_per_pixel: Optional[float] = None,
     seconds_per_line: Optional[float] = 1.0,
+    use_filtered: bool = True,
+    show_raw: bool = False,
     ax: Optional[plt.Axes] = None,
 ):
     created = ax is None
@@ -122,9 +124,18 @@ def plot_diameter_vs_time_mpl(
         seconds_per_line=seconds_per_line,
         um_per_pixel=um_per_pixel,
     )
-    diameter = right_space - left_space
+    diameter_raw = right_space - left_space
+    diameter_filt_px = np.asarray(
+        [getattr(r, "diameter_px_filt", getattr(r, "diameter_px", np.nan)) for r in results],
+        dtype=float,
+    )
+    diameter_filt = diameter_filt_px * um_per_pixel if um_per_pixel is not None else diameter_filt_px
+    diameter = diameter_filt if use_filtered else diameter_raw
 
-    ax.plot(x_time, diameter, color="tab:blue", lw=1.5)
+    ax.plot(x_time, diameter, color="tab:blue", lw=1.5, label="diameter")
+    if show_raw and use_filtered:
+        ax.plot(x_time, diameter_raw, color="tab:gray", lw=1.0, alpha=0.7, label="diameter raw")
+        ax.legend(loc="upper right")
     ax.set_xlabel("time (s)" if seconds_per_line is not None else "time (rows)")
     ax.set_ylabel("diameter (um)" if um_per_pixel is not None else "diameter (px)")
     ax.set_title("Diameter vs time")
@@ -193,25 +204,45 @@ def plot_diameter_vs_time_plotly_dict(
     *,
     um_per_pixel: Optional[float] = None,
     seconds_per_line: Optional[float] = 1.0,
+    use_filtered: bool = True,
+    show_raw: bool = False,
 ) -> dict[str, Any]:
     x_time, _, left_space, right_space = _result_arrays(
         results,
         seconds_per_line=seconds_per_line,
         um_per_pixel=um_per_pixel,
     )
-    diameter = right_space - left_space
+    diameter_raw = right_space - left_space
+    diameter_filt_px = np.asarray(
+        [getattr(r, "diameter_px_filt", getattr(r, "diameter_px", np.nan)) for r in results],
+        dtype=float,
+    )
+    diameter_filt = diameter_filt_px * um_per_pixel if um_per_pixel is not None else diameter_filt_px
+    diameter = diameter_filt if use_filtered else diameter_raw
 
-    return {
-        "data": [
+    data = [
+        {
+            "type": "scatter",
+            "mode": "lines",
+            "x": x_time.tolist(),
+            "y": diameter.tolist(),
+            "name": "diameter",
+            "line": {"color": "royalblue"},
+        }
+    ]
+    if show_raw and use_filtered:
+        data.append(
             {
                 "type": "scatter",
                 "mode": "lines",
                 "x": x_time.tolist(),
-                "y": diameter.tolist(),
-                "name": "diameter",
-                "line": {"color": "royalblue"},
+                "y": diameter_raw.tolist(),
+                "name": "diameter raw",
+                "line": {"color": "gray", "dash": "dash"},
             }
-        ],
+        )
+    return {
+        "data": data,
         "layout": {
             "title": "Diameter vs time",
             "xaxis": {"title": "time (s)" if seconds_per_line is not None else "time (rows)"},

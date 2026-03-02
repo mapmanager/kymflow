@@ -36,4 +36,9 @@ Save report as:
 - `tickets/<this_ticket_filename_without_.md>_codex_report.md`
 If that file exists, save as:
 - `tickets/<this_ticket_filename_without_.md>_codex_report_v2.md` (or higher)
-Never overwrite an existing report.
+Never overwrite an existing non-empty report.
+If the base report file exists but is 0 bytes (partial write), you may reuse/overwrite that 0-byte path (or delete it and reuse base).
+Always write atomically:
+- write to `tickets/<derived_report_name>.tmp` first,
+- verify tmp file is non-empty,
+- then rename tmp to final report path in the same folder.
