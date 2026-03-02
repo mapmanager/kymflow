@@ -39,6 +39,10 @@ class AppController:
         polarity: str = "bright_on_dark",
         source: str = "synthetic",
         path: str | None = None,
+        loaded_shape: tuple[int, int] | None = None,
+        loaded_dtype: str | None = None,
+        loaded_min: float | None = None,
+        loaded_max: float | None = None,
     ) -> None:
         self.state.img = img
         self.state.seconds_per_line = float(seconds_per_line)
@@ -46,6 +50,11 @@ class AppController:
         self.state.polarity = str(polarity)
         self.state.source = str(source)
         self.state.loaded_path = None if path is None else str(path)
+        self.state.loaded_shape = loaded_shape
+        self.state.loaded_dtype = loaded_dtype
+        self.state.loaded_min = loaded_min
+        self.state.loaded_max = loaded_max
+        self.state.tiff_error = None
         self.state.results = None
         self._rebuild_figures()
         self._emit()
@@ -88,6 +97,10 @@ class AppController:
             polarity=payload.polarity,
             source=payload.source,
             path=payload.path,
+            loaded_shape=payload.loaded_shape,
+            loaded_dtype=payload.loaded_dtype,
+            loaded_min=payload.loaded_min,
+            loaded_max=payload.loaded_max,
         )
 
     def detect(self) -> None:
@@ -95,21 +108,27 @@ class AppController:
             raise RuntimeError("no image loaded")
         if self.state.detection_params is None:
             raise RuntimeError("detection_params not set")
+        if self.state.is_busy:
+            raise RuntimeError("busy")
 
         from diameter_analysis import DiameterAnalyzer
 
-        analyzer = DiameterAnalyzer(
-            self.state.img,
-            seconds_per_line=self.state.seconds_per_line,
-            um_per_pixel=self.state.um_per_pixel,
-            polarity=self.state.polarity,
-        )
-
-        res = analyzer.analyze(params=self.state.detection_params)
-        self.state.results = res
-
-        self._rebuild_figures()
+        self.state.is_busy = True
         self._emit()
+        try:
+            analyzer = DiameterAnalyzer(
+                self.state.img,
+                seconds_per_line=self.state.seconds_per_line,
+                um_per_pixel=self.state.um_per_pixel,
+                polarity=self.state.polarity,
+            )
+
+            res = analyzer.analyze(params=self.state.detection_params)
+            self.state.results = res
+            self._rebuild_figures()
+        finally:
+            self.state.is_busy = False
+            self._emit()
 
     def apply_post_filter_only(self) -> None:
         # Rebuild figures using existing results and current post_filter_params
@@ -217,17 +236,42 @@ class AppController:
             self.fig_line = set_xrange(self.fig_line, x0, x1)
 
     def on_relayout(self, source: str, relayout: dict) -> None:
-        rng = None
-        if "xaxis.range[0]" in relayout and "xaxis.range[1]" in relayout:
-            rng = (float(relayout["xaxis.range[0]"]), float(relayout["xaxis.range[1]"]))
-        elif "xaxis.range" in relayout:
-            r = relayout["xaxis.range"]
-            if isinstance(r, (list, tuple)) and len(r) == 2:
-                rng = (float(r[0]), float(r[1]))
-
-        if rng is None:
+        if self.state._syncing_axes:
             return
 
-        self.state.x_range = rng
-        self._rebuild_figures()
-        self._emit()
+        new_range: tuple[float, float] | None = None
+        autorange_reset = False
+
+        for axis_name in ("xaxis", "xaxis2"):
+            auto_key = f"{axis_name}.autorange"
+            if auto_key in relayout and bool(relayout[auto_key]):
+                autorange_reset = True
+                break
+
+            k0 = f"{axis_name}.range[0]"
+            k1 = f"{axis_name}.range[1]"
+            if k0 in relayout and k1 in relayout:
+                new_range = (float(relayout[k0]), float(relayout[k1]))
+                break
+
+            k_list = f"{axis_name}.range"
+            if k_list in relayout:
+                r = relayout[k_list]
+                if isinstance(r, (list, tuple)) and len(r) == 2:
+                    new_range = (float(r[0]), float(r[1]))
+                    break
+
+        if not autorange_reset and new_range is None:
+            return
+        if autorange_reset and self.state.x_range is None:
+            return
+        if new_range is not None and self.state.x_range == new_range:
+            return
+
+        self.state._syncing_axes = True
+        try:
+            self.state.x_range = None if autorange_reset else new_range
+            self._rebuild_figures()
+            self._emit()
+        finally:
+            self.state._syncing_axes = False

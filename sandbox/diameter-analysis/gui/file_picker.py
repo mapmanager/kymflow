@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Sequence
 
 from nicegui import app
+
+logger = logging.getLogger(__name__)
 
 
 async def _prompt_for_path(
@@ -11,15 +14,14 @@ async def _prompt_for_path(
     directory: str,
     file_types: Sequence[str] | None = None,
 ) -> str | None:
-    
     native = getattr(app, "native", None)
     if not native:
-        print("file picker unavailable: app.native is not available")
+        logger.error("file picker unavailable: app.native is not available")
         return None
 
     main_window = getattr(native, "main_window", None)
     if not main_window:
-        print("file picker unavailable: app.native.main_window is not available")
+        logger.error("file picker unavailable: app.native.main_window is not available")
         return None
 
     if dialog_type != "file":
@@ -27,11 +29,8 @@ async def _prompt_for_path(
 
     import webview
 
-    dialog_type_enum = webview.FileDialog.OPEN
-
     selection = await main_window.create_file_dialog(  # type: ignore[attr-defined]
-        # webview.OPEN_DIALOG,
-        dialog_type_enum,
+        webview.FileDialog.OPEN,
         allow_multiple=False,
         directory=directory,
         file_types=list(file_types or ["TIFF (*.tif;*.tiff)"]),

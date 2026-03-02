@@ -91,3 +91,23 @@ Pros/cons, drift risk, red flags, and what you’d do differently.
 Do not claim completion unless:
 - All acceptance criteria pass
 - Validation commands were run successfully
+
+## 7) Frontend/backend separation guardrail
+- Backend logic (analysis, IO, filtering) must live outside `gui/`.
+- `gui/` may call backend APIs but must not reimplement analysis logic.
+- Do not reimplement analysis in views/widgets.
+- Controller mediates state updates between GUI and backend.
+
+## 8) File picker guardrail
+- Do not modify `gui/file_picker.py` unless explicitly requested by the ticket.
+- If modification is explicitly requested:
+  - Must use `webview.FileDialog.OPEN`.
+  - Must not use legacy `webview.OPEN_DIALOG`.
+  - Must confirm dialog works in macOS native mode during validation.
+  - Must include a manual smoke-test note in the report:
+    - "Open TIFF dialog works in macOS native mode."
+
+## 9) Views regression guardrail
+- If a ticket modifies `gui/views.py`, acceptance criteria must include:
+  - "Post Filter Params card must remain present and functional."
+- When `gui/views.py` is modified, the report must explicitly confirm this card remains present and functional.

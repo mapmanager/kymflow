@@ -92,6 +92,10 @@ class KymographPayload:
     polarity: str = "bright_on_dark"
     source: str = "synthetic"
     path: str | None = None
+    loaded_shape: tuple[int, int] | None = None
+    loaded_dtype: str | None = None
+    loaded_min: float | None = None
+    loaded_max: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return dataclass_to_dict(self)
@@ -106,6 +110,12 @@ class KymographPayload:
             polarity=str(obj.polarity),
             source=str(obj.source),
             path=None if obj.path is None else str(obj.path),
+            loaded_shape=(
+                None if obj.loaded_shape is None else tuple(int(v) for v in obj.loaded_shape)
+            ),
+            loaded_dtype=None if obj.loaded_dtype is None else str(obj.loaded_dtype),
+            loaded_min=None if obj.loaded_min is None else float(obj.loaded_min),
+            loaded_max=None if obj.loaded_max is None else float(obj.loaded_max),
         )
 
 

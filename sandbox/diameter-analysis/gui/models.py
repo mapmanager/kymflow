@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict, is_dataclass, fields
-from typing import Any, Optional, Callable, Type, TypeVar, get_origin, get_args
+from typing import TYPE_CHECKING, Any, Optional, Callable, Type, TypeVar, get_origin, get_args
 from enum import Enum
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from kymflow.core.image_loaders.kym_image_list import KymImageList
+else:
+    KymImageList = Any  # type: ignore[assignment,misc]
 
 T = TypeVar("T")
 
@@ -77,6 +82,11 @@ class AppState:
     polarity: str = "bright_on_dark"
     source: str = "synthetic"
     loaded_path: Optional[str] = None
+    loaded_shape: Optional[tuple[int, int]] = None
+    loaded_dtype: Optional[str] = None
+    loaded_min: Optional[float] = None
+    loaded_max: Optional[float] = None
+    tiff_error: Optional[str] = None
 
     # Analysis
     results: Optional[Any] = None                # analyzer results object / dict / DataFrame; kept opaque here
@@ -85,8 +95,12 @@ class AppState:
     synthetic_params: Optional[Any] = None
     detection_params: Optional[Any] = None
     post_filter_params: Optional[Any] = None
+    kym_image_list: KymImageList | None = None
 
     gui: GuiConfig = field(default_factory=GuiConfig)
+    file_table_warning: Optional[str] = None
+    is_busy: bool = False
 
     # View state
     x_range: Optional[tuple[float, float]] = None  # seconds
+    _syncing_axes: bool = False

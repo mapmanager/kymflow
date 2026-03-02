@@ -30,6 +30,19 @@ R3: ...
 ## Notes / constraints
 - Any invariants (keys, schema) that must remain stable
 - Any “do not change” constraints
+- Frontend/backend guardrail:
+  - Backend logic (analysis, IO, filtering) stays outside `gui/`.
+  - `gui/` calls backend APIs; no analysis reimplementation in views/widgets.
+  - Controller mediates state updates.
+- File picker guardrail:
+  - Do not modify `gui/file_picker.py` unless explicitly requested.
+  - If modified, use `webview.FileDialog.OPEN` (never `webview.OPEN_DIALOG`).
+  - Confirm dialog behavior in macOS native mode.
+  - Add a manual smoke-test note in report: "Open TIFF dialog works in macOS native mode."
+- Views regression guardrail:
+  - If editing `gui/views.py`, acceptance criteria must state:
+    - "Post Filter Params card must remain present and functional."
+  - Report must explicitly confirm that when `gui/views.py` was modified.
 
 ## Codex implementation report
 Save report as:

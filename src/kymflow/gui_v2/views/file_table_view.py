@@ -153,7 +153,7 @@ class FileTableView:
 
     def __init__(
         self,
-        app_context: "AppContext",
+        app_context: "AppContext" | None = None,
         *,
         on_selected: OnSelected,
         on_metadata_update: OnMetadataUpdate | None = None,
@@ -180,6 +180,14 @@ class FileTableView:
         self._pending_rows: Rows = []
         self._files: list[KymImage] = []
         self._files_by_path: dict[str, KymImage] = {}
+
+    def _get_blinded(self) -> bool:
+        """Return blinded setting from AppContext, or False if unavailable."""
+        return (
+            self._app_context.app_config.get_blinded()
+            if (self._app_context and self._app_context.app_config)
+            else False
+        )
 
     def render(self) -> None:
         """Create the grid UI inside the current container.
@@ -265,8 +273,7 @@ class FileTableView:
         self._files_by_path = {
             str(f.path): f for f in files_list if getattr(f, "path", None) is not None
         }
-        # Get blinded setting from AppConfig
-        blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
+        blinded = self._get_blinded()
         rows: Rows = [
             f.getRowDict(blinded=blinded)
             for f in files_list
@@ -310,7 +317,7 @@ class FileTableView:
         # Ensure our file cache points at the latest object
         self._files_by_path[path] = file
 
-        blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
+        blinded = self._get_blinded()
         row = file.getRowDict(blinded=blinded)
         self.update_row_for_path(path, row)
 

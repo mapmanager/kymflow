@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import logging
+
 from nicegui import ui
 
 from .models import AppState
 from .controllers import AppController
+from .file_table_integration import build_kym_image_list
+from .logging_setup import configure_logging
 from .views import build_home_page
+
+logger = logging.getLogger(__name__)
 
 
 def _make_default_state() -> AppState:
@@ -39,7 +45,7 @@ def _make_default_state() -> AppState:
             bright_band_saturate=False,
         )
     except Exception as e:
-        print("Failed to import SyntheticKymographParams:", e)
+        logger.warning("Failed to import SyntheticKymographParams: %s", e)
         state.synthetic_params = None
 
     # Detection defaults (robust to param name changes)
@@ -55,7 +61,7 @@ def _make_default_state() -> AppState:
 
         state.detection_params = DiameterDetectionParams(**kwargs)
     except Exception as e:
-        print("Failed to build detection params:", e)
+        logger.warning("Failed to build detection params: %s", e)
         state.detection_params = None
 
     # Post-filter defaults (best effort; try a few import locations)
@@ -77,8 +83,14 @@ def _make_default_state() -> AppState:
             raise ImportError("PostFilterParams not found in known modules")
         state.post_filter_params = PostFilterParams()  # type: ignore[call-arg]
     except Exception as e:
-        print("Failed to build post_filter_params:", e)
+        logger.warning("Failed to build post_filter_params: %s", e)
         state.post_filter_params = None
+
+    kym_image_list, warning = build_kym_image_list()
+    state.kym_image_list = kym_image_list
+    state.file_table_warning = warning
+    if warning:
+        logger.warning(warning)
 
     return state
 
@@ -92,6 +104,7 @@ def home() -> None:
 
 
 def main() -> None:
+    configure_logging()
     ui.run(title="Diameter Explorer",
            reload=False,
            native=True,

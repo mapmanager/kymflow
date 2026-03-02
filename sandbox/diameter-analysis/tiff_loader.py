@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 import tifffile
 
 from diameter_analysis import KymographPayload, Polarity
+
+logger = logging.getLogger(__name__)
 
 
 def load_tiff_kymograph(
@@ -27,6 +30,17 @@ def load_tiff_kymograph(
     except ValueError as exc:
         raise ValueError("polarity must be bright_on_dark or dark_on_bright") from exc
 
+    loaded_min = float(np.nanmin(arr))
+    loaded_max = float(np.nanmax(arr))
+    logger.info(
+        "Loaded TIFF path=%s shape=%s dtype=%s min=%s max=%s",
+        str(in_path),
+        arr.shape,
+        str(arr.dtype),
+        loaded_min,
+        loaded_max,
+    )
+
     return KymographPayload(
         kymograph=arr,
         seconds_per_line=float(seconds_per_line),
@@ -34,4 +48,8 @@ def load_tiff_kymograph(
         polarity=pol,
         source="tiff",
         path=str(in_path),
+        loaded_shape=(int(arr.shape[0]), int(arr.shape[1])),
+        loaded_dtype=str(arr.dtype),
+        loaded_min=loaded_min,
+        loaded_max=loaded_max,
     )
