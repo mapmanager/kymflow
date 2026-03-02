@@ -66,7 +66,10 @@ def _run_one_method(
 
 
 def main() -> None:
-    payload = generate_synthetic_kymograph(n_time=220, n_space=150, seed=1)
+    # payload = generate_synthetic_kymograph(n_time=220, n_space=150, seed=1)
+    payload = generate_synthetic_kymograph(n_time=1000,n_space=80,
+                                seconds_per_line=0.001, um_per_pixel=0.15,
+                                seed=1)
 
     analyzer = DiameterAnalyzer(
         payload["kymograph"],
