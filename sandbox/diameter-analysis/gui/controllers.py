@@ -58,8 +58,6 @@ class AppController:
 
         Views must not touch kymflow/kym list internals; they call this method.
         """
-        if self.state.kym_image_list is None:
-            return []
         return list_file_table_kym_images(self.state.kym_image_list)
 
     def _emit(self) -> None:

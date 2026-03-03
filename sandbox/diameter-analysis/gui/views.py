@@ -58,10 +58,6 @@ def build_home_page(controller: AppController) -> None:
         file_table_view.render()
 
         file_table_view.set_files(controller.get_file_table_files())
-        # if state.kym_image_list is not None:
-        #     file_table_view.set_files(state.kym_image_list.images)
-        # else:
-        #     file_table_view.set_files([])
 
 
     with ui.row().classes("w-full items-center gap-2"):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import diameter_kymflow_adapter as adapter
+from gui import diameter_kymflow_adapter as adapter
 
 
 def test_require_channel_and_roi_raises_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:

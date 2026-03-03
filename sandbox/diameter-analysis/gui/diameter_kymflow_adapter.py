@@ -41,26 +41,22 @@ def load_kym_list_for_folder(folder: str | Path) -> Any:
 
 
 def list_file_table_kym_images(klist: Any) -> list[Any]:
-    """Return kym objects suitable for displaying in FileTableView.
+    """Return images for FileTableView.
 
-    Policy: include only items with .path ending in .tif/.tiff when path is present.
+    Trust the kymflow API: ``klist`` is expected to be a kym list object returned by
+    ``load_kym_list_for_folder()`` / facade ``load_kym_list()``, and is assumed to
+    already represent valid kymograph images.
+
+    Returns:
+        A plain list of image objects suitable for passing into
+        ``FileTableView.set_files()``.
     """
-    images: list[Any] = []
-    # Common case: KymImageList exposes an `.images` iterable
-    cand = getattr(klist, "images", None)
-    if cand is None:
-        try:
-            cand = list(klist)  # type: ignore[arg-type]
-        except Exception:
-            cand = []
-    for img in cand:
-        p = getattr(img, "path", None)
-        if p is None:
-            continue
-        suffix = Path(str(p)).suffix.lower()
-        if suffix in {".tif", ".tiff"}:
-            images.append(img)
-    return images
+    if klist is None:
+        return []
+    try:
+        return list(klist.images)
+    except AttributeError:
+        return list(klist)
 
 
 def get_kym_by_path(klist: Any, path: str | Path) -> Any | None:

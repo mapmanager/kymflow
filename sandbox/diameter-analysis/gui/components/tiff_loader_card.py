@@ -6,8 +6,8 @@ from typing import Any
 from nicegui import ui
 
 from ..controllers import AppController
+from ..diameter_kymflow_adapter import get_kym_by_path
 from ..file_picker import prompt_tiff_path
-from kymflow.core.api.kym_external import get_kym_by_path
 
 logger = logging.getLogger(__name__)
 
