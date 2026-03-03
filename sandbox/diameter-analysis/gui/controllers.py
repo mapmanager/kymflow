@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional, Callable
+from pathlib import Path
+from typing import Any, Optional, Callable
 
 import numpy as np
 
@@ -11,6 +12,13 @@ from .plotting import (
     set_xrange,
     make_diameter_figure_dict,
 )
+
+
+class _ManualUnitSelection:
+    def __init__(self, path: str, seconds_per_line: float, um_per_pixel: float) -> None:
+        self.path = path
+        self.seconds_per_line = float(seconds_per_line)
+        self.um_per_pixel = float(um_per_pixel)
 
 
 class AppController:
@@ -34,8 +42,6 @@ class AppController:
         self,
         img: np.ndarray,
         *,
-        seconds_per_line: float,
-        um_per_pixel: float,
         polarity: str = "bright_on_dark",
         source: str = "synthetic",
         path: str | None = None,
@@ -43,12 +49,12 @@ class AppController:
         loaded_dtype: str | None = None,
         loaded_min: float | None = None,
         loaded_max: float | None = None,
+        selected_kym_image: Any | None = None,
     ) -> None:
         self.state.img = img
-        self.state.seconds_per_line = float(seconds_per_line)
-        self.state.um_per_pixel = float(um_per_pixel)
         self.state.polarity = str(polarity)
         self.state.source = str(source)
+        self.state.selected_kym_image = selected_kym_image
         self.state.loaded_path = None if path is None else str(path)
         self.state.loaded_shape = loaded_shape
         self.state.loaded_dtype = loaded_dtype
@@ -68,32 +74,84 @@ class AppController:
         payload = generate_synthetic_kymograph(synthetic_params=self.state.synthetic_params)
         img = payload["kymograph"]
 
-        meta = payload.get("meta", {}) if isinstance(payload, dict) else {}
-        seconds_per_line = float(meta.get("seconds_per_line", payload.get("seconds_per_line", self.state.seconds_per_line)))
-        um_per_pixel = float(meta.get("um_per_pixel", payload.get("um_per_pixel", self.state.um_per_pixel)))
-
         self.set_img(
             img,
-            seconds_per_line=seconds_per_line,
-            um_per_pixel=um_per_pixel,
             polarity=str(payload.get("polarity", "bright_on_dark")),
             source="synthetic",
             path=None,
+            selected_kym_image=None,
         )
 
-    def load_tiff(self, path: str, *, seconds_per_line: float, um_per_pixel: float) -> None:
+    @staticmethod
+    def _coerce_positive_float(value: Any) -> float | None:
+        try:
+            out = float(value)
+        except Exception:
+            return None
+        if not np.isfinite(out) or out <= 0:
+            return None
+        return out
+
+    def resolve_units(
+        self,
+        *,
+        selected_kym_image: Any | None = None,
+        source: str | None = None,
+    ) -> tuple[float, float]:
+        selected = selected_kym_image if selected_kym_image is not None else self.state.selected_kym_image
+        if selected is not None:
+            kym_seconds = self._coerce_positive_float(getattr(selected, "seconds_per_line", None))
+            kym_um = self._coerce_positive_float(getattr(selected, "um_per_pixel", None))
+            if kym_seconds is not None and kym_um is not None:
+                return kym_seconds, kym_um
+            raise RuntimeError("selected_kym_image is missing valid units")
+
+        active_source = str(source if source is not None else self.state.source)
+        if active_source == "synthetic":
+            params = self.state.synthetic_params
+            if params is None:
+                raise RuntimeError("synthetic_params not set")
+            syn_seconds = self._coerce_positive_float(getattr(params, "seconds_per_line", None))
+            syn_um = self._coerce_positive_float(getattr(params, "um_per_pixel", None))
+            if syn_seconds is None or syn_um is None:
+                raise RuntimeError("synthetic_params missing valid units")
+            return syn_seconds, syn_um
+        raise RuntimeError("No canonical units available for non-synthetic source without selected_kym_image")
+
+    def load_tiff(
+        self,
+        path: str,
+        *,
+        seconds_per_line: float | None = None,
+        um_per_pixel: float | None = None,
+        selected_kym_image: Any | None = None,
+    ) -> None:
         from tiff_loader import load_tiff_kymograph
 
+        resolved_seconds: float
+        resolved_um: float
+        if selected_kym_image is not None:
+            resolved_seconds, resolved_um = self.resolve_units(selected_kym_image=selected_kym_image)
+        else:
+            resolved_seconds = self._coerce_positive_float(seconds_per_line) or 0.0
+            resolved_um = self._coerce_positive_float(um_per_pixel) or 0.0
+            if resolved_seconds <= 0.0 or resolved_um <= 0.0:
+                raise RuntimeError(
+                    "load_tiff requires selected_kym_image with units, or explicit positive seconds_per_line and um_per_pixel"
+                )
+            selected_kym_image = _ManualUnitSelection(
+                path=path,
+                seconds_per_line=resolved_seconds,
+                um_per_pixel=resolved_um,
+            )
         payload = load_tiff_kymograph(
             path,
-            seconds_per_line=seconds_per_line,
-            um_per_pixel=um_per_pixel,
+            seconds_per_line=resolved_seconds,
+            um_per_pixel=resolved_um,
             polarity=self.state.polarity,
         )
         self.set_img(
             payload.kymograph,
-            seconds_per_line=payload.seconds_per_line,
-            um_per_pixel=payload.um_per_pixel,
             polarity=payload.polarity,
             source=payload.source,
             path=payload.path,
@@ -101,6 +159,7 @@ class AppController:
             loaded_dtype=payload.loaded_dtype,
             loaded_min=payload.loaded_min,
             loaded_max=payload.loaded_max,
+            selected_kym_image=selected_kym_image,
         )
 
     def detect(self) -> None:
@@ -116,10 +175,11 @@ class AppController:
         self.state.is_busy = True
         self._emit()
         try:
+            seconds_per_line, um_per_pixel = self.resolve_units(source=self.state.source)
             analyzer = DiameterAnalyzer(
                 self.state.img,
-                seconds_per_line=self.state.seconds_per_line,
-                um_per_pixel=self.state.um_per_pixel,
+                seconds_per_line=seconds_per_line,
+                um_per_pixel=um_per_pixel,
                 polarity=self.state.polarity,
             )
 
@@ -140,13 +200,12 @@ class AppController:
         if img is None:
             raise RuntimeError("no img")
         n_time = img.shape[0]
-        seconds = np.arange(n_time, dtype=float) * float(self.state.seconds_per_line)
+        seconds_per_line, um_per_pixel = self.resolve_units(source=self.state.source)
+        seconds = np.arange(n_time, dtype=float) * float(seconds_per_line)
 
         res = self.state.results
         if res is None:
             return seconds, None, None, None
-
-        um_per_pixel = float(self.state.um_per_pixel)
 
         try:
             import pandas as pd  # type: ignore
@@ -208,12 +267,14 @@ class AppController:
             self.fig_line = None
             return
 
+        seconds_per_line, um_per_pixel = self.resolve_units(source=self.state.source)
         seconds, left_um, right_um, center_um = self._extract_overlays_um()
 
         base = make_kymograph_figure_dict(
             self.state.img,
-            seconds_per_line=self.state.seconds_per_line,
-            um_per_pixel=self.state.um_per_pixel,
+            seconds_per_line=seconds_per_line,
+            um_per_pixel=um_per_pixel,
+            title=self.kymograph_title(),
         )
 
         if not self.state.gui.show_center_overlay:
@@ -225,8 +286,8 @@ class AppController:
 
         self.fig_line = make_diameter_figure_dict(
             self.state.results,
-            seconds_per_line=self.state.seconds_per_line,
-            um_per_pixel=self.state.um_per_pixel,
+            seconds_per_line=seconds_per_line,
+            um_per_pixel=um_per_pixel,
             post_filter_params=self.state.post_filter_params,
         )
 
@@ -275,3 +336,14 @@ class AppController:
             self._emit()
         finally:
             self.state._syncing_axes = False
+
+    def kymograph_title(self) -> str:
+        selected = self.state.selected_kym_image
+        selected_path = getattr(selected, "path", None) if selected is not None else None
+        if selected_path is not None:
+            return Path(str(selected_path)).name
+        if self.state.source == "synthetic":
+            return "synthetic"
+        if self.state.loaded_path:
+            return Path(self.state.loaded_path).name
+        return "kymograph"

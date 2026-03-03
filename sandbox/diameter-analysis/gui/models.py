@@ -7,8 +7,10 @@ from enum import Enum
 import numpy as np
 
 if TYPE_CHECKING:
+    from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.image_loaders.kym_image_list import KymImageList
 else:
+    KymImage = Any  # type: ignore[assignment,misc]
     KymImageList = Any  # type: ignore[assignment,misc]
 
 T = TypeVar("T")
@@ -77,8 +79,6 @@ class AppState:
     """App state for one GUI session."""
     # Data
     img: Optional[np.ndarray] = None              # (time, space) as per project convention
-    seconds_per_line: float = 0.001
-    um_per_pixel: float = 0.15
     polarity: str = "bright_on_dark"
     source: str = "synthetic"
     loaded_path: Optional[str] = None
@@ -95,6 +95,7 @@ class AppState:
     synthetic_params: Optional[Any] = None
     detection_params: Optional[Any] = None
     post_filter_params: Optional[Any] = None
+    selected_kym_image: KymImage | None = None
     kym_image_list: KymImageList | None = None
 
     gui: GuiConfig = field(default_factory=GuiConfig)

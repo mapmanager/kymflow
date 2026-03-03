@@ -56,12 +56,18 @@ class DiameterDetectionParams:
     gradient_sigma: float = 1.5
     gradient_kernel: str = "central_diff"
     gradient_min_edge_strength: float = 0.02
+    enable_motion_constraints: bool = True
+    max_edge_shift_um: float = 2.0
+    max_diameter_change_um: float = 2.0
+    max_center_shift_um: float = 2.0
 
     def to_dict(self) -> dict[str, Any]:
+        # TODO(ticket_014): add stable DetectionParams.to_dict() schema contract.
         return dataclass_to_dict(self)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DiameterDetectionParams":
+        # TODO(ticket_014): add stable DetectionParams.from_dict() schema contract.
         obj = dataclass_from_dict(cls, payload)
         if obj.roi is not None and len(obj.roi) != 4:
             raise ValueError("roi must have four entries (t0, t1, x0, x1)")
@@ -134,8 +140,12 @@ class DiameterResult:
     diameter_was_filtered: bool
     qc_score: float
     qc_flags: list[str]
+    qc_edge_violation: bool = False
+    qc_diameter_violation: bool = False
+    qc_center_violation: bool = False
 
     def to_row(self, *, roi_id: int, schema_version: int, um_per_pixel: float) -> dict[str, Any]:
+        # TODO(ticket_014): add stable DetectionResults.to_dict() schema contract.
         return {
             "schema_version": int(schema_version),
             "roi_id": int(roi_id),
@@ -154,10 +164,14 @@ class DiameterResult:
             "diameter_was_filtered": int(bool(self.diameter_was_filtered)),
             "qc_score": float(self.qc_score),
             "qc_flags": "|".join(self.qc_flags),
+            "qc_edge_violation": int(bool(self.qc_edge_violation)),
+            "qc_diameter_violation": int(bool(self.qc_diameter_violation)),
+            "qc_center_violation": int(bool(self.qc_center_violation)),
         }
 
     @classmethod
     def from_row(cls, row: dict[str, str]) -> "DiameterResult":
+        # TODO(ticket_014): add stable DetectionResults.from_dict() schema contract.
         qc_flags = row.get("qc_flags", "")
         return cls(
             center_row=int(row["center_row"]),
@@ -173,6 +187,9 @@ class DiameterResult:
             diameter_was_filtered=bool(int(row.get("diameter_was_filtered", "0"))),
             qc_score=float(row["qc_score"]),
             qc_flags=[f for f in qc_flags.split("|") if f],
+            qc_edge_violation=bool(int(row.get("qc_edge_violation", "0"))),
+            qc_diameter_violation=bool(int(row.get("qc_diameter_violation", "0"))),
+            qc_center_violation=bool(int(row.get("qc_center_violation", "0"))),
         )
 
 
@@ -204,6 +221,7 @@ class DiameterAnalyzer:
         self.kymograph = arr
         self.seconds_per_line = float(seconds_per_line)
         self.um_per_pixel = float(um_per_pixel)
+        self.last_motion_qc: dict[str, np.ndarray] | None = None
 
     def analyze(
         self,
@@ -227,9 +245,104 @@ class DiameterAnalyzer:
             raise ValueError("backend must be 'serial' or 'threads'")
 
         results.sort(key=lambda r: r.center_row)
+        if cfg.diameter_method == DiameterMethod.GRADIENT_EDGES and cfg.enable_motion_constraints:
+            self._apply_motion_constraints(results=results, params=cfg)
+        self.last_motion_qc = self.motion_qc_arrays(results)
         if pf_cfg.enabled:
             self._apply_post_filter(results=results, params=pf_cfg)
         return results
+
+    @staticmethod
+    def motion_qc_arrays(results: list[DiameterResult]) -> dict[str, np.ndarray]:
+        return {
+            "qc_edge_violation": np.asarray([bool(r.qc_edge_violation) for r in results], dtype=bool),
+            "qc_diameter_violation": np.asarray(
+                [bool(r.qc_diameter_violation) for r in results], dtype=bool
+            ),
+            "qc_center_violation": np.asarray(
+                [bool(r.qc_center_violation) for r in results], dtype=bool
+            ),
+        }
+
+    def _apply_motion_constraints(
+        self,
+        *,
+        results: list[DiameterResult],
+        params: DiameterDetectionParams,
+    ) -> None:
+        if len(results) < 2:
+            return
+
+        um_per_px = float(self.um_per_pixel)
+        edge_thr_px = float(params.max_edge_shift_um) / um_per_px
+        diam_thr_px = float(params.max_diameter_change_um) / um_per_px
+        center_thr_px = float(params.max_center_shift_um) / um_per_px
+
+        for i in range(1, len(results)):
+            prev = results[i - 1]
+            cur = results[i]
+            edge_violation = False
+            diameter_violation = False
+            center_violation = False
+
+            prev_left = float(prev.left_edge_px)
+            prev_right = float(prev.right_edge_px)
+            cur_left = float(cur.left_edge_px)
+            cur_right = float(cur.right_edge_px)
+
+            if np.isfinite(cur_left) and np.isfinite(prev_left):
+                if abs(cur_left - prev_left) > edge_thr_px:
+                    cur_left = math.nan
+                    edge_violation = True
+
+            if np.isfinite(cur_right) and np.isfinite(prev_right):
+                if abs(cur_right - prev_right) > edge_thr_px:
+                    cur_right = math.nan
+                    edge_violation = True
+
+            prev_d = prev_right - prev_left if np.isfinite(prev_left) and np.isfinite(prev_right) else math.nan
+            cur_d = cur_right - cur_left if np.isfinite(cur_left) and np.isfinite(cur_right) else math.nan
+            if np.isfinite(cur_d) and np.isfinite(prev_d):
+                if abs(cur_d - prev_d) > diam_thr_px:
+                    cur_left = math.nan
+                    cur_right = math.nan
+                    diameter_violation = True
+
+            prev_c = (
+                0.5 * (prev_left + prev_right)
+                if np.isfinite(prev_left) and np.isfinite(prev_right)
+                else math.nan
+            )
+            cur_c = (
+                0.5 * (cur_left + cur_right)
+                if np.isfinite(cur_left) and np.isfinite(cur_right)
+                else math.nan
+            )
+            if np.isfinite(cur_c) and np.isfinite(prev_c):
+                if abs(cur_c - prev_c) > center_thr_px:
+                    cur_left = math.nan
+                    cur_right = math.nan
+                    center_violation = True
+
+            cur.left_edge_px = float(cur_left)
+            cur.right_edge_px = float(cur_right)
+            cur.diameter_px = (
+                float(cur_right - cur_left)
+                if np.isfinite(cur_left) and np.isfinite(cur_right)
+                else math.nan
+            )
+            cur.diameter_px_filt = float(cur.diameter_px)
+            cur.qc_edge_violation = edge_violation
+            cur.qc_diameter_violation = diameter_violation
+            cur.qc_center_violation = center_violation
+
+            if edge_violation and "motion_edge_violation" not in cur.qc_flags:
+                cur.qc_flags.append("motion_edge_violation")
+            if diameter_violation and "motion_diameter_violation" not in cur.qc_flags:
+                cur.qc_flags.append("motion_diameter_violation")
+            if center_violation and "motion_center_violation" not in cur.qc_flags:
+                cur.qc_flags.append("motion_center_violation")
+            cur.qc_flags = sorted(set(cur.qc_flags))
 
     def _analyze_threads(
         self,
@@ -604,6 +717,12 @@ class DiameterAnalyzer:
             raise ValueError("gradient_sigma must be >= 0")
         if params.gradient_min_edge_strength < 0:
             raise ValueError("gradient_min_edge_strength must be >= 0")
+        if params.max_edge_shift_um < 0:
+            raise ValueError("max_edge_shift_um must be >= 0")
+        if params.max_diameter_change_um < 0:
+            raise ValueError("max_diameter_change_um must be >= 0")
+        if params.max_center_shift_um < 0:
+            raise ValueError("max_center_shift_um must be >= 0")
         if params.gradient_kernel != "central_diff":
             raise ValueError("gradient_kernel must be 'central_diff'")
         return params
@@ -659,6 +778,9 @@ class DiameterAnalyzer:
             "diameter_was_filtered",
             "qc_score",
             "qc_flags",
+            "qc_edge_violation",
+            "qc_diameter_violation",
+            "qc_center_violation",
         ]
         with results_path.open("w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)

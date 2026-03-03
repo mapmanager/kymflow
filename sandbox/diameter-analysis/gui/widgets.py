@@ -44,13 +44,31 @@ def dataclass_editor_card(
     *,
     title: str,
     on_change: Callable[[str, Any], None],
+    header_actions: Callable[[], None] | None = None,
     dense: bool = True,
 ) -> ui.card:
     if not is_dataclass(obj):
         raise TypeError("dataclass_editor_card expects a dataclass instance")
 
     with ui.card().classes("w-full"):
-        ui.label(title).classes("text-lg font-semibold")
+        with ui.row().classes("w-full items-center justify-between"):
+            ui.label(title).classes("text-lg font-semibold")
+            if header_actions is not None:
+                with ui.row().classes("items-center gap-2"):
+                    header_actions()
+        motion_fields = {"max_edge_shift_um", "max_diameter_change_um", "max_center_shift_um"}
+        motion_controls: list[Any] = []
+
+        def _set_motion_controls_enabled(enabled: bool) -> None:
+            for ctl in motion_controls:
+                try:
+                    if enabled:
+                        ctl.enable()
+                    else:
+                        ctl.disable()
+                except Exception:
+                    pass
+
         with ui.grid(columns=2).classes("w-full gap-3"):
             for f in fields(obj):
                 name = f.name
@@ -61,7 +79,18 @@ def dataclass_editor_card(
 
                 if isinstance(value, bool) or tp is bool:
                     w = ui.switch(value=bool(value))
-                    w.on("update:model-value", lambda e, n=name: on_change(n, bool(_select_value(e.args))))
+                    if name == "enable_motion_constraints":
+                        def _on_motion_toggle(e, n=name) -> None:
+                            enabled = bool(_select_value(e.args))
+                            on_change(n, enabled)
+                            _set_motion_controls_enabled(enabled)
+
+                        w.on("update:model-value", _on_motion_toggle)
+                    else:
+                        w.on(
+                            "update:model-value",
+                            lambda e, n=name: on_change(n, bool(_select_value(e.args))),
+                        )
                 elif isinstance(value, int) or tp is int:
                     w = ui.number(value=int(value), step=1)
                     w.on(
@@ -101,5 +130,9 @@ def dataclass_editor_card(
 
                 if dense:
                     w.classes("w-full")
+                if name in motion_fields:
+                    motion_controls.append(w)
+                    if hasattr(obj, "enable_motion_constraints"):
+                        _set_motion_controls_enabled(bool(getattr(obj, "enable_motion_constraints")))
 
         return ui.card()

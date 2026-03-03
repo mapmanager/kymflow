@@ -22,6 +22,7 @@ def test_gradient_edges_runs_and_is_mostly_ordered() -> None:
         window_rows_odd=5,
         diameter_method=DiameterMethod.GRADIENT_EDGES,
         gradient_sigma=1.5,
+        enable_motion_constraints=False,
     )
     results = analyzer.analyze(params=params, backend="serial")
 

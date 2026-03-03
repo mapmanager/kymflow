@@ -5,7 +5,8 @@ from typing import Any, Iterable
 
 from kymflow.core.image_loaders.kym_image_list import KymImageList
 
-SEED_FOLDER = "/Users/cudmore/Dropbox/data/cell-shortening/fig1"
+# SEED_FOLDER = "/Users/cudmore/Dropbox/data/cell-shortening/fig1"
+SEED_FOLDER = "/Users/cudmore/Downloads/kymflow_app/cell-shortening/fig1"
 
 
 def build_kym_image_list(seed_folder: str | Path = SEED_FOLDER) -> tuple[KymImageList | None, str | None]:
@@ -43,3 +44,17 @@ def filter_tiff_images(images: Iterable[Any]) -> list[Any]:
         if suffix in {".tif", ".tiff"}:
             out.append(img)
     return out
+
+
+# depreciate, not needed when using KymImageList
+def find_kym_image_by_path(kml: KymImageList | None, path: str | Path) -> Any | None:
+    if kml is None:
+        return None
+    target = str(Path(path))
+    for img in iter_kym_images(kml):
+        img_path = getattr(img, "path", None)
+        if img_path is None:
+            continue
+        if str(img_path) == target:
+            return img
+    return None
