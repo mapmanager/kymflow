@@ -111,3 +111,7 @@ Do not claim completion unless:
 - If a ticket modifies `gui/views.py`, acceptance criteria must include:
   - "Post Filter Params card must remain present and functional."
 - When `gui/views.py` is modified, the report must explicitly confirm this card remains present and functional.
+
+## 10) Real kymograph facade guardrail
+- When dealing with real kymographs, use only `kymflow.core.api.kym_external` facade functions.
+- Do not access `KymImage` convenience properties directly from diameter-analysis code.

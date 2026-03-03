@@ -150,7 +150,7 @@ class KymImageList(AcqImageList[KymImage]):
         *,
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
-        depth: int = 1,
+        depth: int = 4,
         follow_symlinks: bool = False,
         cancel_event: threading.Event | None = None,
         progress_cb: ProgressCallback | None = None,

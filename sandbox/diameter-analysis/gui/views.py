@@ -11,7 +11,7 @@ from kymflow.gui_v2.events import FileSelection
 from kymflow.gui_v2.views.file_table_view import FileTableView
 
 from .controllers import AppController
-from .file_table_integration import filter_tiff_images, find_kym_image_by_path, iter_kym_images
+
 from .models import AppState
 from .widgets import dataclass_editor_card
 
@@ -37,19 +37,13 @@ def build_home_page(controller: AppController) -> None:
         if state.is_busy:
             ui.notify("Busy... detect is running", type="warning", timeout=2000)
             return
+
         path = file_selection.path
         if not path:
             return
-        try:
-            # abb we do not need find_kym_image_by_path()
-            # we can use KymImageList.find_by_path(path)
-            # selected_kym_image = find_kym_image_by_path(state.kym_image_list, str(path))
-            selected_kym_image = state.kym_image_list.find_by_path(str(path)) if state.kym_image_list else None
-            
-            # we do not need to load, we can get image (lazy load from KymImage with just
-            # img_data:np.ndarray = selected_kym_image.getChannelData(1)
-            controller.load_tiff(str(path), selected_kym_image=selected_kym_image)
 
+        try:
+            controller.load_selected_path(path)
             ui.notify("TIFF loaded", type="positive", timeout=1200)
         except Exception as e:
             msg = f"Failed to load TIFF: {e}"
@@ -62,12 +56,13 @@ def build_home_page(controller: AppController) -> None:
         ui.label("File Browser").classes("text-lg font-semibold")
         file_table_view = FileTableView(on_selected=_on_file_selected)
         file_table_view.render()
-        if state.kym_image_list is not None:
-            file_table_view.set_files(filter_tiff_images(iter_kym_images(state.kym_image_list)))
-        else:
-            file_table_view.set_files([])
-        if state.file_table_warning:
-            ui.label(state.file_table_warning).classes("text-sm text-orange-700")
+
+        file_table_view.set_files(controller.get_file_table_files())
+        # if state.kym_image_list is not None:
+        #     file_table_view.set_files(state.kym_image_list.images)
+        # else:
+        #     file_table_view.set_files([])
+
 
     with ui.row().classes("w-full items-center gap-2"):
         ui.button("Generate synthetic", on_click=lambda: _safe_run(controller.generate_synthetic)).props(

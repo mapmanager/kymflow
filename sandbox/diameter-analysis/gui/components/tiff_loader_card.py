@@ -7,7 +7,7 @@ from nicegui import ui
 
 from ..controllers import AppController
 from ..file_picker import prompt_tiff_path
-from ..file_table_integration import find_kym_image_by_path
+from kymflow.core.api.kym_external import get_kym_by_path
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,11 @@ class TiffLoaderCard:
 
     def _load_path(self, path: str) -> None:
         state = self.controller.state
-        selected_kym_image = find_kym_image_by_path(state.kym_image_list, path)
+        selected_kym_image = (
+            get_kym_by_path(state.kym_image_list, str(path))
+            if state.kym_image_list is not None
+            else None
+        )
         self.controller.load_tiff(
             path,
             seconds_per_line=self._input_value(self._seconds_input),

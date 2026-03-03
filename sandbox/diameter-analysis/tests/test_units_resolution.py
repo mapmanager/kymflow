@@ -32,6 +32,10 @@ def test_detect_uses_selected_kym_image_units(monkeypatch) -> None:
             return []
 
     monkeypatch.setattr("diameter_analysis.DiameterAnalyzer", _FakeAnalyzer)
+    monkeypatch.setattr(
+        "gui.controllers.get_kym_geometry_for",
+        lambda _kimg: ((4, 6), 0.003, 0.21),
+    )
 
     state = AppState()
     controller = AppController(state)

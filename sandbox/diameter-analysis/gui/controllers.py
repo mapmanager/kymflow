@@ -5,6 +5,18 @@ from typing import Any, Optional, Callable
 
 import numpy as np
 
+from .diameter_kymflow_adapter import (
+    DEFAULT_CHANNEL_ID,
+    DEFAULT_ROI_ID,
+    get_kym_geometry_for,
+    get_roi_pixel_bounds_for,
+    load_channel_for,
+    require_channel_and_roi,
+    get_kym_by_path,
+    load_kym_list_for_folder,
+    list_file_table_kym_images,
+)
+
 from .models import AppState
 from .plotting import (
     make_kymograph_figure_dict,
@@ -12,7 +24,6 @@ from .plotting import (
     set_xrange,
     make_diameter_figure_dict,
 )
-
 
 class _ManualUnitSelection:
     def __init__(self, path: str, seconds_per_line: float, um_per_pixel: float) -> None:
@@ -34,9 +45,39 @@ class AppController:
         self.fig_img: Optional[dict] = None
         self.fig_line: Optional[dict] = None
 
+
+    def initialize_kym_list(self, folder: str | Path) -> None:
+        """Load the kymograph list for FileTableView (real data).
+
+        This is the *only* place the GUI layer should trigger kymflow list loading.
+        """
+        self.state.kym_image_list = load_kym_list_for_folder(folder)
+
+    def get_file_table_files(self) -> list[Any]:
+        """Return kym objects to display in FileTableView.
+
+        Views must not touch kymflow/kym list internals; they call this method.
+        """
+        if self.state.kym_image_list is None:
+            return []
+        return list_file_table_kym_images(self.state.kym_image_list)
+
     def _emit(self) -> None:
         if self._on_state_change:
             self._on_state_change(self.state)
+
+    def get_selected_kym(self, path: str | Path) -> Any | None:
+        """Resolve a selected file path into a kym object from the loaded kym list."""
+        if self.state.kym_image_list is None:
+            return None
+        return get_kym_by_path(self.state.kym_image_list, str(path))
+
+    def load_selected_path(self, path: str | Path) -> None:
+        """Load a real kymograph selected by path (FileTableView selection)."""
+        kym = self.get_selected_kym(path)
+        if kym is None:
+            raise ValueError(f"Selected file not found in kym list: {path}")
+        self.load_real_kym(kym)
 
     def set_img(
         self,
@@ -100,10 +141,17 @@ class AppController:
     ) -> tuple[float, float]:
         selected = selected_kym_image if selected_kym_image is not None else self.state.selected_kym_image
         if selected is not None:
-            kym_seconds = self._coerce_positive_float(getattr(selected, "seconds_per_line", None))
-            kym_um = self._coerce_positive_float(getattr(selected, "um_per_pixel", None))
-            if kym_seconds is not None and kym_um is not None:
-                return kym_seconds, kym_um
+            try:
+                _, kym_seconds, kym_um = get_kym_geometry_for(selected)
+                if kym_seconds is not None and kym_um is not None:
+                    return float(kym_seconds), float(kym_um)
+            except Exception:
+                pass
+            if isinstance(selected, _ManualUnitSelection):
+                kym_seconds = self._coerce_positive_float(selected.seconds_per_line)
+                kym_um = self._coerce_positive_float(selected.um_per_pixel)
+                if kym_seconds is not None and kym_um is not None:
+                    return kym_seconds, kym_um
             raise RuntimeError("selected_kym_image is missing valid units")
 
         active_source = str(source if source is not None else self.state.source)
@@ -160,6 +208,31 @@ class AppController:
             loaded_min=payload.loaded_min,
             loaded_max=payload.loaded_max,
             selected_kym_image=selected_kym_image,
+        )
+
+    def load_real_kym(self, kimg: Any) -> None:
+        require_channel_and_roi(
+            kimg,
+            channel=DEFAULT_CHANNEL_ID,
+            roi_id=DEFAULT_ROI_ID,
+        )
+        _ = get_roi_pixel_bounds_for(kimg, roi_id=DEFAULT_ROI_ID)
+        channel_data = np.asarray(load_channel_for(kimg, channel=DEFAULT_CHANNEL_ID))
+        if channel_data.ndim != 2:
+            raise ValueError(f"Expected 2D kymograph channel data, got shape={channel_data.shape!r}.")
+
+        loaded_min = float(np.nanmin(channel_data))
+        loaded_max = float(np.nanmax(channel_data))
+        self.set_img(
+            channel_data,
+            polarity=self.state.polarity,
+            source="kymflow",
+            path=str(getattr(kimg, "path", "")),
+            loaded_shape=(int(channel_data.shape[0]), int(channel_data.shape[1])),
+            loaded_dtype=str(channel_data.dtype),
+            loaded_min=loaded_min,
+            loaded_max=loaded_max,
+            selected_kym_image=kimg,
         )
 
     def detect(self) -> None:

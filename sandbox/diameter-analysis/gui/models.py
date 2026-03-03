@@ -99,7 +99,6 @@ class AppState:
     kym_image_list: KymImageList | None = None
 
     gui: GuiConfig = field(default_factory=GuiConfig)
-    file_table_warning: Optional[str] = None
     is_busy: bool = False
 
     # View state
