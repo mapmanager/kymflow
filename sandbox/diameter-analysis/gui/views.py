@@ -72,7 +72,7 @@ def build_home_page(controller: AppController) -> None:
 
     ui.separator()
 
-    splitter = ui.splitter(value=28).props("limits=[0,100]").classes("w-full")
+    splitter = ui.splitter(value=0).props("limits=[0,100]").classes("w-full")
 
     with splitter.before:
         with ui.column().classes("w-full gap-2"):

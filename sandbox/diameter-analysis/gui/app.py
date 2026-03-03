@@ -85,7 +85,7 @@ def main() -> None:
     ui.run(title="Diameter Explorer",
            reload=False,
            native=True,
-           window_size=(1200, 1000),
+           window_size=(2000, 1400),
     )
 
 

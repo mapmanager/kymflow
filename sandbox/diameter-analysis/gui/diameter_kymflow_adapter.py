@@ -53,10 +53,11 @@ def list_file_table_kym_images(klist: Any) -> list[Any]:
     """
     if klist is None:
         return []
-    try:
-        return list(klist.images)
-    except AttributeError:
-        return list(klist)
+    if not hasattr(klist, "images"):
+        raise TypeError(
+            f"Expected klist with .images (KymImageList contract); got {type(klist)!r}"
+        )
+    return list(klist.images)
 
 
 def get_kym_by_path(klist: Any, path: str | Path) -> Any | None:

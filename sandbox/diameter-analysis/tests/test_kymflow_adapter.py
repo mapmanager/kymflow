@@ -56,3 +56,20 @@ def test_defaults_channel_one_and_roi_one_are_applied(monkeypatch: pytest.Monkey
 
     assert calls["roi_id"] == 1
     assert calls["channel"] == 1
+
+
+def test_list_file_table_kym_images_fails_fast_without_images() -> None:
+    class _NoImages:
+        pass
+
+    with pytest.raises(TypeError, match=r"Expected klist with \.images"):
+        adapter.list_file_table_kym_images(_NoImages())
+
+
+def test_list_file_table_kym_images_uses_images_contract() -> None:
+    class _WithImages:
+        def __init__(self) -> None:
+            self.images = [object(), object()]
+
+    out = adapter.list_file_table_kym_images(_WithImages())
+    assert len(out) == 2

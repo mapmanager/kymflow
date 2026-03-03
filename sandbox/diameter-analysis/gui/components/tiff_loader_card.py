@@ -6,7 +6,6 @@ from typing import Any
 from nicegui import ui
 
 from ..controllers import AppController
-from ..diameter_kymflow_adapter import get_kym_by_path
 from ..file_picker import prompt_tiff_path
 
 logger = logging.getLogger(__name__)
@@ -75,19 +74,17 @@ class TiffLoaderCard:
             ui.notify(msg, type="negative", timeout=8000)
 
     def _load_path(self, path: str) -> None:
-        state = self.controller.state
-        selected_kym_image = (
-            get_kym_by_path(state.kym_image_list, str(path))
-            if state.kym_image_list is not None
-            else None
-        )
+        # Only controllers may touch diameter_kymflow_adapter/kymflow facade.
+        # So: ask the controller to resolve the selected kym object.
+        selected_kym_image = self.controller.get_selected_kym(path)
+
         self.controller.load_tiff(
             path,
             seconds_per_line=self._input_value(self._seconds_input),
             um_per_pixel=self._input_value(self._um_input),
             selected_kym_image=selected_kym_image,
         )
-
+        
     @staticmethod
     def _input_value(widget: Any | None) -> float | None:
         if widget is None:
