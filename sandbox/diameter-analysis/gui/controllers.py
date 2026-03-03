@@ -367,10 +367,10 @@ class AppController:
             self.fig_img = set_xrange(self.fig_img, x0, x1)
             self.fig_line = set_xrange(self.fig_line, x0, x1)
 
-    def on_relayout(self, source: str, relayout: dict) -> None:
-        if self.state._syncing_axes:
-            return
-
+    @staticmethod
+    def _parse_xrange_from_relayout(
+        relayout: dict[str, Any],
+    ) -> tuple[tuple[float, float] | None, bool]:
         new_range: tuple[float, float] | None = None
         autorange_reset = False
 
@@ -392,6 +392,14 @@ class AppController:
                 if isinstance(r, (list, tuple)) and len(r) == 2:
                     new_range = (float(r[0]), float(r[1]))
                     break
+
+        return new_range, autorange_reset
+
+    def on_relayout(self, source: str, relayout: dict) -> None:
+        if self.state._syncing_axes:
+            return
+
+        new_range, autorange_reset = self._parse_xrange_from_relayout(relayout)
 
         if not autorange_reset and new_range is None:
             return
