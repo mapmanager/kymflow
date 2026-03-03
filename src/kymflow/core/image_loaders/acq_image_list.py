@@ -57,13 +57,16 @@ class AcqImageList(Generic[T]):
 
     If `path` is None and `file_path_list` is None, the resulting list is empty (backwards-compat).
 
-    Examples:
-        # Generic usage with AcqImage
-        image_list = AcqImageList(path="/path/to/folder", image_cls=AcqImage)
+    Recommended usage pattern (also followed by KymImageList):
 
-        # For KymImage-specific functionality, use KymImageList instead
-        from kymflow.core.image_loaders.kym_image_list import KymImageList
-        kym_list = KymImageList(path="/path/to/folder")
+    1. Construct the list: AcqImageList.load_from_path("/path/to/folder", image_cls=AcqImage)
+    2. At runtime, find a specific image by path: img = images.find_by_path("/path/to/foo.tif")
+    3. Use the AcqImage API for geometry and voxels: header = img.header; shape = header.shape; vox = header.voxels
+    4. Use lazy loading of channel data: img.load_channel(1); data = img.getChannelData(1)
+
+    Subclasses such as KymImageList are designed to be used via this AcqImage/AcqImageList
+    API in external code. External callers should avoid depending on subclass-specific
+    convenience properties when a generic AcqImage method or header field is available.
     """
 
     def __init__(

@@ -46,7 +46,7 @@ def filter_tiff_images(images: Iterable[Any]) -> list[Any]:
     return out
 
 
-# depreciate, not needed when using KymImageList
+# abb depreciate, not needed when using KymImageList
 def find_kym_image_by_path(kml: KymImageList | None, path: str | Path) -> Any | None:
     if kml is None:
         return None

@@ -22,10 +22,45 @@ else:
 logger = get_logger(__name__)
 
 class AcqImage:
-    """General purpose acquired image.
+    """General purpose acquired image with lazy-loading support.
 
-    If path is specified, allows lazy loading of image data.
-    If image is specified, it will be used instead of loading from path.
+    An AcqImage represents an n-dimensional image plus associated acquisition
+    metadata:
+
+    - File paths per channel (_file_path_dict)
+    - Per-channel image data (_imgData, loaded lazily)
+    - Header (AcqImgHeader) describing shape, voxel sizes, labels, etc.
+    - Experimental metadata (ExperimentMetadata)
+    - ROI set and related analysis state
+
+    Key behaviors:
+
+    - If path is provided and load_image=False (the common case for lists),
+      the instance is created without loading any image data. Channel data
+      is loaded on demand via load_channel().
+    - If img_data is provided, it is used directly instead of loading from file.
+    - Subclasses (e.g. KymImage) override _load_channel_from_path to implement
+      format-specific loading and may further interpret header fields.
+
+    Recommended external usage (also for subclasses like KymImage):
+
+    1. Obtain an AcqImage from an AcqImageList (or KymImageList):
+       - Use AcqImageList.load_from_path() or KymImageList.load_from_path()
+       - Or use acq_list.find_by_path(path) / kym_list.find_by_path(path)
+
+    2. Treat header as the authoritative source of geometry and voxel sizes:
+       - image.header.shape -> full array shape (e.g. (time_lines, space_pixels)
+         for kymographs)
+       - image.header.voxels -> voxel sizes per axis (e.g. (seconds_per_line,
+         micrometers_per_pixel) for kymographs)
+
+    3. Use lazy loading via load_channel() and getChannelData():
+       - image.load_channel(channel) loads from disk only if needed
+       - image.getChannelData(channel) returns the cached numpy array
+
+    Subclasses may provide additional convenience properties, but external
+    modules should prefer the generic AcqImage API (header, load_channel,
+    getChannelData, path) so that code remains compatible across image types.
     """
 
     def __init__(self, path: str | Path | None,
@@ -235,20 +270,25 @@ class AcqImage:
             self._header.init_defaults_from_shape()
     
     def load_channel(self, channel: int) -> bool:
-        """Load image data for a specific channel from file path.
+        """Load image data for a specific channel from file path (lazy and idempotent).
         
-        This is a template method that derived classes should rely on.
-        Derived classes must override `_load_channel_from_path()` to implement
-        format-specific loading logic.
+        This is the primary entry point for lazy loading of channel data.
+        It relies on the subclass implementation of _load_channel_from_path().
         
-        This method is idempotent - if channel data already exists, it returns
-        True without reloading.
+        Behavior:
+        - If channel data is already loaded (getChannelData(channel) is not None),
+          this method does not touch disk and immediately returns True.
+        - Otherwise, it looks up the channel file path via getChannelPath(channel)
+          and asks the subclass to load from disk.
+        - On success, the loaded numpy array is cached in _imgData[channel]
+          and subsequent calls to load_channel(channel) will be no-ops.
         
         Args:
-            channel: Channel number (1-based integer key).
+            channel: 1-based channel index.
             
         Returns:
-            True if loading succeeded or channel already loaded, False otherwise.
+            True if the channel data is available after this call (either because
+            it was already loaded or loading succeeded), False otherwise.
         """
         # Idempotent check: if channel data already exists, return True
         if self.getChannelData(channel) is not None:

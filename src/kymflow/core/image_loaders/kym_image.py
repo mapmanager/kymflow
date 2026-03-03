@@ -21,7 +21,29 @@ if TYPE_CHECKING:
 class KymImage(AcqImage):
     """KymImage is a subclass of AcqImage that represents a kymograph image.
 
-    Rows in np array are time, columns are space.
+    Rows in the numpy array correspond to time, columns correspond to space.
+
+    In addition to the generic AcqImage behavior (path handling, header, lazy
+    channel loading), KymImage parses Olympus header text when available and
+    initializes AcqImgHeader with kymograph-specific semantics:
+    header.shape == (num_lines, pixels_per_line),
+    header.voxels == (seconds_per_line, micrometers_per_pixel),
+    header.labels == ["Time (s)", "Space (um)"]. It also manages a per-image
+    KymAnalysis instance for kymograph analysis.
+
+    External usage note:
+
+    External modules should treat KymImage primarily as an AcqImage. Prefer using
+    kym.header.shape for geometry, kym.header.voxels for voxel sizes,
+    kym.header.physical_size (or helpers in the external API facade), and
+    kym.load_channel(channel) / kym.getChannelData(channel) for lazy loading.
+
+    The additional KymImage convenience properties (num_lines, pixels_per_line,
+    seconds_per_line, um_per_pixel) are thin wrappers around header.shape and
+    header.voxels and are kept mainly for backwards compatibility and readability
+    inside kymflow. When writing new analysis code or external integrations,
+    prefer the generic AcqImage/AcqImgHeader API or the helpers from the external
+    facade module instead of these properties.
     """
 
     def __init__(self, path: str | Path | None = None,
@@ -182,9 +204,13 @@ class KymImage(AcqImage):
 
     @property
     def num_lines(self) -> int | None:
-        """Number of lines scanned.
+        """Number of lines scanned (convenience wrapper around header.shape[0]).
         
         Returns None if shape is not available (no header and no loaded data).
+
+        Note:
+            For new external code, prefer using kym.header.shape[0] (or the helper
+            in kymflow.core.api.kym_external) rather than this property.
         """
         if self.img_shape is None:
             return None
@@ -192,9 +218,13 @@ class KymImage(AcqImage):
     
     @property
     def pixels_per_line(self) -> int | None:
-        """Number of pixels per line.
+        """Number of pixels per line (convenience wrapper around header.shape[1]).
         
         Returns None if shape is not available (no header and no loaded data).
+
+        Note:
+            For new external code, prefer using kym.header.shape[1] (or the helper
+            in kymflow.core.api.kym_external) rather than this property.
         """
         if self.img_shape is None:
             return None
@@ -202,10 +232,14 @@ class KymImage(AcqImage):
 
     @property
     def seconds_per_line(self) -> float:
-        """Temporal resolution in seconds per line scan.
+        """Temporal resolution in seconds per line scan (convenience wrapper for header.voxels[0]).
         
         Returns:
             Seconds per line from header.voxels[0], or default 0.001 if not set.
+
+        Note:
+            For new external code, prefer using get_kym_geometry from
+            kymflow.core.api.kym_external rather than this property.
         """
         if self.header.voxels is None or len(self.header.voxels) < 1:
             return 0.001  # Default fallback
@@ -213,10 +247,14 @@ class KymImage(AcqImage):
 
     @property
     def um_per_pixel(self) -> float:
-        """Spatial resolution in micrometers per pixel.
+        """Spatial resolution in micrometers per pixel (convenience wrapper for header.voxels[1]).
         
         Returns:
             Micrometers per pixel from header.voxels[1], or default 1.0 if not set.
+
+        Note:
+            For new external code, prefer using get_kym_geometry from
+            kymflow.core.api.kym_external rather than this property.
         """
         if self.header.voxels is None or len(self.header.voxels) < 2:
             return 1.0  # Default fallback

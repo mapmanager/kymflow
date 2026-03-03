@@ -63,6 +63,24 @@ class KymImageList(AcqImageList[KymImage]):
     list contains exactly that one file.
 
     If `path` is None and `file_path_list` is None, the resulting list is empty (backwards-compat).
+
+    Recommended external usage:
+
+    1. Construct the list (no pixel data loaded):
+       klist = KymImageList.load_from_path("/path/to/kymographs")
+
+    2. At runtime, find a specific kymograph by path using AcqImageList.find_by_path:
+       kimg = klist.find_by_path("/path/to/kymographs/foo.tif")
+
+    3. Use the generic AcqImage/AcqImgHeader API for geometry and voxels, or use the
+       helpers in kymflow.core.api.kym_external (get_kym_geometry, get_kym_physical_size).
+
+    4. Use lazy loading of channel data via AcqImage methods:
+       kimg.load_channel(1); data = kimg.getChannelData(1)
+
+    External modules should avoid depending on KymImage-specific convenience properties
+    (num_lines, pixels_per_line, seconds_per_line, um_per_pixel) and instead rely on
+    header.shape / header.voxels or the helpers from kymflow.core.api.kym_external.
     """
 
     def __init__(
