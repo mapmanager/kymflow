@@ -958,6 +958,8 @@ class WideCsvRegistry:
                 continue
             match = self.wide_column_re.fullmatch(col_name)
             if match is None:
+                if "_roi" in col_name or "_ch" in col_name:
+                    raise ValueError(f"Invalid wide CSV column name: {col_name!r}")
                 # Ignore unrelated non-wide columns.
                 continue
             field_name = match.group("field")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import math
 import re
@@ -210,6 +211,17 @@ def test_wide_csv_loader_ignores_unrelated_non_wide_columns() -> None:
     _assert_bundle_equivalent(loaded, bundle)
 
 
+def test_wide_csv_loader_fails_on_malformed_roi_channel_column_name() -> None:
+    bundle = _make_bundle()
+    header, rows = bundle_to_wide_csv_rows(bundle)
+    idx = header.index("diameter_px_roi1_ch1") + 1
+    bad_header = list(header)
+    bad_header.insert(idx, "diameter_px_roiX_ch1")
+    bad_rows = [list(r[:idx]) + [""] + list(r[idx:]) for r in rows]
+    with pytest.raises(ValueError, match="Invalid wide CSV column name: 'diameter_px_roiX_ch1'"):
+        _ = bundle_from_wide_csv_rows(bad_header, bad_rows)
+
+
 def test_analyze_strict_roi_channel_propagation() -> None:
     payload = generate_synthetic_kymograph(n_time=24, n_space=36, seed=9)
     analyzer = DiameterAnalyzer(
@@ -255,3 +267,26 @@ def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Pa
 
     with pytest.raises(ValueError, match="missing required key: channel_id"):
         _ = load_diameter_analysis(kym_path)
+
+
+def test_load_diameter_analysis_tolerates_extra_json_and_csv_columns(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, csv_path = save_diameter_analysis(kym_path, bundle)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    payload["extra_json_note"] = "ok"
+    payload["runs"]["roi1_ch1"]["extra_run_field"] = "ok"
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    rows[0].append("notes")
+    for idx in range(1, len(rows)):
+        rows[idx].append(f"row-{idx}")
+    with csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(rows)
+
+    loaded = load_diameter_analysis(kym_path)
+    _assert_bundle_equivalent(loaded, bundle)
