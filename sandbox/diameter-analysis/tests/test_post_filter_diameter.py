@@ -79,7 +79,14 @@ def test_analysis_with_post_filter_preserves_raw_and_filtered() -> None:
 
     det = DiameterDetectionParams(stride=1, window_rows_odd=1)
     pf = PostFilterParams(enabled=True, filter_type=PostFilterType.HAMPEL, kernel_size=5)
-    results = analyzer.analyze(det, backend="serial", post_filter_params=pf)
+    results = analyzer.analyze(
+        det,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+        post_filter_params=pf,
+    )
 
     assert len(results) > 0
     raw = np.array([r.diameter_px for r in results], dtype=float)
@@ -99,7 +106,14 @@ def test_save_load_roundtrip_contains_post_filter_params(tmp_path) -> None:
     )
     det = DiameterDetectionParams(stride=2, window_rows_odd=3)
     pf = PostFilterParams(enabled=True, filter_type=PostFilterType.MEDIAN, kernel_size=3)
-    results = analyzer.analyze(det, backend="serial", post_filter_params=pf)
+    results = analyzer.analyze(
+        det,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+        post_filter_params=pf,
+    )
 
     analyzer.save_analysis(
         tmp_path,

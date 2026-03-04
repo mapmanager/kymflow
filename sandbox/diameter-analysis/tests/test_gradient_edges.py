@@ -25,7 +25,13 @@ def test_gradient_edges_runs_and_is_mostly_ordered() -> None:
         max_diameter_change_um_on=False,
         max_center_shift_um_on=False,
     )
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     valid = [r for r in results if np.isfinite(r.left_edge_px) and np.isfinite(r.right_edge_px)]
     assert len(valid) / len(results) > 0.8
@@ -47,8 +53,20 @@ def test_gradient_edges_serial_threads_identical() -> None:
         gradient_sigma=1.2,
     )
 
-    serial = analyzer.analyze(params=params, backend="serial")
-    threaded = analyzer.analyze(params=params, backend="threads")
+    serial = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
+    threaded = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="threads",
+    )
 
     assert len(serial) == len(threaded)
     for a, b in zip(serial, threaded):
@@ -78,7 +96,13 @@ def test_gradient_edges_accuracy_vs_truth(mae_tol: float) -> None:
         gradient_sigma=1.0,
     )
 
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
     truth = np.asarray(payload["truth"]["truth_diameter_px"], dtype=float)
     centers = np.array([r.center_row for r in results], dtype=int)
     estimate = np.array([r.diameter_px for r in results], dtype=float)
@@ -99,7 +123,13 @@ def test_plot_orientation_uses_transposed_shape() -> None:
         polarity=payload["polarity"],
     )
     params = DiameterDetectionParams(diameter_method=DiameterMethod.GRADIENT_EDGES, stride=2)
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     fig = plot_kymograph_with_edges_mpl(
         payload["kymograph"],

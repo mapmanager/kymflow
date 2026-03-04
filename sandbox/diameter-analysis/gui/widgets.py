@@ -26,6 +26,21 @@ def _select_value(args: Any) -> Any:
     return args
 
 
+def _coerce_switch_bool(raw: Any) -> bool:
+    v = _select_value(raw)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)) and v in (0, 1):
+        return bool(v)
+    if isinstance(v, str):
+        vv = v.strip().lower()
+        if vv == "true":
+            return True
+        if vv == "false":
+            return False
+    raise ValueError(f"Invalid switch boolean value: {v!r}")
+
+
 def _coerce_enum(enum_cls: type[Enum], raw: Any) -> Enum:
     v = _select_value(raw)
 
@@ -90,7 +105,7 @@ def dataclass_editor_card(
                     w = ui.switch(value=bool(value))
                     w.on(
                         "update:model-value",
-                        lambda e, n=name: on_change(n, bool(_select_value(e.args))),
+                        lambda e, n=name: on_change(n, _coerce_switch_bool(e.args)),
                     )
                 elif isinstance(value, int) or tp is int:
                     w = ui.number(value=int(value), step=1)

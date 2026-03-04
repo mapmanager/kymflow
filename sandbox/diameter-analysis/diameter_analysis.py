@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
@@ -22,6 +23,9 @@ from diameter_plots import (
 ANALYSIS_SCHEMA_VERSION = 1
 THREAD_CHUNK_SIZE = 512
 ALIGNED_RESULTS_SCHEMA_VERSION = 1
+BUNDLE_SCHEMA_VERSION = 1
+RUN_KEY_RE = re.compile(r"^roi(?P<roi>\d+)_ch(?P<ch>\d+)$")
+WIDE_COLUMN_RE = re.compile(r"^(?P<field>[a-z0-9_]+)_roi(?P<roi>\d+)_ch(?P<ch>\d+)$")
 
 
 class BinningMethod(str, Enum):
@@ -339,8 +343,8 @@ class DiameterAlignedResults:
         schema_version: Schema version for this payload.
         source: Data source type (`"synthetic"` or `"real"`).
         path: Optional source path.
-        roi_id: ROI identifier for real data, else `None`.
-        channel_id: Channel identifier for real data, else `None`.
+        roi_id: ROI identifier for this analysis run.
+        channel_id: Channel identifier for this analysis run.
         seconds_per_line: Time spacing used to compute traces.
         um_per_pixel: Spatial scale used to compute traces.
         time_s: Aligned time axis in seconds, or `None` if unknown.
@@ -359,8 +363,8 @@ class DiameterAlignedResults:
     schema_version: int
     source: Literal["synthetic", "real"]
     path: str | None
-    roi_id: int | None
-    channel_id: int | None
+    roi_id: int
+    channel_id: int
     seconds_per_line: float
     um_per_pixel: float
     time_s: list[float] | None
@@ -444,8 +448,8 @@ class DiameterAlignedResults:
 
         object.__setattr__(self, "schema_version", int(self.schema_version))
         object.__setattr__(self, "path", None if self.path is None else str(self.path))
-        object.__setattr__(self, "roi_id", None if self.roi_id is None else int(self.roi_id))
-        object.__setattr__(self, "channel_id", None if self.channel_id is None else int(self.channel_id))
+        object.__setattr__(self, "roi_id", int(self.roi_id))
+        object.__setattr__(self, "channel_id", int(self.channel_id))
         object.__setattr__(self, "seconds_per_line", float(self.seconds_per_line))
         object.__setattr__(self, "um_per_pixel", float(self.um_per_pixel))
         object.__setattr__(self, "time_s", normalized_time)
@@ -478,8 +482,8 @@ class DiameterAlignedResults:
         um_per_pixel: float,
         source: Literal["synthetic", "real"],
         path: str | None = None,
-        roi_id: int | None = None,
-        channel_id: int | None = None,
+        roi_id: int,
+        channel_id: int,
     ) -> "DiameterAlignedResults":
         """Build aligned arrays from per-frame `DiameterResult` objects.
 
@@ -489,8 +493,8 @@ class DiameterAlignedResults:
             um_per_pixel: Spatial conversion used for analysis.
             source: Input source category (`"synthetic"` or `"real"`).
             path: Optional source path.
-            roi_id: Optional ROI id.
-            channel_id: Optional channel id.
+            roi_id: ROI id.
+            channel_id: Channel id.
         """
         um = float(um_per_pixel)
         time_s = [float(r.time_s) for r in results]
@@ -531,6 +535,8 @@ class DiameterAlignedResults:
 
 @dataclass
 class DiameterResult:
+    roi_id: int
+    channel_id: int
     center_row: int
     time_s: float
     left_edge_px: float
@@ -548,7 +554,13 @@ class DiameterResult:
     qc_diameter_violation: bool = False
     qc_center_violation: bool = False
 
+    def __post_init__(self) -> None:
+        self.roi_id = int(self.roi_id)
+        self.channel_id = int(self.channel_id)
+
     ROW_FIELDS: ClassVar[tuple[str, ...]] = (
+        "roi_id",
+        "channel_id",
         "center_row",
         "time_s",
         "left_edge_px",
@@ -574,11 +586,19 @@ class DiameterResult:
     def from_dict(cls, payload: dict[str, Any]) -> "DiameterResult":
         return dataclass_from_dict(cls, payload)
 
-    def to_row(self, *, roi_id: int, schema_version: int, um_per_pixel: float) -> dict[str, Any]:
+    def to_row(
+        self,
+        *,
+        roi_id: int,
+        channel_id: int,
+        schema_version: int,
+        um_per_pixel: float,
+    ) -> dict[str, Any]:
         base = self.to_dict()
         return {
             "schema_version": int(schema_version),
             "roi_id": int(roi_id),
+            "channel_id": int(channel_id),
             "center_row": int(base["center_row"]),
             "time_s": float(base["time_s"]),
             "left_edge_px": float(base["left_edge_px"]),
@@ -601,8 +621,13 @@ class DiameterResult:
 
     @classmethod
     def from_row(cls, row: dict[str, str]) -> "DiameterResult":
+        for key in ("roi_id", "channel_id"):
+            if key not in row or row[key] == "":
+                raise ValueError(f"Missing required row key: {key}")
         qc_flags = row.get("qc_flags", "")
         payload = {
+            "roi_id": int(row["roi_id"]),
+            "channel_id": int(row["channel_id"]),
             "center_row": int(row["center_row"]),
             "time_s": float(row["time_s"]),
             "left_edge_px": float(row["left_edge_px"]),
@@ -624,6 +649,310 @@ class DiameterResult:
         if missing:
             raise ValueError(f"Missing row fields: {missing}")
         return cls.from_dict(payload)
+
+
+def _run_key_to_str(key: tuple[int, int]) -> str:
+    roi_id, channel_id = key
+    return f"roi{int(roi_id)}_ch{int(channel_id)}"
+
+
+def _run_key_from_str(value: str) -> tuple[int, int]:
+    match = RUN_KEY_RE.fullmatch(str(value))
+    if match is None:
+        raise ValueError(f"Invalid run key format: {value!r}")
+    return int(match.group("roi")), int(match.group("ch"))
+
+
+@dataclass(frozen=True)
+class DiameterRunKey:
+    roi_id: int
+    channel_id: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "roi_id", int(self.roi_id))
+        object.__setattr__(self, "channel_id", int(self.channel_id))
+
+    def as_tuple(self) -> tuple[int, int]:
+        return (self.roi_id, self.channel_id)
+
+
+@dataclass
+class DiameterAnalysisBundle:
+    """Container for multiple (roi_id, channel_id) analysis runs.
+
+    JSON key format for runs is `roi{roi_id}_ch{channel_id}`.
+    Missing required keys are errors (no backward-compat defaults).
+    """
+
+    runs: dict[tuple[int, int], list[DiameterResult]]
+    schema_version: int = BUNDLE_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if int(self.schema_version) <= 0:
+            raise ValueError("schema_version must be >= 1")
+        normalized: dict[tuple[int, int], list[DiameterResult]] = {}
+        for key, results in self.runs.items():
+            if not isinstance(key, tuple) or len(key) != 2:
+                raise ValueError(f"Invalid run key={key!r}; expected tuple[int, int]")
+            roi_id, channel_id = int(key[0]), int(key[1])
+            if not isinstance(results, list):
+                raise ValueError(f"Run {key!r} results must be a list")
+            for idx, result in enumerate(results):
+                if not isinstance(result, DiameterResult):
+                    raise ValueError(f"Run {key!r} result[{idx}] must be DiameterResult")
+                if result.roi_id != roi_id or result.channel_id != channel_id:
+                    raise ValueError(
+                        "Result run-key mismatch at "
+                        f"run={key!r} index={idx}: "
+                        f"result=(roi_id={result.roi_id}, channel_id={result.channel_id})"
+                    )
+            normalized[(roi_id, channel_id)] = list(results)
+        self.runs = normalized
+        self.schema_version = int(self.schema_version)
+
+    def to_dict(self) -> dict[str, Any]:
+        runs_payload: dict[str, Any] = {}
+        for key in sorted(self.runs):
+            roi_id, channel_id = key
+            run_key = _run_key_to_str(key)
+            runs_payload[run_key] = {
+                "roi_id": int(roi_id),
+                "channel_id": int(channel_id),
+                "results": [result.to_dict() for result in self.runs[key]],
+            }
+        return {"schema_version": int(self.schema_version), "runs": runs_payload}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "DiameterAnalysisBundle":
+        if not isinstance(payload, dict):
+            raise ValueError("DiameterAnalysisBundle payload must be an object")
+        if "schema_version" not in payload:
+            raise ValueError("DiameterAnalysisBundle missing required key: schema_version")
+        if "runs" not in payload:
+            raise ValueError("DiameterAnalysisBundle missing required key: runs")
+        runs_raw = payload["runs"]
+        if not isinstance(runs_raw, dict):
+            raise ValueError("DiameterAnalysisBundle 'runs' must be an object")
+
+        runs: dict[tuple[int, int], list[DiameterResult]] = {}
+        for run_name, run_payload in runs_raw.items():
+            roi_id, channel_id = _run_key_from_str(str(run_name))
+            if not isinstance(run_payload, dict):
+                raise ValueError(f"Run payload for {run_name!r} must be an object")
+            for key in ("roi_id", "channel_id", "results"):
+                if key not in run_payload:
+                    raise ValueError(f"Run {run_name!r} missing required key: {key}")
+            if int(run_payload["roi_id"]) != roi_id or int(run_payload["channel_id"]) != channel_id:
+                raise ValueError(
+                    f"Run key mismatch for {run_name!r}: "
+                    f"payload=(roi_id={run_payload['roi_id']}, channel_id={run_payload['channel_id']})"
+                )
+            results_raw = run_payload["results"]
+            if not isinstance(results_raw, list):
+                raise ValueError(f"Run {run_name!r} 'results' must be a list")
+            results: list[DiameterResult] = []
+            for idx, entry in enumerate(results_raw):
+                if not isinstance(entry, dict):
+                    raise ValueError(f"Run {run_name!r} results[{idx}] must be an object")
+                results.append(DiameterResult.from_dict(entry))
+            runs[(roi_id, channel_id)] = results
+
+        return cls(schema_version=int(payload["schema_version"]), runs=runs)
+
+
+WIDE_BASE_FIELDS: tuple[str, ...] = (
+    "center_row",
+    "left_edge_px",
+    "right_edge_px",
+    "diameter_px",
+    "peak",
+    "baseline",
+    "edge_strength_left",
+    "edge_strength_right",
+    "diameter_px_filt",
+    "diameter_was_filtered",
+    "qc_score",
+)
+WIDE_QC_FIELDS: tuple[str, ...] = (
+    "qc_flags",
+    "qc_edge_violation",
+    "qc_diameter_violation",
+    "qc_center_violation",
+)
+WIDE_REQUIRED_RECON_FIELDS: tuple[str, ...] = (
+    "center_row",
+    "left_edge_px",
+    "right_edge_px",
+    "diameter_px",
+    "peak",
+    "baseline",
+    "qc_score",
+)
+
+
+def bundle_to_wide_csv_rows(
+    bundle: DiameterAnalysisBundle,
+    *,
+    include_time: bool = True,
+    include_qc: bool = True,
+) -> tuple[list[str], list[list[str]]]:
+    """Convert a multi-run bundle into wide CSV rows.
+
+    Column naming convention uses single underscores:
+    `{field}_roi{roi_id}_ch{channel_id}`.
+    """
+    run_keys = sorted(bundle.runs.keys())
+    time_values = sorted({float(result.time_s) for results in bundle.runs.values() for result in results})
+
+    fields = list(WIDE_BASE_FIELDS)
+    if not include_time and "center_row" in fields:
+        fields.remove("center_row")
+    if include_qc:
+        fields.extend(WIDE_QC_FIELDS)
+
+    header = ["time_s"]
+    for run_key in run_keys:
+        suffix = _run_key_to_str(run_key)
+        for field_name in fields:
+            header.append(f"{field_name}_{suffix}")
+
+    rows: list[list[str]] = []
+    run_maps: dict[tuple[int, int], dict[float, DiameterResult]] = {}
+    for run_key, results in bundle.runs.items():
+        t_map: dict[float, DiameterResult] = {}
+        for result in results:
+            time_value = float(result.time_s)
+            if time_value in t_map:
+                raise ValueError(f"Duplicate time_s={time_value} in run={run_key!r}")
+            t_map[time_value] = result
+        run_maps[run_key] = t_map
+
+    for time_value in time_values:
+        row: list[str] = [f"{time_value:.12g}"]
+        for run_key in run_keys:
+            result = run_maps[run_key].get(time_value)
+            for field_name in fields:
+                if result is None:
+                    row.append("")
+                    continue
+                value = getattr(result, field_name)
+                if isinstance(value, bool):
+                    row.append("1" if value else "0")
+                elif isinstance(value, list):
+                    row.append("|".join(str(v) for v in value))
+                else:
+                    row.append(str(value))
+        rows.append(row)
+    return header, rows
+
+
+def bundle_from_wide_csv_rows(
+    header: list[str],
+    rows: list[list[str]],
+) -> DiameterAnalysisBundle:
+    """Parse a wide CSV representation back into a multi-run bundle."""
+    if "time_s" not in header:
+        raise ValueError("Wide CSV missing required column: time_s")
+    time_idx = header.index("time_s")
+
+    run_columns: dict[tuple[int, int], dict[str, int]] = {}
+    for col_idx, col_name in enumerate(header):
+        if col_name == "time_s":
+            continue
+        match = WIDE_COLUMN_RE.fullmatch(col_name)
+        if match is None:
+            raise ValueError(f"Invalid wide CSV column name: {col_name!r}")
+        run_key = (int(match.group("roi")), int(match.group("ch")))
+        run_columns.setdefault(run_key, {})[match.group("field")] = col_idx
+
+    for run_key, field_map in run_columns.items():
+        for required in WIDE_REQUIRED_RECON_FIELDS:
+            if required not in field_map:
+                raise ValueError(f"Run {run_key!r} missing required wide CSV column: {required}")
+
+    def _float_cell(row: list[str], idx: int) -> float:
+        value = row[idx]
+        if value == "":
+            raise ValueError(f"Missing numeric cell at column index {idx}")
+        return float(value)
+
+    def _int_cell(row: list[str], idx: int) -> int:
+        value = row[idx]
+        if value == "":
+            raise ValueError(f"Missing integer cell at column index {idx}")
+        return int(float(value))
+
+    runs: dict[tuple[int, int], list[DiameterResult]] = {k: [] for k in run_columns}
+    for row_idx, row in enumerate(rows):
+        if len(row) != len(header):
+            raise ValueError(
+                f"Row length mismatch at row_idx={row_idx}: expected {len(header)} got {len(row)}"
+            )
+        time_value = row[time_idx]
+        if time_value == "":
+            raise ValueError(f"Missing time_s at row_idx={row_idx}")
+        time_s = float(time_value)
+        for run_key, field_map in run_columns.items():
+            center_raw = row[field_map["center_row"]]
+            if center_raw == "":
+                continue
+            roi_id, channel_id = run_key
+            qc_flags_raw = row[field_map["qc_flags"]] if "qc_flags" in field_map else ""
+            runs[run_key].append(
+                DiameterResult(
+                    roi_id=roi_id,
+                    channel_id=channel_id,
+                    center_row=_int_cell(row, field_map["center_row"]),
+                    time_s=time_s,
+                    left_edge_px=_float_cell(row, field_map["left_edge_px"]),
+                    right_edge_px=_float_cell(row, field_map["right_edge_px"]),
+                    diameter_px=_float_cell(row, field_map["diameter_px"]),
+                    peak=_float_cell(row, field_map["peak"]),
+                    baseline=_float_cell(row, field_map["baseline"]),
+                    edge_strength_left=(
+                        _float_cell(row, field_map["edge_strength_left"])
+                        if "edge_strength_left" in field_map and row[field_map["edge_strength_left"]] != ""
+                        else math.nan
+                    ),
+                    edge_strength_right=(
+                        _float_cell(row, field_map["edge_strength_right"])
+                        if "edge_strength_right" in field_map and row[field_map["edge_strength_right"]] != ""
+                        else math.nan
+                    ),
+                    diameter_px_filt=(
+                        _float_cell(row, field_map["diameter_px_filt"])
+                        if "diameter_px_filt" in field_map and row[field_map["diameter_px_filt"]] != ""
+                        else _float_cell(row, field_map["diameter_px"])
+                    ),
+                    diameter_was_filtered=(
+                        bool(_int_cell(row, field_map["diameter_was_filtered"]))
+                        if "diameter_was_filtered" in field_map and row[field_map["diameter_was_filtered"]] != ""
+                        else False
+                    ),
+                    qc_score=_float_cell(row, field_map["qc_score"]),
+                    qc_flags=[f for f in qc_flags_raw.split("|") if f],
+                    qc_edge_violation=(
+                        bool(_int_cell(row, field_map["qc_edge_violation"]))
+                        if "qc_edge_violation" in field_map and row[field_map["qc_edge_violation"]] != ""
+                        else False
+                    ),
+                    qc_diameter_violation=(
+                        bool(_int_cell(row, field_map["qc_diameter_violation"]))
+                        if "qc_diameter_violation" in field_map
+                        and row[field_map["qc_diameter_violation"]] != ""
+                        else False
+                    ),
+                    qc_center_violation=(
+                        bool(_int_cell(row, field_map["qc_center_violation"]))
+                        if "qc_center_violation" in field_map and row[field_map["qc_center_violation"]] != ""
+                        else False
+                    ),
+                )
+            )
+
+    for run_key in runs:
+        runs[run_key].sort(key=lambda r: r.center_row)
+    return DiameterAnalysisBundle(schema_version=BUNDLE_SCHEMA_VERSION, runs=runs)
 
 
 class DiameterAnalyzer:
@@ -660,6 +989,9 @@ class DiameterAnalyzer:
         self,
         params: Optional[DiameterDetectionParams] = None,
         *,
+        roi_id: int,
+        roi_bounds: tuple[int, int, int, int],
+        channel_id: int,
         backend: str = "serial",
         post_filter_params: Optional[PostFilterParams] = None,
     ) -> list[DiameterResult]:
@@ -667,13 +999,25 @@ class DiameterAnalyzer:
         cfg = self._validated_params(cfg)
         pf_cfg = self._validated_post_filter_params(post_filter_params or PostFilterParams())
 
-        t0, t1, x0, x1 = self._resolve_roi(None)
+        t0, t1, x0, x1 = self._resolve_roi(roi_bounds)
         centers = list(range(t0, t1, cfg.stride))
 
         if backend == "serial":
-            results = [self._analyze_center(i, cfg, t0, t1, x0, x1) for i in centers]
+            results = [
+                self._analyze_center(i, cfg, t0, t1, x0, x1, roi_id=roi_id, channel_id=channel_id)
+                for i in centers
+            ]
         elif backend == "threads":
-            results = self._analyze_threads(centers, cfg, t0, t1, x0, x1)
+            results = self._analyze_threads(
+                centers,
+                cfg,
+                t0,
+                t1,
+                x0,
+                x1,
+                roi_id=roi_id,
+                channel_id=channel_id,
+            )
         else:
             raise ValueError("backend must be 'serial' or 'threads'")
 
@@ -682,6 +1026,13 @@ class DiameterAnalyzer:
             cfg.max_edge_shift_um_on or cfg.max_diameter_change_um_on or cfg.max_center_shift_um_on
         ):
             self._apply_motion_constraints(results=results, params=cfg)
+        for idx, result in enumerate(results):
+            if result.roi_id != int(roi_id) or result.channel_id != int(channel_id):
+                raise RuntimeError(
+                    "Internal result id mismatch at "
+                    f"index={idx}: expected (roi_id={int(roi_id)}, channel_id={int(channel_id)}) "
+                    f"got (roi_id={result.roi_id}, channel_id={result.channel_id})"
+                )
         self.last_motion_qc = self.motion_qc_arrays(results)
         if pf_cfg.enabled:
             self._apply_post_filter(results=results, params=pf_cfg)
@@ -691,16 +1042,20 @@ class DiameterAnalyzer:
         self,
         params: Optional[DiameterDetectionParams] = None,
         *,
+        roi_id: int,
+        roi_bounds: tuple[int, int, int, int],
+        channel_id: int,
         backend: str = "serial",
         post_filter_params: Optional[PostFilterParams] = None,
         source: Literal["synthetic", "real"] = "synthetic",
         path: str | None = None,
-        roi_id: int | None = None,
-        channel_id: int | None = None,
     ) -> DiameterAlignedResults:
         """Run diameter analysis and return canonical aligned-array results."""
         frame_results = self.analyze(
             params=params,
+            roi_id=roi_id,
+            roi_bounds=roi_bounds,
+            channel_id=channel_id,
             backend=backend,
             post_filter_params=post_filter_params,
         )
@@ -710,8 +1065,8 @@ class DiameterAnalyzer:
             um_per_pixel=self.um_per_pixel,
             source=source,
             path=path,
-            roi_id=roi_id,
-            channel_id=channel_id,
+            roi_id=int(roi_id),
+            channel_id=int(channel_id),
         )
 
     @staticmethod
@@ -820,13 +1175,28 @@ class DiameterAnalyzer:
         t1: int,
         x0: int,
         x1: int,
+        *,
+        roi_id: int,
+        channel_id: int,
     ) -> list[DiameterResult]:
         def _chunked(values: list[int], size: int) -> Iterable[list[int]]:
             for start in range(0, len(values), size):
                 yield values[start : start + size]
 
         def _process_chunk(chunk: list[int]) -> list[DiameterResult]:
-            return [self._analyze_center(i, params, t0, t1, x0, x1) for i in chunk]
+            return [
+                self._analyze_center(
+                    i,
+                    params,
+                    t0,
+                    t1,
+                    x0,
+                    x1,
+                    roi_id=roi_id,
+                    channel_id=channel_id,
+                )
+                for i in chunk
+            ]
 
         chunks = list(_chunked(centers, THREAD_CHUNK_SIZE))
         with ThreadPoolExecutor() as executor:
@@ -845,6 +1215,9 @@ class DiameterAnalyzer:
         t1: int,
         x0: int,
         x1: int,
+        *,
+        roi_id: int,
+        channel_id: int,
     ) -> DiameterResult:
         """Analyze one center row using the selected detection method.
 
@@ -900,6 +1273,8 @@ class DiameterAnalyzer:
         )
 
         return DiameterResult(
+            roi_id=roi_id,
+            channel_id=channel_id,
             center_row=int(center_row),
             time_s=float(center_row * self.seconds_per_line),
             left_edge_px=float(left_edge),
@@ -1186,10 +1561,8 @@ class DiameterAnalyzer:
         score = float(np.clip(score, 0.0, 1.0))
         return score, sorted(set(flags))
 
-    def _resolve_roi(self, roi: tuple[int, int, int, int] | None) -> tuple[int, int, int, int]:
+    def _resolve_roi(self, roi: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
         n_time, n_space = self.kymograph.shape
-        if roi is None:
-            return 0, n_time, 0, n_space
 
         t0, t1, x0, x1 = (int(v) for v in roi)
         if not (0 <= t0 < t1 <= n_time):
@@ -1253,6 +1626,7 @@ class DiameterAnalyzer:
         fieldnames = [
             "schema_version",
             "roi_id",
+            "channel_id",
             "center_row",
             "time_s",
             "left_edge_px",
@@ -1280,6 +1654,7 @@ class DiameterAnalyzer:
                     writer.writerow(
                         result.to_row(
                             roi_id=roi_id,
+                            channel_id=int(result.channel_id),
                             schema_version=ANALYSIS_SCHEMA_VERSION,
                             um_per_pixel=um_per_pixel,
                         )

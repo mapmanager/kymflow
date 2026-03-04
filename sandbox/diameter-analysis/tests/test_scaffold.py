@@ -24,7 +24,13 @@ def test_basic_scaffold_still_runs_with_new_engine() -> None:
     round_trip = DiameterDetectionParams.from_dict(params.to_dict())
     assert round_trip == params
 
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
     assert len(results) == 30
     assert results[0].center_row == 0
     assert results[-1].center_row == 58

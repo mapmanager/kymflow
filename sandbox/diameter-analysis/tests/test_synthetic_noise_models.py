@@ -115,7 +115,13 @@ def test_analysis_runs_on_quantized_data() -> None:
         um_per_pixel=payload["um_per_pixel"],
         polarity=payload["polarity"],
     )
-    results = analyzer.analyze(DiameterDetectionParams(stride=2), backend="serial")
+    results = analyzer.analyze(
+        DiameterDetectionParams(stride=2),
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     assert len(results) > 0
     diam = np.array([r.diameter_px for r in results], dtype=float)

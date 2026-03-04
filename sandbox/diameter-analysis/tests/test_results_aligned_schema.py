@@ -19,8 +19,8 @@ def test_aligned_results_length_mismatch_raises() -> None:
             schema_version=ALIGNED_RESULTS_SCHEMA_VERSION,
             source="synthetic",
             path=None,
-            roi_id=None,
-            channel_id=None,
+            roi_id=1,
+            channel_id=1,
             seconds_per_line=0.01,
             um_per_pixel=0.2,
             time_s=[0.0, 0.01],
@@ -83,7 +83,13 @@ def test_qc_flags_aligned_with_trace_length() -> None:
         max_diameter_change_um=0.001,
         max_center_shift_um=0.001,
     )
-    aligned = analyzer.analyze_aligned(params=params, source="synthetic")
+    aligned = analyzer.analyze_aligned(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        source="synthetic",
+    )
 
     n = len(aligned.diameter_um)
     assert n > 0
@@ -99,6 +105,8 @@ def test_qc_flags_aligned_with_trace_length() -> None:
 
 def test_diameter_result_row_roundtrip() -> None:
     result = DiameterResult(
+        roi_id=1,
+        channel_id=1,
         center_row=4,
         time_s=0.2,
         left_edge_px=11.0,
@@ -116,6 +124,6 @@ def test_diameter_result_row_roundtrip() -> None:
         qc_diameter_violation=True,
         qc_center_violation=False,
     )
-    row = result.to_row(roi_id=1, schema_version=1, um_per_pixel=0.4)
+    row = result.to_row(roi_id=1, channel_id=1, schema_version=1, um_per_pixel=0.4)
     loaded = DiameterResult.from_row({k: str(v) for k, v in row.items()})
     assert loaded == result

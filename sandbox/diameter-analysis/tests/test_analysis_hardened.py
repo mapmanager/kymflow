@@ -19,7 +19,13 @@ def test_stride_semantics_center_row_and_time() -> None:
         polarity=payload["polarity"],
     )
     params = DiameterDetectionParams(stride=4, window_rows_odd=5)
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     expected_centers = list(range(0, 60, 4))
     assert [r.center_row for r in results] == expected_centers
@@ -39,8 +45,20 @@ def test_serial_and_threads_backends_match() -> None:
     )
     params = DiameterDetectionParams(stride=3, window_rows_odd=7)
 
-    serial = analyzer.analyze(params=params, backend="serial")
-    threaded = analyzer.analyze(params=params, backend="threads")
+    serial = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
+    threaded = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="threads",
+    )
 
     assert len(serial) == len(threaded)
     for a, b in zip(serial, threaded):
@@ -65,7 +83,13 @@ def test_save_load_roundtrip_schema_and_row_count(tmp_path: Path) -> None:
     )
 
     params = DiameterDetectionParams(stride=3, window_rows_odd=5)
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     params_path, results_path = analyzer.save_analysis(
         tmp_path,
@@ -98,7 +122,13 @@ def test_synthetic_truth_and_threshold_width_accuracy(mae_tol: float) -> None:
         polarity=payload["polarity"],
     )
     params = DiameterDetectionParams(stride=1, window_rows_odd=1)
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     truth = np.asarray(payload["truth"]["truth_diameter_px"], dtype=float)
     centers = np.array([r.center_row for r in results], dtype=int)
@@ -125,7 +155,13 @@ def test_missing_edges_do_not_crash_and_qc_flagged() -> None:
         threshold_mode="absolute",
         threshold_value=1e9,
     )
-    results = analyzer.analyze(params=params, backend="serial")
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+        backend="serial",
+    )
 
     assert len(results) > 0
     assert any(

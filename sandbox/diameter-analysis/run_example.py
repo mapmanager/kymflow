@@ -37,6 +37,9 @@ def _run_one_method(
     _time_start = time.time()
     results = analyzer.analyze(
         params=params,
+        roi_id=1,
+        roi_bounds=(0, int(payload["kymograph"].shape[0]), 0, int(payload["kymograph"].shape[1])),
+        channel_id=1,
         backend="threads",
         post_filter_params=post_filter_params,
     )

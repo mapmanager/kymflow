@@ -7,6 +7,12 @@
 2. Edge detection: run threshold- or gradient-based left/right edge localization.
 3. Optional motion gating: reject implausible frame-to-frame jumps (used with `gradient_edges`).
 
+## ROI and Channel Selection Contract
+Detection parameters describe **how** to detect edges/diameter. They do not include ROI or channel selection.
+
+- ROI and channel are selected by the app/workflow and passed to `DiameterAnalyzer.analyze(...)`.
+- Current real-data workflow uses `roi_id=1` and `channel_id=1`.
+
 ## Parameter Reference
 
 | name | type | default | units | used by | description | tuning guidance | common failure modes |

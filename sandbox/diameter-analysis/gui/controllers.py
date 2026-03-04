@@ -257,7 +257,34 @@ class AppController:
                 polarity=self.state.polarity,
             )
 
-            res = analyzer.analyze(params=self.state.detection_params)
+            roi_id = DEFAULT_ROI_ID
+            channel_id = DEFAULT_CHANNEL_ID
+            if self.state.source == "kymflow":
+                selected = self.state.selected_kym_image
+                if selected is None:
+                    raise RuntimeError("No selected kym image for real-data analysis.")
+                require_channel_and_roi(
+                    selected,
+                    channel=channel_id,
+                    roi_id=roi_id,
+                )
+                bounds = get_roi_pixel_bounds_for(selected, roi_id=roi_id)
+                roi_bounds = (
+                    int(bounds.row_start),
+                    int(bounds.row_stop),
+                    int(bounds.col_start),
+                    int(bounds.col_stop),
+                )
+            else:
+                n_time, n_space = self.state.img.shape
+                roi_bounds = (0, int(n_time), 0, int(n_space))
+
+            res = analyzer.analyze(
+                params=self.state.detection_params,
+                roi_id=roi_id,
+                roi_bounds=roi_bounds,
+                channel_id=channel_id,
+            )
             self.state.results = res
             self._rebuild_figures()
         finally:
