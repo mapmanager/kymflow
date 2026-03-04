@@ -90,6 +90,12 @@ def set_xrange(fig: dict, x0: float, x1: float) -> dict:
 
 
 def _extract_diameter_um(results: Any, um_per_pixel: float) -> Optional[np.ndarray]:
+    if hasattr(results, "diameter_um"):
+        vals = []
+        for v in getattr(results, "diameter_um"):
+            vals.append(np.nan if v is None else float(v))
+        return np.asarray(vals, dtype=float)
+
     # pandas DataFrame
     try:
         import pandas as pd  # type: ignore
@@ -133,6 +139,26 @@ def _extract_diameter_um(results: Any, um_per_pixel: float) -> Optional[np.ndarr
         return np.asarray(vals, dtype=float)
 
     return None
+
+
+def _extract_time_s(results: Any, seconds_per_line: float, n_points: int) -> np.ndarray:
+    if hasattr(results, "time_s"):
+        raw = getattr(results, "time_s")
+        if raw is not None:
+            return np.asarray([float(v) for v in raw], dtype=float)
+    return _time_axis(n_points, seconds_per_line=float(seconds_per_line))
+
+
+def _extract_filtered_diameter_um(results: Any) -> Optional[np.ndarray]:
+    if not hasattr(results, "diameter_um_filtered"):
+        return None
+    raw = getattr(results, "diameter_um_filtered")
+    if raw is None:
+        return None
+    vals = []
+    for v in raw:
+        vals.append(np.nan if v is None else float(v))
+    return np.asarray(vals, dtype=float)
 
 
 def _nanmedian(a: np.ndarray) -> float:
@@ -234,7 +260,7 @@ def make_diameter_figure_dict(
             },
         }
 
-    t = _time_axis(len(d_um), seconds_per_line=float(seconds_per_line))
+    t = _extract_time_s(results, seconds_per_line=float(seconds_per_line), n_points=len(d_um))
 
     traces = [{
         "type": "scatter",
@@ -246,7 +272,9 @@ def make_diameter_figure_dict(
     }]
 
     if post_filter_params is not None and bool(getattr(post_filter_params, "enabled", False)):
-        d_f = apply_post_filter_1d(d_um, post_filter_params)
+        d_f = _extract_filtered_diameter_um(results)
+        if d_f is None:
+            d_f = apply_post_filter_1d(d_um, post_filter_params)
         traces.append({
             "type": "scatter",
             "mode": "lines",

@@ -39,6 +39,27 @@ def _coerce_enum(enum_cls: type[Enum], raw: Any) -> Enum:
     return enum_cls(v)  # type: ignore[arg-type]
 
 
+def _field_help_text(metadata: Any) -> str:
+    description = str(getattr(metadata, "get", lambda *_: "")("description", "")).strip()
+    if not description:
+        return ""
+    units = str(getattr(metadata, "get", lambda *_: "")("units", "")).strip()
+    raw_methods = getattr(metadata, "get", lambda *_: None)("methods", None)
+    methods = ""
+    if isinstance(raw_methods, (list, tuple)):
+        methods = ", ".join(str(m) for m in raw_methods if str(m).strip())
+    elif raw_methods is not None:
+        methods = str(raw_methods).strip()
+    extra = []
+    if units:
+        extra.append(f"units: {units}")
+    if methods:
+        extra.append(f"methods: {methods}")
+    if not extra:
+        return description
+    return f"{description} ({'; '.join(extra)})"
+
+
 def dataclass_editor_card(
     obj: Any,
     *,
@@ -134,5 +155,9 @@ def dataclass_editor_card(
                     motion_controls.append(w)
                     if hasattr(obj, "enable_motion_constraints"):
                         _set_motion_controls_enabled(bool(getattr(obj, "enable_motion_constraints")))
+
+                help_text = _field_help_text(f.metadata)
+                if help_text:
+                    ui.label(help_text).classes("col-span-2 text-xs text-gray-500 -mt-2")
 
         return ui.card()

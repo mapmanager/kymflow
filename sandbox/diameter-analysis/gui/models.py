@@ -103,4 +103,5 @@ class AppState:
 
     # View state
     x_range: Optional[tuple[float, float]] = None  # seconds
+    data_version: int = 0
     _syncing_axes: bool = False

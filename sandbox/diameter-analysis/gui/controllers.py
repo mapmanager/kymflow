@@ -44,6 +44,7 @@ class AppController:
 
         self.fig_img: Optional[dict] = None
         self.fig_line: Optional[dict] = None
+        self._last_built_data_version: int = -1
 
 
     def initialize_kym_list(self, folder: str | Path) -> None:
@@ -101,6 +102,8 @@ class AppController:
         self.state.loaded_max = loaded_max
         self.state.tiff_error = None
         self.state.results = None
+        self.state.x_range = None
+        self.state.data_version += 1
         self._rebuild_figures()
         self._emit()
 
@@ -338,6 +341,7 @@ class AppController:
             self.fig_line = None
             return
 
+        is_fresh_load = self.state.data_version != self._last_built_data_version
         seconds_per_line, um_per_pixel = self.resolve_units(source=self.state.source)
         seconds, left_um, right_um, center_um = self._extract_overlays_um()
 
@@ -362,10 +366,76 @@ class AppController:
             post_filter_params=self.state.post_filter_params,
         )
 
+        if is_fresh_load and self.fig_img and self.fig_line:
+            n_time, n_space = self.state.img.shape
+            max_x = float(max(0, n_time - 1) * seconds_per_line)
+            max_y = float(max(0, n_space - 1) * um_per_pixel)
+            full_x_range = (0.0, max_x)
+            self.state.x_range = full_x_range
+
+            img_layout = self.fig_img.setdefault("layout", {})
+            img_xaxis = img_layout.setdefault("xaxis", {})
+            img_yaxis = img_layout.setdefault("yaxis", {})
+            img_xaxis["range"] = [full_x_range[0], full_x_range[1]]
+            img_yaxis["range"] = [0.0, max_y]
+
+            line_layout = self.fig_line.setdefault("layout", {})
+            line_xaxis = line_layout.setdefault("xaxis", {})
+            line_xaxis["range"] = [full_x_range[0], full_x_range[1]]
+
         if self.state.x_range and self.fig_img and self.fig_line:
             x0, x1 = self.state.x_range
             self.fig_img = set_xrange(self.fig_img, x0, x1)
             self.fig_line = set_xrange(self.fig_line, x0, x1)
+        self._last_built_data_version = self.state.data_version
+
+    def on_relayout(self, source: str, relayout: dict) -> None:
+        if self.state._syncing_axes:
+            return
+
+        new_range, autorange_reset = self._parse_xrange_from_relayout(relayout)
+
+        if not autorange_reset and new_range is None:
+            return
+        if autorange_reset and self.state.x_range is None:
+            return
+        if new_range is not None and self.state.x_range == new_range:
+            return
+
+        self.state._syncing_axes = True
+        try:
+            if autorange_reset:
+                target = self._compute_full_xrange()
+                self.state.x_range = target
+            else:
+                target = new_range
+                self.state.x_range = target
+            self._apply_xrange_without_rebuild(target)
+            self._emit()
+        finally:
+            self.state._syncing_axes = False
+
+    def _compute_full_xrange(self) -> tuple[float, float] | None:
+        if self.state.img is None:
+            return None
+        seconds_per_line, _ = self.resolve_units(source=self.state.source)
+        n_time = int(self.state.img.shape[0])
+        max_x = float(max(0, n_time - 1) * seconds_per_line)
+        return (0.0, max_x)
+
+    def _apply_xrange_without_rebuild(self, x_range: tuple[float, float] | None) -> None:
+        if self.fig_img is None or self.fig_line is None:
+            return
+        if x_range is None:
+            for fig in (self.fig_img, self.fig_line):
+                layout = fig.setdefault("layout", {})
+                xaxis = layout.setdefault("xaxis", {})
+                xaxis.pop("range", None)
+                xaxis["autorange"] = True
+            return
+        x0, x1 = x_range
+        self.fig_img = set_xrange(self.fig_img, x0, x1)
+        self.fig_line = set_xrange(self.fig_line, x0, x1)
 
     @staticmethod
     def _parse_xrange_from_relayout(
@@ -394,27 +464,6 @@ class AppController:
                     break
 
         return new_range, autorange_reset
-
-    def on_relayout(self, source: str, relayout: dict) -> None:
-        if self.state._syncing_axes:
-            return
-
-        new_range, autorange_reset = self._parse_xrange_from_relayout(relayout)
-
-        if not autorange_reset and new_range is None:
-            return
-        if autorange_reset and self.state.x_range is None:
-            return
-        if new_range is not None and self.state.x_range == new_range:
-            return
-
-        self.state._syncing_axes = True
-        try:
-            self.state.x_range = None if autorange_reset else new_range
-            self._rebuild_figures()
-            self._emit()
-        finally:
-            self.state._syncing_axes = False
 
     def kymograph_title(self) -> str:
         selected = self.state.selected_kym_image

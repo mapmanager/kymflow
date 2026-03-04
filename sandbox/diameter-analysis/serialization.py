@@ -43,6 +43,14 @@ def _serialize_value(value: Any) -> Any:
 
 
 def dataclass_to_dict(obj: Any) -> dict[str, Any]:
+    """Convert a dataclass instance into JSON-safe nested dictionaries/lists.
+
+    Args:
+        obj: Dataclass instance to serialize.
+
+    Returns:
+        Dictionary representation with enums/NumPy scalars normalized.
+    """
     if not dataclasses.is_dataclass(obj):
         raise TypeError("dataclass_to_dict expects a dataclass instance")
 
@@ -102,6 +110,15 @@ def _deserialize_value(tp: Any, value: Any) -> Any:
 
 
 def dataclass_from_dict(cls: type[Any], payload: dict[str, Any]) -> Any:
+    """Instantiate a dataclass from a dictionary payload.
+
+    Args:
+        cls: Target dataclass type.
+        payload: Source dictionary payload.
+
+    Returns:
+        Dataclass instance with basic scalar/enum coercions applied.
+    """
     if not (isinstance(cls, type) and dataclasses.is_dataclass(cls)):
         raise TypeError("dataclass_from_dict expects a dataclass class")
     if not isinstance(payload, dict):
