@@ -784,7 +784,7 @@ class DiameterAnalysisBundle:
 
 
 WIDE_BASE_FIELDS: tuple[str, ...] = (
-    "center_row",
+    "time_s",
     "left_edge_px",
     "right_edge_px",
     "diameter_px",
@@ -802,8 +802,25 @@ WIDE_QC_FIELDS: tuple[str, ...] = (
     "qc_diameter_violation",
     "qc_center_violation",
 )
+WIDE_CSV_TIME_COLUMNS: tuple[str, ...] = ("time_s",)
+WIDE_CSV_ARRAY_FIELDS: tuple[str, ...] = (
+    "left_edge_px",
+    "right_edge_px",
+    "diameter_px",
+    "peak",
+    "baseline",
+    "edge_strength_left",
+    "edge_strength_right",
+    "diameter_px_filt",
+    "diameter_was_filtered",
+    "qc_score",
+    "qc_flags",
+    "qc_edge_violation",
+    "qc_diameter_violation",
+    "qc_center_violation",
+)
+WIDE_CSV_SCALAR_FIELDS: tuple[str, ...] = ()
 WIDE_REQUIRED_RECON_FIELDS: tuple[str, ...] = (
-    "center_row",
     "left_edge_px",
     "right_edge_px",
     "diameter_px",
@@ -829,11 +846,13 @@ def bundle_to_wide_csv_rows(
     run_keys = sorted(bundle.runs.keys())
     time_values = sorted({float(result.time_s) for results in bundle.runs.values() for result in results})
 
-    fields = list(WIDE_BASE_FIELDS)
-    if include_qc:
-        fields.extend(WIDE_QC_FIELDS)
+    if include_time is not True:
+        raise ValueError("bundle_to_wide_csv_rows requires include_time=True")
+    fields = list(WIDE_CSV_ARRAY_FIELDS)
+    if not include_qc:
+        fields = [f for f in fields if f not in WIDE_QC_FIELDS]
 
-    header = ["time_s"]
+    header = list(WIDE_CSV_TIME_COLUMNS)
     for run_key in run_keys:
         suffix = _run_key_to_str(run_key)
         for field_name in fields:
@@ -858,7 +877,7 @@ def bundle_to_wide_csv_rows(
                 if result is None:
                     row.append("")
                     continue
-                value = getattr(result, field_name)
+                value = time_value if field_name == "time_s" else getattr(result, field_name)
                 if isinstance(value, bool):
                     row.append("1" if value else "0")
                 elif isinstance(value, list):
@@ -874,19 +893,23 @@ def bundle_from_wide_csv_rows(
     rows: list[list[str]],
 ) -> DiameterAnalysisBundle:
     """Parse a wide CSV representation back into a multi-run bundle."""
-    if "time_s" not in header:
-        raise ValueError("Wide CSV missing required column: time_s")
+    for col in WIDE_CSV_TIME_COLUMNS:
+        if col not in header:
+            raise ValueError(f"Wide CSV missing required time column: {col}")
     time_idx = header.index("time_s")
 
     run_columns: dict[tuple[int, int], dict[str, int]] = {}
     for col_idx, col_name in enumerate(header):
-        if col_name == "time_s":
+        if col_name in WIDE_CSV_TIME_COLUMNS:
             continue
         match = WIDE_COLUMN_RE.fullmatch(col_name)
         if match is None:
             raise ValueError(f"Invalid wide CSV column name: {col_name!r}")
+        field_name = match.group("field")
+        if field_name not in WIDE_CSV_ARRAY_FIELDS:
+            raise ValueError(f"Unregistered wide CSV field: {field_name!r}")
         run_key = (int(match.group("roi")), int(match.group("ch")))
-        run_columns.setdefault(run_key, {})[match.group("field")] = col_idx
+        run_columns.setdefault(run_key, {})[field_name] = col_idx
 
     for run_key, field_map in run_columns.items():
         for required in WIDE_REQUIRED_RECON_FIELDS:
@@ -916,8 +939,10 @@ def bundle_from_wide_csv_rows(
             raise ValueError(f"Missing time_s at row_idx={row_idx}")
         time_s = float(time_value)
         for run_key, field_map in run_columns.items():
-            center_raw = row[field_map["center_row"]]
-            if center_raw == "":
+            has_any_data = any(
+                row[idx] != "" for field, idx in field_map.items() if field != "qc_flags"
+            )
+            if not has_any_data:
                 continue
             roi_id, channel_id = run_key
             qc_flags_raw = row[field_map["qc_flags"]] if "qc_flags" in field_map else ""
@@ -925,7 +950,7 @@ def bundle_from_wide_csv_rows(
                 DiameterResult(
                     roi_id=roi_id,
                     channel_id=channel_id,
-                    center_row=_int_cell(row, field_map["center_row"]),
+                    center_row=row_idx,
                     time_s=time_s,
                     left_edge_px=_float_cell(row, field_map["left_edge_px"]),
                     right_edge_px=_float_cell(row, field_map["right_edge_px"]),

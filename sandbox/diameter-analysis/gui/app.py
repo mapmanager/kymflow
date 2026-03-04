@@ -8,7 +8,7 @@ from .config import SEED_FOLDER
 
 from .models import AppState
 from .controllers import AppController
-from .logging_setup import configure_logging
+from logging_setup import configure_logging
 from .views import build_home_page
 
 from synthetic_kymograph import SyntheticKymographParams

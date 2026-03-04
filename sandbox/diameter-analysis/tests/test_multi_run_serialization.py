@@ -10,6 +10,9 @@ from diameter_analysis import (
     DiameterAnalysisBundle,
     DiameterAnalyzer,
     DiameterDetectionParams,
+    WIDE_CSV_ARRAY_FIELDS,
+    WIDE_CSV_SCALAR_FIELDS,
+    WIDE_CSV_TIME_COLUMNS,
     bundle_from_wide_csv_rows,
     bundle_to_wide_csv_rows,
 )
@@ -51,7 +54,6 @@ def _assert_bundle_equivalent(lhs: DiameterAnalysisBundle, rhs: DiameterAnalysis
         for left, right in zip(left_results, right_results):
             assert left.roi_id == right.roi_id
             assert left.channel_id == right.channel_id
-            assert left.center_row == right.center_row
             assert left.time_s == right.time_s
             assert left.left_edge_px == right.left_edge_px
             assert left.right_edge_px == right.right_edge_px
@@ -129,10 +131,43 @@ def test_wide_csv_roundtrip_and_column_naming() -> None:
     _assert_bundle_equivalent(loaded, bundle)
 
 
+def test_wide_csv_registry_drives_header_fields() -> None:
+    bundle = _make_bundle()
+    header, _rows = bundle_to_wide_csv_rows(bundle)
+
+    assert list(WIDE_CSV_TIME_COLUMNS) == ["time_s"]
+    suffixes = {"roi1_ch1", "roi2_ch3"}
+    for suffix in suffixes:
+        for field_name in WIDE_CSV_ARRAY_FIELDS:
+            assert f"{field_name}_{suffix}" in header
+    assert len(WIDE_CSV_SCALAR_FIELDS) == 0
+
+
 def test_wide_csv_export_requires_include_time_true() -> None:
     bundle = _make_bundle()
     with pytest.raises(ValueError, match="include_time=True"):
         _ = bundle_to_wide_csv_rows(bundle, include_time=False)
+
+
+def test_wide_csv_loader_fails_when_time_column_missing() -> None:
+    bundle = _make_bundle()
+    header, rows = bundle_to_wide_csv_rows(bundle)
+    time_idx = header.index("time_s")
+    bad_header = [c for i, c in enumerate(header) if i != time_idx]
+    bad_rows = [[v for i, v in enumerate(r) if i != time_idx] for r in rows]
+    with pytest.raises(ValueError, match="required time column: time_s"):
+        _ = bundle_from_wide_csv_rows(bad_header, bad_rows)
+
+
+def test_wide_csv_loader_fails_when_required_run_field_missing() -> None:
+    bundle = _make_bundle()
+    header, rows = bundle_to_wide_csv_rows(bundle)
+    target = "diameter_px_roi1_ch1"
+    col_idx = header.index(target)
+    bad_header = [c for i, c in enumerate(header) if i != col_idx]
+    bad_rows = [[v for i, v in enumerate(r) if i != col_idx] for r in rows]
+    with pytest.raises(ValueError, match="missing required wide CSV column: diameter_px"):
+        _ = bundle_from_wide_csv_rows(bad_header, bad_rows)
 
 
 def test_analyze_strict_roi_channel_propagation() -> None:

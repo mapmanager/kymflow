@@ -64,7 +64,7 @@ def overlay_edges_on_kymograph_dict(
             "name": name,
             "x": seconds.tolist(),
             "y": y.tolist(),
-            "line": {"width": 2},
+            "line": {"width": 4},
         })
 
     if left_um is not None:
@@ -159,6 +159,51 @@ def _extract_filtered_diameter_um(results: Any) -> Optional[np.ndarray]:
     for v in raw:
         vals.append(np.nan if v is None else float(v))
     return np.asarray(vals, dtype=float)
+
+
+def _extract_roi_channel(results: Any) -> tuple[Optional[int], Optional[int]]:
+    if hasattr(results, "roi_id") and hasattr(results, "channel_id"):
+        return int(getattr(results, "roi_id")), int(getattr(results, "channel_id"))
+
+    # pandas DataFrame
+    try:
+        import pandas as pd  # type: ignore
+        if isinstance(results, pd.DataFrame):
+            if "roi_id" in results.columns and len(results.index) > 0:
+                roi_val = results["roi_id"].iloc[0]
+            else:
+                roi_val = None
+            if "channel_id" in results.columns and len(results.index) > 0:
+                ch_val = results["channel_id"].iloc[0]
+            else:
+                ch_val = None
+            if roi_val is not None and ch_val is not None:
+                return int(roi_val), int(ch_val)
+            return None, None
+    except Exception:
+        pass
+
+    # list of dataclasses/objects
+    if isinstance(results, list) and results:
+        first = results[0]
+        if hasattr(first, "roi_id") and hasattr(first, "channel_id"):
+            return int(getattr(first, "roi_id")), int(getattr(first, "channel_id"))
+
+    return None, None
+
+
+def _format_diameter_trace_name(
+    results: Any,
+    *,
+    filtered: bool = False,
+) -> str:
+    roi_id, channel_id = _extract_roi_channel(results)
+    if roi_id is None or channel_id is None:
+        suffix = "roi N/A, ch N/A"
+    else:
+        suffix = f"roi {roi_id}, ch {channel_id}"
+    prefix = "Diameter filtered" if filtered else "Diameter"
+    return f"{prefix} ({suffix})"
 
 
 def _nanmedian(a: np.ndarray) -> float:
@@ -265,7 +310,7 @@ def make_diameter_figure_dict(
     traces = [{
         "type": "scatter",
         "mode": "lines",
-        "name": "raw",
+        "name": _format_diameter_trace_name(results, filtered=False),
         "x": t.tolist(),
         "y": d_um.tolist(),
         "line": {"width": 2},
@@ -278,7 +323,7 @@ def make_diameter_figure_dict(
         traces.append({
             "type": "scatter",
             "mode": "lines",
-            "name": "filtered",
+            "name": _format_diameter_trace_name(results, filtered=True),
             "x": t.tolist(),
             "y": d_f.tolist(),
             "line": {"width": 2, "dash": "dot"},

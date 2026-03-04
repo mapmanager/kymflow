@@ -163,8 +163,9 @@ def dataclass_editor_card(
                 if dense:
                     w.classes("w-full")
 
-                help_text = _field_help_text(f.metadata)
-                if help_text:
-                    ui.label(help_text).classes("col-span-2 text-xs text-gray-500 -mt-2")
+                # abb removed
+                # help_text = _field_help_text(f.metadata)
+                # if help_text:
+                #     ui.label(help_text).classes("col-span-2 text-xs text-gray-500 -mt-2")
 
         return ui.card()
