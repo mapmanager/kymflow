@@ -54,6 +54,10 @@ Column naming convention:
 
 Shorter runs leave empty cells for out-of-range rows.
 Wide CSV load is aligned by `time_s` and registered run fields; it does not depend on `center_row` ordering.
+Wide CSV parsing behavior:
+
+- Columns that match wide pattern `{field}_roi{roi_id}_ch{channel_id}` must use registered fields; unknown wide columns are rejected.
+- Unrelated non-wide columns are ignored.
 
 ## Fail-fast contract
 No backward-compatibility defaults are applied for required IDs.

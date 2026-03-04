@@ -914,6 +914,80 @@ WIDE_REQUIRED_RECON_FIELDS: tuple[str, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class WideCsvRegistry:
+    time_columns: tuple[str, ...]
+    array_fields: tuple[str, ...]
+    qc_fields: tuple[str, ...]
+    required_recon_fields: tuple[str, ...]
+    wide_column_re: re.Pattern[str]
+
+    def columns(
+        self,
+        run_keys: list[tuple[int, int]],
+        *,
+        include_time: bool = True,
+        include_qc: bool = True,
+    ) -> list[str]:
+        if include_time is not True:
+            raise ValueError("Wide CSV requires include_time=True")
+        fields = list(self.array_fields)
+        if not include_qc:
+            fields = [f for f in fields if f not in self.qc_fields]
+
+        out = list(self.time_columns)
+        for run_key in run_keys:
+            suffix = _run_key_to_str(run_key)
+            for field_name in fields:
+                out.append(f"{field_name}_{suffix}")
+        return out
+
+    def parse_columns(
+        self,
+        header: list[str],
+    ) -> tuple[int, dict[tuple[int, int], dict[str, int]]]:
+        for col in self.time_columns:
+            if col not in header:
+                raise ValueError(f"Wide CSV missing required time column: {col}")
+        time_idx = header.index("time_s")
+
+        run_columns: dict[tuple[int, int], dict[str, int]] = {}
+        unknown_wide_fields: list[str] = []
+        for col_idx, col_name in enumerate(header):
+            if col_name in self.time_columns:
+                continue
+            match = self.wide_column_re.fullmatch(col_name)
+            if match is None:
+                # Ignore unrelated non-wide columns.
+                continue
+            field_name = match.group("field")
+            if field_name not in self.array_fields:
+                unknown_wide_fields.append(col_name)
+                continue
+            run_key = (int(match.group("roi")), int(match.group("ch")))
+            run_columns.setdefault(run_key, {})[field_name] = col_idx
+
+        if unknown_wide_fields:
+            cols = ", ".join(sorted(unknown_wide_fields))
+            raise ValueError(f"Unknown wide CSV columns: {cols}")
+
+        for run_key, field_map in run_columns.items():
+            for required in self.required_recon_fields:
+                if required not in field_map:
+                    raise ValueError(f"Run {run_key!r} missing required wide CSV column: {required}")
+
+        return time_idx, run_columns
+
+
+WIDE_CSV_REGISTRY = WideCsvRegistry(
+    time_columns=WIDE_CSV_TIME_COLUMNS,
+    array_fields=WIDE_CSV_ARRAY_FIELDS,
+    qc_fields=WIDE_QC_FIELDS,
+    required_recon_fields=WIDE_REQUIRED_RECON_FIELDS,
+    wide_column_re=WIDE_COLUMN_RE,
+)
+
+
 def bundle_to_wide_csv_rows(
     bundle: DiameterAnalysisBundle,
     *,
@@ -932,15 +1006,8 @@ def bundle_to_wide_csv_rows(
 
     if include_time is not True:
         raise ValueError("bundle_to_wide_csv_rows requires include_time=True")
-    fields = list(WIDE_CSV_ARRAY_FIELDS)
-    if not include_qc:
-        fields = [f for f in fields if f not in WIDE_QC_FIELDS]
-
-    header = list(WIDE_CSV_TIME_COLUMNS)
-    for run_key in run_keys:
-        suffix = _run_key_to_str(run_key)
-        for field_name in fields:
-            header.append(f"{field_name}_{suffix}")
+    header = WIDE_CSV_REGISTRY.columns(run_keys, include_time=include_time, include_qc=include_qc)
+    fields = [f for f in WIDE_CSV_ARRAY_FIELDS if include_qc or f not in WIDE_QC_FIELDS]
 
     rows: list[list[str]] = []
     run_maps: dict[tuple[int, int], dict[float, DiameterResult]] = {}
@@ -977,28 +1044,7 @@ def bundle_from_wide_csv_rows(
     rows: list[list[str]],
 ) -> DiameterAnalysisBundle:
     """Parse a wide CSV representation back into a multi-run bundle."""
-    for col in WIDE_CSV_TIME_COLUMNS:
-        if col not in header:
-            raise ValueError(f"Wide CSV missing required time column: {col}")
-    time_idx = header.index("time_s")
-
-    run_columns: dict[tuple[int, int], dict[str, int]] = {}
-    for col_idx, col_name in enumerate(header):
-        if col_name in WIDE_CSV_TIME_COLUMNS:
-            continue
-        match = WIDE_COLUMN_RE.fullmatch(col_name)
-        if match is None:
-            raise ValueError(f"Invalid wide CSV column name: {col_name!r}")
-        field_name = match.group("field")
-        if field_name not in WIDE_CSV_ARRAY_FIELDS:
-            raise ValueError(f"Unregistered wide CSV field: {field_name!r}")
-        run_key = (int(match.group("roi")), int(match.group("ch")))
-        run_columns.setdefault(run_key, {})[field_name] = col_idx
-
-    for run_key, field_map in run_columns.items():
-        for required in WIDE_REQUIRED_RECON_FIELDS:
-            if required not in field_map:
-                raise ValueError(f"Run {run_key!r} missing required wide CSV column: {required}")
+    time_idx, run_columns = WIDE_CSV_REGISTRY.parse_columns(header)
 
     def _float_cell(row: list[str], idx: int) -> float:
         value = row[idx]

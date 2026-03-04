@@ -11,6 +11,7 @@ from diameter_analysis import (
     DiameterAnalyzer,
     DiameterDetectionParams,
     WIDE_CSV_ARRAY_FIELDS,
+    WIDE_CSV_REGISTRY,
     WIDE_CSV_SCALAR_FIELDS,
     WIDE_CSV_TIME_COLUMNS,
     bundle_from_wide_csv_rows,
@@ -151,6 +152,12 @@ def test_wide_csv_registry_drives_header_fields() -> None:
     assert len(WIDE_CSV_SCALAR_FIELDS) == 0
 
 
+def test_wide_csv_registry_columns_snapshot_single_run() -> None:
+    cols = WIDE_CSV_REGISTRY.columns([(1, 1)], include_time=True, include_qc=True)
+    expected = ["time_s"] + [f"{field}_roi1_ch1" for field in WIDE_CSV_ARRAY_FIELDS]
+    assert cols == expected
+
+
 def test_wide_csv_export_requires_include_time_true() -> None:
     bundle = _make_bundle()
     with pytest.raises(ValueError, match="include_time=True"):
@@ -176,6 +183,28 @@ def test_wide_csv_loader_fails_when_required_run_field_missing() -> None:
     bad_rows = [[v for i, v in enumerate(r) if i != col_idx] for r in rows]
     with pytest.raises(ValueError, match="missing required wide CSV column: diameter_px"):
         _ = bundle_from_wide_csv_rows(bad_header, bad_rows)
+
+
+def test_wide_csv_loader_rejects_unknown_wide_field() -> None:
+    bundle = _make_bundle()
+    header, rows = bundle_to_wide_csv_rows(bundle)
+    idx = header.index("qc_score_roi1_ch1") + 1
+    bad_header = list(header)
+    bad_header.insert(idx, "bogus_field_roi1_ch1")
+    bad_rows = [list(r[:idx]) + [""] + list(r[idx:]) for r in rows]
+    with pytest.raises(ValueError, match="Unknown wide CSV columns: bogus_field_roi1_ch1"):
+        _ = bundle_from_wide_csv_rows(bad_header, bad_rows)
+
+
+def test_wide_csv_loader_ignores_unrelated_non_wide_columns() -> None:
+    bundle = _make_bundle()
+    header, rows = bundle_to_wide_csv_rows(bundle)
+    idx = header.index("time_s") + 1
+    extra_header = list(header)
+    extra_header.insert(idx, "notes")
+    extra_rows = [list(r[:idx]) + ["x"] + list(r[idx:]) for r in rows]
+    loaded = bundle_from_wide_csv_rows(extra_header, extra_rows)
+    _assert_bundle_equivalent(loaded, bundle)
 
 
 def test_analyze_strict_roi_channel_propagation() -> None:
