@@ -52,9 +52,6 @@ class DiameterDetectionParams:
     """Configuration for the diameter detection pipeline.
 
     Attributes:
-        roi: Optional half-open ROI `(t0, t1, x0, x1)` in pixel indices.
-            Units are pixels/indices. If `None`, the full kymograph is used.
-            Used by all detection methods.
         window_rows_odd: Odd temporal window size (rows) used to create a
             1D spatial profile around each center row. Units: pixels (time rows).
             Used by all methods.
@@ -76,28 +73,19 @@ class DiameterDetectionParams:
             Currently only `central_diff` is supported.
         gradient_min_edge_strength: Minimum derivative magnitude threshold for
             edge-confidence flags in `gradient_edges`. Ignored by `threshold_width`.
-        enable_motion_constraints: Enables frame-to-frame motion gating after
-            `gradient_edges`. Ignored by `threshold_width`.
+        max_edge_shift_um_on: Enables/disables left/right edge displacement
+            gating for `gradient_edges`.
+        max_diameter_change_um_on: Enables/disables diameter jump gating for
+            `gradient_edges`.
+        max_center_shift_um_on: Enables/disables centerline shift gating for
+            `gradient_edges`.
         max_edge_shift_um: Maximum allowed per-frame left/right edge shift in
-            microns before flagging/rejecting a frame. Used only when motion
-            constraints are enabled.
+            microns before flagging/rejecting a frame.
         max_diameter_change_um: Maximum allowed per-frame diameter jump in
-            microns before flagging/rejecting a frame. Used only when motion
-            constraints are enabled.
+            microns before flagging/rejecting a frame.
         max_center_shift_um: Maximum allowed per-frame center shift in microns
-            before flagging/rejecting a frame. Used only when motion constraints
-            are enabled.
+            before flagging/rejecting a frame.
     """
-
-    roi: tuple[int, int, int, int] | None = field(
-        default=None,
-        metadata={
-            "description": "Optional half-open ROI (t0,t1,x0,x1) in pixel indices; None analyzes full image.",
-            "units": "px-index",
-            "methods": ["threshold_width", "gradient_edges"],
-            "constraints": "len=4 when provided; 0<=t0<t1<=n_time and 0<=x0<x1<=n_space",
-        },
-    )
     window_rows_odd: int = field(
         default=5,
         metadata={
@@ -188,13 +176,31 @@ class DiameterDetectionParams:
             "constraints": "float >= 0",
         },
     )
-    enable_motion_constraints: bool = field(
+    max_edge_shift_um_on: bool = field(
         default=True,
         metadata={
-            "description": "Enable frame-to-frame motion gating after gradient_edges.",
+            "description": "Enable edge-shift motion gating for gradient_edges.",
             "units": "unitless",
             "methods": ["gradient_edges"],
-            "constraints": "ignored by threshold_width",
+            "constraints": "bool",
+        },
+    )
+    max_diameter_change_um_on: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable diameter-change motion gating for gradient_edges.",
+            "units": "unitless",
+            "methods": ["gradient_edges"],
+            "constraints": "bool",
+        },
+    )
+    max_center_shift_um_on: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable center-shift motion gating for gradient_edges.",
+            "units": "unitless",
+            "methods": ["gradient_edges"],
+            "constraints": "bool",
         },
     )
     max_edge_shift_um: float = field(
@@ -232,10 +238,7 @@ class DiameterDetectionParams:
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DiameterDetectionParams":
         # TODO(ticket_014): add stable DetectionParams.from_dict() schema contract.
-        obj = dataclass_from_dict(cls, payload)
-        if obj.roi is not None and len(obj.roi) != 4:
-            raise ValueError("roi must have four entries (t0, t1, x0, x1)")
-        return obj
+        return dataclass_from_dict(cls, payload)
 
 
 @dataclass(frozen=True)
@@ -664,7 +667,7 @@ class DiameterAnalyzer:
         cfg = self._validated_params(cfg)
         pf_cfg = self._validated_post_filter_params(post_filter_params or PostFilterParams())
 
-        t0, t1, x0, x1 = self._resolve_roi(cfg.roi)
+        t0, t1, x0, x1 = self._resolve_roi(None)
         centers = list(range(t0, t1, cfg.stride))
 
         if backend == "serial":
@@ -675,7 +678,9 @@ class DiameterAnalyzer:
             raise ValueError("backend must be 'serial' or 'threads'")
 
         results.sort(key=lambda r: r.center_row)
-        if cfg.diameter_method == DiameterMethod.GRADIENT_EDGES and cfg.enable_motion_constraints:
+        if cfg.diameter_method == DiameterMethod.GRADIENT_EDGES and (
+            cfg.max_edge_shift_um_on or cfg.max_diameter_change_um_on or cfg.max_center_shift_um_on
+        ):
             self._apply_motion_constraints(results=results, params=cfg)
         self.last_motion_qc = self.motion_qc_arrays(results)
         if pf_cfg.enabled:
@@ -729,10 +734,9 @@ class DiameterAnalyzer:
     ) -> None:
         """Apply frame-to-frame QC gates for `gradient_edges` outputs.
 
-        Reads only motion-constraint fields from `DiameterDetectionParams`:
-        `max_edge_shift_um`, `max_diameter_change_um`, and `max_center_shift_um`.
-        This step is relevant only when `enable_motion_constraints=True` and the
-        active `diameter_method` is `gradient_edges`.
+        Reads motion-constraint fields and per-constraint toggles from
+        `DiameterDetectionParams`. Each gate is applied only if its `_on` toggle
+        is enabled and the corresponding threshold is valid.
         """
         if len(results) < 2:
             return
@@ -754,19 +758,19 @@ class DiameterAnalyzer:
             cur_left = float(cur.left_edge_px)
             cur_right = float(cur.right_edge_px)
 
-            if np.isfinite(cur_left) and np.isfinite(prev_left):
+            if params.max_edge_shift_um_on and np.isfinite(cur_left) and np.isfinite(prev_left):
                 if abs(cur_left - prev_left) > edge_thr_px:
                     cur_left = math.nan
                     edge_violation = True
 
-            if np.isfinite(cur_right) and np.isfinite(prev_right):
+            if params.max_edge_shift_um_on and np.isfinite(cur_right) and np.isfinite(prev_right):
                 if abs(cur_right - prev_right) > edge_thr_px:
                     cur_right = math.nan
                     edge_violation = True
 
             prev_d = prev_right - prev_left if np.isfinite(prev_left) and np.isfinite(prev_right) else math.nan
             cur_d = cur_right - cur_left if np.isfinite(cur_left) and np.isfinite(cur_right) else math.nan
-            if np.isfinite(cur_d) and np.isfinite(prev_d):
+            if params.max_diameter_change_um_on and np.isfinite(cur_d) and np.isfinite(prev_d):
                 if abs(cur_d - prev_d) > diam_thr_px:
                     cur_left = math.nan
                     cur_right = math.nan
@@ -782,7 +786,7 @@ class DiameterAnalyzer:
                 if np.isfinite(cur_left) and np.isfinite(cur_right)
                 else math.nan
             )
-            if np.isfinite(cur_c) and np.isfinite(prev_c):
+            if params.max_center_shift_um_on and np.isfinite(cur_c) and np.isfinite(prev_c):
                 if abs(cur_c - prev_c) > center_thr_px:
                     cur_left = math.nan
                     cur_right = math.nan

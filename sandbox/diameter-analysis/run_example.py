@@ -31,7 +31,6 @@ def _run_one_method(
     params = DiameterDetectionParams(
         window_rows_odd=5,
         stride=2,
-        roi=(0, int(payload["kymograph"].shape[0]), 0, int(payload["kymograph"].shape[1])),
         diameter_method=method,
     )
     

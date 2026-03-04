@@ -17,12 +17,13 @@ def test_gradient_edges_runs_and_is_mostly_ordered() -> None:
         polarity=payload["polarity"],
     )
     params = DiameterDetectionParams(
-        roi=(0, 150, 0, 120),
         stride=2,
         window_rows_odd=5,
         diameter_method=DiameterMethod.GRADIENT_EDGES,
         gradient_sigma=1.5,
-        enable_motion_constraints=False,
+        max_edge_shift_um_on=False,
+        max_diameter_change_um_on=False,
+        max_center_shift_um_on=False,
     )
     results = analyzer.analyze(params=params, backend="serial")
 
@@ -40,7 +41,6 @@ def test_gradient_edges_serial_threads_identical() -> None:
         polarity=payload["polarity"],
     )
     params = DiameterDetectionParams(
-        roi=(0, 180, 0, 128),
         stride=3,
         window_rows_odd=7,
         diameter_method=DiameterMethod.GRADIENT_EDGES,
@@ -72,7 +72,6 @@ def test_gradient_edges_accuracy_vs_truth(mae_tol: float) -> None:
         polarity=payload["polarity"],
     )
     params = DiameterDetectionParams(
-        roi=(0, 180, 0, 128),
         stride=1,
         window_rows_odd=1,
         diameter_method=DiameterMethod.GRADIENT_EDGES,

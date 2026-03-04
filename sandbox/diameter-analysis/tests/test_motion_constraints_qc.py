@@ -22,7 +22,9 @@ def test_gradient_motion_constraints_produce_nans_and_qc_flags() -> None:
         diameter_method=DiameterMethod.GRADIENT_EDGES,
         window_rows_odd=1,
         stride=1,
-        enable_motion_constraints=True,
+        max_edge_shift_um_on=True,
+        max_diameter_change_um_on=True,
+        max_center_shift_um_on=True,
         max_edge_shift_um=0.001,
         max_diameter_change_um=0.001,
         max_center_shift_um=0.001,
@@ -40,7 +42,9 @@ def test_motion_constraints_off_matches_baseline_behavior() -> None:
         diameter_method=DiameterMethod.GRADIENT_EDGES,
         window_rows_odd=1,
         stride=1,
-        enable_motion_constraints=False,
+        max_edge_shift_um_on=False,
+        max_diameter_change_um_on=False,
+        max_center_shift_um_on=False,
     )
     unconstrained = analyzer.analyze(params=base)
 
@@ -48,7 +52,9 @@ def test_motion_constraints_off_matches_baseline_behavior() -> None:
         diameter_method=DiameterMethod.GRADIENT_EDGES,
         window_rows_odd=1,
         stride=1,
-        enable_motion_constraints=True,
+        max_edge_shift_um_on=True,
+        max_diameter_change_um_on=True,
+        max_center_shift_um_on=True,
         max_edge_shift_um=1e9,
         max_diameter_change_um=1e9,
         max_center_shift_um=1e9,
@@ -59,3 +65,33 @@ def test_motion_constraints_off_matches_baseline_behavior() -> None:
     rhs = np.array([r.diameter_px for r in effectively_unconstrained], dtype=float)
     assert np.array_equal(lhs, rhs, equal_nan=True)
     assert all(not r.qc_edge_violation and not r.qc_diameter_violation and not r.qc_center_violation for r in unconstrained)
+
+
+def test_only_enabled_constraint_toggle_applies() -> None:
+    analyzer = _make_analyzer()
+    base = DiameterDetectionParams(
+        diameter_method=DiameterMethod.GRADIENT_EDGES,
+        window_rows_odd=1,
+        stride=1,
+        max_edge_shift_um_on=False,
+        max_diameter_change_um_on=False,
+        max_center_shift_um_on=False,
+    )
+    unconstrained = analyzer.analyze(params=base)
+
+    edge_only = DiameterDetectionParams(
+        diameter_method=DiameterMethod.GRADIENT_EDGES,
+        window_rows_odd=1,
+        stride=1,
+        max_edge_shift_um_on=True,
+        max_diameter_change_um_on=False,
+        max_center_shift_um_on=False,
+        max_edge_shift_um=0.001,
+    )
+    constrained = analyzer.analyze(params=edge_only)
+    assert any(r.qc_edge_violation for r in constrained)
+    assert all(not r.qc_diameter_violation for r in constrained)
+    assert all(not r.qc_center_violation for r in constrained)
+    lhs = np.array([r.diameter_px for r in unconstrained], dtype=float)
+    rhs = np.array([r.diameter_px for r in constrained], dtype=float)
+    assert not np.array_equal(lhs, rhs, equal_nan=True)

@@ -12,3 +12,12 @@ def test_dataclass_editor_card_renders_detection_params() -> None:
         title="Detection Params",
         on_change=lambda _name, _value: None,
     )
+
+
+def test_dataclass_editor_card_contains_no_detection_specific_motion_logic() -> None:
+    import inspect
+    import gui.widgets as widgets
+
+    src = inspect.getsource(widgets.dataclass_editor_card)
+    assert "enable_motion_constraints" not in src
+    assert "motion_fields" not in src

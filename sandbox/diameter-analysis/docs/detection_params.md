@@ -3,7 +3,7 @@
 ## Overview
 `DiameterDetectionParams` configures three shared pipeline stages for both detection methods (`threshold_width`, `gradient_edges`):
 
-1. Profile construction: choose ROI/time sampling and aggregate rows into a 1D spatial profile.
+1. Profile construction: choose time sampling and aggregate rows into a 1D spatial profile.
 2. Edge detection: run threshold- or gradient-based left/right edge localization.
 3. Optional motion gating: reject implausible frame-to-frame jumps (used with `gradient_edges`).
 
@@ -11,7 +11,6 @@
 
 | name | type | default | units | used by | description | tuning guidance | common failure modes |
 |---|---|---:|---|---|---|---|---|
-| `roi` | `tuple[int,int,int,int] \| None` | `None` | px-index | both | Optional half-open `(t0,t1,x0,x1)` index bounds for analysis. `None` means full image extent. | Tighten ROI to exclude clutter/neighbor structures; widen ROI if vessel drift exits bounds. | Wrong vessel tracked; intermittent misses when vessel exits ROI. |
 | `window_rows_odd` | `int` | `5` | px (time rows) | both | Number of rows aggregated per center frame to build each spatial profile. Must be odd. | Increase for stronger temporal denoising; decrease to preserve rapid dynamics. | Too noisy/jumpy traces (too small), over-smoothed transients (too large). |
 | `stride` | `int` | `1` | px (time rows) | both | Step between analyzed center rows. | Increase for speed/coarser sampling; decrease for denser temporal coverage. | Missed fast events when stride too large. |
 | `binning_method` | `BinningMethod` | `mean` | unitless | both | Row aggregation operator before edge detection (`mean` or `median`). | Use `median` for outlier resistance; use `mean` when subtle gradient contrast matters. | Texture/outliers dominate profile (`mean`), faint edges lost (`median`). |
@@ -22,7 +21,9 @@
 | `gradient_sigma` | `float` | `1.5` | px | gradient_edges | Gaussian smoothing sigma before derivative edge extraction. | Increase to suppress noise; decrease to preserve sharp edge localization. | Texture lock-in/noise edges (too low), inner-edge picks from overblur (too high). |
 | `gradient_kernel` | `str` | `central_diff` | unitless | gradient_edges | Derivative operator selection (currently only `central_diff` supported). | Keep default; alternative kernels are not enabled. | Validation errors if set to unsupported value. |
 | `gradient_min_edge_strength` | `float` | `0.02` | intensity/px | gradient_edges | Minimum derivative magnitude considered a confident edge. | Increase to reject weak/ambiguous edges; decrease for faint-data sensitivity. | Excess false edges (too low), too many low-strength flags/misses (too high). |
-| `enable_motion_constraints` | `bool` | `True` | unitless | gradient_edges | Enables frame-to-frame gating of implausible edge/diameter/center shifts. | Keep enabled for jitter suppression; disable for unconstrained raw traces. | Jitter persists (disabled/too loose), real dynamics suppressed (too strict). |
+| `max_edge_shift_um_on` | `bool` | `True` | unitless | gradient_edges | Enables left/right edge-displacement constraint. | Turn on to suppress edge jumps; turn off to inspect unconstrained raw edge traces. | Persistent edge jitter (off), true fast edge shifts clipped (on + strict threshold). |
+| `max_diameter_change_um_on` | `bool` | `True` | unitless | gradient_edges | Enables per-frame diameter-change constraint. | Turn on to suppress diameter spikes; turn off to inspect unconstrained diameter dynamics. | Diameter spikes persist (off), true fast pulsatile changes clipped (on + strict threshold). |
+| `max_center_shift_um_on` | `bool` | `True` | unitless | gradient_edges | Enables per-frame centerline-shift constraint. | Turn on for centerline stability; turn off to allow free center drift. | Centerline wobble (off), physiologic center drift clipped (on + strict threshold). |
 | `max_edge_shift_um` | `float` | `2.0` | um | gradient_edges | Maximum allowed per-frame left/right edge displacement before rejection. | Increase if true motion gets clipped; decrease to suppress jumpy edge spikes. | Frequent edge-violation NaNs (too low), jitter leakage (too high). |
 | `max_diameter_change_um` | `float` | `2.0` | um | gradient_edges | Maximum allowed per-frame diameter delta before rejection. | Increase for physiologic fast changes; decrease to suppress implausible spikes. | Pulse peaks clipped (too low), diameter spikes remain (too high). |
 | `max_center_shift_um` | `float` | `2.0` | um | gradient_edges | Maximum allowed per-frame centerline displacement before rejection. | Increase for drifting vessels; decrease for stronger centerline stabilization. | Drift clipped (too low), centerline wobble persists (too high). |
@@ -31,15 +32,14 @@
 
 ### Edges jumping / centerline jitter
 1. Use `diameter_method="gradient_edges"`.
-2. Keep `enable_motion_constraints=True`.
+2. Keep relevant toggles enabled: `max_edge_shift_um_on=True`, `max_diameter_change_um_on=True`, `max_center_shift_um_on=True`.
 3. Increase `gradient_sigma` modestly.
 4. Tighten `max_edge_shift_um` and `max_center_shift_um`.
 Trade-off: stronger constraints can suppress true rapid motion.
 
 ### False edges / background texture
-1. Narrow `roi` around the target vessel.
-2. Use `binning_method="median"`.
-3. Increase `gradient_sigma` and/or `gradient_min_edge_strength`.
+1. Use `binning_method="median"`.
+2. Increase `gradient_sigma` and/or `gradient_min_edge_strength`.
 Trade-off: too much smoothing can blur true wall transitions.
 
 ### Missing edges / low contrast

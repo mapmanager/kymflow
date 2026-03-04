@@ -29,3 +29,16 @@ def test_widget_help_text_uses_detection_param_metadata() -> None:
     assert "Gaussian smoothing sigma" in help_text
     assert "units: px" in help_text
     assert "methods: gradient_edges" in help_text
+
+
+def test_detection_params_removed_roi_and_enable_motion_constraints() -> None:
+    obj = DiameterDetectionParams()
+    assert not hasattr(obj, "roi")
+    assert not hasattr(obj, "enable_motion_constraints")
+
+
+def test_detection_params_new_motion_toggles_default_true() -> None:
+    obj = DiameterDetectionParams()
+    assert obj.max_edge_shift_um_on is True
+    assert obj.max_diameter_change_um_on is True
+    assert obj.max_center_shift_um_on is True

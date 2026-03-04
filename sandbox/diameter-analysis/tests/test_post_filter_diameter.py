@@ -77,7 +77,7 @@ def test_analysis_with_post_filter_preserves_raw_and_filtered() -> None:
         polarity=payload["polarity"],
     )
 
-    det = DiameterDetectionParams(roi=(0, 120, 0, 96), stride=1, window_rows_odd=1)
+    det = DiameterDetectionParams(stride=1, window_rows_odd=1)
     pf = PostFilterParams(enabled=True, filter_type=PostFilterType.HAMPEL, kernel_size=5)
     results = analyzer.analyze(det, backend="serial", post_filter_params=pf)
 
@@ -97,7 +97,7 @@ def test_save_load_roundtrip_contains_post_filter_params(tmp_path) -> None:
         um_per_pixel=payload["um_per_pixel"],
         polarity=payload["polarity"],
     )
-    det = DiameterDetectionParams(roi=(0, 80, 0, 80), stride=2, window_rows_odd=3)
+    det = DiameterDetectionParams(stride=2, window_rows_odd=3)
     pf = PostFilterParams(enabled=True, filter_type=PostFilterType.MEDIAN, kernel_size=3)
     results = analyzer.analyze(det, backend="serial", post_filter_params=pf)
 

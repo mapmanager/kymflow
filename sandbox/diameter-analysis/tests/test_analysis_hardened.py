@@ -18,10 +18,10 @@ def test_stride_semantics_center_row_and_time() -> None:
         um_per_pixel=payload["um_per_pixel"],
         polarity=payload["polarity"],
     )
-    params = DiameterDetectionParams(roi=(5, 29, 0, 80), stride=4, window_rows_odd=5)
+    params = DiameterDetectionParams(stride=4, window_rows_odd=5)
     results = analyzer.analyze(params=params, backend="serial")
 
-    expected_centers = list(range(5, 29, 4))
+    expected_centers = list(range(0, 60, 4))
     assert [r.center_row for r in results] == expected_centers
     assert np.allclose(
         np.array([r.time_s for r in results]),
@@ -37,7 +37,7 @@ def test_serial_and_threads_backends_match() -> None:
         um_per_pixel=payload["um_per_pixel"],
         polarity=payload["polarity"],
     )
-    params = DiameterDetectionParams(roi=(0, 180, 5, 115), stride=3, window_rows_odd=7)
+    params = DiameterDetectionParams(stride=3, window_rows_odd=7)
 
     serial = analyzer.analyze(params=params, backend="serial")
     threaded = analyzer.analyze(params=params, backend="threads")
@@ -64,7 +64,7 @@ def test_save_load_roundtrip_schema_and_row_count(tmp_path: Path) -> None:
         polarity=payload["polarity"],
     )
 
-    params = DiameterDetectionParams(roi=(0, 72, 0, 96), stride=3, window_rows_odd=5)
+    params = DiameterDetectionParams(stride=3, window_rows_odd=5)
     results = analyzer.analyze(params=params, backend="serial")
 
     params_path, results_path = analyzer.save_analysis(
@@ -97,7 +97,7 @@ def test_synthetic_truth_and_threshold_width_accuracy(mae_tol: float) -> None:
         um_per_pixel=payload["um_per_pixel"],
         polarity=payload["polarity"],
     )
-    params = DiameterDetectionParams(roi=(0, 160, 0, 128), stride=1, window_rows_odd=1)
+    params = DiameterDetectionParams(stride=1, window_rows_odd=1)
     results = analyzer.analyze(params=params, backend="serial")
 
     truth = np.asarray(payload["truth"]["truth_diameter_px"], dtype=float)
@@ -119,7 +119,12 @@ def test_missing_edges_do_not_crash_and_qc_flagged() -> None:
         um_per_pixel=payload["um_per_pixel"],
         polarity=payload["polarity"],
     )
-    params = DiameterDetectionParams(roi=(0, 40, 25, 35), stride=2, window_rows_odd=3)
+    params = DiameterDetectionParams(
+        stride=2,
+        window_rows_odd=3,
+        threshold_mode="absolute",
+        threshold_value=1e9,
+    )
     results = analyzer.analyze(params=params, backend="serial")
 
     assert len(results) > 0

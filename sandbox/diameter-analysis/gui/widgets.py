@@ -77,18 +77,6 @@ def dataclass_editor_card(
             if header_actions is not None:
                 with ui.row().classes("items-center gap-2"):
                     header_actions()
-        motion_fields = {"max_edge_shift_um", "max_diameter_change_um", "max_center_shift_um"}
-        motion_controls: list[Any] = []
-
-        def _set_motion_controls_enabled(enabled: bool) -> None:
-            for ctl in motion_controls:
-                try:
-                    if enabled:
-                        ctl.enable()
-                    else:
-                        ctl.disable()
-                except Exception:
-                    pass
 
         with ui.grid(columns=2).classes("w-full gap-3"):
             for f in fields(obj):
@@ -100,18 +88,10 @@ def dataclass_editor_card(
 
                 if isinstance(value, bool) or tp is bool:
                     w = ui.switch(value=bool(value))
-                    if name == "enable_motion_constraints":
-                        def _on_motion_toggle(e, n=name) -> None:
-                            enabled = bool(_select_value(e.args))
-                            on_change(n, enabled)
-                            _set_motion_controls_enabled(enabled)
-
-                        w.on("update:model-value", _on_motion_toggle)
-                    else:
-                        w.on(
-                            "update:model-value",
-                            lambda e, n=name: on_change(n, bool(_select_value(e.args))),
-                        )
+                    w.on(
+                        "update:model-value",
+                        lambda e, n=name: on_change(n, bool(_select_value(e.args))),
+                    )
                 elif isinstance(value, int) or tp is int:
                     w = ui.number(value=int(value), step=1)
                     w.on(
@@ -151,10 +131,6 @@ def dataclass_editor_card(
 
                 if dense:
                     w.classes("w-full")
-                if name in motion_fields:
-                    motion_controls.append(w)
-                    if hasattr(obj, "enable_motion_constraints"):
-                        _set_motion_controls_enabled(bool(getattr(obj, "enable_motion_constraints")))
 
                 help_text = _field_help_text(f.metadata)
                 if help_text:
