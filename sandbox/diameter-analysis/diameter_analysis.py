@@ -330,6 +330,12 @@ def _normalize_bool_list(values: list[Any], *, field_name: str) -> list[bool]:
     return out
 
 
+def _require_int(value: Any, *, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name} must be int, got {type(value).__name__}")
+    return value
+
+
 @dataclass(frozen=True)
 class DiameterAlignedResults:
     """Aligned per-frame diameter outputs for one ROI/channel analysis.
@@ -555,8 +561,8 @@ class DiameterResult:
     qc_center_violation: bool = False
 
     def __post_init__(self) -> None:
-        self.roi_id = int(self.roi_id)
-        self.channel_id = int(self.channel_id)
+        _require_int(self.roi_id, field_name="roi_id")
+        _require_int(self.channel_id, field_name="channel_id")
 
     ROW_FIELDS: ClassVar[tuple[str, ...]] = (
         "roi_id",
@@ -669,8 +675,16 @@ class DiameterRunKey:
     channel_id: int
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "roi_id", int(self.roi_id))
-        object.__setattr__(self, "channel_id", int(self.channel_id))
+        object.__setattr__(
+            self,
+            "roi_id",
+            _require_int(self.roi_id, field_name="DiameterRunKey.roi_id"),
+        )
+        object.__setattr__(
+            self,
+            "channel_id",
+            _require_int(self.channel_id, field_name="DiameterRunKey.channel_id"),
+        )
 
     def as_tuple(self) -> tuple[int, int]:
         return (self.roi_id, self.channel_id)
@@ -694,7 +708,8 @@ class DiameterAnalysisBundle:
         for key, results in self.runs.items():
             if not isinstance(key, tuple) or len(key) != 2:
                 raise ValueError(f"Invalid run key={key!r}; expected tuple[int, int]")
-            roi_id, channel_id = int(key[0]), int(key[1])
+            roi_id = _require_int(key[0], field_name=f"run key roi_id for {key!r}")
+            channel_id = _require_int(key[1], field_name=f"run key channel_id for {key!r}")
             if not isinstance(results, list):
                 raise ValueError(f"Run {key!r} results must be a list")
             for idx, result in enumerate(results):
@@ -742,10 +757,18 @@ class DiameterAnalysisBundle:
             for key in ("roi_id", "channel_id", "results"):
                 if key not in run_payload:
                     raise ValueError(f"Run {run_name!r} missing required key: {key}")
-            if int(run_payload["roi_id"]) != roi_id or int(run_payload["channel_id"]) != channel_id:
+            run_roi_id = _require_int(
+                run_payload["roi_id"],
+                field_name=f"Run {run_name!r} roi_id",
+            )
+            run_channel_id = _require_int(
+                run_payload["channel_id"],
+                field_name=f"Run {run_name!r} channel_id",
+            )
+            if run_roi_id != roi_id or run_channel_id != channel_id:
                 raise ValueError(
                     f"Run key mismatch for {run_name!r}: "
-                    f"payload=(roi_id={run_payload['roi_id']}, channel_id={run_payload['channel_id']})"
+                    f"payload=(roi_id={run_roi_id}, channel_id={run_channel_id})"
                 )
             results_raw = run_payload["results"]
             if not isinstance(results_raw, list):
@@ -801,12 +824,12 @@ def bundle_to_wide_csv_rows(
     Column naming convention uses single underscores:
     `{field}_roi{roi_id}_ch{channel_id}`.
     """
+    if not include_time:
+        raise ValueError("bundle_to_wide_csv_rows requires include_time=True")
     run_keys = sorted(bundle.runs.keys())
     time_values = sorted({float(result.time_s) for results in bundle.runs.values() for result in results})
 
     fields = list(WIDE_BASE_FIELDS)
-    if not include_time and "center_row" in fields:
-        fields.remove("center_row")
     if include_qc:
         fields.extend(WIDE_QC_FIELDS)
 

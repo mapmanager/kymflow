@@ -27,7 +27,23 @@ def _select_value(args: Any) -> Any:
 
 
 def _coerce_switch_bool(raw: Any) -> bool:
-    v = _select_value(raw)
+    """Coerce NiceGUI/Quasar switch event payloads into a real bool.
+
+    NiceGUI may emit:
+      - bool
+      - 0/1
+      - "true"/"false"
+      - {"value": ...}
+      - [value, event]  (common for click / pointer events)
+    """
+    v = raw
+
+    # Common NiceGUI pattern: [value, event_payload]
+    if isinstance(v, (list, tuple)) and len(v) > 0:
+        v = v[0]
+
+    v = _select_value(v)
+
     if isinstance(v, bool):
         return v
     if isinstance(v, (int, float)) and v in (0, 1):
@@ -38,8 +54,8 @@ def _coerce_switch_bool(raw: Any) -> bool:
             return True
         if vv == "false":
             return False
-    raise ValueError(f"Invalid switch boolean value: {v!r}")
 
+    raise ValueError(f"Invalid switch boolean value: {v!r}")
 
 def _coerce_enum(enum_cls: type[Enum], raw: Any) -> Enum:
     v = _select_value(raw)

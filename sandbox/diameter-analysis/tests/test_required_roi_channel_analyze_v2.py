@@ -104,6 +104,46 @@ def test_diameter_result_requires_roi_and_channel_at_construction() -> None:
         )
 
 
+def test_diameter_result_rejects_non_int_roi_or_channel() -> None:
+    with pytest.raises(ValueError, match="roi_id must be int"):
+        DiameterResult(  # type: ignore[arg-type]
+            roi_id="1",
+            channel_id=1,
+            center_row=1,
+            time_s=0.1,
+            left_edge_px=10.0,
+            right_edge_px=20.0,
+            diameter_px=10.0,
+            peak=1.0,
+            baseline=0.0,
+            edge_strength_left=0.1,
+            edge_strength_right=0.1,
+            diameter_px_filt=10.0,
+            diameter_was_filtered=False,
+            qc_score=1.0,
+            qc_flags=[],
+        )
+
+    with pytest.raises(ValueError, match="channel_id must be int"):
+        DiameterResult(  # type: ignore[arg-type]
+            roi_id=1,
+            channel_id="1",
+            center_row=1,
+            time_s=0.1,
+            left_edge_px=10.0,
+            right_edge_px=20.0,
+            diameter_px=10.0,
+            peak=1.0,
+            baseline=0.0,
+            edge_strength_left=0.1,
+            edge_strength_right=0.1,
+            diameter_px_filt=10.0,
+            diameter_was_filtered=False,
+            qc_score=1.0,
+            qc_flags=[],
+        )
+
+
 def test_from_row_raises_when_roi_or_channel_missing() -> None:
     row = {
         "roi_id": "1",

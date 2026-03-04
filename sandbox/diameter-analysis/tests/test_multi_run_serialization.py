@@ -4,6 +4,8 @@ import json
 import math
 import re
 
+import pytest
+
 from diameter_analysis import (
     DiameterAnalysisBundle,
     DiameterAnalyzer,
@@ -104,6 +106,14 @@ def test_bundle_from_dict_missing_roi_or_channel_fails_fast() -> None:
     assert isinstance(run, dict)
 
 
+def test_bundle_from_dict_rejects_non_int_run_ids() -> None:
+    bundle = _make_bundle()
+    payload = bundle.to_dict()
+    payload["runs"]["roi1_ch1"]["roi_id"] = "1"
+    with pytest.raises(ValueError, match="roi_id"):
+        DiameterAnalysisBundle.from_dict(payload)
+
+
 def test_wide_csv_roundtrip_and_column_naming() -> None:
     bundle = _make_bundle()
     header, rows = bundle_to_wide_csv_rows(bundle)
@@ -117,6 +127,12 @@ def test_wide_csv_roundtrip_and_column_naming() -> None:
 
     loaded = bundle_from_wide_csv_rows(header, rows)
     _assert_bundle_equivalent(loaded, bundle)
+
+
+def test_wide_csv_export_requires_include_time_true() -> None:
+    bundle = _make_bundle()
+    with pytest.raises(ValueError, match="include_time=True"):
+        _ = bundle_to_wide_csv_rows(bundle, include_time=False)
 
 
 def test_analyze_strict_roi_channel_propagation() -> None:
