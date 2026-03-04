@@ -36,6 +36,52 @@ def test_aligned_results_length_mismatch_raises() -> None:
         )
 
 
+def test_aligned_results_rejects_non_int_roi_id() -> None:
+    with pytest.raises(ValueError, match="roi_id must be int"):
+        DiameterAlignedResults(
+            schema_version=ALIGNED_RESULTS_SCHEMA_VERSION,
+            source="synthetic",
+            path=None,
+            roi_id="1",  # type: ignore[arg-type]
+            channel_id=1,
+            seconds_per_line=0.01,
+            um_per_pixel=0.2,
+            time_s=[0.0, 0.01],
+            left_um=[1.0, 2.0],
+            right_um=[3.0, 4.0],
+            center_um=[2.0, 3.0],
+            diameter_um=[2.0, 2.0],
+            diameter_um_filtered=None,
+            qc_left_edge_violation=[False, False],
+            qc_right_edge_violation=[False, False],
+            qc_center_shift_violation=[False, False],
+            qc_diameter_change_violation=[False, False],
+        )
+
+
+def test_aligned_results_rejects_non_bool_qc_flags() -> None:
+    with pytest.raises(ValueError, match="qc_left_edge_violation\\[0\\] must be bool"):
+        DiameterAlignedResults(
+            schema_version=ALIGNED_RESULTS_SCHEMA_VERSION,
+            source="synthetic",
+            path=None,
+            roi_id=1,
+            channel_id=1,
+            seconds_per_line=0.01,
+            um_per_pixel=0.2,
+            time_s=[0.0, 0.01],
+            left_um=[1.0, 2.0],
+            right_um=[3.0, 4.0],
+            center_um=[2.0, 3.0],
+            diameter_um=[2.0, 2.0],
+            diameter_um_filtered=None,
+            qc_left_edge_violation=[0, False],  # type: ignore[list-item]
+            qc_right_edge_violation=[False, False],
+            qc_center_shift_violation=[False, False],
+            qc_diameter_change_violation=[False, False],
+        )
+
+
 def test_aligned_results_roundtrip_preserves_none() -> None:
     obj = DiameterAlignedResults(
         schema_version=ALIGNED_RESULTS_SCHEMA_VERSION,

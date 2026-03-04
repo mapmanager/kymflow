@@ -299,6 +299,8 @@ class KymographPayload:
 def _normalize_optional_float(value: Any) -> float | None:
     if value is None:
         return None
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"Expected numeric value or None, got {type(value).__name__}")
     as_float = float(value)
     if np.isnan(as_float):
         return None
@@ -310,6 +312,10 @@ def _normalize_float_list(values: list[Any], *, field_name: str) -> list[float]:
     for idx, value in enumerate(values):
         if value is None:
             raise ValueError(f"{field_name}[{idx}] must be a finite float, got None")
+        if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+            raise ValueError(
+                f"{field_name}[{idx}] must be a finite float, got {type(value).__name__}"
+            )
         as_float = float(value)
         if np.isnan(as_float):
             raise ValueError(f"{field_name}[{idx}] must be a finite float, got NaN")
@@ -324,9 +330,9 @@ def _normalize_optional_float_list(values: list[Any]) -> list[float | None]:
 def _normalize_bool_list(values: list[Any], *, field_name: str) -> list[bool]:
     out: list[bool] = []
     for idx, value in enumerate(values):
-        if value is None:
-            raise ValueError(f"{field_name}[{idx}] must be bool, got None")
-        out.append(bool(value))
+        if not isinstance(value, bool):
+            raise ValueError(f"{field_name}[{idx}] must be bool, got {type(value).__name__}")
+        out.append(value)
     return out
 
 
@@ -334,6 +340,19 @@ def _require_int(value: Any, *, field_name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field_name} must be int, got {type(value).__name__}")
     return value
+
+
+def _require_numeric(value: Any, *, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"{field_name} must be numeric, got {type(value).__name__}")
+    return float(value)
+
+
+def _require_positive_numeric(value: Any, *, field_name: str) -> float:
+    as_float = _require_numeric(value, field_name=field_name)
+    if as_float <= 0.0:
+        raise ValueError(f"{field_name} must be > 0")
+    return as_float
 
 
 @dataclass(frozen=True)
@@ -386,14 +405,17 @@ class DiameterAlignedResults:
     qc_any_violation: list[bool] | None = None
 
     def __post_init__(self) -> None:
-        if int(self.schema_version) <= 0:
+        _require_int(self.schema_version, field_name="schema_version")
+        if self.schema_version <= 0:
             raise ValueError("schema_version must be >= 1")
         if self.source not in {"synthetic", "real"}:
             raise ValueError("source must be 'synthetic' or 'real'")
-        if float(self.seconds_per_line) <= 0.0:
-            raise ValueError("seconds_per_line must be > 0")
-        if float(self.um_per_pixel) <= 0.0:
-            raise ValueError("um_per_pixel must be > 0")
+        if self.path is not None and not isinstance(self.path, str):
+            raise ValueError(f"path must be str or None, got {type(self.path).__name__}")
+        _require_int(self.roi_id, field_name="roi_id")
+        _require_int(self.channel_id, field_name="channel_id")
+        _require_positive_numeric(self.seconds_per_line, field_name="seconds_per_line")
+        _require_positive_numeric(self.um_per_pixel, field_name="um_per_pixel")
 
         normalized_time = (
             None
@@ -452,22 +474,29 @@ class DiameterAlignedResults:
         if qc_any is None:
             qc_any = [a or b or c or d for a, b, c, d in zip(qc_left, qc_right, qc_center, qc_diam)]
 
-        object.__setattr__(self, "schema_version", int(self.schema_version))
-        object.__setattr__(self, "path", None if self.path is None else str(self.path))
-        object.__setattr__(self, "roi_id", int(self.roi_id))
-        object.__setattr__(self, "channel_id", int(self.channel_id))
-        object.__setattr__(self, "seconds_per_line", float(self.seconds_per_line))
-        object.__setattr__(self, "um_per_pixel", float(self.um_per_pixel))
-        object.__setattr__(self, "time_s", normalized_time)
-        object.__setattr__(self, "left_um", left_um)
-        object.__setattr__(self, "right_um", right_um)
-        object.__setattr__(self, "center_um", center_um)
-        object.__setattr__(self, "diameter_um", diameter_um)
-        object.__setattr__(self, "diameter_um_filtered", diameter_um_filtered)
-        object.__setattr__(self, "qc_left_edge_violation", qc_left)
-        object.__setattr__(self, "qc_right_edge_violation", qc_right)
-        object.__setattr__(self, "qc_center_shift_violation", qc_center)
-        object.__setattr__(self, "qc_diameter_change_violation", qc_diam)
+        if normalized_time is not None and list(self.time_s) != normalized_time:
+            raise ValueError("time_s must contain finite numeric values only")
+        if list(self.left_um) != left_um:
+            raise ValueError("left_um must contain numeric values or None")
+        if list(self.right_um) != right_um:
+            raise ValueError("right_um must contain numeric values or None")
+        if list(self.center_um) != center_um:
+            raise ValueError("center_um must contain numeric values or None")
+        if list(self.diameter_um) != diameter_um:
+            raise ValueError("diameter_um must contain numeric values or None")
+        if diameter_um_filtered is not None and list(self.diameter_um_filtered) != diameter_um_filtered:
+            raise ValueError("diameter_um_filtered must contain numeric values or None")
+        if list(self.qc_left_edge_violation) != qc_left:
+            raise ValueError("qc_left_edge_violation must contain bool values only")
+        if list(self.qc_right_edge_violation) != qc_right:
+            raise ValueError("qc_right_edge_violation must contain bool values only")
+        if list(self.qc_center_shift_violation) != qc_center:
+            raise ValueError("qc_center_shift_violation must contain bool values only")
+        if list(self.qc_diameter_change_violation) != qc_diam:
+            raise ValueError("qc_diameter_change_violation must contain bool values only")
+        if qc_any is not None and self.qc_any_violation is not None and list(self.qc_any_violation) != qc_any:
+            raise ValueError("qc_any_violation must contain bool values only")
+
         object.__setattr__(self, "qc_any_violation", qc_any)
 
     def to_dict(self) -> dict[str, Any]:
@@ -590,7 +619,65 @@ class DiameterResult:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DiameterResult":
-        return dataclass_from_dict(cls, payload)
+        if not isinstance(payload, dict):
+            raise ValueError("DiameterResult payload must be an object")
+        required = (
+            "roi_id",
+            "channel_id",
+            "center_row",
+            "time_s",
+            "left_edge_px",
+            "right_edge_px",
+            "diameter_px",
+            "peak",
+            "baseline",
+            "edge_strength_left",
+            "edge_strength_right",
+            "diameter_px_filt",
+            "diameter_was_filtered",
+            "qc_score",
+            "qc_flags",
+            "qc_edge_violation",
+            "qc_diameter_violation",
+            "qc_center_violation",
+        )
+        for key in required:
+            if key not in payload:
+                raise ValueError(f"DiameterResult missing required key: {key}")
+
+        qc_flags_raw = payload["qc_flags"]
+        if not isinstance(qc_flags_raw, list):
+            raise ValueError(f"qc_flags must be list[str], got {type(qc_flags_raw).__name__}")
+        qc_flags: list[str] = []
+        for idx, entry in enumerate(qc_flags_raw):
+            if not isinstance(entry, str):
+                raise ValueError(f"qc_flags[{idx}] must be str, got {type(entry).__name__}")
+            qc_flags.append(entry)
+
+        for key in ("diameter_was_filtered", "qc_edge_violation", "qc_diameter_violation", "qc_center_violation"):
+            if not isinstance(payload[key], bool):
+                raise ValueError(f"{key} must be bool, got {type(payload[key]).__name__}")
+
+        return cls(
+            roi_id=_require_int(payload["roi_id"], field_name="roi_id"),
+            channel_id=_require_int(payload["channel_id"], field_name="channel_id"),
+            center_row=_require_int(payload["center_row"], field_name="center_row"),
+            time_s=_require_numeric(payload["time_s"], field_name="time_s"),
+            left_edge_px=_require_numeric(payload["left_edge_px"], field_name="left_edge_px"),
+            right_edge_px=_require_numeric(payload["right_edge_px"], field_name="right_edge_px"),
+            diameter_px=_require_numeric(payload["diameter_px"], field_name="diameter_px"),
+            peak=_require_numeric(payload["peak"], field_name="peak"),
+            baseline=_require_numeric(payload["baseline"], field_name="baseline"),
+            edge_strength_left=_require_numeric(payload["edge_strength_left"], field_name="edge_strength_left"),
+            edge_strength_right=_require_numeric(payload["edge_strength_right"], field_name="edge_strength_right"),
+            diameter_px_filt=_require_numeric(payload["diameter_px_filt"], field_name="diameter_px_filt"),
+            diameter_was_filtered=payload["diameter_was_filtered"],
+            qc_score=_require_numeric(payload["qc_score"], field_name="qc_score"),
+            qc_flags=qc_flags,
+            qc_edge_violation=payload["qc_edge_violation"],
+            qc_diameter_violation=payload["qc_diameter_violation"],
+            qc_center_violation=payload["qc_center_violation"],
+        )
 
     def to_row(
         self,
@@ -627,10 +714,12 @@ class DiameterResult:
 
     @classmethod
     def from_row(cls, row: dict[str, str]) -> "DiameterResult":
-        for key in ("roi_id", "channel_id"):
-            if key not in row or row[key] == "":
+        for key in cls.ROW_FIELDS:
+            if key not in row:
                 raise ValueError(f"Missing required row key: {key}")
-        qc_flags = row.get("qc_flags", "")
+            if key != "qc_flags" and row[key] == "":
+                raise ValueError(f"Missing required row key: {key}")
+        qc_flags = row["qc_flags"]
         payload = {
             "roi_id": int(row["roi_id"]),
             "channel_id": int(row["channel_id"]),
@@ -641,15 +730,15 @@ class DiameterResult:
             "diameter_px": float(row["diameter_px"]),
             "peak": float(row["peak"]),
             "baseline": float(row["baseline"]),
-            "edge_strength_left": float(row.get("edge_strength_left", "nan")),
-            "edge_strength_right": float(row.get("edge_strength_right", "nan")),
-            "diameter_px_filt": float(row.get("diameter_px_filt", row["diameter_px"])),
-            "diameter_was_filtered": bool(int(row.get("diameter_was_filtered", "0"))),
+            "edge_strength_left": float(row["edge_strength_left"]),
+            "edge_strength_right": float(row["edge_strength_right"]),
+            "diameter_px_filt": float(row["diameter_px_filt"]),
+            "diameter_was_filtered": bool(int(row["diameter_was_filtered"])),
             "qc_score": float(row["qc_score"]),
             "qc_flags": [f for f in qc_flags.split("|") if f],
-            "qc_edge_violation": bool(int(row.get("qc_edge_violation", "0"))),
-            "qc_diameter_violation": bool(int(row.get("qc_diameter_violation", "0"))),
-            "qc_center_violation": bool(int(row.get("qc_center_violation", "0"))),
+            "qc_edge_violation": bool(int(row["qc_edge_violation"])),
+            "qc_diameter_violation": bool(int(row["qc_diameter_violation"])),
+            "qc_center_violation": bool(int(row["qc_center_violation"])),
         }
         missing = [field for field in cls.ROW_FIELDS if field not in payload]
         if missing:
@@ -675,16 +764,8 @@ class DiameterRunKey:
     channel_id: int
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "roi_id",
-            _require_int(self.roi_id, field_name="DiameterRunKey.roi_id"),
-        )
-        object.__setattr__(
-            self,
-            "channel_id",
-            _require_int(self.channel_id, field_name="DiameterRunKey.channel_id"),
-        )
+        _require_int(self.roi_id, field_name="DiameterRunKey.roi_id")
+        _require_int(self.channel_id, field_name="DiameterRunKey.channel_id")
 
     def as_tuple(self) -> tuple[int, int]:
         return (self.roi_id, self.channel_id)
@@ -702,7 +783,8 @@ class DiameterAnalysisBundle:
     schema_version: int = BUNDLE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
-        if int(self.schema_version) <= 0:
+        _require_int(self.schema_version, field_name="schema_version")
+        if self.schema_version <= 0:
             raise ValueError("schema_version must be >= 1")
         normalized: dict[tuple[int, int], list[DiameterResult]] = {}
         for key, results in self.runs.items():
@@ -723,7 +805,6 @@ class DiameterAnalysisBundle:
                     )
             normalized[(roi_id, channel_id)] = list(results)
         self.runs = normalized
-        self.schema_version = int(self.schema_version)
 
     def to_dict(self) -> dict[str, Any]:
         runs_payload: dict[str, Any] = {}
@@ -780,7 +861,10 @@ class DiameterAnalysisBundle:
                 results.append(DiameterResult.from_dict(entry))
             runs[(roi_id, channel_id)] = results
 
-        return cls(schema_version=int(payload["schema_version"]), runs=runs)
+        return cls(
+            schema_version=_require_int(payload["schema_version"], field_name="schema_version"),
+            runs=runs,
+        )
 
 
 WIDE_BASE_FIELDS: tuple[str, ...] = (

@@ -98,11 +98,12 @@ def dataclass_editor_card(
     on_change: Callable[[str, Any], None],
     header_actions: Callable[[], None] | None = None,
     dense: bool = True,
-) -> ui.card:
+) -> tuple[Any, Callable[[Any], None]]:
     if not is_dataclass(obj):
         raise TypeError("dataclass_editor_card expects a dataclass instance")
 
-    with ui.card().classes("w-full"):
+    editors: dict[str, Any] = {}
+    with ui.card().classes("w-full") as card:
         with ui.row().classes("w-full items-center justify-between"):
             ui.label(title).classes("text-lg font-semibold")
             if header_actions is not None:
@@ -160,6 +161,7 @@ def dataclass_editor_card(
                     w = ui.input(value="" if value is None else str(value))
                     w.on("update:model-value", lambda e, n=name: on_change(n, _select_value(e.args)))
 
+                editors[name] = w
                 if dense:
                     w.classes("w-full")
 
@@ -168,4 +170,20 @@ def dataclass_editor_card(
                 # if help_text:
                 #     ui.label(help_text).classes("col-span-2 text-xs text-gray-500 -mt-2")
 
-        return ui.card()
+    setattr(card, "_editor_widgets", editors)
+
+    def refresh(updated_obj: Any) -> None:
+        if not is_dataclass(updated_obj):
+            raise TypeError("refresh expects a dataclass instance")
+        expected = set(editors.keys())
+        actual = {f.name for f in fields(updated_obj)}
+        if expected != actual:
+            raise ValueError("refresh object fields do not match editor fields")
+
+        for f in fields(updated_obj):
+            value = getattr(updated_obj, f.name)
+            widget = editors[f.name]
+            widget.value = value.value if isinstance(value, Enum) else value
+            widget.update()
+
+    return card, refresh

@@ -175,3 +175,56 @@ def test_from_row_raises_when_roi_or_channel_missing() -> None:
     missing_channel.pop("channel_id")
     with pytest.raises(ValueError, match="Missing required row key: channel_id"):
         DiameterResult.from_row(missing_channel)
+
+
+def test_from_row_fails_fast_when_required_non_id_field_missing() -> None:
+    row = {
+        "roi_id": "1",
+        "channel_id": "1",
+        "center_row": "4",
+        "time_s": "0.2",
+        "left_edge_px": "11.0",
+        "right_edge_px": "18.0",
+        "diameter_px": "7.0",
+        "peak": "0.9",
+        "baseline": "0.1",
+        "edge_strength_left": "0.2",
+        "edge_strength_right": "0.25",
+        "diameter_px_filt": "6.5",
+        "diameter_was_filtered": "1",
+        "qc_score": "0.8",
+        "qc_flags": "",
+        "qc_edge_violation": "0",
+        "qc_diameter_violation": "1",
+        "qc_center_violation": "0",
+    }
+
+    bad = dict(row)
+    bad.pop("edge_strength_left")
+    with pytest.raises(ValueError, match="Missing required row key: edge_strength_left"):
+        DiameterResult.from_row(bad)
+
+
+def test_from_dict_rejects_string_roi_id() -> None:
+    payload = {
+        "roi_id": "1",
+        "channel_id": 1,
+        "center_row": 4,
+        "time_s": 0.2,
+        "left_edge_px": 11.0,
+        "right_edge_px": 18.0,
+        "diameter_px": 7.0,
+        "peak": 0.9,
+        "baseline": 0.1,
+        "edge_strength_left": 0.2,
+        "edge_strength_right": 0.25,
+        "diameter_px_filt": 6.5,
+        "diameter_was_filtered": True,
+        "qc_score": 0.8,
+        "qc_flags": [],
+        "qc_edge_violation": False,
+        "qc_diameter_violation": True,
+        "qc_center_violation": False,
+    }
+    with pytest.raises(ValueError, match="roi_id must be int"):
+        DiameterResult.from_dict(payload)  # type: ignore[arg-type]

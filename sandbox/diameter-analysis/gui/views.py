@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 
-from typing import Any
+from typing import Any, Callable
 
 from nicegui import ui
 
@@ -103,14 +103,19 @@ def build_home_page(controller: AppController) -> None:
                 if state.detection_params is not None and hasattr(
                     state.detection_params, "__dataclass_fields__"
                 ):
+                    refresh_detection_editor: Callable[[Any], None] | None = None
+
                     def _reset_detection_params() -> None:
                         from diameter_analysis import DiameterDetectionParams
 
                         controller.state.detection_params = DiameterDetectionParams()
+                        if refresh_detection_editor is None:
+                            raise RuntimeError("Detection params editor refresh handle not initialized")
+                        refresh_detection_editor(controller.state.detection_params)
                         controller._emit()
                         ui.notify("Detection Params reset to defaults", type="positive", timeout=1500)
 
-                    dataclass_editor_card(
+                    _, refresh_detection_editor = dataclass_editor_card(
                         state.detection_params,
                         title="Detection Params",
                         on_change=lambda name, val: _mutate_dataclass(

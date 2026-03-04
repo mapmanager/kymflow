@@ -116,6 +116,14 @@ def test_bundle_from_dict_rejects_non_int_run_ids() -> None:
         DiameterAnalysisBundle.from_dict(payload)
 
 
+def test_bundle_from_dict_rejects_non_int_schema_version() -> None:
+    bundle = _make_bundle()
+    payload = bundle.to_dict()
+    payload["schema_version"] = "1"
+    with pytest.raises(ValueError, match="schema_version"):
+        DiameterAnalysisBundle.from_dict(payload)
+
+
 def test_wide_csv_roundtrip_and_column_naming() -> None:
     bundle = _make_bundle()
     header, rows = bundle_to_wide_csv_rows(bundle)
