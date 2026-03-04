@@ -65,6 +65,7 @@ def build_home_page(controller: AppController) -> None:
             "outline"
         )
         ui.button("Detect", on_click=lambda: _safe_run(controller.detect)).props("color=primary")
+        ui.button("Save analysis", on_click=lambda: _safe_run(controller.save_analysis)).props("outline")
         ui.switch("Show center", value=state.gui.show_center_overlay).on(
             "update:model-value",
             lambda e: _set_center(controller, bool(e.args)),

@@ -291,6 +291,25 @@ class AppController:
             self.state.is_busy = False
             self._emit()
 
+    def save_analysis(self) -> tuple[Path, Path]:
+        if self.state.results is None:
+            raise RuntimeError("No analysis results to save. Run Detect first.")
+        if self.state.loaded_path is None:
+            raise RuntimeError("No loaded kym path. Save analysis requires a selected kym image.")
+        if not isinstance(self.state.results, list):
+            raise RuntimeError("Current results are not savable as a run list.")
+        if len(self.state.results) == 0:
+            raise RuntimeError("No analysis results to save. Run Detect first.")
+
+        from diameter_analysis import DiameterAnalysisBundle, save_diameter_analysis
+
+        bundle = DiameterAnalysisBundle(
+            runs={
+                (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID): list(self.state.results),
+            }
+        )
+        return save_diameter_analysis(self.state.loaded_path, bundle)
+
     def apply_post_filter_only(self) -> None:
         # Rebuild figures using existing results and current post_filter_params
         self._rebuild_figures()

@@ -988,6 +988,90 @@ WIDE_CSV_REGISTRY = WideCsvRegistry(
 )
 
 
+def _diameter_sidecar_paths(
+    kym_path: str | Path,
+    *,
+    sidecar_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    source = Path(kym_path)
+    if source.name == "":
+        raise ValueError("kym_path must include a filename")
+    base_dir = sidecar_dir if sidecar_dir is not None else source.parent
+    stem = source.stem
+    return (
+        base_dir / f"{stem}.diameter.json",
+        base_dir / f"{stem}.diameter.csv",
+    )
+
+
+def save_diameter_analysis(
+    kym_path: str | Path,
+    bundle: DiameterAnalysisBundle,
+    *,
+    out_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    """Persist one-kymimage diameter analysis as JSON + wide CSV sidecars."""
+    json_path, csv_path = _diameter_sidecar_paths(kym_path, sidecar_dir=out_dir)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = bundle.to_dict()
+    payload["source_path"] = str(Path(kym_path))
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    header, rows = bundle_to_wide_csv_rows(bundle, include_time=True, include_qc=True)
+    with csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
+    return json_path, csv_path
+
+
+def load_diameter_analysis(
+    kym_path: str | Path,
+    *,
+    in_dir: Path | None = None,
+) -> DiameterAnalysisBundle:
+    """Load one-kymimage diameter analysis sidecars and validate consistency."""
+    json_path, csv_path = _diameter_sidecar_paths(kym_path, sidecar_dir=in_dir)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Diameter analysis JSON root must be an object")
+    if "source_path" in payload and not isinstance(payload["source_path"], str):
+        raise ValueError("Diameter analysis JSON 'source_path' must be a string")
+    bundle_json = DiameterAnalysisBundle.from_dict(payload)
+
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+    if not rows:
+        raise ValueError("Diameter analysis CSV is empty")
+    header = [str(c) for c in rows[0]]
+    data_rows = [[str(c) for c in row] for row in rows[1:]]
+    bundle_csv = bundle_from_wide_csv_rows(header, data_rows)
+
+    if bundle_json.schema_version != bundle_csv.schema_version:
+        raise ValueError(
+            "Sidecar schema_version mismatch: "
+            f"json={bundle_json.schema_version} csv={bundle_csv.schema_version}"
+        )
+
+    json_keys = sorted(bundle_json.runs.keys())
+    csv_keys = sorted(bundle_csv.runs.keys())
+    if json_keys != csv_keys:
+        raise ValueError(f"Sidecar run keys mismatch: json={json_keys} csv={csv_keys}")
+
+    for run_key in json_keys:
+        json_results = bundle_json.runs[run_key]
+        csv_results = bundle_csv.runs[run_key]
+        if len(json_results) != len(csv_results):
+            raise ValueError(
+                f"Sidecar run length mismatch for {run_key!r}: "
+                f"json={len(json_results)} csv={len(csv_results)}"
+            )
+    return bundle_json
+
+
 def bundle_to_wide_csv_rows(
     bundle: DiameterAnalysisBundle,
     *,

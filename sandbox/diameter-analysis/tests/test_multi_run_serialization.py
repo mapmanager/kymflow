@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +17,8 @@ from diameter_analysis import (
     WIDE_CSV_TIME_COLUMNS,
     bundle_from_wide_csv_rows,
     bundle_to_wide_csv_rows,
+    load_diameter_analysis,
+    save_diameter_analysis,
 )
 from synthetic_kymograph import generate_synthetic_kymograph
 
@@ -225,3 +228,30 @@ def test_analyze_strict_roi_channel_propagation() -> None:
     assert len(results) > 0
     assert all(r.roi_id == 7 for r in results)
     assert all(r.channel_id == 5 for r in results)
+
+
+def test_save_load_diameter_analysis_roundtrip_sidecars(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    kym_path = tmp_path / "sample_kym.tif"
+
+    json_path, csv_path = save_diameter_analysis(kym_path, bundle)
+    assert json_path.name == "sample_kym.diameter.json"
+    assert csv_path.name == "sample_kym.diameter.csv"
+    assert json_path.parent == tmp_path
+    assert csv_path.parent == tmp_path
+
+    loaded = load_diameter_analysis(kym_path)
+    _assert_bundle_equivalent(loaded, bundle)
+
+
+def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(kym_path, bundle)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    del payload["runs"]["roi1_ch1"]["channel_id"]
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing required key: channel_id"):
+        _ = load_diameter_analysis(kym_path)
