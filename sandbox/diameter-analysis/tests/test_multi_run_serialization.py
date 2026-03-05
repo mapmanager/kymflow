@@ -249,6 +249,54 @@ def test_save_load_diameter_analysis_roundtrip_sidecars(tmp_path: Path) -> None:
             assert np.isclose(right.sum_intensity, left.sum_intensity, equal_nan=True)
 
 
+def test_save_diameter_analysis_returns_paths_and_writes_files(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+
+    json_path, csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+    assert json_path.exists()
+    assert csv_path.exists()
+    assert json_path.suffixes[-2:] == [".diameter", ".json"]
+    assert csv_path.suffixes[-2:] == [".diameter", ".csv"]
+
+
+def test_load_diameter_analysis_returns_bounds_for_loaded_rois(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    _json_path, csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    header = [col for col in rows[0] if not col.endswith("_roi1")]
+    row_indexes = [i for i, col in enumerate(rows[0]) if not col.endswith("_roi1")]
+    filtered_rows = [[row[i] for i in row_indexes] for row in rows[1:]]
+    with csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(filtered_rows)
+
+    loaded_bundle, loaded_params, loaded_bounds, warnings = load_diameter_analysis(kym_path)
+    assert len(warnings) == 1
+    assert sorted(loaded_bundle.runs.keys()) == [(2, 3)]
+    assert sorted(loaded_params.keys()) == [(2, 3)]
+    assert sorted(loaded_bounds.keys()) == [(2, 3)]
+    assert loaded_bounds[(2, 3)] == roi_bounds_by_run[(2, 3)]
+
+
 def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Path) -> None:
     bundle = _make_bundle()
     params_by_run = _make_detection_params_by_run()
@@ -266,6 +314,89 @@ def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Pa
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     with pytest.raises(ValueError, match="missing required key: channel_id"):
+        _ = load_diameter_analysis(kym_path)
+
+
+def test_load_diameter_analysis_fails_when_roi_id_missing_or_mismatched(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    payload_missing = json.loads(json_path.read_text(encoding="utf-8"))
+    del payload_missing["rois"]["1"]["roi_id"]
+    json_path.write_text(json.dumps(payload_missing, indent=2), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing required key: roi_id"):
+        _ = load_diameter_analysis(kym_path)
+
+    _json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+    payload_bad = json.loads(json_path.read_text(encoding="utf-8"))
+    payload_bad["rois"]["1"]["roi_id"] = 99
+    json_path.write_text(json.dumps(payload_bad, indent=2), encoding="utf-8")
+    with pytest.raises(ValueError, match="ROI key mismatch"):
+        _ = load_diameter_analysis(kym_path)
+
+
+def test_json_schema_version_fail_fast(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    payload_missing = json.loads(json_path.read_text(encoding="utf-8"))
+    del payload_missing["schema_version"]
+    json_path.write_text(json.dumps(payload_missing, indent=2), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing required key: schema_version"):
+        _ = load_diameter_analysis(kym_path)
+
+    # Recreate valid payload, then set wrong version.
+    _json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+    payload_wrong = json.loads(json_path.read_text(encoding="utf-8"))
+    payload_wrong["schema_version"] = 999
+    json_path.write_text(json.dumps(payload_wrong, indent=2), encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsupported diameter sidecar schema_version"):
+        _ = load_diameter_analysis(kym_path)
+
+
+def test_load_diameter_analysis_fails_when_source_path_missing(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    del payload["source_path"]
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing required key: source_path"):
         _ = load_diameter_analysis(kym_path)
 
 
@@ -321,7 +452,7 @@ def test_load_diameter_analysis_skips_roi_when_csv_columns_missing(tmp_path: Pat
     assert any("Skipping ROI 1" in rec.getMessage() for rec in caplog.records)
 
 
-def test_load_diameter_analysis_ignores_extra_roi_columns_not_in_json(tmp_path: Path) -> None:
+def test_load_diameter_analysis_ignores_extra_roi_columns_not_in_json(tmp_path: Path, caplog) -> None:
     bundle = _make_bundle()
     params_by_run = _make_detection_params_by_run()
     roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
@@ -337,11 +468,13 @@ def test_load_diameter_analysis_ignores_extra_roi_columns_not_in_json(tmp_path: 
     del payload["rois"]["2"]
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+    caplog.set_level("WARNING")
     loaded, loaded_params_by_run, loaded_bounds_by_run, warnings = load_diameter_analysis(kym_path)
     assert warnings == []
     assert sorted(loaded.runs.keys()) == [(1, 1)]
     assert sorted(loaded_params_by_run.keys()) == [(1, 1)]
     assert sorted(loaded_bounds_by_run.keys()) == [(1, 1)]
+    assert any("Ignoring CSV columns for undeclared ROIs" in rec.getMessage() for rec in caplog.records)
 
 
 def test_load_diameter_analysis_tolerates_extra_json_and_csv_columns(tmp_path: Path) -> None:
@@ -437,7 +570,11 @@ def test_sidecar_json_does_not_store_sum_intensity(tmp_path: Path) -> None:
         detection_params_by_run=params_by_run,
     )
     payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert "runs" not in payload
+    assert "results" not in payload
+    assert payload["schema_version"] >= 1
     for roi_payload in payload["rois"].values():
+        assert "roi_id" in roi_payload
         assert "results" not in roi_payload
 
 

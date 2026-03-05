@@ -986,6 +986,7 @@ def save_diameter_analysis(
         if len(bounds) != 4:
             raise ValueError(f"roi_bounds_px for run {run_key!r} must have length 4")
         rois_payload[str(int(roi_id))] = {
+            "roi_id": int(roi_id),
             "channel_id": int(channel_id),
             "roi_bounds_px": [int(bounds[0]), int(bounds[1]), int(bounds[2]), int(bounds[3])],
             "detection_params": detection_params_by_run[run_key].to_dict(),
@@ -1023,7 +1024,9 @@ def load_diameter_analysis(
         raise ValueError("Diameter analysis JSON root must be an object")
     if "runs" in payload or "results" in payload:
         raise ValueError("Legacy JSON schema detected")
-    if "source_path" in payload and not isinstance(payload["source_path"], str):
+    if "source_path" not in payload:
+        raise ValueError("Diameter analysis JSON missing required key: source_path")
+    if not isinstance(payload["source_path"], str):
         raise ValueError("Diameter analysis JSON 'source_path' must be a string")
     if "schema_version" not in payload:
         raise ValueError("Diameter analysis JSON missing required key: schema_version")
@@ -1040,7 +1043,7 @@ def load_diameter_analysis(
             raise ValueError(f"ROI payload for {roi_name!r} must be an object")
         if "runs" in roi_payload or "results" in roi_payload:
             raise ValueError(f"Legacy JSON schema detected in ROI {roi_name!r}")
-        for required_key in ("channel_id", "roi_bounds_px", "detection_params"):
+        for required_key in ("roi_id", "channel_id", "roi_bounds_px", "detection_params"):
             if required_key not in roi_payload:
                 raise ValueError(f"ROI {roi_name!r} missing required key: {required_key}")
         try:
@@ -1048,6 +1051,9 @@ def load_diameter_analysis(
         except Exception as exc:
             raise ValueError(f"ROI key must be int-like string, got {roi_name!r}") from exc
         roi_id = _require_int(roi_id, field_name=f"ROI key {roi_name!r}")
+        roi_id_payload = _require_int(roi_payload["roi_id"], field_name=f"ROI {roi_name!r} roi_id")
+        if roi_id_payload != roi_id:
+            raise ValueError(f"ROI key mismatch for {roi_name!r}: payload roi_id={roi_id_payload}")
         channel_id = _require_int(roi_payload["channel_id"], field_name=f"ROI {roi_name!r} channel_id")
         bounds_raw = roi_payload["roi_bounds_px"]
         if not isinstance(bounds_raw, list) or len(bounds_raw) != 4:
@@ -1092,6 +1098,7 @@ def load_diameter_analysis(
 
     keep_indices: list[int] = []
     filtered_header: list[str] = []
+    ignored_undeclared_roi_columns: list[str] = []
     for idx, col_name in enumerate(header_full):
         if col_name in WIDE_CSV_TIME_COLUMNS:
             keep_indices.append(idx)
@@ -1106,6 +1113,14 @@ def load_diameter_analysis(
         if roi_id in valid_rois:
             keep_indices.append(idx)
             filtered_header.append(col_name)
+        else:
+            ignored_undeclared_roi_columns.append(col_name)
+
+    if ignored_undeclared_roi_columns:
+        logger.warning(
+            "Ignoring CSV columns for undeclared ROIs: %s",
+            ", ".join(sorted(ignored_undeclared_roi_columns)),
+        )
 
     filtered_rows = [[row[i] for i in keep_indices] for row in data_rows]
     bundle_csv = bundle_from_wide_csv_rows(filtered_header, filtered_rows, roi_to_channel=valid_rois)
