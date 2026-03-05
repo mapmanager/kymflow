@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 from typing import Any, Callable
 
@@ -101,11 +102,10 @@ def build_home_page(controller: AppController) -> None:
     with splitter.after:
         with ui.row().classes("w-full gap-2 items-start no-wrap"):
             with ui.column().classes("w-[460px] shrink-0 gap-2"):
+                refresh_detection_editor: Callable[[Any], None] | None = None
                 if state.detection_params is not None and hasattr(
                     state.detection_params, "__dataclass_fields__"
                 ):
-                    refresh_detection_editor: Callable[[Any], None] | None = None
-
                     def _reset_detection_params() -> None:
                         from diameter_analysis import DiameterDetectionParams
 
@@ -172,6 +172,8 @@ def build_home_page(controller: AppController) -> None:
                     fig_line_el.figure = controller.fig_line or {}
                     fig_img_el.update()
                     fig_line_el.update()
+                    if state.detection_params is not None and refresh_detection_editor is not None:
+                        refresh_detection_editor(state.detection_params)
                     _set_textarea_from_dataclass(synthetic_dict_el, state.synthetic_params)
                     _set_textarea_from_dataclass(detection_dict_el, state.detection_params)
 
@@ -180,7 +182,10 @@ def build_home_page(controller: AppController) -> None:
 
 def _safe_run(fn) -> None:
     try:
-        fn()
+        out = fn()
+        if isinstance(out, tuple) and len(out) == 2 and isinstance(out[0], Path) and isinstance(out[1], Path):
+            ui.notify(f"Saved: {out[0].name}, {out[1].name}", type="positive", timeout=1800)
+            return
         ui.notify("OK", type="positive", timeout=1200)
     except Exception as e:
         ui.notify(str(e), type="negative", timeout=8000)

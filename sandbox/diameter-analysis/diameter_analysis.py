@@ -588,6 +588,8 @@ class DiameterResult:
     qc_edge_violation: bool = False
     qc_diameter_violation: bool = False
     qc_center_violation: bool = False
+    sum_intensity: float = math.nan
+    um_per_pixel: float = math.nan
 
     def __post_init__(self) -> None:
         _require_int(self.roi_id, field_name="roi_id")
@@ -615,7 +617,11 @@ class DiameterResult:
     )
 
     def to_dict(self) -> dict[str, Any]:
-        return dataclass_to_dict(self)
+        payload = dataclass_to_dict(self)
+        # CSV-only runtime fields; do not persist in JSON run payloads.
+        payload.pop("sum_intensity", None)
+        payload.pop("um_per_pixel", None)
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DiameterResult":
@@ -677,6 +683,16 @@ class DiameterResult:
             qc_edge_violation=payload["qc_edge_violation"],
             qc_diameter_violation=payload["qc_diameter_violation"],
             qc_center_violation=payload["qc_center_violation"],
+            sum_intensity=(
+                _require_numeric(payload["sum_intensity"], field_name="sum_intensity")
+                if "sum_intensity" in payload
+                else math.nan
+            ),
+            um_per_pixel=(
+                _require_numeric(payload["um_per_pixel"], field_name="um_per_pixel")
+                if "um_per_pixel" in payload
+                else math.nan
+            ),
         )
 
     def to_row(
@@ -891,6 +907,10 @@ WIDE_CSV_ARRAY_FIELDS: tuple[str, ...] = (
     "left_edge_px",
     "right_edge_px",
     "diameter_px",
+    "left_edge_um",
+    "right_edge_um",
+    "diameter_um",
+    "sum_intensity",
     "peak",
     "baseline",
     "edge_strength_left",
@@ -1010,14 +1030,30 @@ def save_diameter_analysis(
     kym_path: str | Path,
     bundle: DiameterAnalysisBundle,
     *,
+    detection_params_by_run: dict[tuple[int, int], DiameterDetectionParams],
     out_dir: Path | None = None,
 ) -> tuple[Path, Path]:
     """Persist one-kymimage diameter analysis as JSON + wide CSV sidecars."""
     json_path, csv_path = _diameter_sidecar_paths(kym_path, sidecar_dir=out_dir)
     json_path.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = bundle.to_dict()
-    payload["source_path"] = str(Path(kym_path))
+    runs_payload: dict[str, Any] = {}
+    for run_key in sorted(bundle.runs):
+        if run_key not in detection_params_by_run:
+            raise ValueError(f"Missing detection_params for run {run_key!r}")
+        roi_id, channel_id = run_key
+        run_name = _run_key_to_str(run_key)
+        runs_payload[run_name] = {
+            "roi_id": int(roi_id),
+            "channel_id": int(channel_id),
+            "detection_params": detection_params_by_run[run_key].to_dict(),
+            "results": [result.to_dict() for result in bundle.runs[run_key]],
+        }
+    payload = {
+        "schema_version": int(bundle.schema_version),
+        "source_path": str(Path(kym_path)),
+        "runs": runs_payload,
+    }
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     header, rows = bundle_to_wide_csv_rows(bundle, include_time=True, include_qc=True)
@@ -1032,7 +1068,7 @@ def load_diameter_analysis(
     kym_path: str | Path,
     *,
     in_dir: Path | None = None,
-) -> DiameterAnalysisBundle:
+) -> tuple[DiameterAnalysisBundle, dict[tuple[int, int], DiameterDetectionParams]]:
     """Load one-kymimage diameter analysis sidecars and validate consistency."""
     json_path, csv_path = _diameter_sidecar_paths(kym_path, sidecar_dir=in_dir)
 
@@ -1041,7 +1077,41 @@ def load_diameter_analysis(
         raise ValueError("Diameter analysis JSON root must be an object")
     if "source_path" in payload and not isinstance(payload["source_path"], str):
         raise ValueError("Diameter analysis JSON 'source_path' must be a string")
-    bundle_json = DiameterAnalysisBundle.from_dict(payload)
+    if "schema_version" not in payload:
+        raise ValueError("Diameter analysis JSON missing required key: schema_version")
+    if "runs" not in payload or not isinstance(payload["runs"], dict):
+        raise ValueError("Diameter analysis JSON missing required object key: runs")
+
+    runs_json: dict[tuple[int, int], list[DiameterResult]] = {}
+    detection_params_by_run: dict[tuple[int, int], DiameterDetectionParams] = {}
+    for run_name, run_payload in payload["runs"].items():
+        if not isinstance(run_payload, dict):
+            raise ValueError(f"Run payload for {run_name!r} must be an object")
+        for required_key in ("roi_id", "channel_id", "detection_params", "results"):
+            if required_key not in run_payload:
+                raise ValueError(f"Run {run_name!r} missing required key: {required_key}")
+        run_key = _run_key_from_str(str(run_name))
+        roi_id = _require_int(run_payload["roi_id"], field_name=f"Run {run_name!r} roi_id")
+        channel_id = _require_int(run_payload["channel_id"], field_name=f"Run {run_name!r} channel_id")
+        if (roi_id, channel_id) != run_key:
+            raise ValueError(
+                f"Run key mismatch for {run_name!r}: "
+                f"payload=(roi_id={roi_id}, channel_id={channel_id})"
+            )
+        detection_params_by_run[run_key] = DiameterDetectionParams.from_dict(run_payload["detection_params"])
+        results_raw = run_payload["results"]
+        if not isinstance(results_raw, list):
+            raise ValueError(f"Run {run_name!r} results must be a list")
+        run_results: list[DiameterResult] = []
+        for idx, entry in enumerate(results_raw):
+            if not isinstance(entry, dict):
+                raise ValueError(f"Run {run_name!r} results[{idx}] must be an object")
+            run_results.append(DiameterResult.from_dict(entry))
+        runs_json[run_key] = run_results
+    bundle_json = DiameterAnalysisBundle(
+        schema_version=_require_int(payload["schema_version"], field_name="schema_version"),
+        runs=runs_json,
+    )
 
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.reader(f)
@@ -1071,7 +1141,7 @@ def load_diameter_analysis(
                 f"Sidecar run length mismatch for {run_key!r}: "
                 f"json={len(json_results)} csv={len(csv_results)}"
             )
-    return bundle_json
+    return bundle_csv, detection_params_by_run
 
 
 def bundle_to_wide_csv_rows(
@@ -1114,7 +1184,27 @@ def bundle_to_wide_csv_rows(
                 if result is None:
                     row.append("")
                     continue
-                value = time_value if field_name == "time_s" else getattr(result, field_name)
+                if field_name == "time_s":
+                    value = time_value
+                elif field_name == "left_edge_um":
+                    um = float(getattr(result, "um_per_pixel", math.nan))
+                    if not np.isfinite(um):
+                        raise ValueError("Cannot write left_edge_um without finite result.um_per_pixel")
+                    value = float(result.left_edge_px) * um
+                elif field_name == "right_edge_um":
+                    um = float(getattr(result, "um_per_pixel", math.nan))
+                    if not np.isfinite(um):
+                        raise ValueError("Cannot write right_edge_um without finite result.um_per_pixel")
+                    value = float(result.right_edge_px) * um
+                elif field_name == "diameter_um":
+                    um = float(getattr(result, "um_per_pixel", math.nan))
+                    if not np.isfinite(um):
+                        raise ValueError("Cannot write diameter_um without finite result.um_per_pixel")
+                    value = float(result.diameter_px) * um
+                elif field_name == "sum_intensity":
+                    value = float(getattr(result, "sum_intensity", math.nan))
+                else:
+                    value = getattr(result, field_name)
                 if isinstance(value, bool):
                     row.append("1" if value else "0")
                 elif isinstance(value, list):
@@ -1162,15 +1252,26 @@ def bundle_from_wide_csv_rows(
                 continue
             roi_id, channel_id = run_key
             qc_flags_raw = row[field_map["qc_flags"]] if "qc_flags" in field_map else ""
+            diameter_px = _float_cell(row, field_map["diameter_px"])
+            left_edge_px = _float_cell(row, field_map["left_edge_px"])
+            right_edge_px = _float_cell(row, field_map["right_edge_px"])
+            um_per_pixel = math.nan
+            if "diameter_um" in field_map and row[field_map["diameter_um"]] != "" and np.isfinite(diameter_px) and diameter_px != 0.0:
+                um_per_pixel = _float_cell(row, field_map["diameter_um"]) / diameter_px
+            elif "left_edge_um" in field_map and row[field_map["left_edge_um"]] != "" and np.isfinite(left_edge_px) and left_edge_px != 0.0:
+                um_per_pixel = _float_cell(row, field_map["left_edge_um"]) / left_edge_px
+            elif "right_edge_um" in field_map and row[field_map["right_edge_um"]] != "" and np.isfinite(right_edge_px) and right_edge_px != 0.0:
+                um_per_pixel = _float_cell(row, field_map["right_edge_um"]) / right_edge_px
+
             runs[run_key].append(
                 DiameterResult(
                     roi_id=roi_id,
                     channel_id=channel_id,
                     center_row=row_idx,
                     time_s=time_s,
-                    left_edge_px=_float_cell(row, field_map["left_edge_px"]),
-                    right_edge_px=_float_cell(row, field_map["right_edge_px"]),
-                    diameter_px=_float_cell(row, field_map["diameter_px"]),
+                    left_edge_px=left_edge_px,
+                    right_edge_px=right_edge_px,
+                    diameter_px=diameter_px,
                     peak=_float_cell(row, field_map["peak"]),
                     baseline=_float_cell(row, field_map["baseline"]),
                     edge_strength_left=(
@@ -1211,6 +1312,12 @@ def bundle_from_wide_csv_rows(
                         if "qc_center_violation" in field_map and row[field_map["qc_center_violation"]] != ""
                         else False
                     ),
+                    sum_intensity=(
+                        _float_cell(row, field_map["sum_intensity"])
+                        if "sum_intensity" in field_map and row[field_map["sum_intensity"]] != ""
+                        else math.nan
+                    ),
+                    um_per_pixel=float(um_per_pixel),
                 )
             )
 
@@ -1507,6 +1614,7 @@ class DiameterAnalyzer:
         if params.polarity == Polarity.DARK_ON_BRIGHT:
             profile_proc = np.nanmax(profile_proc) - profile_proc
 
+        sum_intensity = float(np.sum(profile_proc))
         baseline = float(np.nanpercentile(profile_proc, 10))
         peak = float(np.nanpercentile(profile_proc, 90))
 
@@ -1552,6 +1660,8 @@ class DiameterAnalyzer:
             diameter_was_filtered=False,
             qc_score=qc_score,
             qc_flags=qc_flags,
+            sum_intensity=sum_intensity,
+            um_per_pixel=float(self.um_per_pixel),
         )
 
     @staticmethod

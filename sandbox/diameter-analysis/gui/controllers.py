@@ -77,6 +77,7 @@ class AppController:
         if kym is None:
             raise ValueError(f"Selected file not found in kym list: {path}")
         self.load_real_kym(kym)
+        self.try_load_saved_analysis()
 
     def set_img(
         self,
@@ -300,6 +301,8 @@ class AppController:
             raise RuntimeError("Current results are not savable as a run list.")
         if len(self.state.results) == 0:
             raise RuntimeError("No analysis results to save. Run Detect first.")
+        if self.state.detection_params is None:
+            raise RuntimeError("No detection params to save.")
 
         from diameter_analysis import DiameterAnalysisBundle, save_diameter_analysis
 
@@ -308,7 +311,34 @@ class AppController:
                 (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID): list(self.state.results),
             }
         )
-        return save_diameter_analysis(self.state.loaded_path, bundle)
+        return save_diameter_analysis(
+            self.state.loaded_path,
+            bundle,
+            detection_params_by_run={
+                (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID): self.state.detection_params,
+            },
+        )
+
+    def try_load_saved_analysis(self) -> bool:
+        if self.state.loaded_path is None:
+            return False
+        from diameter_analysis import load_diameter_analysis
+        json_path = Path(self.state.loaded_path).with_suffix(".diameter.json")
+        csv_path = Path(self.state.loaded_path).with_suffix(".diameter.csv")
+        if not json_path.exists() or not csv_path.exists():
+            return False
+
+        bundle, detection_params_by_run = load_diameter_analysis(self.state.loaded_path)
+        run_key = (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID)
+        if run_key not in bundle.runs:
+            raise ValueError(f"Loaded analysis missing run {run_key!r}")
+        if run_key not in detection_params_by_run:
+            raise ValueError(f"Loaded analysis missing detection params for run {run_key!r}")
+        self.state.results = list(bundle.runs[run_key])
+        self.state.detection_params = detection_params_by_run[run_key]
+        self._rebuild_figures()
+        self._emit()
+        return True
 
     def apply_post_filter_only(self) -> None:
         # Rebuild figures using existing results and current post_filter_params

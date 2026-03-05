@@ -6,6 +6,7 @@ import math
 import re
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from diameter_analysis import (
@@ -47,6 +48,13 @@ def _make_bundle() -> DiameterAnalysisBundle:
         channel_id=3,
     )
     return DiameterAnalysisBundle(runs={(1, 1): run_a, (2, 3): run_b})
+
+
+def _make_detection_params_by_run() -> dict[tuple[int, int], DiameterDetectionParams]:
+    return {
+        (1, 1): DiameterDetectionParams(stride=2, window_rows_odd=3, gradient_sigma=1.25),
+        (2, 3): DiameterDetectionParams(stride=2, window_rows_odd=3, gradient_sigma=2.5),
+    }
 
 
 def _assert_bundle_equivalent(lhs: DiameterAnalysisBundle, rhs: DiameterAnalysisBundle) -> None:
@@ -244,22 +252,39 @@ def test_analyze_strict_roi_channel_propagation() -> None:
 
 def test_save_load_diameter_analysis_roundtrip_sidecars(tmp_path: Path) -> None:
     bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
     kym_path = tmp_path / "sample_kym.tif"
 
-    json_path, csv_path = save_diameter_analysis(kym_path, bundle)
+    json_path, csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        detection_params_by_run=params_by_run,
+    )
     assert json_path.name == "sample_kym.diameter.json"
     assert csv_path.name == "sample_kym.diameter.csv"
     assert json_path.parent == tmp_path
     assert csv_path.parent == tmp_path
 
-    loaded = load_diameter_analysis(kym_path)
+    loaded, loaded_params_by_run = load_diameter_analysis(kym_path)
     _assert_bundle_equivalent(loaded, bundle)
+    assert loaded_params_by_run == params_by_run
+    for run_key in sorted(bundle.runs):
+        base = bundle.runs[run_key]
+        got = loaded.runs[run_key]
+        assert len(base) == len(got)
+        for left, right in zip(base, got):
+            assert np.isclose(right.sum_intensity, left.sum_intensity, equal_nan=True)
 
 
 def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Path) -> None:
     bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
     kym_path = tmp_path / "sample_kym.tif"
-    json_path, _csv_path = save_diameter_analysis(kym_path, bundle)
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        detection_params_by_run=params_by_run,
+    )
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     del payload["runs"]["roi1_ch1"]["channel_id"]
@@ -271,8 +296,13 @@ def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Pa
 
 def test_load_diameter_analysis_tolerates_extra_json_and_csv_columns(tmp_path: Path) -> None:
     bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
     kym_path = tmp_path / "sample_kym.tif"
-    json_path, csv_path = save_diameter_analysis(kym_path, bundle)
+    json_path, csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        detection_params_by_run=params_by_run,
+    )
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     payload["extra_json_note"] = "ok"
@@ -288,5 +318,87 @@ def test_load_diameter_analysis_tolerates_extra_json_and_csv_columns(tmp_path: P
         writer = csv.writer(f)
         writer.writerows(rows)
 
-    loaded = load_diameter_analysis(kym_path)
+    loaded, loaded_params_by_run = load_diameter_analysis(kym_path)
     _assert_bundle_equivalent(loaded, bundle)
+    assert loaded_params_by_run == params_by_run
+
+
+def test_wide_csv_contains_sum_intensity_and_um_columns() -> None:
+    bundle = _make_bundle()
+    header, rows = bundle_to_wide_csv_rows(bundle)
+    assert "sum_intensity_roi1_ch1" in header
+    assert "left_edge_um_roi1_ch1" in header
+    assert "right_edge_um_roi1_ch1" in header
+    assert "diameter_um_roi1_ch1" in header
+
+    run = bundle.runs[(1, 1)]
+    row0 = rows[0]
+    col = {name: i for i, name in enumerate(header)}
+    r0 = run[0]
+    assert np.isclose(float(row0[col["left_edge_um_roi1_ch1"]]), r0.left_edge_px * r0.um_per_pixel)
+    assert np.isclose(float(row0[col["right_edge_um_roi1_ch1"]]), r0.right_edge_px * r0.um_per_pixel)
+    assert np.isclose(float(row0[col["diameter_um_roi1_ch1"]]), r0.diameter_px * r0.um_per_pixel)
+    assert np.isclose(float(row0[col["sum_intensity_roi1_ch1"]]), r0.sum_intensity)
+
+
+def test_sum_intensity_matches_binned_profile_sum() -> None:
+    payload = generate_synthetic_kymograph(n_time=40, n_space=48, seed=17)
+    analyzer = DiameterAnalyzer(
+        payload["kymograph"],
+        seconds_per_line=payload["seconds_per_line"],
+        um_per_pixel=payload["um_per_pixel"],
+        polarity=payload["polarity"],
+    )
+    params = DiameterDetectionParams(stride=2, window_rows_odd=3)
+    results = analyzer.analyze(
+        params=params,
+        roi_id=1,
+        roi_bounds=(0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1]),
+        channel_id=1,
+    )
+    r0 = results[0]
+    half = params.window_rows_odd // 2
+    w0 = max(0, r0.center_row - half)
+    w1 = min(analyzer.kymograph.shape[0], r0.center_row + half + 1)
+    window = analyzer.kymograph[w0:w1, :]
+    if params.binning_method.value == "mean":
+        profile = np.nanmean(window, axis=0)
+    else:
+        profile = np.nanmedian(window, axis=0)
+    profile_proc = np.asarray(profile, dtype=float)
+    if params.polarity.value == "dark_on_bright":
+        profile_proc = np.nanmax(profile_proc) - profile_proc
+    expected = float(np.sum(profile_proc))
+    assert np.isclose(r0.sum_intensity, expected)
+
+
+def test_sidecar_json_does_not_store_sum_intensity(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        detection_params_by_run=params_by_run,
+    )
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    for run_payload in payload["runs"].values():
+        for result_payload in run_payload["results"]:
+            assert "sum_intensity" not in result_payload
+
+
+def test_load_diameter_analysis_fails_when_detection_params_missing(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        detection_params_by_run=params_by_run,
+    )
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    del payload["runs"]["roi1_ch1"]["detection_params"]
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing required key: detection_params"):
+        _ = load_diameter_analysis(kym_path)
