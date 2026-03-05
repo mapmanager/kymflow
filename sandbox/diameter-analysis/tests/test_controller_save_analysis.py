@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 import diameter_analysis as da
@@ -45,6 +46,7 @@ def test_save_analysis_calls_backend_with_loaded_path(monkeypatch: pytest.Monkey
     controller.state.loaded_path = "/tmp/example.tif"
     controller.state.results = [_one_result()]
     controller.state.detection_params = DiameterDetectionParams(stride=2, gradient_sigma=3.0)
+    controller.state.img = np.ones((5, 7), dtype=float)
 
     called: dict[str, object] = {}
 
@@ -52,12 +54,14 @@ def test_save_analysis_calls_backend_with_loaded_path(monkeypatch: pytest.Monkey
         kym_path: str | Path,
         bundle: da.DiameterAnalysisBundle,
         *,
+        roi_bounds_by_run: dict[tuple[int, int], tuple[int, int, int, int]],
         detection_params_by_run: dict[tuple[int, int], DiameterDetectionParams],
         out_dir: Path | None = None,
     ):
         called["kym_path"] = str(kym_path)
         called["keys"] = sorted(bundle.runs.keys())
         called["len_run"] = len(bundle.runs[(1, 1)])
+        called["bounds"] = roi_bounds_by_run[(1, 1)]
         called["params_keys"] = sorted(detection_params_by_run.keys())
         called["stride"] = detection_params_by_run[(1, 1)].stride
         called["out_dir"] = out_dir
@@ -69,6 +73,7 @@ def test_save_analysis_calls_backend_with_loaded_path(monkeypatch: pytest.Monkey
     assert called["kym_path"] == "/tmp/example.tif"
     assert called["keys"] == [(1, 1)]
     assert called["len_run"] == 1
+    assert called["bounds"] == (0, 5, 0, 7)
     assert called["params_keys"] == [(1, 1)]
     assert called["stride"] == 2
     assert called["out_dir"] is None
@@ -87,10 +92,14 @@ def test_try_load_saved_analysis_populates_results_and_detection_params(
     params = DiameterDetectionParams(stride=5, gradient_sigma=1.1)
     bundle = da.DiameterAnalysisBundle(runs={(1, 1): [_one_result()]})
 
-    monkeypatch.setattr(da, "load_diameter_analysis", lambda _path: (bundle, {(1, 1): params}))
+    monkeypatch.setattr(
+        da,
+        "load_diameter_analysis",
+        lambda _path: (bundle, {(1, 1): params}, {(1, 1): (0, 1, 0, 1)}, ["warn msg"]),
+    )
 
-    loaded = controller.try_load_saved_analysis()
-    assert loaded is True
+    warnings = controller.try_load_saved_analysis()
+    assert warnings == ["warn msg"]
     assert isinstance(controller.state.results, list)
     assert len(controller.state.results) == 1
     assert controller.state.detection_params == params

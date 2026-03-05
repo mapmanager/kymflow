@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import math
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -24,8 +25,9 @@ ANALYSIS_SCHEMA_VERSION = 1
 THREAD_CHUNK_SIZE = 512
 ALIGNED_RESULTS_SCHEMA_VERSION = 1
 BUNDLE_SCHEMA_VERSION = 1
-RUN_KEY_RE = re.compile(r"^roi(?P<roi>\d+)_ch(?P<ch>\d+)$")
-WIDE_COLUMN_RE = re.compile(r"^(?P<field>[a-z0-9_]+)_roi(?P<roi>\d+)_ch(?P<ch>\d+)$")
+WIDE_COLUMN_RE = re.compile(r"^(?P<field>[a-z0-9_]+)_roi(?P<roi>\d+)$")
+DIAMETER_SIDECAR_SCHEMA_VERSION = 2
+logger = logging.getLogger(__name__)
 
 
 class BinningMethod(str, Enum):
@@ -762,18 +764,6 @@ class DiameterResult:
         return cls.from_dict(payload)
 
 
-def _run_key_to_str(key: tuple[int, int]) -> str:
-    roi_id, channel_id = key
-    return f"roi{int(roi_id)}_ch{int(channel_id)}"
-
-
-def _run_key_from_str(value: str) -> tuple[int, int]:
-    match = RUN_KEY_RE.fullmatch(str(value))
-    if match is None:
-        raise ValueError(f"Invalid run key format: {value!r}")
-    return int(match.group("roi")), int(match.group("ch"))
-
-
 @dataclass(frozen=True)
 class DiameterRunKey:
     roi_id: int
@@ -791,7 +781,6 @@ class DiameterRunKey:
 class DiameterAnalysisBundle:
     """Container for multiple (roi_id, channel_id) analysis runs.
 
-    JSON key format for runs is `roi{roi_id}_ch{channel_id}`.
     Missing required keys are errors (no backward-compat defaults).
     """
 
@@ -821,67 +810,6 @@ class DiameterAnalysisBundle:
                     )
             normalized[(roi_id, channel_id)] = list(results)
         self.runs = normalized
-
-    def to_dict(self) -> dict[str, Any]:
-        runs_payload: dict[str, Any] = {}
-        for key in sorted(self.runs):
-            roi_id, channel_id = key
-            run_key = _run_key_to_str(key)
-            runs_payload[run_key] = {
-                "roi_id": int(roi_id),
-                "channel_id": int(channel_id),
-                "results": [result.to_dict() for result in self.runs[key]],
-            }
-        return {"schema_version": int(self.schema_version), "runs": runs_payload}
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "DiameterAnalysisBundle":
-        if not isinstance(payload, dict):
-            raise ValueError("DiameterAnalysisBundle payload must be an object")
-        if "schema_version" not in payload:
-            raise ValueError("DiameterAnalysisBundle missing required key: schema_version")
-        if "runs" not in payload:
-            raise ValueError("DiameterAnalysisBundle missing required key: runs")
-        runs_raw = payload["runs"]
-        if not isinstance(runs_raw, dict):
-            raise ValueError("DiameterAnalysisBundle 'runs' must be an object")
-
-        runs: dict[tuple[int, int], list[DiameterResult]] = {}
-        for run_name, run_payload in runs_raw.items():
-            roi_id, channel_id = _run_key_from_str(str(run_name))
-            if not isinstance(run_payload, dict):
-                raise ValueError(f"Run payload for {run_name!r} must be an object")
-            for key in ("roi_id", "channel_id", "results"):
-                if key not in run_payload:
-                    raise ValueError(f"Run {run_name!r} missing required key: {key}")
-            run_roi_id = _require_int(
-                run_payload["roi_id"],
-                field_name=f"Run {run_name!r} roi_id",
-            )
-            run_channel_id = _require_int(
-                run_payload["channel_id"],
-                field_name=f"Run {run_name!r} channel_id",
-            )
-            if run_roi_id != roi_id or run_channel_id != channel_id:
-                raise ValueError(
-                    f"Run key mismatch for {run_name!r}: "
-                    f"payload=(roi_id={run_roi_id}, channel_id={run_channel_id})"
-                )
-            results_raw = run_payload["results"]
-            if not isinstance(results_raw, list):
-                raise ValueError(f"Run {run_name!r} 'results' must be a list")
-            results: list[DiameterResult] = []
-            for idx, entry in enumerate(results_raw):
-                if not isinstance(entry, dict):
-                    raise ValueError(f"Run {run_name!r} results[{idx}] must be an object")
-                results.append(DiameterResult.from_dict(entry))
-            runs[(roi_id, channel_id)] = results
-
-        return cls(
-            schema_version=_require_int(payload["schema_version"], field_name="schema_version"),
-            runs=runs,
-        )
-
 
 WIDE_BASE_FIELDS: tuple[str, ...] = (
     "time_s",
@@ -956,8 +884,13 @@ class WideCsvRegistry:
             fields = [f for f in fields if f not in self.qc_fields]
 
         out = list(self.time_columns)
+        seen_roi: set[int] = set()
         for run_key in run_keys:
-            suffix = _run_key_to_str(run_key)
+            roi_id = int(run_key[0])
+            if roi_id in seen_roi:
+                raise ValueError(f"Duplicate ROI {roi_id} in run keys for wide CSV export")
+            seen_roi.add(roi_id)
+            suffix = f"roi{roi_id}"
             for field_name in fields:
                 out.append(f"{field_name}_{suffix}")
         return out
@@ -965,13 +898,13 @@ class WideCsvRegistry:
     def parse_columns(
         self,
         header: list[str],
-    ) -> tuple[int, dict[tuple[int, int], dict[str, int]]]:
+    ) -> tuple[int, dict[int, dict[str, int]]]:
         for col in self.time_columns:
             if col not in header:
                 raise ValueError(f"Wide CSV missing required time column: {col}")
         time_idx = header.index("time_s")
 
-        run_columns: dict[tuple[int, int], dict[str, int]] = {}
+        run_columns: dict[int, dict[str, int]] = {}
         unknown_wide_fields: list[str] = []
         for col_idx, col_name in enumerate(header):
             if col_name in self.time_columns:
@@ -986,8 +919,8 @@ class WideCsvRegistry:
             if field_name not in self.array_fields:
                 unknown_wide_fields.append(col_name)
                 continue
-            run_key = (int(match.group("roi")), int(match.group("ch")))
-            run_columns.setdefault(run_key, {})[field_name] = col_idx
+            roi_id = int(match.group("roi"))
+            run_columns.setdefault(roi_id, {})[field_name] = col_idx
 
         if unknown_wide_fields:
             cols = ", ".join(sorted(unknown_wide_fields))
@@ -1030,6 +963,7 @@ def save_diameter_analysis(
     kym_path: str | Path,
     bundle: DiameterAnalysisBundle,
     *,
+    roi_bounds_by_run: dict[tuple[int, int], tuple[int, int, int, int]],
     detection_params_by_run: dict[tuple[int, int], DiameterDetectionParams],
     out_dir: Path | None = None,
 ) -> tuple[Path, Path]:
@@ -1037,22 +971,29 @@ def save_diameter_analysis(
     json_path, csv_path = _diameter_sidecar_paths(kym_path, sidecar_dir=out_dir)
     json_path.parent.mkdir(parents=True, exist_ok=True)
 
-    runs_payload: dict[str, Any] = {}
+    rois_payload: dict[str, Any] = {}
+    seen_roi: set[int] = set()
     for run_key in sorted(bundle.runs):
         if run_key not in detection_params_by_run:
             raise ValueError(f"Missing detection_params for run {run_key!r}")
+        if run_key not in roi_bounds_by_run:
+            raise ValueError(f"Missing roi_bounds_px for run {run_key!r}")
         roi_id, channel_id = run_key
-        run_name = _run_key_to_str(run_key)
-        runs_payload[run_name] = {
-            "roi_id": int(roi_id),
+        if roi_id in seen_roi:
+            raise ValueError(f"Duplicate ROI {roi_id} in bundle runs; exactly one channel per ROI is required")
+        seen_roi.add(roi_id)
+        bounds = roi_bounds_by_run[run_key]
+        if len(bounds) != 4:
+            raise ValueError(f"roi_bounds_px for run {run_key!r} must have length 4")
+        rois_payload[str(int(roi_id))] = {
             "channel_id": int(channel_id),
+            "roi_bounds_px": [int(bounds[0]), int(bounds[1]), int(bounds[2]), int(bounds[3])],
             "detection_params": detection_params_by_run[run_key].to_dict(),
-            "results": [result.to_dict() for result in bundle.runs[run_key]],
         }
     payload = {
-        "schema_version": int(bundle.schema_version),
+        "schema_version": int(DIAMETER_SIDECAR_SCHEMA_VERSION),
         "source_path": str(Path(kym_path)),
-        "runs": runs_payload,
+        "rois": rois_payload,
     }
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -1068,7 +1009,12 @@ def load_diameter_analysis(
     kym_path: str | Path,
     *,
     in_dir: Path | None = None,
-) -> tuple[DiameterAnalysisBundle, dict[tuple[int, int], DiameterDetectionParams]]:
+) -> tuple[
+    DiameterAnalysisBundle,
+    dict[tuple[int, int], DiameterDetectionParams],
+    dict[tuple[int, int], tuple[int, int, int, int]],
+    list[str],
+]:
     """Load one-kymimage diameter analysis sidecars and validate consistency."""
     json_path, csv_path = _diameter_sidecar_paths(kym_path, sidecar_dir=in_dir)
 
@@ -1079,69 +1025,96 @@ def load_diameter_analysis(
         raise ValueError("Diameter analysis JSON 'source_path' must be a string")
     if "schema_version" not in payload:
         raise ValueError("Diameter analysis JSON missing required key: schema_version")
-    if "runs" not in payload or not isinstance(payload["runs"], dict):
-        raise ValueError("Diameter analysis JSON missing required object key: runs")
+    schema_version = _require_int(payload["schema_version"], field_name="schema_version")
+    if schema_version != DIAMETER_SIDECAR_SCHEMA_VERSION:
+        raise ValueError(f"Unsupported diameter sidecar schema_version={schema_version}")
+    if "rois" not in payload or not isinstance(payload["rois"], dict):
+        raise ValueError("Diameter analysis JSON missing required object key: rois")
 
-    runs_json: dict[tuple[int, int], list[DiameterResult]] = {}
     detection_params_by_run: dict[tuple[int, int], DiameterDetectionParams] = {}
-    for run_name, run_payload in payload["runs"].items():
-        if not isinstance(run_payload, dict):
-            raise ValueError(f"Run payload for {run_name!r} must be an object")
-        for required_key in ("roi_id", "channel_id", "detection_params", "results"):
-            if required_key not in run_payload:
-                raise ValueError(f"Run {run_name!r} missing required key: {required_key}")
-        run_key = _run_key_from_str(str(run_name))
-        roi_id = _require_int(run_payload["roi_id"], field_name=f"Run {run_name!r} roi_id")
-        channel_id = _require_int(run_payload["channel_id"], field_name=f"Run {run_name!r} channel_id")
-        if (roi_id, channel_id) != run_key:
-            raise ValueError(
-                f"Run key mismatch for {run_name!r}: "
-                f"payload=(roi_id={roi_id}, channel_id={channel_id})"
-            )
-        detection_params_by_run[run_key] = DiameterDetectionParams.from_dict(run_payload["detection_params"])
-        results_raw = run_payload["results"]
-        if not isinstance(results_raw, list):
-            raise ValueError(f"Run {run_name!r} results must be a list")
-        run_results: list[DiameterResult] = []
-        for idx, entry in enumerate(results_raw):
-            if not isinstance(entry, dict):
-                raise ValueError(f"Run {run_name!r} results[{idx}] must be an object")
-            run_results.append(DiameterResult.from_dict(entry))
-        runs_json[run_key] = run_results
-    bundle_json = DiameterAnalysisBundle(
-        schema_version=_require_int(payload["schema_version"], field_name="schema_version"),
-        runs=runs_json,
-    )
+    roi_bounds_by_run: dict[tuple[int, int], tuple[int, int, int, int]] = {}
+    for roi_name, roi_payload in payload["rois"].items():
+        if not isinstance(roi_payload, dict):
+            raise ValueError(f"ROI payload for {roi_name!r} must be an object")
+        for required_key in ("channel_id", "roi_bounds_px", "detection_params"):
+            if required_key not in roi_payload:
+                raise ValueError(f"ROI {roi_name!r} missing required key: {required_key}")
+        try:
+            roi_id = int(roi_name)
+        except Exception as exc:
+            raise ValueError(f"ROI key must be int-like string, got {roi_name!r}") from exc
+        roi_id = _require_int(roi_id, field_name=f"ROI key {roi_name!r}")
+        channel_id = _require_int(roi_payload["channel_id"], field_name=f"ROI {roi_name!r} channel_id")
+        bounds_raw = roi_payload["roi_bounds_px"]
+        if not isinstance(bounds_raw, list) or len(bounds_raw) != 4:
+            raise ValueError(f"ROI {roi_name!r} roi_bounds_px must be a list[4]")
+        run_key = (roi_id, channel_id)
+        roi_bounds_by_run[run_key] = (
+            _require_int(bounds_raw[0], field_name=f"ROI {roi_name!r} roi_bounds_px[0]"),
+            _require_int(bounds_raw[1], field_name=f"ROI {roi_name!r} roi_bounds_px[1]"),
+            _require_int(bounds_raw[2], field_name=f"ROI {roi_name!r} roi_bounds_px[2]"),
+            _require_int(bounds_raw[3], field_name=f"ROI {roi_name!r} roi_bounds_px[3]"),
+        )
+        detection_params_by_run[run_key] = DiameterDetectionParams.from_dict(roi_payload["detection_params"])
 
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.reader(f)
         rows = list(reader)
     if not rows:
         raise ValueError("Diameter analysis CSV is empty")
-    header = [str(c) for c in rows[0]]
+    header_full = [str(c) for c in rows[0]]
     data_rows = [[str(c) for c in row] for row in rows[1:]]
-    bundle_csv = bundle_from_wide_csv_rows(header, data_rows)
+    roi_to_channel_full = {run_key[0]: run_key[1] for run_key in detection_params_by_run}
 
-    if bundle_json.schema_version != bundle_csv.schema_version:
-        raise ValueError(
-            "Sidecar schema_version mismatch: "
-            f"json={bundle_json.schema_version} csv={bundle_csv.schema_version}"
-        )
-
-    json_keys = sorted(bundle_json.runs.keys())
-    csv_keys = sorted(bundle_csv.runs.keys())
-    if json_keys != csv_keys:
-        raise ValueError(f"Sidecar run keys mismatch: json={json_keys} csv={csv_keys}")
-
-    for run_key in json_keys:
-        json_results = bundle_json.runs[run_key]
-        csv_results = bundle_csv.runs[run_key]
-        if len(json_results) != len(csv_results):
-            raise ValueError(
-                f"Sidecar run length mismatch for {run_key!r}: "
-                f"json={len(json_results)} csv={len(csv_results)}"
+    skipped_messages: list[str] = []
+    valid_rois: dict[int, int] = {}
+    required_fields = tuple(WIDE_CSV_REGISTRY.required_recon_fields)
+    for roi_id, channel_id in sorted(roi_to_channel_full.items()):
+        missing_cols = [
+            f"{field}_roi{roi_id}" for field in required_fields if f"{field}_roi{roi_id}" not in header_full
+        ]
+        if missing_cols:
+            msg = (
+                f"Skipping ROI {roi_id} (channel {channel_id}): missing required CSV columns: "
+                + ", ".join(missing_cols)
             )
-    return bundle_csv, detection_params_by_run
+            logger.error(msg)
+            skipped_messages.append(msg)
+            continue
+        valid_rois[roi_id] = channel_id
+
+    if not valid_rois:
+        raise ValueError("No ROI rows could be loaded: all declared ROIs are missing required CSV columns")
+
+    keep_indices: list[int] = []
+    filtered_header: list[str] = []
+    for idx, col_name in enumerate(header_full):
+        if col_name in WIDE_CSV_TIME_COLUMNS:
+            keep_indices.append(idx)
+            filtered_header.append(col_name)
+            continue
+        match = WIDE_COLUMN_RE.fullmatch(col_name)
+        if match is None:
+            keep_indices.append(idx)
+            filtered_header.append(col_name)
+            continue
+        roi_id = int(match.group("roi"))
+        if roi_id in valid_rois:
+            keep_indices.append(idx)
+            filtered_header.append(col_name)
+
+    filtered_rows = [[row[i] for i in keep_indices] for row in data_rows]
+    bundle_csv = bundle_from_wide_csv_rows(filtered_header, filtered_rows, roi_to_channel=valid_rois)
+
+    detection_params_out = {
+        (roi_id, channel_id): detection_params_by_run[(roi_id, channel_id)]
+        for roi_id, channel_id in valid_rois.items()
+    }
+    roi_bounds_out = {
+        (roi_id, channel_id): roi_bounds_by_run[(roi_id, channel_id)]
+        for roi_id, channel_id in valid_rois.items()
+    }
+    return bundle_csv, detection_params_out, roi_bounds_out, skipped_messages
 
 
 def bundle_to_wide_csv_rows(
@@ -1218,8 +1191,12 @@ def bundle_to_wide_csv_rows(
 def bundle_from_wide_csv_rows(
     header: list[str],
     rows: list[list[str]],
+    *,
+    roi_to_channel: dict[int, int],
 ) -> DiameterAnalysisBundle:
     """Parse a wide CSV representation back into a multi-run bundle."""
+    if not roi_to_channel:
+        raise ValueError("bundle_from_wide_csv_rows requires non-empty roi_to_channel mapping")
     time_idx, run_columns = WIDE_CSV_REGISTRY.parse_columns(header)
 
     def _float_cell(row: list[str], idx: int) -> float:
@@ -1234,7 +1211,12 @@ def bundle_from_wide_csv_rows(
             raise ValueError(f"Missing integer cell at column index {idx}")
         return int(float(value))
 
-    runs: dict[tuple[int, int], list[DiameterResult]] = {k: [] for k in run_columns}
+    runs: dict[tuple[int, int], list[DiameterResult]] = {}
+    for roi_id in run_columns:
+        if roi_id not in roi_to_channel:
+            raise ValueError(f"Missing channel mapping for roi_id={roi_id}")
+        run_key = (int(roi_id), int(roi_to_channel[roi_id]))
+        runs[run_key] = []
     for row_idx, row in enumerate(rows):
         if len(row) != len(header):
             raise ValueError(
@@ -1244,13 +1226,14 @@ def bundle_from_wide_csv_rows(
         if time_value == "":
             raise ValueError(f"Missing time_s at row_idx={row_idx}")
         time_s = float(time_value)
-        for run_key, field_map in run_columns.items():
+        for roi_id, field_map in run_columns.items():
             has_any_data = any(
                 row[idx] != "" for field, idx in field_map.items() if field != "qc_flags"
             )
             if not has_any_data:
                 continue
-            roi_id, channel_id = run_key
+            channel_id = int(roi_to_channel[roi_id])
+            run_key = (int(roi_id), channel_id)
             qc_flags_raw = row[field_map["qc_flags"]] if "qc_flags" in field_map else ""
             diameter_px = _float_cell(row, field_map["diameter_px"])
             left_edge_px = _float_cell(row, field_map["left_edge_px"])
@@ -1973,113 +1956,6 @@ class DiameterAnalyzer:
         if params.hampel_scale != "mad":
             raise ValueError("PostFilterParams.hampel_scale must be 'mad'")
         return params
-
-    @staticmethod
-    def save_analysis(
-        output_dir: str | Path,
-        params_by_roi: dict[int, DiameterDetectionParams],
-        results_by_roi: dict[int, list[DiameterResult]],
-        *,
-        um_per_pixel: float,
-        post_filter_params_by_roi: Optional[dict[int, PostFilterParams]] = None,
-    ) -> tuple[Path, Path]:
-        output = Path(output_dir)
-        output.mkdir(parents=True, exist_ok=True)
-
-        params_path = output / "analysis_params.json"
-        results_path = output / "analysis_results.csv"
-
-        pf_map = post_filter_params_by_roi or {}
-        params_payload = {
-            "schema_version": ANALYSIS_SCHEMA_VERSION,
-            "rois": {str(k): v.to_dict() for k, v in sorted(params_by_roi.items())},
-            "post_filter_params": {str(k): v.to_dict() for k, v in sorted(pf_map.items())},
-        }
-        params_path.write_text(json.dumps(params_payload, indent=2), encoding="utf-8")
-
-        fieldnames = [
-            "schema_version",
-            "roi_id",
-            "channel_id",
-            "center_row",
-            "time_s",
-            "left_edge_px",
-            "right_edge_px",
-            "diameter_px",
-            "diameter_um",
-            "peak",
-            "baseline",
-            "edge_strength_left",
-            "edge_strength_right",
-            "diameter_px_filt",
-            "diameter_um_filt",
-            "diameter_was_filtered",
-            "qc_score",
-            "qc_flags",
-            "qc_edge_violation",
-            "qc_diameter_violation",
-            "qc_center_violation",
-        ]
-        with results_path.open("w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for roi_id in sorted(results_by_roi):
-                for result in results_by_roi[roi_id]:
-                    writer.writerow(
-                        result.to_row(
-                            roi_id=roi_id,
-                            channel_id=int(result.channel_id),
-                            schema_version=ANALYSIS_SCHEMA_VERSION,
-                            um_per_pixel=um_per_pixel,
-                        )
-                    )
-
-        return params_path, results_path
-
-    @staticmethod
-    def load_analysis(output_dir: str | Path) -> dict[str, Any]:
-        output = Path(output_dir)
-        params_path = output / "analysis_params.json"
-        results_path = output / "analysis_results.csv"
-
-        params_payload = json.loads(params_path.read_text(encoding="utf-8"))
-        if int(params_payload.get("schema_version", -1)) != ANALYSIS_SCHEMA_VERSION:
-            raise ValueError("Unsupported params schema_version")
-
-        rois_raw = params_payload.get("rois")
-        if not isinstance(rois_raw, dict):
-            raise ValueError("analysis_params.json must contain 'rois' mapping")
-
-        params_by_roi = {
-            int(roi_id): DiameterDetectionParams.from_dict(cfg)
-            for roi_id, cfg in rois_raw.items()
-        }
-        pf_raw = params_payload.get("post_filter_params", {})
-        if not isinstance(pf_raw, dict):
-            raise ValueError("analysis_params.json 'post_filter_params' must be an object")
-        post_filter_params_by_roi = {
-            int(roi_id): PostFilterParams.from_dict(cfg) for roi_id, cfg in pf_raw.items()
-        }
-
-        results_by_roi: dict[int, list[DiameterResult]] = {}
-        with results_path.open("r", encoding="utf-8", newline="") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                row_version = int(row.get("schema_version", -1))
-                if row_version != ANALYSIS_SCHEMA_VERSION:
-                    raise ValueError("Unsupported results schema_version")
-                roi_id = int(row["roi_id"])
-                results_by_roi.setdefault(roi_id, []).append(DiameterResult.from_row(row))
-
-        for roi_id in results_by_roi:
-            results_by_roi[roi_id].sort(key=lambda r: r.center_row)
-
-        return {
-            "schema_version": ANALYSIS_SCHEMA_VERSION,
-            "params_by_roi": params_by_roi,
-            "post_filter_params_by_roi": post_filter_params_by_roi,
-            "results_by_roi": results_by_roi,
-        }
 
     def plot(
         self,

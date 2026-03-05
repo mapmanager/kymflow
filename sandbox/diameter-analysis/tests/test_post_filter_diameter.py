@@ -3,10 +3,13 @@ from __future__ import annotations
 import numpy as np
 
 from diameter_analysis import (
+    DiameterAnalysisBundle,
     DiameterAnalyzer,
     DiameterDetectionParams,
     PostFilterParams,
     PostFilterType,
+    load_diameter_analysis,
+    save_diameter_analysis,
 )
 from synthetic_kymograph import generate_synthetic_kymograph
 
@@ -96,7 +99,7 @@ def test_analysis_with_post_filter_preserves_raw_and_filtered() -> None:
     assert all(hasattr(r, "diameter_was_filtered") for r in results)
 
 
-def test_save_load_roundtrip_contains_post_filter_params(tmp_path) -> None:
+def test_save_load_roundtrip_preserves_filtered_results(tmp_path) -> None:
     payload = generate_synthetic_kymograph(n_time=80, n_space=80, seed=2)
     analyzer = DiameterAnalyzer(
         payload["kymograph"],
@@ -115,13 +118,16 @@ def test_save_load_roundtrip_contains_post_filter_params(tmp_path) -> None:
         post_filter_params=pf,
     )
 
-    analyzer.save_analysis(
-        tmp_path,
-        params_by_roi={1: det},
-        results_by_roi={1: results},
-        um_per_pixel=payload["um_per_pixel"],
-        post_filter_params_by_roi={1: pf},
+    kym_path = tmp_path / "filtered.tif"
+    save_diameter_analysis(
+        kym_path,
+        DiameterAnalysisBundle(runs={(1, 1): results}),
+        roi_bounds_by_run={(1, 1): (0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1])},
+        detection_params_by_run={(1, 1): det},
     )
-    loaded = analyzer.load_analysis(tmp_path)
-    assert "post_filter_params_by_roi" in loaded
-    assert loaded["post_filter_params_by_roi"][1] == pf
+    loaded_bundle, loaded_params, _bounds, warnings = load_diameter_analysis(kym_path)
+    assert warnings == []
+    assert loaded_params[(1, 1)] == det
+    loaded = loaded_bundle.runs[(1, 1)]
+    assert len(loaded) == len(results)
+    assert any(r.diameter_was_filtered for r in loaded)

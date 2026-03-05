@@ -44,8 +44,10 @@ def build_home_page(controller: AppController) -> None:
             return
 
         try:
-            controller.load_selected_path(path)
+            warnings = controller.load_selected_path(path)
             ui.notify("TIFF loaded", type="positive", timeout=1200)
+            for msg in warnings:
+                ui.notify(msg, type="warning", timeout=5000)
         except Exception as e:
             msg = f"Failed to load TIFF: {e}"
             logger.error("TIFF load failed from file table: %s", e)

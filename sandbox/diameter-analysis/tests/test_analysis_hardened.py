@@ -6,7 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from diameter_analysis import DiameterAnalyzer, DiameterDetectionParams
+from diameter_analysis import (
+    DiameterAnalysisBundle,
+    DiameterAnalyzer,
+    DiameterDetectionParams,
+    load_diameter_analysis,
+    save_diameter_analysis,
+)
 from synthetic_kymograph import generate_synthetic_kymograph
 
 
@@ -91,23 +97,24 @@ def test_save_load_roundtrip_schema_and_row_count(tmp_path: Path) -> None:
         backend="serial",
     )
 
-    params_path, results_path = analyzer.save_analysis(
-        tmp_path,
-        params_by_roi={7: params},
-        results_by_roi={7: results},
-        um_per_pixel=payload["um_per_pixel"],
+    kym_path = tmp_path / "roundtrip.tif"
+    run_key = (1, 1)
+    json_path, csv_path = save_diameter_analysis(
+        kym_path,
+        DiameterAnalysisBundle(runs={run_key: results}),
+        roi_bounds_by_run={run_key: (0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1])},
+        detection_params_by_run={run_key: params},
     )
+    loaded_bundle, loaded_params, loaded_bounds, warnings = load_diameter_analysis(kym_path)
+    assert json_path.name == "roundtrip.diameter.json"
+    assert csv_path.name == "roundtrip.diameter.csv"
+    assert warnings == []
+    assert set(loaded_bundle.runs) == {run_key}
+    assert loaded_params[run_key] == params
+    assert loaded_bounds[run_key] == (0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1])
+    assert len(loaded_bundle.runs[run_key]) == len(results)
 
-    loaded = analyzer.load_analysis(tmp_path)
-    assert params_path.name == "analysis_params.json"
-    assert results_path.name == "analysis_results.csv"
-    assert loaded["schema_version"] == 1
-    assert set(loaded["params_by_roi"]) == {7}
-    assert set(loaded["results_by_roi"]) == {7}
-    assert loaded["params_by_roi"][7] == params
-    assert len(loaded["results_by_roi"][7]) == len(results)
-
-    with results_path.open("r", encoding="utf-8", newline="") as f:
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == len(results)
 

@@ -1,16 +1,17 @@
 # Multi-Run Serialization
 
-## Bundle JSON schema
-`DiameterAnalysisBundle` stores multiple analysis runs keyed by `(roi_id, channel_id)`.
+## Sidecar JSON schema (metadata-only, v2)
+Diameter sidecar JSON is metadata-only and does not duplicate per-row result arrays.
 
 - Top-level keys:
-  - `schema_version` (required)
-  - `runs` (required object)
-- Run key format: `roi{roi_id}_ch{channel_id}`
-- Each run object requires:
-  - `roi_id`
+  - `schema_version` (required, must be `2`)
+  - `source_path` (required string path)
+  - `rois` (required object)
+- ROI key format: `"<roi_id>"` (string int)
+- Each ROI object requires:
   - `channel_id`
-  - `results` (list of `DiameterResult` dict payloads)
+  - `roi_bounds_px` (`[t0, t1, x0, x1]`)
+  - `detection_params`
 
 Example:
 
@@ -18,17 +19,15 @@ Example:
 {
   "schema_version": 1,
   "runs": {
-    "roi1_ch1": {
-      "roi_id": 1,
+    "1": {
       "channel_id": 1,
-      "results": [
-        {"roi_id": 1, "channel_id": 1, "center_row": 0, "time_s": 0.0}
-      ]
+      "roi_bounds_px": [0, 100, 0, 64],
+      "detection_params": {"stride": 1}
     },
-    "roi2_ch3": {
-      "roi_id": 2,
+    "2": {
       "channel_id": 3,
-      "results": []
+      "roi_bounds_px": [10, 80, 2, 60],
+      "detection_params": {"stride": 2}
     }
   }
 }
@@ -45,12 +44,12 @@ Wide CSV export/import is registry-driven in `diameter_analysis.py`:
 
 Column naming convention:
 
-- `{field}_roi{roi_id}_ch{channel_id}`
+- `{field}_roi{roi_id}`
 - Single underscore separators only.
 - Example columns:
-  - `diameter_px_roi1_ch1`
-  - `left_edge_px_roi2_ch3`
-  - `qc_flags_roi2_ch3`
+  - `diameter_px_roi1`
+  - `left_edge_px_roi2`
+  - `qc_flags_roi2`
 
 Shorter runs leave empty cells for out-of-range rows.
 Wide CSV load is aligned by `time_s` and registered run fields; it does not depend on `center_row` ordering.

@@ -71,13 +71,13 @@ class AppController:
             return None
         return get_kym_by_path(self.state.kym_image_list, str(path))
 
-    def load_selected_path(self, path: str | Path) -> None:
+    def load_selected_path(self, path: str | Path) -> list[str]:
         """Load a real kymograph selected by path (FileTableView selection)."""
         kym = self.get_selected_kym(path)
         if kym is None:
             raise ValueError(f"Selected file not found in kym list: {path}")
         self.load_real_kym(kym)
-        self.try_load_saved_analysis()
+        return self.try_load_saved_analysis()
 
     def set_img(
         self,
@@ -303,9 +303,13 @@ class AppController:
             raise RuntimeError("No analysis results to save. Run Detect first.")
         if self.state.detection_params is None:
             raise RuntimeError("No detection params to save.")
+        if self.state.img is None:
+            raise RuntimeError("No loaded image for ROI bounds metadata.")
 
         from diameter_analysis import DiameterAnalysisBundle, save_diameter_analysis
 
+        n_time, n_space = self.state.img.shape
+        roi_bounds = (0, int(n_time), 0, int(n_space))
         bundle = DiameterAnalysisBundle(
             runs={
                 (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID): list(self.state.results),
@@ -314,31 +318,33 @@ class AppController:
         return save_diameter_analysis(
             self.state.loaded_path,
             bundle,
+            roi_bounds_by_run={
+                (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID): roi_bounds,
+            },
             detection_params_by_run={
                 (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID): self.state.detection_params,
             },
         )
 
-    def try_load_saved_analysis(self) -> bool:
+    def try_load_saved_analysis(self) -> list[str]:
         if self.state.loaded_path is None:
-            return False
+            return []
         from diameter_analysis import load_diameter_analysis
         json_path = Path(self.state.loaded_path).with_suffix(".diameter.json")
         csv_path = Path(self.state.loaded_path).with_suffix(".diameter.csv")
         if not json_path.exists() or not csv_path.exists():
-            return False
+            return []
 
-        bundle, detection_params_by_run = load_diameter_analysis(self.state.loaded_path)
+        bundle, detection_params_by_run, _roi_bounds_by_run, warnings = load_diameter_analysis(
+            self.state.loaded_path
+        )
         run_key = (DEFAULT_ROI_ID, DEFAULT_CHANNEL_ID)
-        if run_key not in bundle.runs:
-            raise ValueError(f"Loaded analysis missing run {run_key!r}")
-        if run_key not in detection_params_by_run:
-            raise ValueError(f"Loaded analysis missing detection params for run {run_key!r}")
-        self.state.results = list(bundle.runs[run_key])
-        self.state.detection_params = detection_params_by_run[run_key]
-        self._rebuild_figures()
-        self._emit()
-        return True
+        if run_key in bundle.runs and run_key in detection_params_by_run:
+            self.state.results = list(bundle.runs[run_key])
+            self.state.detection_params = detection_params_by_run[run_key]
+            self._rebuild_figures()
+            self._emit()
+        return warnings
 
     def apply_post_filter_only(self) -> None:
         # Rebuild figures using existing results and current post_filter_params

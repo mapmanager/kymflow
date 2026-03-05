@@ -4,7 +4,14 @@ import csv
 
 import pytest
 
-from diameter_analysis import DiameterAnalyzer, DiameterDetectionParams, DiameterResult
+from diameter_analysis import (
+    DiameterAnalysisBundle,
+    DiameterAnalyzer,
+    DiameterDetectionParams,
+    DiameterResult,
+    load_diameter_analysis,
+    save_diameter_analysis,
+)
 from synthetic_kymograph import generate_synthetic_kymograph
 
 
@@ -64,22 +71,25 @@ def test_save_load_roundtrip_preserves_roi_and_channel_ids(tmp_path) -> None:
         channel_id=channel_id,
     )
 
-    DiameterAnalyzer.save_analysis(
-        tmp_path,
-        params_by_roi={roi_id: params},
-        results_by_roi={roi_id: results},
-        um_per_pixel=analyzer.um_per_pixel,
+    kym_path = tmp_path / "ids.tif"
+    save_diameter_analysis(
+        kym_path,
+        DiameterAnalysisBundle(runs={(roi_id, channel_id): results}),
+        roi_bounds_by_run={
+            (roi_id, channel_id): (0, analyzer.kymograph.shape[0], 0, analyzer.kymograph.shape[1])
+        },
+        detection_params_by_run={(roi_id, channel_id): params},
     )
 
-    csv_path = tmp_path / "analysis_results.csv"
+    csv_path = tmp_path / "ids.diameter.csv"
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
     assert rows
-    assert rows[0]["roi_id"] == str(roi_id)
-    assert rows[0]["channel_id"] == str(channel_id)
+    assert f"diameter_px_roi{roi_id}" in rows[0]
 
-    loaded = DiameterAnalyzer.load_analysis(tmp_path)
-    loaded_results = loaded["results_by_roi"][roi_id]
+    loaded_bundle, _params, _bounds, warnings = load_diameter_analysis(kym_path)
+    assert warnings == []
+    loaded_results = loaded_bundle.runs[(roi_id, channel_id)]
     assert loaded_results
     assert all(r.roi_id == roi_id for r in loaded_results)
     assert all(r.channel_id == channel_id for r in loaded_results)
