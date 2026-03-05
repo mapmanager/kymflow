@@ -1021,6 +1021,8 @@ def load_diameter_analysis(
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Diameter analysis JSON root must be an object")
+    if "runs" in payload or "results" in payload:
+        raise ValueError("Legacy JSON schema detected")
     if "source_path" in payload and not isinstance(payload["source_path"], str):
         raise ValueError("Diameter analysis JSON 'source_path' must be a string")
     if "schema_version" not in payload:
@@ -1036,6 +1038,8 @@ def load_diameter_analysis(
     for roi_name, roi_payload in payload["rois"].items():
         if not isinstance(roi_payload, dict):
             raise ValueError(f"ROI payload for {roi_name!r} must be an object")
+        if "runs" in roi_payload or "results" in roi_payload:
+            raise ValueError(f"Legacy JSON schema detected in ROI {roi_name!r}")
         for required_key in ("channel_id", "roi_bounds_px", "detection_params"):
             if required_key not in roi_payload:
                 raise ValueError(f"ROI {roi_name!r} missing required key: {required_key}")

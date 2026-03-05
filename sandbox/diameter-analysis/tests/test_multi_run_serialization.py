@@ -269,6 +269,81 @@ def test_load_diameter_analysis_fails_when_run_required_key_missing(tmp_path: Pa
         _ = load_diameter_analysis(kym_path)
 
 
+def test_load_diameter_analysis_rejects_legacy_runs_key(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    payload["runs"] = {}
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Legacy JSON schema detected"):
+        _ = load_diameter_analysis(kym_path)
+
+
+def test_load_diameter_analysis_skips_roi_when_csv_columns_missing(tmp_path: Path, caplog) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    _json_path, csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    header = [col for col in rows[0] if not col.endswith("_roi1")]
+    row_indexes = [i for i, col in enumerate(rows[0]) if not col.endswith("_roi1")]
+    filtered_rows = [[row[i] for i in row_indexes] for row in rows[1:]]
+    with csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(filtered_rows)
+
+    caplog.set_level("ERROR")
+    loaded, loaded_params_by_run, loaded_bounds_by_run, warnings = load_diameter_analysis(kym_path)
+    assert sorted(loaded.runs.keys()) == [(2, 3)]
+    assert sorted(loaded_params_by_run.keys()) == [(2, 3)]
+    assert sorted(loaded_bounds_by_run.keys()) == [(2, 3)]
+    assert len(warnings) == 1
+    assert "Skipping ROI 1" in warnings[0]
+    assert any("Skipping ROI 1" in rec.getMessage() for rec in caplog.records)
+
+
+def test_load_diameter_analysis_ignores_extra_roi_columns_not_in_json(tmp_path: Path) -> None:
+    bundle = _make_bundle()
+    params_by_run = _make_detection_params_by_run()
+    roi_bounds_by_run = _make_roi_bounds_by_run(bundle)
+    kym_path = tmp_path / "sample_kym.tif"
+    json_path, _csv_path = save_diameter_analysis(
+        kym_path,
+        bundle,
+        roi_bounds_by_run=roi_bounds_by_run,
+        detection_params_by_run=params_by_run,
+    )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    del payload["rois"]["2"]
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    loaded, loaded_params_by_run, loaded_bounds_by_run, warnings = load_diameter_analysis(kym_path)
+    assert warnings == []
+    assert sorted(loaded.runs.keys()) == [(1, 1)]
+    assert sorted(loaded_params_by_run.keys()) == [(1, 1)]
+    assert sorted(loaded_bounds_by_run.keys()) == [(1, 1)]
+
+
 def test_load_diameter_analysis_tolerates_extra_json_and_csv_columns(tmp_path: Path) -> None:
     bundle = _make_bundle()
     params_by_run = _make_detection_params_by_run()
