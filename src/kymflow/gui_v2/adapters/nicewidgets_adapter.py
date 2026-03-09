@@ -1,0 +1,130 @@
+"""Adapter functions for mapping kymflow models to nicewidgets models.
+
+Phase 2 of the migration plan: KymImage-to-ChannelManager and
+VelocityEvent-to-AcqImageEvent conversion.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import TYPE_CHECKING, List, Optional
+
+import numpy as np
+
+from kymflow.core.api.kym_external import get_kym_geometry, get_roi_ids, get_roi_pixel_bounds
+from kymflow.core.image_loaders.kym_image import KymImage
+
+if TYPE_CHECKING:
+    from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
+
+
+def kymimage_to_channel_manager(
+    kym: KymImage,
+    channel: int = 1,
+) -> tuple["ChannelManager", List["RegionOfInterest"]]:
+    """Build ChannelManager and RegionOfInterest list from a KymImage.
+
+    Handles transpose and physical units. KymImage uses (rows=time, cols=space).
+    ChannelManager row_scale = seconds_per_line, col_scale = micrometers_per_pixel.
+
+    ROI names use format ROI_{roi_id} so bindings can map back to kymflow roi_id.
+
+    Args:
+        kym: KymImage instance. Must have loaded channel data (call load_channel first).
+        channel: 1-based channel index (default 1).
+
+    Returns:
+        (ChannelManager, List[RegionOfInterest]) for use with ImageRoiWidget.
+
+    Raises:
+        ValueError: If channel data cannot be loaded.
+    """
+    # Lazy import to avoid pulling nicewidgets at module load when not needed
+    from nicewidgets.image_line_widget.models import Channel, ChannelManager, RegionOfInterest
+
+    ok = kym.load_channel(channel)
+    if not ok:
+        raise ValueError(f"Failed to load channel {channel} for image {kym.path}")
+    data = kym.getChannelData(channel)
+    if data is None:
+        raise ValueError(f"No data for channel {channel} after load")
+
+    # Get geometry; fallback defaults if header incomplete
+    try:
+        (num_lines, pixels_per_line), dt, dx = get_kym_geometry(kym)
+    except ValueError:
+        num_lines, pixels_per_line = data.shape[0], data.shape[1]
+        dt = 0.001  # 1 ms/line default
+        dx = 1.0  # 1 um/pixel default
+
+    x_label = (
+        kym.header.labels[0]
+        if kym.header.labels and len(kym.header.labels) >= 1
+        else "Time (s)"
+    )
+    y_label = (
+        kym.header.labels[1]
+        if kym.header.labels and len(kym.header.labels) >= 2
+        else "Space (um)"
+    )
+
+    ch = Channel(name="Channel1", data=np.asarray(data))
+    manager = ChannelManager(
+        channels=[ch],
+        row_scale=float(dt),
+        col_scale=float(dx),
+        x_label=x_label,
+        y_label=y_label,
+    )
+
+    rois: List[RegionOfInterest] = []
+    for roi_id in get_roi_ids(kym):
+        bounds = get_roi_pixel_bounds(kym, roi_id)
+        roi = RegionOfInterest(
+            name=f"ROI_{roi_id}",
+            r0=bounds.row_start,
+            r1=bounds.row_stop,
+            c0=bounds.col_start,
+            c1=bounds.col_stop,
+        )
+        rois.append(roi)
+
+    return manager, rois
+
+
+def velocity_events_to_acq_image_events(
+    events: Optional[List["VelocityEvent"]],
+) -> List["AcqImageEvent"]:
+    """Convert kymflow VelocityEvent list to nicewidgets AcqImageEvent list.
+
+    Maps t_start/t_end, event_type, user_type, and _uuid (event_id).
+
+    Args:
+        events: List of VelocityEvent, or None (returns empty list).
+
+    Returns:
+        List of AcqImageEvent for use with LinePlotWidget.acq_image_events.
+    """
+    from nicewidgets.image_line_widget.models import AcqImageEvent
+
+    if events is None:
+        return []
+
+    result = []
+    for ev in events:
+        event_id = (
+            getattr(ev, "_uuid", None)
+            if hasattr(ev, "_uuid")
+            else None
+        )
+        if event_id is None:
+            event_id = str(uuid.uuid4())
+        acq = AcqImageEvent(
+            start_t=float(ev.t_start),
+            stop_t=float(ev.t_end) if ev.t_end is not None else None,
+            event_type=str(ev.event_type),
+            user_type=getattr(ev.user_type, "value", str(ev.user_type)),
+            event_id=event_id,
+        )
+        result.append(acq)
+    return result
