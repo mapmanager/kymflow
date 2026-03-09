@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from kymflow.core.plotting.theme import ThemeMode
+from kymflow.gui_v2.views.image_line_viewer_replacement_view import (
+    ImageLineViewerReplacementView,
+)
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
 from kymflow.gui_v2.state import AppState, ImageDisplayParams
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
 from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
-from kymflow.gui_v2.events import FileSelection, ImageDisplayChange, MetadataUpdate, SelectionOrigin
+from kymflow.gui_v2.events import (
+    FileSelection,
+    ImageDisplayChange,
+    MetadataUpdate,
+    ROISelection,
+    SelectionOrigin,
+)
 from kymflow.gui_v2.events_state import ThemeChanged
 from kymflow.gui_v2.views.contrast_bindings import ContrastBindings
 from kymflow.gui_v2.views.contrast_view import ContrastView
@@ -21,6 +30,67 @@ from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperime
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
+from kymflow.gui_v2.app_context import AppContext
+from kymflow.gui_v2.pages.home_page import HomePage
+
+
+def test_home_page_uses_image_line_viewer_replacement(bus) -> None:
+    """Phase 4: HomePage uses ImageLineViewerReplacementView (not ImageLineViewerView)."""
+    context = AppContext()
+    page = HomePage(context, bus)
+    assert isinstance(page._image_line_viewer, ImageLineViewerReplacementView)
+
+
+def test_home_page_on_roi_select_emits_roi_selection(bus) -> None:
+    """Phase 4: ROI selection in ImageRoiWidget emits ROISelection(phase='intent')."""
+    context = AppContext()
+    page = HomePage(context, bus)
+
+    emitted = []
+    original_emit = bus.emit
+
+    def capture_emit(event):
+        emitted.append(event)
+        original_emit(event)
+
+    bus.emit = capture_emit
+
+    # Simulate on_roi_select callback (wired in replacement view when user selects ROI)
+    view = page._image_line_viewer
+    assert view._on_roi_select is not None
+    view._on_roi_select(1)
+
+    assert len(emitted) == 1
+    assert isinstance(emitted[0], ROISelection)
+    assert emitted[0].roi_id == 1
+    assert emitted[0].phase == "intent"
+    assert emitted[0].origin == SelectionOrigin.IMAGE_VIEWER
+
+
+def test_home_page_drawer_filter_change_calls_apply_filters(bus) -> None:
+    """Phase 5: _on_drawer_filter_change calls apply_filters on replacement view."""
+    context = AppContext()
+    page = HomePage(context, bus)
+    with patch.object(page._image_line_viewer, "apply_filters") as mock_apply:
+        page._on_drawer_filter_change(remove_outliers=True, median_filter=True)
+    mock_apply.assert_called_once_with(True, True)
+
+
+def test_home_page_replacement_view_has_on_edit_roi(bus) -> None:
+    """Phase 6: HomePage wires on_edit_roi so ROI edits emit EditRoi."""
+    context = AppContext()
+    page = HomePage(context, bus)
+    view = page._image_line_viewer
+    assert view._on_edit_roi is not None
+
+
+def test_home_page_drawer_full_zoom_calls_reset_zoom(bus) -> None:
+    """Phase 5: _on_drawer_full_zoom calls reset_zoom on replacement view."""
+    context = AppContext()
+    page = HomePage(context, bus)
+    with patch.object(page._image_line_viewer, "reset_zoom") as mock_reset:
+        page._on_drawer_full_zoom()
+    mock_reset.assert_called_once()
 
 
 def test_contrast_widget_event_flow(bus: EventBus, app_state: AppState) -> None:

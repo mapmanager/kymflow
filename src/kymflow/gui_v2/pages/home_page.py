@@ -33,7 +33,13 @@ from kymflow.gui_v2.controllers import (
     TaskStateBridgeController,
     VelocityEventUpdateController,
 )
-from kymflow.gui_v2.events import FileSelection, NextPrevFileEvent, SaveSelected, SelectionOrigin
+from kymflow.gui_v2.events import (
+    FileSelection,
+    NextPrevFileEvent,
+    ROISelection,
+    SaveSelected,
+    SelectionOrigin,
+)
 from kymflow.gui_v2.events_state import FileListChanged
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.utils.splitter_handle import add_splitter_handle
@@ -53,8 +59,8 @@ from kymflow.gui_v2.views import (
     FileTableView,
     FolderSelectorView,
     FolderSelectorBindings,
-    ImageLineViewerBindings,
-    ImageLineViewerView,
+    ImageLineViewerReplacementBindings,
+    ImageLineViewerReplacementView,
     KymEventBindings,
     KymEventView,
     LinePlotControlsBindings,
@@ -159,9 +165,21 @@ class HomePage(BasePage):
             get_kym_event_report_text=lambda: self._dataframe_to_csv_text(self._get_velocity_event_df_safe()),
         )
         self._file_table_view.set_context_menu_builder(_file_table_menu.build)
-        self._image_line_viewer = ImageLineViewerView(
+        def _on_roi_select(roi_id: int | None) -> None:
+            """Emit ROISelection when user selects ROI in ImageRoiWidget."""
+            bus.emit(
+                ROISelection(
+                    roi_id=roi_id,
+                    origin=SelectionOrigin.IMAGE_VIEWER,
+                    phase="intent",
+                )
+            )
+
+        self._image_line_viewer = ImageLineViewerReplacementView(
             on_kym_event_x_range=bus.emit,
             on_set_roi_bounds=bus.emit,
+            on_roi_select=_on_roi_select,
+            on_edit_roi=bus.emit,
         )
         self._event_view = KymEventView(
             context,
@@ -177,7 +195,7 @@ class HomePage(BasePage):
         )
         self._table_bindings: FileTableBindings | None = None
         self._folder_bindings: FolderSelectorBindings | None = None
-        self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
+        self._image_line_viewer_bindings: ImageLineViewerReplacementBindings | None = None
         self._event_bindings: KymEventBindings | None = None
         # 20260213ppc: Plot pool controller refs (set when LazySection render runs)
         self._plot_pool_controller_ref: dict = {"value": None}
@@ -346,7 +364,7 @@ class HomePage(BasePage):
             self.bus, self._file_table_view, app_state=self.context.app_state
         )
         self._folder_bindings = FolderSelectorBindings(self.bus, self._folder_view)
-        self._image_line_viewer_bindings = ImageLineViewerBindings(
+        self._image_line_viewer_bindings = ImageLineViewerReplacementBindings(
             self.bus, self._image_line_viewer
         )
         self._event_bindings = KymEventBindings(self.bus, self._event_view, app_state=self.context.app_state)
@@ -652,11 +670,11 @@ class HomePage(BasePage):
         )
 
     def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
-        """Callback when splitter pane filter controls change - applies filters to plot."""
+        """Callback when splitter pane filter controls change. Applies filters to replacement view."""
         self._image_line_viewer.apply_filters(remove_outliers, median_filter)
 
     def _on_drawer_full_zoom(self) -> None:
-        """Callback when splitter pane full zoom button is clicked - resets plot zoom."""
+        """Callback when splitter pane full zoom button is clicked. Resets zoom on replacement view."""
         self._image_line_viewer.reset_zoom()
 
     def _on_full_zoom_shortcut(self, _event) -> None:
