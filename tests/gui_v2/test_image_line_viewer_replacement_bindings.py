@@ -74,7 +74,7 @@ def test_theme_changed_calls_view(mock_replacement_view: MagicMock, mock_bus: Ma
 
 
 def test_add_kym_event_refreshes(mock_replacement_view: MagicMock, mock_bus: MagicMock) -> None:
-    """AddKymEvent calls refresh_velocity_events."""
+    """AddKymEvent calls refresh_events_for_current_roi."""
     bindings = ImageLineViewerReplacementBindings(mock_bus, mock_replacement_view)
     event = AddKymEvent(
         event_id="ev-1",
@@ -86,11 +86,11 @@ def test_add_kym_event_refreshes(mock_replacement_view: MagicMock, mock_bus: Mag
         phase="state",
     )
     bindings._on_add_kym_event(event)
-    mock_replacement_view.refresh_velocity_events.assert_called_once()
+    mock_replacement_view.refresh_events_for_current_roi.assert_called_once()
 
 
 def test_delete_kym_event_refreshes(mock_replacement_view: MagicMock, mock_bus: MagicMock) -> None:
-    """DeleteKymEvent calls refresh_velocity_events."""
+    """DeleteKymEvent calls refresh_events_for_current_roi."""
     bindings = ImageLineViewerReplacementBindings(mock_bus, mock_replacement_view)
     event = DeleteKymEvent(
         event_id="ev-1",
@@ -100,7 +100,7 @@ def test_delete_kym_event_refreshes(mock_replacement_view: MagicMock, mock_bus: 
         phase="state",
     )
     bindings._on_delete_kym_event(event)
-    mock_replacement_view.refresh_velocity_events.assert_called_once()
+    mock_replacement_view.refresh_events_for_current_roi.assert_called_once()
 
 
 def test_event_selection_calls_zoom(mock_replacement_view: MagicMock, mock_bus: MagicMock) -> None:

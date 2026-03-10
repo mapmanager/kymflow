@@ -20,6 +20,7 @@ from kymflow.gui_v2.events import (
     KymScrollXEvent,
     ROISelection,
     ImageDisplayChange,
+    SelectionOrigin,
     SetKymEventRangeState,
     SetRoiBounds,
     VelocityEventUpdate,
@@ -102,6 +103,9 @@ class ImageLineViewerReplacementBindings:
         )
 
     def _on_roi_changed(self, e: ROISelection) -> None:
+        # For FILE_TABLE origin, FileSelection already set ROI; avoid duplicate work.
+        if e.origin == SelectionOrigin.FILE_TABLE:
+            return
         safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_theme_changed(self, e: ThemeChanged) -> None:
@@ -114,10 +118,10 @@ class ImageLineViewerReplacementBindings:
         current = self._view._current_file
         if current is None:
             return
-        if e.file and e.file.path and current.path:
-            if str(e.file.path) != str(current.path):
-                return
-        safe_call(self._view.refresh_velocity_events)
+        if str(e.file.path) != str(current.path):
+            return
+        # Physical units affect both image and line; do a full refresh.
+        safe_call(self._view._refresh_from_state)
 
     def _on_analysis_completed(self, e: AnalysisCompleted) -> None:
         if not e.success:
@@ -125,9 +129,9 @@ class ImageLineViewerReplacementBindings:
         current = self._view._current_file
         if current is None:
             return
-        if e.file and e.file.path and current.path:
-            if str(e.file.path) != str(current.path):
-                return
+        if str(e.file.path) != str(current.path):
+            return
+        # Recompute line + events for current ROI when analysis completes.
         safe_call(self._view.refresh_velocity_events)
 
     def _on_detect_events_done(self, e: DetectEvents) -> None:
@@ -136,7 +140,8 @@ class ImageLineViewerReplacementBindings:
             return
         if e.path and current.path and str(current.path) != e.path:
             return
-        safe_call(self._view.refresh_velocity_events)
+        # DetectEvents only affects event rectangles.
+        safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_event_selected(self, e: EventSelection) -> None:
         safe_call(self._view.zoom_to_event, e)
@@ -151,13 +156,16 @@ class ImageLineViewerReplacementBindings:
         )
 
     def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:
-        safe_call(self._view.refresh_velocity_events)
+        # VelocityEventUpdate only affects event rectangles.
+        safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_add_kym_event(self, e: AddKymEvent) -> None:
-        safe_call(self._view.refresh_velocity_events)
+        # AddKymEvent only affects event rectangles.
+        safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
-        safe_call(self._view.refresh_velocity_events)
+        # DeleteKymEvent only affects event rectangles.
+        safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_roi_bounds(self, e: SetRoiBounds) -> None:
         from kymflow.core.image_loaders.roi import RoiBounds
@@ -186,4 +194,5 @@ class ImageLineViewerReplacementBindings:
         safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_roi_deleted(self, e: DeleteRoi) -> None:
-        safe_call(self._view.refresh_velocity_events)
+        # Deleted ROI is already removed from ImageRoiWidget; clear selection/line/events.
+        safe_call(self._view.set_selected_roi, None)

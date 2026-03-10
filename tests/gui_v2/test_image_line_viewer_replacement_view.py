@@ -20,8 +20,8 @@ def replacement_view() -> ImageLineViewerReplacementView:
 
 
 def test_apply_filters_stores_state_and_refreshes(replacement_view: ImageLineViewerReplacementView) -> None:
-    """apply_filters updates _remove_outliers, _median_filter and triggers _refresh_from_state."""
-    with patch.object(replacement_view, "_refresh_from_state") as mock_refresh:
+    """apply_filters updates _remove_outliers, _median_filter and triggers _update_line_for_current_roi."""
+    with patch.object(replacement_view, "_update_line_for_current_roi") as mock_refresh:
         replacement_view.apply_filters(remove_outliers=True, median_filter=True)
 
     assert replacement_view._remove_outliers is True
@@ -61,9 +61,9 @@ def test_reset_zoom_no_op_when_widgets_none(replacement_view: ImageLineViewerRep
 
 
 def test_set_event_filter_stores_filter_and_refreshes(replacement_view: ImageLineViewerReplacementView) -> None:
-    """set_event_filter stores filter dict and triggers _refresh_from_state."""
+    """set_event_filter stores filter dict and triggers _update_events_for_current_roi."""
     filter_dict = {"User Added": True, "Auto Detected": False}
-    with patch.object(replacement_view, "_refresh_from_state") as mock_refresh:
+    with patch.object(replacement_view, "_update_events_for_current_roi") as mock_refresh:
         replacement_view.set_event_filter(filter_dict)
 
     assert replacement_view._event_filter == filter_dict
@@ -73,7 +73,7 @@ def test_set_event_filter_stores_filter_and_refreshes(replacement_view: ImageLin
 def test_set_event_filter_none(replacement_view: ImageLineViewerReplacementView) -> None:
     """set_event_filter accepts None to clear filter."""
     replacement_view._event_filter = {"User Added": True}
-    with patch.object(replacement_view, "_refresh_from_state"):
+    with patch.object(replacement_view, "_update_events_for_current_roi"):
         replacement_view.set_event_filter(None)
 
     assert replacement_view._event_filter is None

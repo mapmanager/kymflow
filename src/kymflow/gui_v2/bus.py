@@ -224,7 +224,7 @@ class EventBus:
                 # Phase matches - deliver event
                 filtered_handlers.append((handler, handler_phase))
 
-        if self._config.trace:
+        if 1 or self._config.trace:
             logger.info(f"[bus] received {etype.__name__} phase={event_phase}")
             logger.info(f'  event:{event}')
             # logger.info(f"  phase={event_phase}")

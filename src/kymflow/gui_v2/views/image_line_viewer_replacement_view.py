@@ -16,6 +16,7 @@ import numpy as np
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.plotting.theme import ThemeMode as KymflowThemeMode
 from kymflow.gui_v2.adapters import (
     kymimage_to_channel_manager,
@@ -40,12 +41,11 @@ OnRoiSelect = Callable[[int | None], None]
 OnEditRoi = Callable[[EditRoi], None]
 
 
-def _region_of_interest_to_roi_bounds(roi) -> "RoiBounds":
+def _region_of_interest_to_roi_bounds(roi) -> RoiBounds:
     """Convert nicewidgets RegionOfInterest to kymflow RoiBounds.
     r0,r1=rows=dim0, c0,c1=cols=dim1.
     """
-    from kymflow.core.image_loaders.roi import RoiBounds
-
+    
     return RoiBounds(
         dim0_start=int(min(roi.r0, roi.r1)),
         dim0_stop=int(max(roi.r0, roi.r1)),
@@ -55,13 +55,24 @@ def _region_of_interest_to_roi_bounds(roi) -> "RoiBounds":
 
 
 def _parse_roi_id_from_name(name: str) -> int | None:
-    """Parse roi_id from RegionOfInterest name (e.g. ROI_1 -> 1)."""
-    if not name or not name.startswith("ROI_"):
+    """Parse roi_id from RegionOfInterest name for widget->app events.
+
+    kymflow uses roi_id (int) as the canonical identifier. The adapter creates
+    names as str(roi_id) (e.g. "1", "2"). ImageRoiWidget may add ROIs with
+    "ROI_N" format. Supports both: bare int string and "ROI_<int>".
+    """
+    if not name:
         return None
     try:
-        return int(name.split("_", 1)[1])
-    except (IndexError, ValueError):
-        return None
+        return int(name)
+    except ValueError:
+        pass
+    if name.startswith("ROI_"):
+        try:
+            return int(name.split("_", 1)[1])
+        except (IndexError, ValueError):
+            pass
+    return None
 
 
 def _to_nicewidgets_theme(kymflow_theme: KymflowThemeMode) -> str:
@@ -108,12 +119,7 @@ class ImageLineViewerReplacementView:
         """Create the viewer UI: ImageRoiWidget + LinePlotWidget in a column."""
         from nicewidgets.image_line_widget.image_roi_widget import ImageRoiWidget
         from nicewidgets.image_line_widget.line_plot_widget import LinePlotWidget
-        from nicewidgets.image_line_widget.models import (
-            AxisEvent,
-            AxisEventType,
-            ROIEvent,
-            ROIEventType,
-        )
+        from nicewidgets.image_line_widget.models import AxisEvent, ROIEvent, ROIEventType
 
         self._container = ui.column().classes("w-full h-full")
         with self._container:
@@ -127,7 +133,7 @@ class ImageLineViewerReplacementView:
                     roi_id = _parse_roi_id_from_name(e.roi.name)
                     if roi_id is not None:
                         bounds = _region_of_interest_to_roi_bounds(e.roi)
-                        path = str(self._current_file.path) if self._current_file and hasattr(self._current_file, "path") else None
+                        path = str(self._current_file.path) if self._current_file else None
                         self._on_edit_roi(
                             EditRoi(
                                 roi_id=roi_id,
@@ -162,7 +168,7 @@ class ImageLineViewerReplacementView:
 
             # Create empty ChannelManager for initial state
             import numpy as np
-            from nicewidgets.image_line_widget.models import Channel, ChannelManager, RegionOfInterest
+            from nicewidgets.image_line_widget.models import Channel, ChannelManager
 
             placeholder = np.zeros((10, 10), dtype=np.float64)
             placeholder_manager = ChannelManager(
@@ -200,90 +206,116 @@ class ImageLineViewerReplacementView:
 
     def _refresh_from_state(self) -> None:
         """Update widgets from _current_file and _current_roi_id."""
-
-        from kymflow.core.utils.get_stack_trace import get_stack_trace
-        logger.error('=== === ===')
-        print(get_stack_trace())
-
-        # return
-
         if self._image_roi_widget is None or self._line_plot_widget is None:
             return
 
         kf = self._current_file
-        roi_id = self._current_roi_id
 
         if kf is None:
-            # Clear to placeholder
+            # No file: clear line + events and leave image placeholder.
+            self._line_plot_widget.clear_for_no_roi()
             return
 
-        # try:
-        if 1:
-            logger.error('calling kymimage_to_channel_manager')
-            manager, rois = kymimage_to_channel_manager(kf)
-            theme_str = _to_nicewidgets_theme(self._theme)
+        try:
+            self._update_image_for_file_change()
+            self._update_line_for_current_roi()
+            self._update_events_for_current_roi()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("ImageLineViewerReplacementView _refresh_from_state failed: %s", exc)
 
-
-            logger.error('calling set_file')
-            self._image_roi_widget.set_file(manager, rois)
-            self._image_roi_widget.set_theme(theme_str)
-
-            if self._display_params:
-                self._image_roi_widget.set_colorscale(self._display_params.colorscale)
-                if self._display_params.zmin is not None or self._display_params.zmax is not None:
-                    self._image_roi_widget.set_contrast(
-                        zmin=self._display_params.zmin,
-                        zmax=self._display_params.zmax,
-                    )
-
-            if roi_id is not None:
-                self._suppress_roi_select_emit = True
-                try:
-                    self._image_roi_widget.select_roi_by_name(f"ROI_{roi_id}")
-                finally:
-                    self._suppress_roi_select_emit = False
-
-            # Update line plot with velocity + events
-            kym_analysis = kf.get_kym_analysis()
-            median_filter_size = 3 if self._median_filter else 0
-
-            if roi_id is not None and kym_analysis.has_analysis(roi_id):
-                time_arr = kym_analysis.get_analysis_value(roi_id, "time")
-                vel_arr = kym_analysis.get_analysis_value(
-                    roi_id, "velocity",
-                    remove_outliers=self._remove_outliers,
-                    median_filter=median_filter_size,
+    def _update_image_for_file_change(self) -> None:
+        """Rebuild ImageRoiWidget for the current file (image + ROIs only)."""
+        kf = self._current_file
+        if kf is None or self._image_roi_widget is None:
+            return
+        manager, rois = kymimage_to_channel_manager(kf)
+        theme_str = _to_nicewidgets_theme(self._theme)
+        self._image_roi_widget.set_file(manager, rois)
+        self._image_roi_widget.set_theme(theme_str)
+        if self._display_params:
+            self._image_roi_widget.set_colorscale(self._display_params.colorscale)
+            if self._display_params.zmin is not None or self._display_params.zmax is not None:
+                self._image_roi_widget.set_contrast(
+                    zmin=self._display_params.zmin,
+                    zmax=self._display_params.zmax,
                 )
-                if time_arr is not None and vel_arr is not None:
-                    x_line = np.asarray(time_arr, dtype=float)
-                    y_line = np.asarray(vel_arr, dtype=float)
-                    self._line_plot_widget.clear_lines()
-                    self._line_plot_widget.add_line(x_line, y_line, "velocity")
+        if self._current_roi_id is not None:
+            self._suppress_roi_select_emit = True
+            try:
+                self._image_roi_widget.select_roi_by_name(str(self._current_roi_id))
+            finally:
+                self._suppress_roi_select_emit = False
 
-                    events_raw = (
-                        kym_analysis.get_velocity_events_filtered(roi_id, self._event_filter or {})
-                        if self._event_filter
-                        else kym_analysis.get_velocity_events(roi_id)
-                    )
-                    acq_events = velocity_events_to_acq_image_events(events_raw)
-                    self._line_plot_widget.acq_image_events.clear_all_events()
-                    if acq_events:
-                        self._line_plot_widget.acq_image_events.add_events(acq_events)
-                    if self._selected_event_id:
-                        self._line_plot_widget.acq_image_events.select_event(
-                            self._selected_event_id,
-                            event_window_t=0.2,
-                        )
-                else:
-                    self._line_plot_widget.clear_lines()
-            else:
-                self._line_plot_widget.clear_lines()
-                self._line_plot_widget.acq_image_events.clear_all_events()
+    def _update_line_for_current_roi(self) -> None:
+        """Recompute velocity line for current file & ROI (no image changes)."""
+        if self._line_plot_widget is None:
+            return
+        kf = self._current_file
+        roi_id = self._current_roi_id
+        if kf is None or roi_id is None:
+            self._line_plot_widget.clear_for_no_roi()
+            return
+        kym_analysis = kf.get_kym_analysis()
+        if not kym_analysis.has_analysis(roi_id):
+            self._line_plot_widget.clear_for_no_roi()
+            return
+        median_filter_size = 3 if self._median_filter else 0
+        time_arr = kym_analysis.get_analysis_value(roi_id, "time")
+        vel_arr = kym_analysis.get_analysis_value(
+            roi_id,
+            "velocity",
+            remove_outliers=self._remove_outliers,
+            median_filter=median_filter_size,
+        )
+        if time_arr is None or vel_arr is None:
+            self._line_plot_widget.clear_for_no_roi()
+            return
+        x_line = np.asarray(time_arr, dtype=float)
+        y_line = np.asarray(vel_arr, dtype=float)
+        self._line_plot_widget.set_velocity_trace(x_line, y_line, name="velocity")
 
-            self._line_plot_widget.set_theme(theme_str)
+    def _update_events_for_current_roi(self) -> None:
+        """Recompute velocity-event rectangles for current file & ROI only."""
+        if self._line_plot_widget is None:
+            return
+        kf = self._current_file
+        roi_id = self._current_roi_id
+        if kf is None or roi_id is None:
+            self._line_plot_widget.set_events([])
+            return
+        kym_analysis = kf.get_kym_analysis()
+        if self._event_filter:
+            events_raw = kym_analysis.get_velocity_events_filtered(roi_id, self._event_filter)
+        else:
+            events_raw = kym_analysis.get_velocity_events(roi_id)
+        acq_events = velocity_events_to_acq_image_events(events_raw)
+        self._line_plot_widget.set_events(acq_events or [])
+        if self._selected_event_id:
+            self._line_plot_widget.acq_image_events.select_event(
+                self._selected_event_id,
+                event_window_t=0.2,
+            )
 
-        # except Exception as e:
-        #     logger.error("ImageLineViewerReplacementView _refresh_from_state: %s", e)
+    def _apply_zoom_to_event(self, e: EventSelection) -> None:
+        """Select and zoom to an event without recomputing data."""
+        self._selected_event_id = e.event_id
+        if (
+            not e.event_id
+            or not e.event
+            or not e.options
+            or not e.options.zoom
+            or self._line_plot_widget is None
+        ):
+            return
+        pad = float(e.options.zoom_pad_sec)
+        self._line_plot_widget.acq_image_events.select_event(
+            e.event_id,
+            event_window_t=pad * 2,
+        )
+        if self._image_roi_widget:
+            self._image_roi_widget.set_x_axis_range(
+                [e.event.t_start - pad, e.event.t_start + pad]
+            )
 
     def set_selected_file(self, file: Optional[KymImage]) -> None:
         """Update plot for new file. Clears ROI; ROISelection will set it."""
@@ -307,8 +339,23 @@ class ImageLineViewerReplacementView:
         safe_call(self._set_selected_roi_impl, roi_id)
 
     def _set_selected_roi_impl(self, roi_id: Optional[int]) -> None:
+        """Select ROI by roi_id. Name must match adapter convention (str(roi_id))."""
         self._current_roi_id = roi_id
-        self._refresh_from_state()
+        if self._image_roi_widget:
+            name = str(roi_id) if roi_id is not None else None
+            if name is not None and name not in self._image_roi_widget.rois:
+                logger.error(
+                    "set_selected_roi: ROI name %r not in widget (expected str(roi_id) from adapter)",
+                    name,
+                )
+                name = None
+            self._suppress_roi_select_emit = True
+            try:
+                self._image_roi_widget.select_roi_by_name(name, emit_select=False)
+            finally:
+                self._suppress_roi_select_emit = False
+        self._update_line_for_current_roi()
+        self._update_events_for_current_roi()
 
     def set_theme(self, theme: KymflowThemeMode) -> None:
         """Update theme for both widgets."""
@@ -337,35 +384,18 @@ class ImageLineViewerReplacementView:
         safe_call(self._zoom_to_event_impl, e)
 
     def _zoom_to_event_impl(self, e: EventSelection) -> None:
-        self._selected_event_id = e.event_id
-        self._refresh_from_state()
-        if (
-            e.event_id
-            and e.event
-            and e.options
-            and e.options.zoom
-            and self._line_plot_widget
-        ):
-            pad = float(e.options.zoom_pad_sec)
-            self._line_plot_widget.acq_image_events.select_event(
-                e.event_id,
-                event_window_t=pad * 2,  # full window width
-            )
-            if self._image_roi_widget:
-                self._image_roi_widget.set_x_axis_range(
-                    [e.event.t_start - pad, e.event.t_start + pad]
-                )
+        self._apply_zoom_to_event(e)
 
     def set_event_filter(self, event_filter: dict[str, bool] | None) -> None:
         """Set event type filter. Triggers refresh."""
         self._event_filter = event_filter
-        self._refresh_from_state()
+        self._update_events_for_current_roi()
 
     def apply_filters(self, remove_outliers: bool, median_filter: bool) -> None:
         """Apply filter settings. Triggers refresh."""
         self._remove_outliers = remove_outliers
         self._median_filter = median_filter
-        self._refresh_from_state()
+        self._update_line_for_current_roi()
 
     def reset_zoom(self) -> None:
         """Reset zoom to full scale."""
@@ -396,6 +426,7 @@ class ImageLineViewerReplacementView:
     def _scroll_x_impl(self, direction: Literal["prev", "next"]) -> None:
         if self._line_plot_widget is None or self._image_roi_widget is None:
             return
+        # Plotly layout is variable; .get() is intentional for optional structure.
         layout = self._line_plot_widget.plot_dict.get("layout") or {}
         xaxis = layout.get("xaxis") or {}
         rng = xaxis.get("range")
@@ -441,4 +472,9 @@ class ImageLineViewerReplacementView:
 
     def refresh_velocity_events(self) -> None:
         """Re-refresh to pick up event changes."""
-        self._refresh_from_state()
+        self._update_line_for_current_roi()
+        self._update_events_for_current_roi()
+
+    def refresh_events_for_current_roi(self) -> None:
+        """Refresh only velocity events for current ROI (no image or line changes)."""
+        self._update_events_for_current_roi()

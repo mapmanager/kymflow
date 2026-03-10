@@ -30,7 +30,8 @@ def kymimage_to_channel_manager(
     Handles transpose and physical units. KymImage uses (rows=time, cols=space).
     ChannelManager row_scale = seconds_per_line, col_scale = micrometers_per_pixel.
 
-    ROI names use format ROI_{roi_id} so bindings can map back to kymflow roi_id.
+    ROI names use str(roi_id) (e.g. "1", "2") so the view can select by name
+    and map back to kymflow roi_id. kymflow uses int as the canonical ROI key.
 
     Args:
         kym: KymImage instance. Must have loaded channel data (call load_channel first).

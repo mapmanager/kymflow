@@ -79,7 +79,8 @@ def home() -> None:
     #     pass
 
 
-    logger.info("20260225 NICEGUI_STORAGE_PATH=%s", os.environ.get("NICEGUI_STORAGE_PATH", "(not set)"))
+    _storage_path = os.environ.get("NICEGUI_STORAGE_PATH", "(not set)")
+    logger.info(f"NICEGUI_STORAGE_PATH={_storage_path}")
 
     # Install native rect polling only in native mode (delayed slightly so native window exists).
     # Skip entirely in browser mode - no reason to poll native window rects.
@@ -105,7 +106,7 @@ def home() -> None:
 
     # Get or create cached page instance
     cached_page = get_cached_page(session_id, "/")
-    logger.warning(f'cached_page:{cached_page}')
+    logger.info(f'cached_page:{cached_page}')
 
     if cached_page is not None:
         # Reuse cached page
@@ -145,28 +146,21 @@ def home() -> None:
         if is_web:
             chosen_path = default_path or last_path
             chosen_depth = default_depth if default_path else last_depth
-            chosen_source = "default_path" if default_path else ("last_path" if last_path else "none")
+            # chosen_source = "default_path" if default_path else ("last_path" if last_path else "none")
         else:
             chosen_path = last_path
             chosen_depth = last_depth
-            chosen_source = "last_path" if last_path else "none"
-
-        # ---- Debug logging (so you can see exactly what branch you hit) ----
-        logger.info(f"[bootstrap] cached_page is None: {cached_page is None}")
-        logger.info(f"[bootstrap] context.app_state.folder is None: {context.app_state.folder is None}")
-        logger.info(f"[bootstrap] KYMFLOW_GUI_NATIVE raw: {raw_native!r} -> is_web={is_web}")
-        logger.info(f"[bootstrap] last_path={last_path!r} last_depth={last_depth!r}")
-        logger.info(f"[bootstrap] KYMFLOW_DEFAULT_PATH={default_path!r}")
-        logger.info(f"[bootstrap] KYMFLOW_DEFAULT_DEPTH raw={raw_default_depth!r} parsed={default_depth!r}")
-        logger.info(f"[bootstrap] chosen_source={chosen_source} chosen_path={chosen_path!r} chosen_depth={chosen_depth!r}")
+            # chosen_source = "last_path" if last_path else "none"
 
         if chosen_path:
             chosen_path_obj = Path(chosen_path)
             exists = chosen_path_obj.exists()
-            logger.info(f"[bootstrap] chosen_path exists={exists} resolved={str(chosen_path_obj)!r}")
+            # logger.info(f"chosen_path exists={exists} resolved={str(chosen_path_obj)!r}")
 
             if exists:
-                logger.info(f"[bootstrap] emitting SelectPathEvent new_path={str(chosen_path_obj)!r} depth={chosen_depth!r}")
+                logger.info(f"-->> emitting SelectPathEvent")
+                logger.info(f'  new_path={str(chosen_path_obj)}')
+                logger.info(f'  depth={chosen_depth}')
                 page.bus.emit(
                     SelectPathEvent(
                         new_path=str(chosen_path_obj),
@@ -175,9 +169,9 @@ def home() -> None:
                     )
                 )
             else:
-                logger.warning(f"[bootstrap] Bootstrap path does not exist: {chosen_path!r}")
+                logger.warning(f"-->> path does not exist: {chosen_path!r}")
         else:
-            logger.info("[bootstrap] No chosen_path (nothing to bootstrap)")
+            logger.info("-->> No chosen_path (nothing to bootstrap)")
 
 def _env_bool(name: str, default: bool) -> bool:
     """Parse env var as bool; if unset/invalid returns default."""
@@ -218,12 +212,7 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     native_bool = _env_bool("KYMFLOW_GUI_NATIVE", True) if native_bool is None else native_bool
     reload = _env_bool("KYMFLOW_GUI_RELOAD", False) if reload is None else reload
 
-    # Render sets PORT; if absent use 8080.
-    # from nicegui import native as native_module
-    # port = _env_int("PORT", native_module.find_open_port())
-    # port = _env_int("PORT", 8080)
     from nicegui import native as native_module    
-    # port = _env_int("PORT", native_module.find_open_port())
     if native_bool:
         port = _env_int("PORT", native_module.find_open_port())
     else:
@@ -233,17 +222,15 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     default_host = "127.0.0.1" if native_bool else "0.0.0.0"
     host = os.getenv("HOST", default_host)
 
-    logger.info(
-        "Starting KymFlow GUI v2: port=%s reload=%s native=%s",
-        port,
-        reload,
-        native_bool,
-    )
-
-    # Register minimal shutdown handlers to persist configs (native mode only)
     if native_bool:
         install_shutdown_handlers(context)
-    
+
+    logger.info('Starting KymFlow GUI ui.run with')
+    logger.info(f'  host={host}')
+    logger.info(f'  port={port}')
+    logger.info(f'  reload={reload}')
+    logger.info(f'  native={native_bool}')
+
     ui.run(
         host=host,
         port=port,
