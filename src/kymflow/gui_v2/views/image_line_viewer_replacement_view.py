@@ -200,6 +200,13 @@ class ImageLineViewerReplacementView:
 
     def _refresh_from_state(self) -> None:
         """Update widgets from _current_file and _current_roi_id."""
+
+        from kymflow.core.utils.get_stack_trace import get_stack_trace
+        logger.error('=== === ===')
+        print(get_stack_trace())
+
+        # return
+
         if self._image_roi_widget is None or self._line_plot_widget is None:
             return
 
@@ -210,9 +217,14 @@ class ImageLineViewerReplacementView:
             # Clear to placeholder
             return
 
-        try:
+        # try:
+        if 1:
+            logger.error('calling kymimage_to_channel_manager')
             manager, rois = kymimage_to_channel_manager(kf)
             theme_str = _to_nicewidgets_theme(self._theme)
+
+
+            logger.error('calling set_file')
             self._image_roi_widget.set_file(manager, rois)
             self._image_roi_widget.set_theme(theme_str)
 
@@ -269,8 +281,9 @@ class ImageLineViewerReplacementView:
                 self._line_plot_widget.acq_image_events.clear_all_events()
 
             self._line_plot_widget.set_theme(theme_str)
-        except Exception as e:
-            logger.warning("ImageLineViewerReplacementView _refresh_from_state: %s", e)
+
+        # except Exception as e:
+        #     logger.error("ImageLineViewerReplacementView _refresh_from_state: %s", e)
 
     def set_selected_file(self, file: Optional[KymImage]) -> None:
         """Update plot for new file. Clears ROI; ROISelection will set it."""
