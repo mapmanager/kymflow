@@ -401,9 +401,15 @@ ROI = RectROI
 class RoiSet:
     """Container and manager for multiple ROI instances.
 
-    This class owns the ROIs, assigns unique integer IDs, and preserves
+    This class owns the ROIs, assigns unique integer IDs (roi_id), and preserves
     creation order (via an internal dict). Holds a reference to AcqImage
     for bounds validation.
+
+    ROI ID semantics:
+    - roi_id is an integer, assigned sequentially starting at 1.
+    - All kymflow APIs use int as the canonical ROI identifier.
+    - For display in nicewidgets ImageRoiWidget, the adapter uses
+      name=str(roi_id) (e.g. "1", "2") so selection can be mapped back to roi_id.
     """
 
     def __init__(self, acq_image: "AcqImage") -> None:

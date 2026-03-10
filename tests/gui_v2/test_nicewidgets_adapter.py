@@ -48,7 +48,8 @@ class TestKymimageToChannelManager:
         assert manager is not None
         assert len(rois) == 1
         # ROI names use format ROI_<roi_id>; kymflow may use 1-based IDs
-        assert rois[0].name.startswith("ROI_") and rois[0].name[4:].isdigit()
+        # Adapter uses name=str(roi_id) for widget display (e.g. "1", "2")
+        assert rois[0].name.isdigit()
         assert rois[0].r0 == 0 and rois[0].r1 == 10
         assert rois[0].c0 == 0 and rois[0].c1 == 15
 
@@ -63,12 +64,12 @@ class TestKymimageToChannelManager:
         assert ch.data.shape == (50, 80)
 
     def test_multiple_rois_use_roi_naming(self) -> None:
-        """ROI names are ROI_<id> for bindings mapping (ids from get_roi_ids)."""
+        """ROI names are str(roi_id) for bindings mapping (ids from get_roi_ids)."""
         kym = _make_synthetic_kym(20, 20, rois=[(0, 5, 0, 5), (10, 15, 10, 15)])
         _, rois = kymimage_to_channel_manager(kym)
         assert len(rois) == 2
         for roi in rois:
-            assert roi.name.startswith("ROI_") and roi.name[4:].isdigit()
+            assert roi.name.isdigit()
         assert rois[0].r0 == 0 and rois[0].r1 == 5
         assert rois[1].r0 == 10 and rois[1].r1 == 15
 
@@ -148,7 +149,7 @@ class TestVelocityEventsToAcqImageEvents:
 
 def test_parse_roi_id_from_name() -> None:
     """_parse_roi_id_from_name extracts roi_id from ROI_<id>."""
-    from kymflow.gui_v2.views.image_line_viewer_replacement_view import (
+    from kymflow.gui_v2.views.image_line_viewer_v2_view import (
         _parse_roi_id_from_name,
     )
 
@@ -160,36 +161,36 @@ def test_parse_roi_id_from_name() -> None:
     assert _parse_roi_id_from_name("") is None
 
 
-class TestImageLineViewerReplacementView:
-    """Basic tests for ImageLineViewerReplacementView (Phase 2)."""
+class TestImageLineViewerV2View:
+    """Basic tests for ImageLineViewerV2View (Phase 2)."""
 
     def test_instantiation(self) -> None:
         """View can be instantiated with optional callbacks."""
-        from kymflow.gui_v2.views.image_line_viewer_replacement_view import (
-            ImageLineViewerReplacementView,
+        from kymflow.gui_v2.views.image_line_viewer_v2_view import (
+            ImageLineViewerV2View,
         )
 
-        view = ImageLineViewerReplacementView()
+        view = ImageLineViewerV2View()
         assert view._current_file is None
         assert view._current_roi_id is None
 
     def test_set_theme_before_render(self) -> None:
         """set_theme does not crash when widgets not yet created."""
         from kymflow.core.plotting.theme import ThemeMode
-        from kymflow.gui_v2.views.image_line_viewer_replacement_view import (
-            ImageLineViewerReplacementView,
+        from kymflow.gui_v2.views.image_line_viewer_v2_view import (
+            ImageLineViewerV2View,
         )
 
-        view = ImageLineViewerReplacementView()
+        view = ImageLineViewerV2View()
         view.set_theme(ThemeMode.DARK)
         assert view._theme == ThemeMode.DARK
 
     def test_set_selected_file_none(self) -> None:
         """set_selected_file(None) does not crash."""
-        from kymflow.gui_v2.views.image_line_viewer_replacement_view import (
-            ImageLineViewerReplacementView,
+        from kymflow.gui_v2.views.image_line_viewer_v2_view import (
+            ImageLineViewerV2View,
         )
 
-        view = ImageLineViewerReplacementView()
+        view = ImageLineViewerV2View()
         view.set_selected_file(None)
         assert view._current_file is None

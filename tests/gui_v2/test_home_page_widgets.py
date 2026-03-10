@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from kymflow.core.plotting.theme import ThemeMode
-from kymflow.gui_v2.views.image_line_viewer_replacement_view import (
-    ImageLineViewerReplacementView,
+from kymflow.gui_v2.views.image_line_viewer_v2_view import (
+    ImageLineViewerV2View,
 )
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
 from kymflow.gui_v2.state import AppState, ImageDisplayParams
@@ -34,11 +34,11 @@ from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.pages.home_page import HomePage
 
 
-def test_home_page_uses_image_line_viewer_replacement(bus) -> None:
-    """Phase 4: HomePage uses ImageLineViewerReplacementView (not ImageLineViewerView)."""
+def test_home_page_uses_image_line_viewer_v2(bus) -> None:
+    """Phase 4: HomePage uses ImageLineViewerV2View (not ImageLineViewerView)."""
     context = AppContext()
     page = HomePage(context, bus)
-    assert isinstance(page._image_line_viewer, ImageLineViewerReplacementView)
+    assert isinstance(page._image_line_viewer, ImageLineViewerV2View)
 
 
 def test_home_page_on_roi_select_emits_roi_selection(bus) -> None:
@@ -55,7 +55,7 @@ def test_home_page_on_roi_select_emits_roi_selection(bus) -> None:
 
     bus.emit = capture_emit
 
-    # Simulate on_roi_select callback (wired in replacement view when user selects ROI)
+    # Simulate on_roi_select callback (wired in v2 view when user selects ROI)
     view = page._image_line_viewer
     assert view._on_roi_select is not None
     view._on_roi_select(1)
@@ -68,7 +68,7 @@ def test_home_page_on_roi_select_emits_roi_selection(bus) -> None:
 
 
 def test_home_page_drawer_filter_change_calls_apply_filters(bus) -> None:
-    """Phase 5: _on_drawer_filter_change calls apply_filters on replacement view."""
+    """Phase 5: _on_drawer_filter_change calls apply_filters on v2 view."""
     context = AppContext()
     page = HomePage(context, bus)
     with patch.object(page._image_line_viewer, "apply_filters") as mock_apply:
@@ -76,7 +76,7 @@ def test_home_page_drawer_filter_change_calls_apply_filters(bus) -> None:
     mock_apply.assert_called_once_with(True, True)
 
 
-def test_home_page_replacement_view_has_on_edit_roi(bus) -> None:
+def test_home_page_v2_view_has_on_edit_roi(bus) -> None:
     """Phase 6: HomePage wires on_edit_roi so ROI edits emit EditRoi."""
     context = AppContext()
     page = HomePage(context, bus)
@@ -85,7 +85,7 @@ def test_home_page_replacement_view_has_on_edit_roi(bus) -> None:
 
 
 def test_home_page_drawer_full_zoom_calls_reset_zoom(bus) -> None:
-    """Phase 5: _on_drawer_full_zoom calls reset_zoom on replacement view."""
+    """Phase 5: _on_drawer_full_zoom calls reset_zoom on v2 view."""
     context = AppContext()
     page = HomePage(context, bus)
     with patch.object(page._image_line_viewer, "reset_zoom") as mock_reset:

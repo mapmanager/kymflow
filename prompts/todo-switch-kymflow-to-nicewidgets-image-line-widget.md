@@ -179,7 +179,7 @@ def _resolve_colorscale(name: str):
 
 ```mermaid
 flowchart TB
-    subgraph replacement [ImageLineViewerReplacement]
+    subgraph replacement [ImageLineViewerV2]
         IRW[ImageRoiWidget - Image Only]
         LPW[LinePlotWidget - Velocity Lines + Event Rects]
         IRW --> LPW
@@ -194,7 +194,7 @@ flowchart TB
 ## 2. ROI Selection Flow (Post-Migration)
 
 - **ImageRoiWidget** emits `ROIEvent(SELECT)` when user selects an ROI in its toolbar.
-- **ImageLineViewerReplacementBindings** listens to `on_roi_event` and emits kymflow `ROISelection(phase="intent", roi_id=...)` to update AppState.
+- **ImageLineViewerV2Bindings** listens to `on_roi_event` and emits kymflow `ROISelection(phase="intent", roi_id=...)` to update AppState.
 - The existing analysis toolbar ROI `ui.select` is ignored during transition; all ROI selection comes from ImageRoiWidget.
 - **Mapping**: Adapter must use ROI names that map 1:1 to kymflow `roi_id` (e.g. `"ROI_0"` → 0) so bindings can emit correct `roi_id` in `ROISelection`.
 
@@ -246,13 +246,13 @@ flowchart TB
 
 4. **KymImage-to-ChannelManager adapter**: Build `ChannelManager` and `List[RegionOfInterest]` from `KymImage`. Handle transpose and physical units.
 5. **VelocityEvent-to-AcqImageEvent converter**: Map kymflow events to nicewidgets model.
-6. **ImageLineViewerReplacement view**: Compose ImageRoiWidget + LinePlotWidget in vertical layout. Implement `set_selected_file`, `set_theme`, etc.
+6. **ImageLineViewerV2 view**: Compose ImageRoiWidget + LinePlotWidget in vertical layout. Implement `set_selected_file`, `set_theme`, etc.
 
-**Unit tests**: Create `tests/gui_v2/test_nicewidgets_adapter.py` covering `kymimage_to_channel_manager`, `velocity_events_to_acq_image_events`, and `ImageLineViewerReplacementView` (instantiation, setters).
+**Unit tests**: Create `tests/gui_v2/test_nicewidgets_adapter.py` covering `kymimage_to_channel_manager`, `velocity_events_to_acq_image_events`, and `ImageLineViewerV2View` (instantiation, setters).
 
 ### Phase 3: Wire Events (kymflow)
 
-7. **ImageLineViewerReplacementBindings**:
+7. **ImageLineViewerV2Bindings**:
    - `FileSelection` → adapter → `ImageRoiWidget.set_file`, `LinePlotWidget` update.
    - `ROISelection` (state): Update view when AppState changes (e.g. from other sources). Primary ROI selection comes from ImageRoiWidget `on_roi_event` → emit `ROISelection(intent)`.
    - `EventSelection` → `LinePlotWidget.acq_image_events.select_event`.
@@ -265,11 +265,11 @@ flowchart TB
    - `EditRoi`, `DeleteRoi`, `EditPhysicalUnits`, `AnalysisCompleted`, `DetectEvents` → refresh/sync.
 8. **Axis linking**: `on_axis_change` on both widgets → sync x-axis via `set_x_axis_range`.
 
-**Unit tests**: Create `tests/gui_v2/test_image_line_viewer_replacement_bindings.py` covering FileSelection, ROISelection, ThemeChanged, AddKymEvent, DeleteKymEvent, EventSelection, KymScrollXEvent, teardown. Add `_parse_roi_id_from_name` test in `test_nicewidgets_adapter.py`.
+**Unit tests**: Create `tests/gui_v2/test_image_line_viewer_v2_bindings.py` covering FileSelection, ROISelection, ThemeChanged, AddKymEvent, DeleteKymEvent, EventSelection, KymScrollXEvent, teardown. Add `_parse_roi_id_from_name` test in `test_nicewidgets_adapter.py`.
 
 ### Phase 4: Swap and Remove (kymflow)
 
-9. Replace `ImageLineViewerView` with `ImageLineViewerReplacement` in [home_page.py](kymflow/src/kymflow/gui_v2/pages/home_page.py).
+9. Replace `ImageLineViewerView` with `ImageLineViewerV2` in [home_page.py](kymflow/src/kymflow/gui_v2/pages/home_page.py).
 10. Update keyboard handlers (`scroll_x`, `reset_zoom`) to call the new view.
 11. Wire `_event_view._on_event_filter_changed` → `new_view.set_event_filter`.
 12. **Defer** LinePlotControlsView integration: Keep drawer controls visible; wire `_on_drawer_filter_change` and `_on_drawer_full_zoom` to no-ops until post-migration.
@@ -279,7 +279,7 @@ flowchart TB
 
 ### Phase 5: Filters, Zoom, Scroll
 
-14. `apply_filters`, `reset_zoom`, `scroll_x` on replacement (needed for keyboard shortcuts and possibly deferred drawer integration).
+14. `apply_filters`, `reset_zoom`, `scroll_x` on v2 (needed for keyboard shortcuts and possibly deferred drawer integration).
 15. Implement `set_event_filter` to filter event rects shown in LinePlotWidget.
 
 **Unit tests**: Add tests for `apply_filters`, `reset_zoom`, `scroll_x`, `set_event_filter` behavior.

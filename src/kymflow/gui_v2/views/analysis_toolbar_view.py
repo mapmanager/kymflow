@@ -77,7 +77,7 @@ class AnalysisToolbarView:
         app_context: "AppContext",
         on_analysis_start: OnAnalysisStart,
         on_analysis_cancel: OnAnalysisCancel,
-        on_add_roi: OnAddRoi,
+        on_add_roi: OnAddRoi | None = None,
         on_delete_roi: OnDeleteRoi,
         on_set_roi_edit_state: OnSetRoiEditState,
         on_roi_selected: OnROISelected,
@@ -108,7 +108,6 @@ class AnalysisToolbarView:
         self._window_select: Optional[ui.select] = None
         self._start_button: Optional[ui.button] = None
         self._cancel_button: Optional[ui.button] = None
-        self._add_roi_button: Optional[ui.button] = None
         self._delete_roi_button: Optional[ui.button] = None
         self._edit_roi_button: Optional[ui.button] = None
         self._roi_select: Optional[ui.select] = None
@@ -143,7 +142,6 @@ class AnalysisToolbarView:
         self._window_select: Optional[ui.select] = None
         self._start_button = None
         self._cancel_button = None
-        self._add_roi_button = None
         self._delete_roi_button = None
         self._edit_roi_button = None
         self._roi_select = None
@@ -174,7 +172,6 @@ class AnalysisToolbarView:
                 on_change=self._on_roi_dropdown_change,
             ).classes("min-w-32")
         with ui.row().classes("items-end gap-2"):
-            self._add_roi_button = ui.button("Add ROI", on_click=self._on_add_roi_click).props("dense").classes("text-sm")
             self._delete_roi_button = ui.button("Delete ROI", on_click=self._on_delete_roi_click).props("dense").classes("text-sm")
             self._edit_roi_button = ui.button("Edit ROI", on_click=self._on_edit_roi_click).props("dense").classes("text-sm")
 
@@ -296,24 +293,6 @@ class AnalysisToolbarView:
                         self._roi_select.enable()
 
         # ROI button states
-        if self._add_roi_button is not None:
-            # Add ROI: enabled when file is selected and under max ROI limit (if limit is set)
-            if running:
-                self._add_roi_button.disable()
-            elif has_file:
-                # Check if we're at the maximum number of ROIs (only if MAX_NUM_ROI is set)
-                if MAX_NUM_ROI is not None:
-                    num_rois = self._current_file.rois.numRois() if self._current_file else 0
-                    if num_rois >= MAX_NUM_ROI:
-                        self._add_roi_button.disable()
-                    else:
-                        self._add_roi_button.enable()
-                else:
-                    # No limit, always enable when file is selected
-                    self._add_roi_button.enable()
-            else:
-                self._add_roi_button.disable()
-        
         if self._delete_roi_button is not None:
             # Delete ROI: enabled when file is selected AND ROI is selected
             if running:
@@ -505,43 +484,6 @@ class AnalysisToolbarView:
         # Emit intent event
         self._on_analysis_cancel(
             AnalysisCancel(
-                phase="intent",
-            )
-        )
-
-    def _on_add_roi_click(self) -> None:
-        """Handle Add ROI button click."""
-        if self._current_file is None:
-            return
-        
-        # Defensive check: verify we haven't reached the maximum number of ROIs (only if limit is set)
-        if MAX_NUM_ROI is not None:
-            num_rois = self._current_file.rois.numRois()
-            if num_rois >= MAX_NUM_ROI:
-                # Show dialog explaining the limit
-                file_stem = (
-                    Path(self._current_file.path).stem
-                    if self._current_file.path is not None
-                    else "unknown file"
-                )
-                with ui.dialog() as dialog, ui.card():
-                    ui.label("Maximum number of ROIs reached").classes("text-lg font-semibold")
-                    ui.label(
-                        f"{file_stem} already has {num_rois} ROI(s). "
-                        f"The maximum allowed is {MAX_NUM_ROI}."
-                    ).classes("text-sm")
-                    with ui.row():
-                        ui.button("OK", on_click=dialog.close).props("outline")
-                
-                dialog.open()
-                return
-        
-        path_str = str(self._current_file.path) if self._current_file.path else None
-        self._on_add_roi(
-            AddRoi(
-                roi_id=None,
-                path=path_str,
-                origin=SelectionOrigin.EXTERNAL,
                 phase="intent",
             )
         )

@@ -13,6 +13,7 @@ import numpy as np
 
 from kymflow.core.api.kym_external import get_kym_geometry, get_roi_ids, get_roi_pixel_bounds
 from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.gui_v2.config import MAX_NUM_ROI
 
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
@@ -106,6 +107,44 @@ def kymimage_to_channel_manager(
         rois.append(roi)
 
     return manager, rois
+
+
+def create_full_roi_for_widget(kym: KymImage) -> "RegionOfInterest | None":
+    """Create a full-image ROI in kymflow and return RegionOfInterest for ImageRoiWidget.
+
+    Used when ImageRoiWidget Add button is clicked and on_request_add_roi callback
+    delegates to kymflow. Returns None if no file, max ROIs reached, or creation fails.
+
+    Args:
+        kym: KymImage to create ROI in.
+
+    Returns:
+        RegionOfInterest with name=str(roi_id), or None on failure.
+    """
+    from nicewidgets.image_line_widget.models import RegionOfInterest
+
+    if MAX_NUM_ROI is not None:
+        n = kym.rois.numRois()
+        if n >= MAX_NUM_ROI:
+            logger.warning(
+                "create_full_roi_for_widget: max ROIs reached (%d >= %d)",
+                n,
+                MAX_NUM_ROI,
+            )
+            return None
+    try:
+        roi = kym.rois.create_roi(bounds=None)
+        bounds = get_roi_pixel_bounds(kym, roi.id)
+        return RegionOfInterest(
+            name=str(roi.id),
+            r0=bounds.row_start,
+            r1=bounds.row_stop,
+            c0=bounds.col_start,
+            c1=bounds.col_stop,
+        )
+    except ValueError as exc:
+        logger.warning("create_full_roi_for_widget: %s", exc)
+        return None
 
 
 def velocity_events_to_acq_image_events(

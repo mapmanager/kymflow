@@ -10,7 +10,6 @@ from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers import (
     AddKymEventController,
-    AddRoiController,
     AnalysisController,
     AnalysisUpdateController,
     AppStateBridgeController,
@@ -34,6 +33,8 @@ from kymflow.gui_v2.controllers import (
     VelocityEventUpdateController,
 )
 from kymflow.gui_v2.events import (
+    AddRoi,
+    FileChanged,
     FileSelection,
     NextPrevFileEvent,
     ROISelection,
@@ -59,8 +60,8 @@ from kymflow.gui_v2.views import (
     FileTableView,
     FolderSelectorView,
     FolderSelectorBindings,
-    ImageLineViewerReplacementBindings,
-    ImageLineViewerReplacementView,
+    ImageLineViewerV2Bindings,
+    ImageLineViewerV2View,
     KymEventBindings,
     KymEventView,
     LinePlotControlsBindings,
@@ -175,11 +176,34 @@ class HomePage(BasePage):
                 )
             )
 
-        self._image_line_viewer = ImageLineViewerReplacementView(
+        def _on_add_roi(roi_id: int) -> None:
+            """Update AppState and emit AddRoi/FileChanged when ROI added via ImageRoiWidget."""
+            context.app_state.select_roi(roi_id)
+            kym_file = context.app_state.selected_file
+            bus.emit(
+                AddRoi(
+                    roi_id=roi_id,
+                    path=str(kym_file.path) if kym_file else None,
+                    origin=SelectionOrigin.IMAGE_VIEWER,
+                    phase="state",
+                )
+            )
+            if kym_file:
+                bus.emit(
+                    FileChanged(
+                        file=kym_file,
+                        change_type="roi",
+                        origin=SelectionOrigin.EXTERNAL,
+                        phase="state",
+                    )
+                )
+
+        self._image_line_viewer = ImageLineViewerV2View(
             on_kym_event_x_range=bus.emit,
             on_set_roi_bounds=bus.emit,
             on_roi_select=_on_roi_select,
             on_edit_roi=bus.emit,
+            on_add_roi=_on_add_roi,
         )
         self._event_view = KymEventView(
             context,
@@ -195,7 +219,7 @@ class HomePage(BasePage):
         )
         self._table_bindings: FileTableBindings | None = None
         self._folder_bindings: FolderSelectorBindings | None = None
-        self._image_line_viewer_bindings: ImageLineViewerReplacementBindings | None = None
+        self._image_line_viewer_bindings: ImageLineViewerV2Bindings | None = None
         self._event_bindings: KymEventBindings | None = None
         # 20260213ppc: Plot pool controller refs (set when LazySection render runs)
         self._plot_pool_controller_ref: dict = {"value": None}
@@ -207,7 +231,6 @@ class HomePage(BasePage):
             app_context=context,
             on_analysis_start=bus.emit,
             on_analysis_cancel=bus.emit,
-            on_add_roi=bus.emit,
             on_delete_roi=bus.emit,
             on_set_roi_edit_state=bus.emit,
             on_roi_selected=bus.emit,
@@ -339,9 +362,6 @@ class HomePage(BasePage):
         self._task_state_bridge = TaskStateBridgeController(
             self.context.home_task, self.bus, task_type="home"
         )
-        self._add_roi_controller = AddRoiController(
-            self.context.app_state, self.bus
-        )
         self._delete_roi_controller = DeleteRoiController(
             self.context.app_state, self.bus
         )
@@ -364,7 +384,7 @@ class HomePage(BasePage):
             self.bus, self._file_table_view, app_state=self.context.app_state
         )
         self._folder_bindings = FolderSelectorBindings(self.bus, self._folder_view)
-        self._image_line_viewer_bindings = ImageLineViewerReplacementBindings(
+        self._image_line_viewer_bindings = ImageLineViewerV2Bindings(
             self.bus, self._image_line_viewer
         )
         self._event_bindings = KymEventBindings(self.bus, self._event_view, app_state=self.context.app_state)
@@ -670,11 +690,11 @@ class HomePage(BasePage):
         )
 
     def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
-        """Callback when splitter pane filter controls change. Applies filters to replacement view."""
+        """Callback when splitter pane filter controls change. Applies filters to v2 view."""
         self._image_line_viewer.apply_filters(remove_outliers, median_filter)
 
     def _on_drawer_full_zoom(self) -> None:
-        """Callback when splitter pane full zoom button is clicked. Resets zoom on replacement view."""
+        """Callback when splitter pane full zoom button is clicked. Resets zoom on v2 view."""
         self._image_line_viewer.reset_zoom()
 
     def _on_full_zoom_shortcut(self, _event) -> None:

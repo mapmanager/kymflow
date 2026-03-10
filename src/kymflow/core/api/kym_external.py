@@ -215,6 +215,13 @@ def get_channel_ids(acq: AcqImage) -> list[int]:
 # -----------------------------------------------------------------------------
 # ROI API (generic AcqImage)
 # -----------------------------------------------------------------------------
+#
+# ROI identifier (roi_id):
+# - kymflow uses int as the canonical ROI key.
+# - The nicewidgets adapter maps roi_id to RegionOfInterest.name via str(roi_id)
+#   (e.g. "1", "2") for display in ImageRoiWidget. Selection events provide the
+#   name; use _parse_roi_id_from_name in image_line_viewer_v2_view to map back
+#   to int (handles both "ROI_N" and bare "N" formats).
 
 
 def get_roi_ids(acq: AcqImage) -> list[int]:
