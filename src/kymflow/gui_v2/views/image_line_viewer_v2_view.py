@@ -112,6 +112,7 @@ class ImageLineViewerV2View:
         self._container: Optional[ui.element] = None
         self._image_roi_widget = None
         self._line_plot_widget = None
+        self._contrast_widget = None
 
         self._current_file: Optional[KymImage] = None
         self._current_roi_id: Optional[int] = None
@@ -124,12 +125,38 @@ class ImageLineViewerV2View:
     def render(self) -> None:
         """Create the viewer UI: ImageRoiWidget + LinePlotWidget in a column."""
         from nicewidgets.image_line_widget.image_roi_widget import ImageRoiWidget
+        from nicewidgets.image_line_widget.image_contrast_widget import ImageContrastWidget
         from nicewidgets.image_line_widget.line_plot_widget import LinePlotWidget
-        from nicewidgets.image_line_widget.models import AxisEvent, ROIEvent, ROIEventType
+        from nicewidgets.image_line_widget.models import (
+            AxisEvent,
+            ChannelEvent,
+            ContrastEvent,
+            ROIEvent,
+            ROIEventType,
+        )
 
         self._container = ui.column().classes("w-full h-full")
         with self._container:
             theme_str = _to_nicewidgets_theme(self._theme)
+
+            def on_contrast_changed(ev: ContrastEvent) -> None:
+                """Apply contrast and colorscale changes from contrast widget locally."""
+                if self._image_roi_widget is None:
+                    return
+                self._image_roi_widget.set_contrast(zmin=ev.zmin, zmax=ev.zmax)
+                self._image_roi_widget.set_colorscale(ev.color_lut)
+
+            def on_channel_event(ev: ChannelEvent) -> None:
+                """Update contrast widget image when user changes the active channel."""
+                if self._image_roi_widget is None or self._contrast_widget is None:
+                    return
+                manager = self._image_roi_widget.manager
+                names = list(manager.channels.keys())
+                if ev.channel_name not in names:
+                    return
+                idx = names.index(ev.channel_name)
+                ch = manager.channels[ev.channel_name]
+                self._contrast_widget.set_channel(idx, ch.data)
 
             def on_roi_event(e: ROIEvent) -> None:
                 if e.type is ROIEventType.SELECT and self._on_roi_select and not self._suppress_roi_select_emit:
@@ -204,6 +231,13 @@ class ImageLineViewerV2View:
                     self._on_add_roi(int(new_roi.name))
                 return new_roi
 
+            # Contrast widget row (above image ROI widget)
+            self._contrast_widget = ImageContrastWidget(
+                widget_name="image_contrast_widget",
+                on_contrast_changed=on_contrast_changed,
+                theme=theme_str,
+            )
+
             self._image_roi_widget = ImageRoiWidget(
                 widget_name="image_roi_widget",
                 manager=placeholder_manager,
@@ -211,6 +245,7 @@ class ImageLineViewerV2View:
                 on_roi_event=on_roi_event,
                 on_axis_change=on_axis_change,
                 on_request_add_roi=on_request_add_roi,
+                 on_channel_event=on_channel_event,
                 theme=theme_str,
             )
 
@@ -272,6 +307,28 @@ class ImageLineViewerV2View:
                 self._image_roi_widget.select_roi_by_name(str(self._current_roi_id))
             finally:
                 self._suppress_roi_select_emit = False
+
+        # Sync contrast widget with new image and display params (view-local only).
+        if self._contrast_widget is not None:
+            names = list(manager.channels.keys())
+            if names:
+                active_name = manager.active_channel_name
+                if active_name not in names:
+                    active_name = names[0]
+                ch = manager.channels[active_name]
+                # Treat channel as opaque int defined by caller; derive from name when possible.
+                try:
+                    channel_idx = int(active_name)
+                except ValueError:
+                    channel_idx = names.index(active_name)
+                self._contrast_widget.set_channel(channel_idx, ch.data)
+                self._contrast_widget.select_roi_by_index(self._current_roi_id)
+                if self._display_params:
+                    self._contrast_widget.set_colorscale(self._display_params.colorscale)
+                    self._contrast_widget.set_contrast(
+                        zmin=self._display_params.zmin,
+                        zmax=self._display_params.zmax,
+                    )
 
     def _update_line_for_current_roi(self) -> None:
         """Recompute velocity line for current file & ROI (no image changes)."""
@@ -373,6 +430,8 @@ class ImageLineViewerV2View:
                 self._image_roi_widget.select_roi_by_name(name, emit_select=False)
             finally:
                 self._suppress_roi_select_emit = False
+        if self._contrast_widget is not None:
+            self._contrast_widget.select_roi_by_index(roi_id)
         self._update_line_for_current_roi()
         self._update_events_for_current_roi()
 
@@ -397,6 +456,9 @@ class ImageLineViewerV2View:
         if self._image_roi_widget and params:
             self._image_roi_widget.set_colorscale(params.colorscale)
             self._image_roi_widget.set_contrast(zmin=params.zmin, zmax=params.zmax)
+        if self._contrast_widget and params:
+            self._contrast_widget.set_colorscale(params.colorscale)
+            self._contrast_widget.set_contrast(zmin=params.zmin, zmax=params.zmax)
 
     def zoom_to_event(self, e: EventSelection) -> None:
         """Update selected event highlight and optionally zoom x-axis to event."""
