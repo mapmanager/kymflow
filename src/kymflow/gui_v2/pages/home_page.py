@@ -204,6 +204,7 @@ class HomePage(BasePage):
             on_roi_select=_on_roi_select,
             on_edit_roi=bus.emit,
             on_add_roi=_on_add_roi,
+            on_delete_roi=bus.emit,
         )
         self._event_view = KymEventView(
             context,
@@ -239,7 +240,6 @@ class HomePage(BasePage):
         self._drawer_task_progress_view = TaskProgressView()
         self._drawer_contrast_view = ContrastView(on_image_display_change=bus.emit)
         self._drawer_line_plot_controls_view = LinePlotControlsView(
-            on_filter_change=self._on_drawer_filter_change,
             on_full_zoom=self._on_drawer_full_zoom,
         )
         # Splitter pane metadata views
@@ -688,10 +688,6 @@ class HomePage(BasePage):
                 phase="intent",
             )
         )
-
-    def _on_drawer_filter_change(self, remove_outliers: bool, median_filter: bool) -> None:
-        """Callback when splitter pane filter controls change. Applies filters to v2 view."""
-        self._image_line_viewer.apply_filters(remove_outliers, median_filter)
 
     def _on_drawer_full_zoom(self) -> None:
         """Callback when splitter pane full zoom button is clicked. Resets zoom on v2 view."""

@@ -225,18 +225,19 @@ class EventBus:
                 filtered_handlers.append((handler, handler_phase))
 
         if 1 or self._config.trace:
-            logger.info(f"[bus] received {etype.__name__} phase={event_phase}")
-            logger.info(f'  event:{event}')
+            logger.debug(f"[bus] received {etype.__name__} phase={event_phase}")
+            logger.debug(f'  event:{event}')
             # logger.info(f"  phase={event_phase}")
-            logger.info(f'  client={self._client_id}')
-            logger.info(f'  num handlers={len(filtered_handlers)}')
+            logger.debug(f'  client={self._client_id}')
+            logger.debug(f'  num handlers={len(filtered_handlers)}')
 
 
-        for handler, phase in filtered_handlers:
-            if self._config.trace:
+        for _idx, (handler, phase) in enumerate(filtered_handlers):
+            if 1 or self._config.trace:
                 name = getattr(handler, "__qualname__", repr(handler))
-                logger.info(f"[bus] emit -> {etype.__name__} handling by {name}")
-                logger.info(f"  phase={event_phase}, client={self._client_id}")
+                logger.debug(f"[bus] emit -> {etype.__name__} handling by {name}")
+                logger.debug(f"  phase={event_phase}, client={self._client_id}")
+                logger.debug(f"  {_idx}: {handler}")
             try:
                 handler(event)
             except Exception:

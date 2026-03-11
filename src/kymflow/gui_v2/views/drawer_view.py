@@ -104,15 +104,16 @@ class DrawerView:
         with ui.row(wrap=False).classes("w-full h-full items-start"):
             # Left side: Vertical tabs for organizing splitter pane content
             with ui.tabs().props('vertical dense').classes("w-12 shrink-0 icon_only_tabs") as tabs:
-                tab_analysis = ui.tab("Analysis", icon="science").tooltip("Analysis")
+                tab_analysis = ui.tab("Analysis", icon="speed").tooltip("Analysis")
                 tab_plotting = ui.tab("Plotting", icon="bar_chart").tooltip("Plotting")
                 tab_metadata = ui.tab("Metadata", icon="description").tooltip("Metadata")
                 tab_options = ui.tab("Options", icon="settings").tooltip("Options")
+                tab_diameter = ui.tab("Diameter", icon="straighten").tooltip("Diameter")
                 tab_about = ui.tab("About", icon="info").tooltip("About")
             
             # Auto-expand left pane when user clicks a tab icon (while minimized)
             if on_tab_click is not None:
-                for t in (tab_analysis, tab_plotting, tab_metadata, tab_options, tab_about):
+                for t in (tab_analysis, tab_plotting, tab_metadata, tab_options, tab_diameter, tab_about):
                     t.on('click', lambda e: on_tab_click())
             
             # Right side: Tab panels - content for each tab
@@ -157,6 +158,11 @@ class DrawerView:
                     with ui.tab_panel(tab_options):
                         with ui.column().classes("w-full gap-4"):
                             self._options_tab_view.render()
+                    
+                    # Diameter tab panel - placeholder for next analysis
+                    with ui.tab_panel(tab_diameter):
+                        with ui.column().classes("w-full gap-4"):
+                            ui.label("Diameter analysis (coming soon)").classes("text-sm text-gray-500")
                     
                     # About tab panel - contains version info and logs
                     with ui.tab_panel(tab_about):

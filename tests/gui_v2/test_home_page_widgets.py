@@ -67,13 +67,11 @@ def test_home_page_on_roi_select_emits_roi_selection(bus) -> None:
     assert emitted[0].origin == SelectionOrigin.IMAGE_VIEWER
 
 
-def test_home_page_drawer_filter_change_calls_apply_filters(bus) -> None:
-    """Phase 5: _on_drawer_filter_change calls apply_filters on v2 view."""
+def test_home_page_v2_view_has_on_delete_roi(bus) -> None:
+    """HomePage wires on_delete_roi so ROI deletes emit DeleteRoi."""
     context = AppContext()
     page = HomePage(context, bus)
-    with patch.object(page._image_line_viewer, "apply_filters") as mock_apply:
-        page._on_drawer_filter_change(remove_outliers=True, median_filter=True)
-    mock_apply.assert_called_once_with(True, True)
+    assert page._image_line_viewer._on_delete_roi is not None
 
 
 def test_home_page_v2_view_has_on_edit_roi(bus) -> None:

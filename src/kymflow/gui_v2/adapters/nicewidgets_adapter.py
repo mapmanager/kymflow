@@ -44,11 +44,13 @@ def kymimage_to_channel_manager(
     Raises:
         ValueError: If channel data cannot be loaded.
     """
+    logger.info('=== check for speed')
+    
     # Lazy import to avoid pulling nicewidgets at module load when not needed
     from nicewidgets.image_line_widget.models import Channel, ChannelManager, RegionOfInterest
 
-    logger.warning(f'loading kym:{kym.path}')
-    logger.warning(f'  channel:{channel}')
+    # logger.warning(f'loading kym:{kym.path}')
+    # logger.warning(f'  channel:{channel}')
     ok = kym.load_channel(channel)
     if not ok:
         raise ValueError(f"Failed to load channel {channel} for image {kym.path}")
@@ -66,23 +68,25 @@ def kymimage_to_channel_manager(
         # dt = 0.001  # 1 ms/line default
         # dx = 1.0  # 1 um/pixel default
 
-    x_label = (
-        kym.header.labels[0]
-        # if kym.header.labels and len(kym.header.labels) >= 1
-        # else "Time (s)"
-    )
-    y_label = (
-        kym.header.labels[1]
-        # if kym.header.labels and len(kym.header.labels) >= 2
-        # else "Space (um)"
-    )
+    x_label = kym.header.labels[0]
+    y_label = kym.header.labels[1]
+    # x_label = (
+    #     kym.header.labels[0]
+    #     # if kym.header.labels and len(kym.header.labels) >= 1
+    #     # else "Time (s)"
+    # )
+    # y_label = (
+    #     kym.header.labels[1]
+    #     # if kym.header.labels and len(kym.header.labels) >= 2
+    #     # else "Space (um)"
+    # )
 
     _chanel_str = str(channel)
 
-    logger.warning(f'  num_lines:{num_lines}, pixels_per_line:{pixels_per_line}')
-    logger.warning(f'  dt:{dt}, dx:{dx}')
-    logger.warning(f'  x_label:{x_label}, y_label:{y_label}')
-    logger.warning(f'  _chanel_str:{_chanel_str}')
+    # logger.warning(f'  num_lines:{num_lines}, pixels_per_line:{pixels_per_line}')
+    # logger.warning(f'  dt:{dt}, dx:{dx}')
+    # logger.warning(f'  x_label:{x_label}, y_label:{y_label}')
+    # logger.warning(f'  _chanel_str:{_chanel_str}')
 
     # ch = Channel(name="Channel1", data=np.asarray(data))
     ch = Channel(name=_chanel_str, data=data)

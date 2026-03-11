@@ -292,6 +292,7 @@ class AcqImage:
         """
         # Idempotent check: if channel data already exists, return True
         if self.getChannelData(channel) is not None:
+            # logger.info(f'Idempotent channel:{channel}: channel data already exists')
             return True
         
         # Get channel path
