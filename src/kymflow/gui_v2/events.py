@@ -663,27 +663,27 @@ class EditRoi:
     phase: EventPhase
 
 
-@dataclass(frozen=True, slots=True)
-class SetRoiEditState:
-    """Arm/disarm the next Plotly rectangle selection for editing ROI bounds.
+# @dataclass(frozen=True, slots=True)
+# class SetRoiEditState:
+#     """Arm/disarm the next Plotly rectangle selection for editing ROI bounds.
 
-    Purpose: Toggle UI state where next rectangle selection proposes new ROI bounds.
-    Triggered by: Intent from AnalysisToolbarView "Edit ROI" button.
-    Consumed by: ImageLineViewerBindings (state → enable/disable Plotly dragmode).
+#     Purpose: Toggle UI state where next rectangle selection proposes new ROI bounds.
+#     Triggered by: Intent from AnalysisToolbarView "Edit ROI" button.
+#     Consumed by: ImageLineViewerBindings (state → enable/disable Plotly dragmode).
 
-    Attributes:
-        enabled: Whether the edit state is active.
-        roi_id: Active ROI ID (required when enabled=True).
-        path: File path (optional, for validation).
-        origin: SelectionOrigin indicating where the toggle came from.
-        phase: Event phase - "intent" or "state".
-    """
+#     Attributes:
+#         enabled: Whether the edit state is active.
+#         roi_id: Active ROI ID (required when enabled=True).
+#         path: File path (optional, for validation).
+#         origin: SelectionOrigin indicating where the toggle came from.
+#         phase: Event phase - "intent" or "state".
+#     """
 
-    enabled: bool
-    roi_id: int | None
-    path: str | None
-    origin: SelectionOrigin
-    phase: EventPhase
+#     enabled: bool
+#     roi_id: int | None
+#     path: str | None
+#     origin: SelectionOrigin
+#     phase: EventPhase
 
 
 @dataclass(frozen=True, slots=True)

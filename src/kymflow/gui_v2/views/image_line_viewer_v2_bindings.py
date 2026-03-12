@@ -17,6 +17,7 @@ from kymflow.gui_v2.events import (
     EditPhysicalUnits,
     EditRoi,
     EventSelection,
+    FileChanged,
     FileSelection,
     KymScrollXEvent,
     ROISelection,
@@ -49,6 +50,7 @@ class ImageLineViewerV2Bindings:
         self._subscribed = False
 
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
+        bus.subscribe_state(FileChanged, self._on_file_changed)
         bus.subscribe_state(ROISelection, self._on_roi_changed)
         bus.subscribe_state(EventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
@@ -61,8 +63,6 @@ class ImageLineViewerV2Bindings:
         bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         bus.subscribe_state(AddKymEvent, self._on_add_kym_event)
         bus.subscribe_state(DeleteKymEvent, self._on_delete_kym_event)
-        bus.subscribe_state(EditRoi, self._on_roi_edited)
-        bus.subscribe_state(DeleteRoi, self._on_roi_deleted)
         bus.subscribe_intent(SetRoiBounds, self._on_roi_bounds)
         bus.subscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = True
@@ -71,6 +71,7 @@ class ImageLineViewerV2Bindings:
         if not self._subscribed:
             return
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
+        self._bus.unsubscribe_state(FileChanged, self._on_file_changed)
         self._bus.unsubscribe_state(ROISelection, self._on_roi_changed)
         self._bus.unsubscribe_state(EventSelection, self._on_event_selected)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
@@ -83,8 +84,6 @@ class ImageLineViewerV2Bindings:
         self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
         self._bus.unsubscribe_state(AddKymEvent, self._on_add_kym_event)
         self._bus.unsubscribe_state(DeleteKymEvent, self._on_delete_kym_event)
-        self._bus.unsubscribe_state(EditRoi, self._on_roi_edited)
-        self._bus.unsubscribe_state(DeleteRoi, self._on_roi_deleted)
         self._bus.unsubscribe_intent(SetRoiBounds, self._on_roi_bounds)
         self._bus.unsubscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = False
@@ -105,6 +104,29 @@ class ImageLineViewerV2Bindings:
                 phase="state",
             ),
         )
+
+    def _on_file_changed(self, e: FileChanged) -> None:
+        """Handle FileChanged state events and refresh ROIs when needed.
+
+        This binding listens for FileChanged events with change_type="roi" for the
+        currently displayed file and triggers a pull-based ROI refresh on the view.
+
+        Args:
+            e: FileChanged state event describing which file changed and why.
+        """
+        # Only care about ROI-related changes.
+        if e.change_type != "roi":
+            return
+        current = self._view._current_file
+        if current is None:
+            return
+        # Compare by path to avoid issues with different KymImage instances
+        # that refer to the same on-disk file.
+        if not getattr(current, "path", None):
+            return
+        if str(e.file.path) != str(current.path):
+            return
+        safe_call(self._view.refresh_rois_for_current_file)
 
     def _on_roi_changed(self, e: ROISelection) -> None:
         # For FILE_TABLE origin, FileSelection already set ROI; avoid duplicate work.
@@ -200,9 +222,7 @@ class ImageLineViewerV2Bindings:
     def _on_kym_scroll_x(self, e: KymScrollXEvent) -> None:
         safe_call(self._view.scroll_x, e.direction)
 
-    def _on_roi_edited(self, e: EditRoi) -> None:
-        safe_call(self._view.set_selected_roi, e.roi_id)
-
-    def _on_roi_deleted(self, e: DeleteRoi) -> None:
-        # Deleted ROI is already removed from ImageRoiWidget; clear selection/line/events.
-        safe_call(self._view.set_selected_roi, None)
+    # ROI Edit/Delete state events are no longer required for view updates.
+    # Structural ROI changes are handled via FileChanged(state, change_type="roi")
+    # and selection changes via ROISelection(state), so we do not subscribe to
+    # EditRoi or DeleteRoi state here.

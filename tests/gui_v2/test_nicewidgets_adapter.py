@@ -192,5 +192,7 @@ class TestImageLineViewerV2View:
         )
 
         view = ImageLineViewerV2View()
-        view.set_selected_file(None)
+        # v2 view signature accepts (file, channel, roi_id); passing all None
+        # should be a no-op and must not raise.
+        view.set_selected_file(None, None, None)
         assert view._current_file is None

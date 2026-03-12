@@ -13,6 +13,7 @@ import pytest
 from nicegui import app, ui
 
 from kymflow.gui_v2.events_folder import SelectPathEvent
+import os
 from kymflow.core.user_config import UserConfig
 
 
@@ -30,6 +31,10 @@ class DummyPage:
 def _load_app_module(monkeypatch):
     """Load gui_v2.app without executing its main() import side effect."""
     monkeypatch.setattr(ui, "page", lambda *_args, **_kwargs: (lambda fn: fn))
+    # Disable file logging while importing the app module so tests do not
+    # attempt to write to the real user log directory (which may be
+    # unwritable in sandboxed environments such as Cursor).
+    os.environ["KYMFLOW_DISABLE_FILE_LOG"] = "1"
 
     import kymflow.gui_v2 as gui_v2_pkg
 

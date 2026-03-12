@@ -18,32 +18,23 @@ from kymflow.gui_v2.controllers.kym_event_range_controller import (
 )
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.controllers.next_prev_file_controller import NextPrevFileController
-from kymflow.gui_v2.controllers.roi_selection_controller import ROISelectionController
 from kymflow.gui_v2.controllers.save_controller import SaveController
 from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeController
 from kymflow.gui_v2.controllers.velocity_event_update_controller import (
     VelocityEventUpdateController,
 )
 from kymflow.gui_v2.controllers.add_kym_event_controller import AddKymEventController
-from kymflow.gui_v2.controllers.add_roi_controller import AddRoiController
 from kymflow.gui_v2.controllers.delete_kym_event_controller import (
     DeleteKymEventController,
 )
-from kymflow.gui_v2.controllers.delete_roi_controller import DeleteRoiController
-from kymflow.gui_v2.controllers.edit_roi_controller import EditRoiController
-from kymflow.gui_v2.controllers.roi_edit_state_controller import (
-    RoiEditStateController,
-)
+from kymflow.gui_v2.controllers.roi_controller import RoiController
 
 __all__ = [
     "AnalysisController",
     "AnalysisUpdateController",
     "AppStateBridgeController",
     "AddKymEventController",
-    "AddRoiController",
     "DeleteKymEventController",
-    "DeleteRoiController",
-    "EditRoiController",
     "EventAnalysisController",
     "EventSelectionController",
     "FileSelectionController",
@@ -54,8 +45,7 @@ __all__ = [
     "KymEventRangeStateController",
     "MetadataController",
     "NextPrevFileController",
-    "ROISelectionController",
-    "RoiEditStateController",
+    "RoiController",
     "SaveController",
     "TaskStateBridgeController",
     "VelocityEventUpdateController",

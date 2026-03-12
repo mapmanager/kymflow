@@ -17,9 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.controllers.add_roi_controller import AddRoiController
-from kymflow.gui_v2.controllers.delete_roi_controller import DeleteRoiController
-from kymflow.gui_v2.controllers.edit_roi_controller import EditRoiController
+from kymflow.gui_v2.controllers.roi_controller import RoiController
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.events import (
     AddRoi,
@@ -36,8 +34,8 @@ from kymflow.gui_v2.events import (
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.views.file_table_bindings import FileTableBindings
 from kymflow.gui_v2.views.file_table_view import FileTableView
-from kymflow.gui_v2.views.image_line_viewer_bindings import ImageLineViewerBindings
-from kymflow.gui_v2.views.image_line_viewer_view import ImageLineViewerView
+from kymflow.gui_v2.views.image_line_viewer_v2_bindings import ImageLineViewerV2Bindings
+from kymflow.gui_v2.views.image_line_viewer_v2_view import ImageLineViewerV2View
 from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
@@ -232,8 +230,8 @@ def test_metadata_update_event_emit_consume(bus: EventBus) -> None:
 
 
 def test_add_roi_controller_emits_file_changed(bus: EventBus, app_state: AppState) -> None:
-    """Test that AddRoiController emits FileChanged after creating ROI."""
-    controller = AddRoiController(app_state, bus)
+    """Test that RoiController emits FileChanged after creating ROI."""
+    controller = RoiController(app_state, bus)
     
     # Create a mock file with ROIs
     mock_file = MagicMock()
@@ -273,8 +271,8 @@ def test_add_roi_controller_emits_file_changed(bus: EventBus, app_state: AppStat
 
 
 def test_edit_roi_controller_emits_file_changed(bus: EventBus, app_state: AppState) -> None:
-    """Test that EditRoiController emits FileChanged after editing ROI."""
-    controller = EditRoiController(app_state, bus)
+    """Test that RoiController emits FileChanged after editing ROI."""
+    controller = RoiController(app_state, bus)
     
     # Create a mock file with ROIs
     mock_file = MagicMock()
@@ -317,8 +315,8 @@ def test_edit_roi_controller_emits_file_changed(bus: EventBus, app_state: AppSta
 
 
 def test_delete_roi_controller_emits_file_changed(bus: EventBus, app_state: AppState) -> None:
-    """Test that DeleteRoiController emits FileChanged after deleting ROI."""
-    controller = DeleteRoiController(app_state, bus)
+    """Test that RoiController emits FileChanged after deleting ROI."""
+    controller = RoiController(app_state, bus)
     
     # Create a mock file with ROIs
     mock_file = MagicMock()
@@ -670,43 +668,11 @@ def test_metadata_header_bindings_handles_metadata_update(bus: EventBus) -> None
     bindings.teardown()
 
 
-# ============================================================================
-# ImageLineViewerBindings Handling MetadataUpdate Tests
-# ============================================================================
-
-
-def test_image_line_viewer_bindings_ignores_metadata_update(bus: EventBus) -> None:
-    """Test that ImageLineViewerBindings does NOT handle MetadataUpdate events.
-    
-    Metadata edits (e.g., "note" field) do not affect the plot, so ImageLineViewerBindings
-    should not subscribe to MetadataUpdate events.
-    """
-    view = ImageLineViewerView(
-        on_kym_event_x_range=lambda e: None,
-        on_set_roi_bounds=lambda e: None,
-    )
-    bindings = ImageLineViewerBindings(bus, view)
-    
-    # Verify view doesn't have set_metadata method (it was removed)
-    assert not hasattr(view, 'set_metadata'), "set_metadata should have been removed"
-    
-    mock_file = MagicMock()
-    
-    # Emit MetadataUpdate state event
-    bus.emit(
-        MetadataUpdate(
-            file=mock_file,
-            metadata_type="experimental",
-            fields={"note": "test"},
-            origin=SelectionOrigin.EXTERNAL,
-            phase="state",
-        )
-    )
-    
-    # Verify no plot refresh occurred (no way to directly verify, but if we got here
-    # without errors, the subscription was correctly removed)
-    # The fact that set_metadata doesn't exist confirms the removal
-    
+#
+# Note: Legacy ImageLineViewerBindings (v1) tests removed.
+# The v2 bindings do not subscribe to MetadataUpdate events either, and the
+# absence of any errors when emitting MetadataUpdate in other tests is
+# sufficient to validate that behavior.
     bindings.teardown()
 
 
@@ -775,7 +741,7 @@ def test_metadata_update_full_flow(bus: EventBus, app_state: AppState) -> None:
 def test_file_changed_roi_flow(bus: EventBus, app_state: AppState, mock_app_context) -> None:
     """Test complete flow: ROI controller emits FileChanged → FileTableBindings updates table."""
     # Setup controller
-    controller = AddRoiController(app_state, bus)
+    controller = RoiController(app_state, bus)
     
     # Setup bindings
     table = FileTableView(

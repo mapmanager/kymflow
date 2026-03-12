@@ -14,8 +14,6 @@ from kymflow.gui_v2.controllers import (
     AnalysisUpdateController,
     AppStateBridgeController,
     DeleteKymEventController,
-    DeleteRoiController,
-    EditRoiController,
     EventAnalysisController,
     EventSelectionController,
     FileSelectionController,
@@ -26,8 +24,7 @@ from kymflow.gui_v2.controllers import (
     KymEventRangeStateController,
     MetadataController,
     NextPrevFileController,
-    ROISelectionController,
-    RoiEditStateController,
+    RoiController,
     SaveController,
     TaskStateBridgeController,
     VelocityEventUpdateController,
@@ -120,7 +117,7 @@ class HomePage(BasePage):
         self._bridge: AppStateBridgeController | None = None
         self._folder_controller: FolderController | None = None
         self._file_selection_controller: FileSelectionController | None = None
-        self._roi_selection_controller: ROISelectionController | None = None
+        self._roi_controller: RoiController | None = None
         self._event_selection_controller: EventSelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
         self._kym_event_range_state_controller: KymEventRangeStateController | None = None
@@ -318,9 +315,7 @@ class HomePage(BasePage):
         self._next_prev_file_controller = NextPrevFileController(
             self.context.app_state, self.bus
         )
-        self._roi_selection_controller = ROISelectionController(
-            self.context.app_state, self.bus
-        )
+        self._roi_controller = RoiController(self.context.app_state, self.bus)
         self._event_selection_controller = EventSelectionController(
             self.context.app_state, self.bus
         )
@@ -355,13 +350,6 @@ class HomePage(BasePage):
         self._task_state_bridge = TaskStateBridgeController(
             self.context.home_task, self.bus, task_type="home"
         )
-        self._delete_roi_controller = DeleteRoiController(
-            self.context.app_state, self.bus
-        )
-        self._edit_roi_controller = EditRoiController(
-            self.context.app_state, self.bus
-        )
-        self._roi_edit_state_controller = RoiEditStateController(self.bus)
         self._event_analysis_controller = EventAnalysisController(
             self.context.app_state, self.bus
         )

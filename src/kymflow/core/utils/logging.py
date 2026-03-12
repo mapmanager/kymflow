@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Union
 
+import os
 from platformdirs import user_config_dir
 
 # App name used for config/log paths; must match user_config.py and app_config.py.
@@ -33,8 +34,7 @@ def setup_logging(
     max_bytes: int = 5_000_000,
     backup_count: int = 5,
 ) -> None:
-    """
-    Configure root logging with console and rotating file handler.
+    """Configure root logging with console and optional rotating file handler.
 
     Console and file both receive the same formatter. Console uses the given
     level; file captures everything at DEBUG. Log file is always written to the
@@ -52,7 +52,7 @@ def setup_logging(
     backup_count:
         Number of rotated log files to keep.
     """
-    # Convert string levels like "INFO" to logging.INFO
+    # Convert string levels like "INFO" to logging.INFO.
     if isinstance(level, str):
         level = getattr(logging, level.upper(), logging.INFO)
 
@@ -82,6 +82,11 @@ def setup_logging(
     root.addHandler(console)
 
     # -------- File handler (platformdirs-based path, same folder as user_config) --------
+    # Allow disabling the file handler via environment variable. This is useful
+    # in test environments (e.g. Cursor sandbox) where the default log directory
+    # may not be writable.
+    if os.getenv("KYMFLOW_DISABLE_FILE_LOG", "").strip().lower() in {"1", "true", "yes"}:
+        return
     global _LOG_FILE_PATH
     log_dir = Path(user_config_dir(_APP_NAME)) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)

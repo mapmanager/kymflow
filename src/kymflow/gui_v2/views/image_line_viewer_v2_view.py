@@ -309,7 +309,10 @@ class ImageLineViewerV2View:
         kf = self._current_file
         if kf is None or self._image_roi_widget is None:
             return
+        # Rebuild the ChannelManager and ROI list from the current KymImage so the
+        # widget reflects the latest model state.
         manager, rois = kymimage_to_channel_manager(kf)
+        # set_file remains the high-level API for updating both manager and ROIs.
         self._image_roi_widget.set_file(manager, rois)
         if self._display_params:
             self._image_roi_widget.set_colorscale(self._display_params.colorscale)
@@ -346,6 +349,49 @@ class ImageLineViewerV2View:
                         zmin=self._display_params.zmin,
                         zmax=self._display_params.zmax,
                     )
+
+    def refresh_rois_for_current_file(self) -> None:
+        """Refresh ROIs in the widget for the current file from the backing model.
+
+        This method is intended to be called when the underlying KymImage.rois
+        for the current file changes (for example, after AddRoi/EditRoi/DeleteRoi
+        controllers update the model and emit FileChanged events). It rebuilds
+        the ImageRoiWidget ROI shapes and keeps the current ROI selection where
+        possible.
+        """
+        if self._image_roi_widget is None:
+            return
+
+        kf = self._current_file
+        if kf is None:
+            # No file: clear ROIs and selection in the widget.
+            from nicewidgets.image_line_widget.image_roi_widget import RegionOfInterest
+
+            self._image_roi_widget.set_rois({})
+            self._image_roi_widget.set_selected_roi(None)
+            return
+
+        # Derive the ROI mapping from the KymImage.rois container. We use the
+        # ROI id as the canonical name (string) so that it remains stable across
+        # updates and matches the adapter conventions.
+        rois_dict: dict[str, RegionOfInterest] = {}
+        for roi_id in kf.rois.get_roi_ids():
+            roi = kf.rois.get(roi_id)
+            if roi is None:
+                continue
+            # RegionOfInterest stored on KymImage uses integer ids; convert to
+            # string name for the widget-level mapping.
+            roi_name = str(roi_id)
+            rois_dict[roi_name] = roi
+
+        self._image_roi_widget.set_rois(rois_dict)
+
+        # Preserve the current ROI selection when possible by mapping the
+        # numeric id back to the string name used by the widget.
+        if self._current_roi_id is not None and str(self._current_roi_id) in rois_dict:
+            self._image_roi_widget.set_selected_roi(str(self._current_roi_id))
+        else:
+            self._image_roi_widget.set_selected_roi(None)
 
     def _update_line_for_current_roi(self) -> None:
         """Recompute velocity line for current file & ROI (no image changes)."""
