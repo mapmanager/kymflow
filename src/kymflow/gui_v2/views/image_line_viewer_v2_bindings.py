@@ -10,6 +10,7 @@ from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
     AddKymEvent,
+    ChannelSelection,
     DeleteKymEvent,
     DeleteRoi,
     DetectEvents,
@@ -52,6 +53,7 @@ class ImageLineViewerV2Bindings:
         bus.subscribe_state(EventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        bus.subscribe_state(ChannelSelection, self._on_channel_selection_changed)
         bus.subscribe_state(EditPhysicalUnits, self._on_edit_physical_units)
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         bus.subscribe_state(DetectEvents, self._on_detect_events_done)
@@ -73,6 +75,7 @@ class ImageLineViewerV2Bindings:
         self._bus.unsubscribe_state(EventSelection, self._on_event_selected)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
+        self._bus.unsubscribe_state(ChannelSelection, self._on_channel_selection_changed)
         self._bus.unsubscribe_state(EditPhysicalUnits, self._on_edit_physical_units)
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._bus.unsubscribe_state(DetectEvents, self._on_detect_events_done)
@@ -113,6 +116,12 @@ class ImageLineViewerV2Bindings:
 
     def _on_image_display_changed(self, e: ImageDisplayChange) -> None:
         safe_call(self._view.set_image_display, e.params)
+
+    def _on_channel_selection_changed(self, e: ChannelSelection) -> None:
+        """Handle channel selection change event (state)."""
+        # TODO: extend ImageLineViewerV2View with set_selected_channel if needed.
+        # For now, rely on ImageRoiWidget's own channel handling; this is a hook for future use.
+        pass
 
     def _on_edit_physical_units(self, e: EditPhysicalUnits) -> None:
         current = self._view._current_file

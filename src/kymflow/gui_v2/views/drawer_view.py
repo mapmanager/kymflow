@@ -105,10 +105,10 @@ class DrawerView:
             # Left side: Vertical tabs for organizing splitter pane content
             with ui.tabs().props('vertical dense').classes("w-12 shrink-0 icon_only_tabs") as tabs:
                 tab_analysis = ui.tab("Analysis", icon="speed").tooltip("Analysis")
+                tab_diameter = ui.tab("Diameter", icon="straighten").tooltip("Diameter")
                 tab_plotting = ui.tab("Plotting", icon="bar_chart").tooltip("Plotting")
                 tab_metadata = ui.tab("Metadata", icon="description").tooltip("Metadata")
                 tab_options = ui.tab("Options", icon="settings").tooltip("Options")
-                tab_diameter = ui.tab("Diameter", icon="straighten").tooltip("Diameter")
                 tab_about = ui.tab("About", icon="info").tooltip("About")
             
             # Auto-expand left pane when user clicks a tab icon (while minimized)

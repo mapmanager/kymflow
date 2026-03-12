@@ -218,6 +218,34 @@ class MetadataUpdate:
 
 
 @dataclass(frozen=True, slots=True)
+class ChannelSelection:
+    """Channel selection event (intent or state phase).
+
+    Purpose:
+        Track which image channel is currently active so views and controllers
+        can coordinate channel-dependent behavior (e.g., contrast widgets,
+        image display).
+
+    For intent phase:
+        - Emitted by views when user changes the active channel (e.g., channel
+          dropdown in ImageRoiWidget / ImageLineViewerV2View).
+
+    For state phase:
+        - Emitted by AppStateBridge when AppState.selected_channel changes
+          (if tracked), or mirrored from intent by a dedicated controller.
+
+    Attributes:
+        channel: 1-based channel index, or None if no channel is active.
+        origin: SelectionOrigin indicating where the selection came from.
+        phase: Event phase - "intent" or "state".
+    """
+
+    channel: int | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
 class EditPhysicalUnits:
     """Edit physical units event (intent or state phase).
 

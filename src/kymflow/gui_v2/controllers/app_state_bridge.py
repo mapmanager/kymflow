@@ -14,6 +14,7 @@ from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import is_client_alive
 from kymflow.gui_v2.events import (
+    ChannelSelection,
     EventSelection,
     FileSelection,
     ROISelection,
@@ -72,6 +73,7 @@ class AppStateBridgeController:
         self._app_state.on_image_display_changed(self._on_image_display_changed)
         self._app_state.on_metadata_changed(self._on_metadata_changed)
         self._app_state.on_analysis_changed(self._on_analysis_changed)
+        self._app_state.on_channel_selection_changed(self._on_channel_selection_changed)
 
     def _on_file_list_changed(self) -> None:
         """Handle AppState file list change callback.
@@ -274,6 +276,28 @@ class AppStateBridgeController:
             AnalysisUpdate(
                 file=kym_file,
                 fields={},
+                origin=SelectionOrigin.EXTERNAL,
+                phase="state",
+            )
+        )
+
+    def _on_channel_selection_changed(self, channel: int | None) -> None:
+        """Handle AppState channel selection change callback.
+
+        Emits ChannelSelection(phase="state") event with the current channel.
+        Checks client validity before emitting.
+
+        Args:
+            channel: Selected 1-based channel index, or None if selection cleared.
+        """
+        if not is_client_alive():
+            logger.debug(
+                f"[bridge] Skipping ChannelSelection emit - client deleted (bus={self._bus._client_id[:8]}...)"
+            )
+            return
+        self._bus.emit(
+            ChannelSelection(
+                channel=channel,
                 origin=SelectionOrigin.EXTERNAL,
                 phase="state",
             )

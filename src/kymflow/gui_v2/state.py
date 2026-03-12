@@ -77,6 +77,7 @@ class AppState:
         
         self.selected_file: Optional[KymImage] = None
         self.selected_roi_id: Optional[int] = None  # Currently selected ROI ID
+        self.selected_channel: Optional[int] = None  # 1-based active channel index
         self.selected_event_id: Optional[str] = None
         self.selected_event_roi_id: Optional[int] = None
         self.selected_event_path: Optional[str] = None
@@ -98,6 +99,7 @@ class AppState:
         self._image_display_changed_handlers: List[ImageDisplayChangedHandler] = []
         self._roi_selection_changed_handlers: List[Callable[[Optional[int]], None]] = []
         self._event_selection_changed_handlers: List[EventSelectionChangedHandler] = []
+        self._channel_selection_changed_handlers: List[Callable[[Optional[int]], None]] = []
     
     # Registration methods
     def on_file_list_changed(self, handler: FileListChangedHandler) -> None:
@@ -127,6 +129,10 @@ class AppState:
     def on_roi_selection_changed(self, handler: Callable[[Optional[int]], None]) -> None:
         """Register callback for ROI selection changes."""
         self._roi_selection_changed_handlers.append(handler)
+
+    def on_channel_selection_changed(self, handler: Callable[[Optional[int]], None]) -> None:
+        """Register callback for channel selection changes."""
+        self._channel_selection_changed_handlers.append(handler)
 
     def on_event_selection_changed(self, handler: EventSelectionChangedHandler) -> None:
         """Register callback for event selection changes."""
@@ -227,8 +233,12 @@ class AppState:
                 self.selected_roi_id = roi_ids[0]
             else:
                 self.selected_roi_id = None
+            # Initialize selected_channel to first available channel if present.
+            channels = kym_file.channels_available()
+            self.selected_channel = channels[0] if channels else None
         else:
             self.selected_roi_id = None
+            self.selected_channel = None
 
         # Note: Event selection clearing is now handled via FileSelection.kym_event_selection=None
         # emitted by AppStateBridge, so we no longer need to call select_velocity_event() here.
@@ -334,6 +344,16 @@ class AppState:
                 handler(roi_id)
             except Exception:
                 logger.exception("Error in roi_selection_changed handler")
+
+    def select_channel(self, channel: Optional[int]) -> None:
+        """Select an image channel and notify handlers."""
+        self.selected_channel = channel
+        logger.info(f"select_channel: calling channel_selection_changed handlers for channel={channel}")
+        for handler in list(self._channel_selection_changed_handlers):
+            try:
+                handler(channel)
+            except Exception:
+                logger.exception("Error in channel_selection_changed handler")
 
     def select_velocity_event(
         self,

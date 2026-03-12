@@ -11,8 +11,6 @@ Phase 6: ROI edit (ROIEvent UPDATE → EditRoi); recursion fix (suppress ROI sel
 from __future__ import annotations
 
 from typing import Callable, Literal, Optional
-
-import numpy as np
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
@@ -25,6 +23,7 @@ from kymflow.gui_v2.adapters import (
 )
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.events import (
+    ChannelSelection,
     DeleteRoi,
     EditRoi,
     EventSelection,
@@ -43,6 +42,7 @@ OnRoiSelect = Callable[[int | None], None]
 OnEditRoi = Callable[[EditRoi], None]
 OnAddRoi = Callable[[int], None]
 OnDeleteRoi = Callable[[DeleteRoi], None]
+OnChannelSelect = Callable[[ChannelSelection], None]
 
 
 def _region_of_interest_to_roi_bounds(roi) -> RoiBounds:
@@ -107,6 +107,7 @@ class ImageLineViewerV2View:
         self._on_edit_roi = on_edit_roi
         self._on_add_roi = on_add_roi
         self._on_delete_roi = on_delete_roi
+        self._on_channel_select: OnChannelSelect | None = None
 
         self._suppress_roi_select_emit = False
         self._container: Optional[ui.element] = None
@@ -156,7 +157,22 @@ class ImageLineViewerV2View:
                     return
                 idx = names.index(ev.channel_name)
                 ch = manager.channels[ev.channel_name]
-                self._contrast_widget.set_channel(idx, ch.data)
+                # Treat channel as opaque int defined by caller; prefer parsing from name.
+                try:
+                    channel_int = int(ev.channel_name)
+                except ValueError:
+                    channel_int = idx
+                self._contrast_widget.set_channel(channel_int, ch.data)
+                # Emit ChannelSelection intent event upstream if callback is provided.
+                if self._on_channel_select is not None:
+                    from kymflow.gui_v2.events import ChannelSelection, SelectionOrigin
+                    self._on_channel_select(
+                        ChannelSelection(
+                            channel=channel_int,
+                            origin=SelectionOrigin.IMAGE_VIEWER,
+                            phase="intent",
+                        )
+                    )
 
             def on_roi_event(e: ROIEvent) -> None:
                 if e.type is ROIEventType.SELECT and self._on_roi_select and not self._suppress_roi_select_emit:

@@ -15,7 +15,11 @@ from typing import Callable, Optional
 from nicegui import ui
 
 from kymflow.gui_v2.client_utils import safe_call
+from kymflow.gui_v2.events import ImageDisplayChange
+from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
+from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.core.utils.logging import get_logger
+from nicewidgets.image_line_widget.image_contrast_widget import ImageContrastWidget
 
 logger = get_logger(__name__)
 
@@ -45,6 +49,7 @@ class LinePlotControlsView:
         self,
         *,
         on_full_zoom: OnFullZoom,
+        on_image_display_change: Callable[[ImageDisplayChange], None],
     ) -> None:
         """Initialize line plot controls view.
 
@@ -52,9 +57,11 @@ class LinePlotControlsView:
             on_full_zoom: Callback function that receives full zoom requests.
         """
         self._on_full_zoom = on_full_zoom
+        self._on_image_display_change = on_image_display_change
 
         # UI components (created in render())
         self._full_zoom_btn: Optional[ui.button] = None
+        self._contrast_widget: Optional[ImageContrastWidget] = None
 
         # State (for enabling/disabling controls)
         self._current_file = None
@@ -73,6 +80,12 @@ class LinePlotControlsView:
         with ui.row().classes("w-full gap-2 items-center"):
             self._full_zoom_btn = ui.button("Full zoom", icon="zoom_out_map").props("dense").classes("text-sm")
             self._full_zoom_btn.on("click", self._on_full_zoom_handler)
+
+        # Add contrast widget for global contrast control (plotting tab).
+        self._contrast_widget = ImageContrastWidget(
+            widget_name="toolbar_image_contrast",
+            on_contrast_changed=self._on_contrast_changed,
+        )
 
         # Initialize button states
         self._update_control_states()
@@ -95,6 +108,17 @@ class LinePlotControlsView:
         self._current_roi_id = None
         self._update_control_states()
 
+        # Update contrast widget image based on selected file (channel handled elsewhere).
+        if self._contrast_widget is not None:
+            if file is None:
+                self._contrast_widget.set_file(None)
+            else:
+                try:
+                    image = file.get_img_slice(channel=1)
+                except Exception:
+                    image = None
+                self._contrast_widget.set_file(image)
+
     def set_selected_roi(self, roi_id: Optional[int]) -> None:
         """Update view for new ROI selection.
 
@@ -110,6 +134,15 @@ class LinePlotControlsView:
         """Internal implementation of set_selected_roi."""
         self._current_roi_id = roi_id
         self._update_control_states()
+
+    def set_image_display(self, params: ImageDisplayParams) -> None:
+        """Update toolbar contrast widget from global image display state."""
+        if self._contrast_widget is None or params is None:
+            return
+        if params.colorscale:
+            self._contrast_widget.set_colorscale(params.colorscale)
+        if params.zmin is not None and params.zmax is not None:
+            self._contrast_widget.set_contrast(params.zmin, params.zmax)
 
     def _update_control_states(self) -> None:
         """Update control states based on current file and ROI selection."""
@@ -129,3 +162,25 @@ class LinePlotControlsView:
         """Handle full zoom button click."""
         # Emit callback
         self._on_full_zoom()
+
+    def _on_contrast_changed(self, ev) -> None:
+        """Emit ImageDisplayChange intent when toolbar contrast changes."""
+        print(ev)
+        logger.info(f'ev:{ev}')
+        if self._on_image_display_change is None:
+            return
+        params = ImageDisplayParams(
+            colorscale=ev.color_lut,
+            zmin=ev.zmin,
+            zmax=ev.zmax,
+            origin=ImageDisplayOrigin.CONTRAST_WIDGET,
+        )
+        from kymflow.gui_v2.events import ImageDisplayChange as IDC, SelectionOrigin
+
+        self._on_image_display_change(
+            IDC(
+                params=params,
+                origin=SelectionOrigin.ANALYSIS_TOOLBAR,
+                phase="intent",
+            )
+        )

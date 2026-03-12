@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import FileSelection, ROISelection
+from kymflow.gui_v2.events import FileSelection, ROISelection, ImageDisplayChange
 from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 
 if TYPE_CHECKING:
@@ -48,6 +48,7 @@ class LinePlotControlsBindings:
         # Subscribe to state change events
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(ROISelection, self._on_roi_selection_changed)
+        bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -62,6 +63,7 @@ class LinePlotControlsBindings:
 
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
         self._bus.unsubscribe_state(ROISelection, self._on_roi_selection_changed)
+        self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -87,3 +89,7 @@ class LinePlotControlsBindings:
             e: ROISelection event (phase="state") containing the selected ROI ID.
         """
         safe_call(self._view.set_selected_roi, e.roi_id)
+
+    def _on_image_display_changed(self, e: ImageDisplayChange) -> None:
+        """Handle image display parameter change event (state)."""
+        safe_call(self._view.set_image_display, e.params)

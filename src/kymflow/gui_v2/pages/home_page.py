@@ -198,6 +198,12 @@ class HomePage(BasePage):
                     )
                 )
 
+        from kymflow.gui_v2.events import ChannelSelection, SelectionOrigin
+
+        def _on_channel_select(e: ChannelSelection) -> None:
+            """Channel selection intent from image viewer; forward to bus."""
+            bus.emit(e)
+
         self._image_line_viewer = ImageLineViewerV2View(
             on_kym_event_x_range=bus.emit,
             on_set_roi_bounds=bus.emit,
@@ -206,6 +212,8 @@ class HomePage(BasePage):
             on_add_roi=_on_add_roi,
             on_delete_roi=bus.emit,
         )
+        # Wire channel selection callback after construction.
+        self._image_line_viewer._on_channel_select = _on_channel_select
         self._event_view = KymEventView(
             context,
             on_selected=bus.emit,
@@ -241,6 +249,7 @@ class HomePage(BasePage):
         self._drawer_contrast_view = ContrastView(on_image_display_change=bus.emit)
         self._drawer_line_plot_controls_view = LinePlotControlsView(
             on_full_zoom=self._on_drawer_full_zoom,
+            on_image_display_change=bus.emit,
         )
         # Splitter pane metadata views
         def _get_metadata_field_options(field_name: str) -> list[str]:
