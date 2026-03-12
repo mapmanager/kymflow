@@ -538,16 +538,26 @@ class AddKymEvent:
     Purpose:
         Create a new velocity event with specified t_start/t_end. KymAnalysis
         will fill in defaults for other fields (event_type, user_type, etc.).
+
     Triggered by:
-        - Intent: KymEventView when user completes range selection for new event.
-        - State: AddKymEventController after creating the event.
+        - Intent: KymEventView when the user completes the range selection for a new
+          event (typically after SetKymEventRangeState + SetKymEventXRange have
+          captured the proposed time window).
+        - State: KymEventController after creating the event in the underlying
+          KymAnalysis model.
+
     Consumed by:
-        - AddKymEventController (intent -> KymAnalysis create).
-        - Any state listeners that need to refresh UI after creation.
+        - KymEventController (intent → KymAnalysis.add_velocity_event()).
+        - Any state listeners that need to refresh UI after creation, such as
+          KymEventCacheSyncController (which refreshes the velocity-event cache)
+          and bindings that respond to FileChanged(state, change_type="analysis").
+
     Dependencies:
-        - Requires SetKymEventRangeState + SetKymEventXRange flow to capture t_start/t_end.
-        - roi_id comes from KymEventView._roi_filter (current ROI filter).
-        - path comes from AppState.selected_file in controller.
+        - Requires the SetKymEventRangeState + SetKymEventXRange flow to capture
+          t_start/t_end.
+        - roi_id comes from the current ROI filter in the KymEventView.
+        - path is typically resolved by KymEventController via AppState
+          (selected file or path passed on the event).
 
     Attributes:
         event_id: Event ID after creation (None in intent, set in state).
@@ -573,15 +583,20 @@ class DeleteKymEvent:
     """Delete a velocity event event (intent or state phase).
 
     Purpose:
-        Remove a velocity event by event_id.
+        Remove a velocity event by event_id from the underlying KymAnalysis.
+
     Triggered by:
-        - Intent: KymEventView when user confirms deletion.
-        - State: DeleteKymEventController after deleting the event.
+        - Intent: KymEventView when the user confirms deletion of a velocity event.
+        - State: KymEventController after deleting the event from KymAnalysis.
+
     Consumed by:
-        - DeleteKymEventController (intent -> KymAnalysis delete).
-        - Any state listeners that need to refresh UI after deletion.
+        - KymEventController (intent → KymAnalysis.delete_velocity_event()).
+        - Any state listeners that need to refresh UI after deletion, such as
+          KymEventCacheSyncController (which refreshes the velocity-event cache)
+          and bindings that respond to FileChanged(state, change_type="analysis").
+
     Dependencies:
-        - Requires an active event selection (event_id) in KymEventView.
+        - Requires an active velocity event selection (event_id) in KymEventView.
 
     Attributes:
         event_id: Unique event id string to delete.
@@ -602,13 +617,25 @@ class DeleteKymEvent:
 class AddRoi:
     """Add ROI event (intent or state phase).
 
-    Purpose: Create a new ROI with default full-image bounds.
-    Triggered by: Intent from AnalysisToolbarView "Add ROI" button.
-    Consumed by: AddRoiController (intent → KymImage.rois.create_roi()).
+    Purpose:
+        Request creation of a new ROI for the current KymImage, typically with
+        default full-image bounds. The underlying AcqImage/KymImage is the single
+        source of truth for ROI structure.
+
+    Triggered by:
+        - Intent: ROI-creation UI (e.g., ImageLineViewerV2View or ImageRoiWidget)
+          when the user requests a new ROI.
+        - State: RoiController after creating the ROI on the associated KymImage.
+
+    Consumed by:
+        - RoiController (intent → KymImage.rois.create_roi(), AppState.select_roi()).
+        - Any state listeners that need to refresh UI after ROI creation, primarily
+          via FileChanged(state, change_type="roi") and ROISelection(state)
+          emitted from AppStateBridge/AppState.
 
     Attributes:
-        roi_id: ROI ID after creation (None in intent, set in state).
-        path: File path (optional, for validation).
+        roi_id: ROI ID after creation (None in intent, set in state when used).
+        path: File path (optional, for validation or explicit targeting).
         origin: SelectionOrigin indicating where the add came from.
         phase: Event phase - "intent" or "state".
     """
@@ -623,13 +650,25 @@ class AddRoi:
 class DeleteRoi:
     """Delete ROI event (intent or state phase).
 
-    Purpose: Remove an ROI by roi_id.
-    Triggered by: Intent from AnalysisToolbarView "Delete ROI" button (with confirmation).
-    Consumed by: DeleteRoiController (intent → KymImage.rois.delete()).
+    Purpose:
+        Request deletion of an ROI by roi_id from the current KymImage. The
+        controller is responsible for performing any safety checks before
+        mutating the ROI set (e.g., verifying no dependent analysis).
+
+    Triggered by:
+        - Intent: ROI-deletion UI (e.g., ImageLineViewerV2View or ImageRoiWidget)
+          when the user confirms deletion.
+        - State: RoiController after removing the ROI from KymImage.rois.
+
+    Consumed by:
+        - RoiController (intent → KymImage.rois.delete(), AppState.select_roi()).
+        - Any state listeners that need to refresh UI after ROI deletion, primarily
+          via FileChanged(state, change_type="roi") and ROISelection(state)
+          emitted from AppStateBridge/AppState.
 
     Attributes:
         roi_id: ROI ID to delete.
-        path: File path (optional, for validation).
+        path: File path (optional, for validation or explicit targeting).
         origin: SelectionOrigin indicating where the delete came from.
         phase: Event phase - "intent" or "state".
     """
@@ -644,14 +683,27 @@ class DeleteRoi:
 class EditRoi:
     """Edit ROI event (intent or state phase).
 
-    Purpose: Update ROI bounds (and optionally other attributes).
-    Triggered by: Intent from AnalysisToolbarView "Edit ROI" button → SetRoiEditState → SetRoiBounds flow.
-    Consumed by: EditRoiController (intent → KymImage.rois.edit_roi()).
+    Purpose:
+        Update ROI geometry (bounds) and, in the future, potentially other ROI
+        attributes. The underlying AcqImage/KymImage holds the canonical ROI
+        definitions; views should treat this event as a request rather than
+        directly mutating local ROI state.
+
+    Triggered by:
+        - Intent: ROI-editing UI (e.g., ImageLineViewerV2View when the user
+          finishes an ROI-drag or rectangle selection).
+        - State: RoiController after applying new bounds to KymImage.rois.
+
+    Consumed by:
+        - RoiController (intent → KymImage.rois.edit_roi()).
+        - Any state listeners that need to refresh UI after ROI edits, primarily
+          via FileChanged(state, change_type="roi") and ROISelection(state)
+          emitted from AppStateBridge/AppState.
 
     Attributes:
         roi_id: ROI ID to edit.
         bounds: New RoiBounds (optional, None means unchanged).
-        path: File path (optional, for validation).
+        path: File path (optional, for validation or explicit targeting).
         origin: SelectionOrigin indicating where the edit came from.
         phase: Event phase - "intent" or "state".
     """

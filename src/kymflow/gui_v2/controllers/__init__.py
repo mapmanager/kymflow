@@ -13,6 +13,7 @@ from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayCont
 from kymflow.gui_v2.controllers.kym_event_cache_sync_controller import (
     KymEventCacheSyncController,
 )
+from kymflow.gui_v2.controllers.kym_event_controller import KymEventController
 from kymflow.gui_v2.controllers.kym_event_range_controller import (
     KymEventRangeStateController,
 )
@@ -23,18 +24,12 @@ from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeControll
 from kymflow.gui_v2.controllers.velocity_event_update_controller import (
     VelocityEventUpdateController,
 )
-from kymflow.gui_v2.controllers.add_kym_event_controller import AddKymEventController
-from kymflow.gui_v2.controllers.delete_kym_event_controller import (
-    DeleteKymEventController,
-)
 from kymflow.gui_v2.controllers.roi_controller import RoiController
 
 __all__ = [
     "AnalysisController",
     "AnalysisUpdateController",
     "AppStateBridgeController",
-    "AddKymEventController",
-    "DeleteKymEventController",
     "EventAnalysisController",
     "EventSelectionController",
     "FileSelectionController",
@@ -42,6 +37,7 @@ __all__ = [
     "FolderController",
     "ImageDisplayController",
     "KymEventCacheSyncController",
+    "KymEventController",
     "KymEventRangeStateController",
     "MetadataController",
     "NextPrevFileController",

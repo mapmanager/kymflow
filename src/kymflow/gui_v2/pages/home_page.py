@@ -9,11 +9,9 @@ from nicegui import ui
 from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers import (
-    AddKymEventController,
     AnalysisController,
     AnalysisUpdateController,
     AppStateBridgeController,
-    DeleteKymEventController,
     EventAnalysisController,
     EventSelectionController,
     FileSelectionController,
@@ -21,6 +19,7 @@ from kymflow.gui_v2.controllers import (
     FolderController,
     ImageDisplayController,
     KymEventCacheSyncController,
+    KymEventController,
     KymEventRangeStateController,
     MetadataController,
     NextPrevFileController,
@@ -124,8 +123,7 @@ class HomePage(BasePage):
         self._metadata_controller: MetadataController | None = None
         self._analysis_update_controller: AnalysisUpdateController | None = None
         self._velocity_event_update_controller: VelocityEventUpdateController | None = None
-        self._add_kym_event_controller: AddKymEventController | None = None
-        self._delete_kym_event_controller: DeleteKymEventController | None = None
+        self._kym_event_controller: KymEventController | None = None
         self._kym_event_cache_sync_controller: KymEventCacheSyncController | None = None
         self._analysis_controller: AnalysisController | None = None
         self._save_controller: SaveController | None = None
@@ -332,10 +330,7 @@ class HomePage(BasePage):
         self._velocity_event_update_controller = VelocityEventUpdateController(
             self.context.app_state, self.bus
         )
-        self._add_kym_event_controller = AddKymEventController(
-            self.context.app_state, self.bus
-        )
-        self._delete_kym_event_controller = DeleteKymEventController(
+        self._kym_event_controller = KymEventController(
             self.context.app_state, self.bus
         )
         self._kym_event_cache_sync_controller = KymEventCacheSyncController(

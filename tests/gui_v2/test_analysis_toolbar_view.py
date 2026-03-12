@@ -368,16 +368,3 @@ def test_detect_events_click_handles_none_inputs(
     assert event.baseline_drop_params.mad_k == default_params.mad_k
     assert event.baseline_drop_params.abs_score_floor == default_params.abs_score_floor
 
-
-def test_detect_all_events_click_uses_same_params(
-    kym_file_with_analysis: KymImage,
-    mock_app_context,
-) -> None:
-    """Detect Events (all files) feature is currently disabled in the UI.
-
-    This test is retained for documentation but skipped while the corresponding
-    button and callback are commented out in AnalysisToolbarView.
-    """
-    import pytest
-
-    pytest.skip("Detect Events (all files) UI and callback are disabled in AnalysisToolbarView")
