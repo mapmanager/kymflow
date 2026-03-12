@@ -1,0 +1,84 @@
+---
+alwaysApply: true
+---
+
+# gui_v2 coding rules
+
+## 1. Fail-fast policy (no unnecessary soft-fail patterns)
+
+For code in `kymflow/src/kymflow/gui_v2` and tightly related NiceGUI/nicewidgets glue:
+
+- **Do NOT introduce new "soft-fail" defensive patterns for our own domain objects** (e.g. `KymImage`, `AppState`, ROI/Kym controllers), unless explicitly requested in a nearby comment.
+
+- Avoid, for our own types:
+  - `dict.get("key", <default>)` or `.get("key") or {}` to avoid `KeyError` where the dictionary is expected to have that key.
+  - `getattr(obj, "attr", <default>)` / `hasattr(obj, "attr")` around attributes that should always exist (e.g. `KymImage.path`, `.rois`, analysis APIs).
+  - Broad `try/except` around ROI or Kym event operations that only log and return (e.g. swallowing `ValueError` from `create_roi`, `edit_roi`, `add_velocity_event`, `delete_velocity_event`).
+
+- **Preferred behavior:**
+  - Assume our domain schemas and APIs are correct and let code fail fast if invariants are violated.
+  - If interacting with an external/untyped API (e.g. Plotly JSON, browser events, user-provided dicts) and you must be defensive, add a short inline comment explaining why at that call-site.
+
+## 2. Documentation (Google-style docstrings)
+
+- All new or modified **classes** and **functions** in `gui_v2` must use **Google-style docstrings**:
+
+  - One-line summary.
+  - `Args:` section that documents every parameter and its meaning.
+  - `Returns:` section that states the return type and meaning (or clarifies `None`).
+  - `Raises:` section when nontrivial public APIs can raise meaningful exceptions.
+
+- Inline comments should only explain:
+  - Non-obvious control flow or decisions.
+  - Domain-specific reasoning that the code alone cannot convey.
+  - Do not narrate trivial steps (“increment counter”, “call function”).
+
+## 3. Event-bus architecture invariants
+
+- Always respect the **intent vs state** phases on events:
+  - `phase="intent"` for user actions.
+  - `phase="state"` for confirmed model changes.
+
+- When adding new behavior, **prefer existing events**:
+  - Use `FileChanged(state, change_type="roi" | "analysis" | ...)` to signal that a file’s derived data has changed.
+  - Use `FileSelection`, `ROISelection`, `EventSelection`, `ChannelSelection` for selection changes.
+
+- Do not add new state-phase ROI or Kym events where `FileChanged(state)` plus the appropriate selection event can express the same information.
+
+## 4. ROI and Kym controller responsibilities
+
+- **RoiController**
+  - Handles all `AddRoi`, `EditRoi`, `DeleteRoi`, and `ROISelection` **intent** events.
+  - Emits `FileChanged(state, change_type="roi")` and relies on `AppState`/`AppStateBridge` for `ROISelection(state)`.
+  - Do not create new ROI micro-controllers; extend `RoiController` instead.
+
+- **KymEventController**
+  - Handles all `AddKymEvent` and `DeleteKymEvent` **intent** events.
+  - Emits `AddKymEvent(state)` / `DeleteKymEvent(state)` plus `FileChanged(state, change_type="analysis")`.
+  - New Kym event flows (add/delete variants) should be integrated into `KymEventController`, not new controllers.
+
+- **Other Kym event controllers**
+  - `KymEventCacheSyncController` (cache sync) and `KymEventRangeStateController` (arming range selection) remain focused, separate responsibilities.
+  - Do not duplicate their behavior in other controllers without a clear reason.
+
+## 5. ROI CRUD UI location
+
+- User-facing runtime ROI CRUD (add, delete, edit) must be driven from:
+  - `ImageLineViewerV2View`, and
+  - `ImageRoiWidget` (nicewidgets).
+
+- The analysis toolbar **must not** reintroduce ROI add/edit/delete NiceGUI widgets. It can still react to ROI / file / analysis state via bindings, but should not be a second ROI CRUD surface.
+
+## 6. NiceGUI and testing
+
+- NiceGUI is the primary GUI framework (current version: **3.7.1**; this may be updated manually).
+- Do not change NiceGUI API usage or version assumptions unless explicitly requested.
+- GUI v2 tests must be runnable with:
+
+  ```bash
+  cd kymflow
+  uv run pytest tests/gui_v2
+  ```
+
+- Logging in tests must respect `KYMFLOW_DISABLE_FILE_LOG=1` to avoid writing to the real user log directory.
+

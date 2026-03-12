@@ -1,0 +1,28 @@
+---
+alwaysApply: true
+---
+# Defensive coding rules for gui_v2
+
+## Fail-fast policy
+
+For code under `kymflow/src/kymflow/gui_v2` and tightly related NiceGUI/nicewidgets glue:
+
+- **Do NOT introduce new "soft-fail" defensive patterns for our own domain objects** (e.g. `KymImage`, `AppState`, ROI/kym-event controllers), unless explicitly requested in a comment adjacent to that call site.
+
+- **Forbidden patterns for new/modified code (unless interacting with truly external or untyped libraries):**
+  - `dict.get("key", <default>)` or `.get("key") or {}` used to avoid `KeyError` when the data structure is *supposed* to have that key.
+  - `getattr(obj, "attr", <default>)` / `hasattr(obj, "attr")` used to guard access to attributes that should always exist on our own types (e.g. `KymImage.path`, `KymImage.rois`, analysis APIs).
+  - Broad `try/except` around core library or domain API calls that only log and return (e.g. swallowing `ValueError` from ROI/Kym event operations) instead of surfacing the error.
+
+- **Preferred behavior:**
+  - Assume the schema and APIs for our domain objects are correct and let code fail fast (raise) if they are not.
+  - If a case truly is optional (e.g. a third-party or dynamic library that may or may not expose a field), document that explicitly in a comment at the call-site before using `.get`/`getattr`/`hasattr`/`try/except`.
+
+## Exceptions
+
+- These constraints can be relaxed **only** when:
+  - The code is interacting with external or untyped systems (e.g. Plotly JSON, browser messages, user-provided dicts), and
+  - A short inline comment explains why defensive handling is required at that point.
+
+In all other cases, prefer explicit invariants and fail-fast behavior over silent soft failures.
+
