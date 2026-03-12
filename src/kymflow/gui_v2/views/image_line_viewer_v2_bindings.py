@@ -90,8 +90,9 @@ class ImageLineViewerV2Bindings:
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
-        safe_call(self._view.set_selected_file, e.file)
-        safe_call(self._view.set_selected_roi, e.roi_id)
+        """Update view with full selection state (file, channel, roi_id) from the event.
+        ROI is set as part of set_selected_file; ROISelection is handled in _on_roi_changed."""
+        safe_call(self._view.set_selected_file, e.file, e.channel, e.roi_id)
         safe_call(
             self._view.zoom_to_event,
             EventSelection(

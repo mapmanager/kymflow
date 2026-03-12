@@ -85,6 +85,7 @@ class FileSelection:
     origin: SelectionOrigin
     phase: EventPhase
     roi_id: int | None = None
+    channel: int | None = None
     kym_event_selection: "EventSelection | None" = None
 
 

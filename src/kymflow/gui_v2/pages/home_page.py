@@ -1071,12 +1071,12 @@ class HomePage(BasePage):
 
                             # Initialize viewer with current AppState (if already set)
                             # This ensures viewer shows current selection/theme on first render
-                            current_file = self.context.app_state.selected_file
-                            if current_file is not None:
-                                self._image_line_viewer.set_selected_file(current_file)
-                            current_roi = self.context.app_state.selected_roi_id
-                            if current_roi is not None:
-                                self._image_line_viewer.set_selected_roi(current_roi)
+                            app_state = self.context.app_state
+                            self._image_line_viewer.set_selected_file(
+                                app_state.selected_file,
+                                app_state.selected_channel,
+                                app_state.selected_roi_id,
+                            )
                             self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)

@@ -111,7 +111,6 @@ class AnalysisToolbarView:
         self._delete_roi_button: Optional[ui.button] = None
         self._edit_roi_button: Optional[ui.button] = None
         self._roi_select: Optional[ui.select] = None
-        self._file_path_label: Optional[ui.label] = None
         self._progress_bar: Optional[ui.linear_progress] = None
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
@@ -124,6 +123,7 @@ class AnalysisToolbarView:
 
         # State
         self._current_file: Optional[KymImage] = None
+        self._current_channel: Optional[int] = None
         self._current_roi_id: Optional[int] = None
         self._task_state: Optional[TaskStateChanged] = None
         self._suppress_roi_emit: bool = False  # Suppress ROI dropdown on_change during programmatic updates
@@ -145,7 +145,6 @@ class AnalysisToolbarView:
         self._delete_roi_button = None
         self._edit_roi_button = None
         self._roi_select = None
-        self._file_path_label = None
         self._progress_bar = None
         # self._progress_label = None
         self._detect_events_button = None
@@ -157,11 +156,6 @@ class AnalysisToolbarView:
         self._abs_score_floor_input = None
         # Reset suppression flag to ensure clean state
         self._suppress_roi_emit = False
-
-        # File name label (similar to kym_event_view.py)
-        with ui.row().classes("w-full items-center gap-2"):
-            ui.label("File").classes("text-sm text-gray-500")
-            self._file_path_label = ui.label("No file selected").classes("text-xs text-gray-400")
         
         # ROI management section
         with ui.row().classes("items-end gap-2"):
@@ -206,23 +200,34 @@ class AnalysisToolbarView:
         # Initialize button states
         self._update_button_states()
 
-    def set_selected_file(self, file: Optional[KymImage]) -> None:
+    def set_selected_file(
+        self,
+        file: Optional[KymImage],
+        channel: Optional[int],
+        roi_id: Optional[int],
+    ) -> None:
         """Update view for new file selection.
 
         Called by bindings when FileSelection(phase="state") event is received.
-        Enables/disables buttons based on file selection.
+        Sets full selection state (file, channel, roi_id) and updates UI.
 
         Args:
             file: Selected KymImage instance, or None if selection cleared.
+            channel: 1-based channel index, or None (e.g. no channels).
+            roi_id: Selected ROI id, or None if file has no ROIs.
         """
-        safe_call(self._set_selected_file_impl, file)
+        safe_call(self._set_selected_file_impl, file, channel, roi_id)
 
-    def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
+    def _set_selected_file_impl(
+        self,
+        file: Optional[KymImage],
+        channel: Optional[int],
+        roi_id: Optional[int],
+    ) -> None:
         """Internal implementation of set_selected_file."""
         self._current_file = file
-        # Reset ROI when file changes (ROI selection will be updated separately)
-        self._current_roi_id = None
-        self._update_file_path_label()
+        self._current_channel = channel
+        self._current_roi_id = roi_id
         self._update_roi_dropdown()
         self._update_button_states()
     
@@ -632,17 +637,6 @@ class AnalysisToolbarView:
                 phase="intent",
             )
         )
-
-    def _update_file_path_label(self) -> None:
-        """Update the file path label with current file name (blinded or real)."""
-        if self._file_path_label is None:
-            return
-        if self._current_file:
-            blinded = self._app_context.app_config.get_blinded() if self._app_context.app_config else False
-            file_name = self._current_file.get_file_name(blinded=blinded) or "No file selected"
-            self._file_path_label.text = file_name
-        else:
-            self._file_path_label.text = "No file selected"
 
     def _render_event_analysis_widget(self) -> None:
         """Render the Event Analysis widget (modular, self-contained).

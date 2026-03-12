@@ -116,6 +116,7 @@ class ImageLineViewerV2View:
         self._contrast_widget = None
 
         self._current_file: Optional[KymImage] = None
+        self._current_channel: Optional[int] = None
         self._current_roi_id: Optional[int] = None
         self._theme: KymflowThemeMode = KymflowThemeMode.DARK
         self._display_params: Optional[ImageDisplayParams] = None
@@ -409,21 +410,39 @@ class ImageLineViewerV2View:
                 [e.event.t_start - pad, e.event.t_start + pad]
             )
 
-    def set_selected_file(self, file: Optional[KymImage]) -> None:
-        """Update plot for new file. Clears ROI; ROISelection will set it."""
-        safe_call(self._set_selected_file_impl, file)
+    def set_selected_file(
+        self,
+        file: Optional[KymImage],
+        channel: Optional[int],
+        roi_id: Optional[int],
+    ) -> None:
+        """Update plot for new file selection.
 
-    def _set_selected_file_impl(self, file: Optional[KymImage]) -> None:
+        Called by bindings when FileSelection(phase="state") is received.
+        Sets full selection state (file, channel, roi_id). roi_id=None means
+        the file has no ROIs and is meaningful, not missing.
+        """
+        safe_call(self._set_selected_file_impl, file, channel, roi_id)
+
+    def _set_selected_file_impl(
+        self,
+        file: Optional[KymImage],
+        channel: Optional[int],
+        roi_id: Optional[int],
+    ) -> None:
         if file is not None:
+            ch = channel if channel is not None else 1
             try:
-                file.load_channel(1)
+                file.load_channel(ch)
             except Exception as exc:
                 logger.error(
-                    "ImageLineViewerV2View failed to load channel=1: %s",
+                    "ImageLineViewerV2View failed to load channel=%s: %s",
+                    ch,
                     exc,
                 )
         self._current_file = file
-        self._current_roi_id = None
+        self._current_channel = channel
+        self._current_roi_id = roi_id
         self._refresh_from_state()
 
     def set_selected_roi(self, roi_id: Optional[int]) -> None:

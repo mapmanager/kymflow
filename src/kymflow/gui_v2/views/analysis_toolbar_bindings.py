@@ -10,6 +10,9 @@ from kymflow.gui_v2.events import AddRoi, DeleteRoi, EditRoi, FileSelection, ROI
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 
+from kymflow.core.utils.logging import get_logger
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     pass
 
@@ -78,15 +81,14 @@ class AnalysisToolbarBindings:
     def _on_file_selection_changed(self, e: FileSelection) -> None:
         """Handle file selection change event.
 
-        Updates view for new file selection and ROI selection. Wrapped in safe_call to handle
-        deleted client errors gracefully.
+        Updates view with full selection state (file, channel, roi_id) from the event.
+        ROI is set as part of set_selected_file; ROISelection events are handled
+        separately in _on_roi_selection_changed when the user changes ROI elsewhere.
 
         Args:
-            e: FileSelection event (phase="state") containing the selected file and roi_id.
+            e: FileSelection event (phase="state") containing file, channel, and roi_id.
         """
-        safe_call(self._view.set_selected_file, e.file)
-        # Update ROI selection from FileSelection (replaces separate ROISelection emission)
-        safe_call(self._view.set_selected_roi, e.roi_id)
+        safe_call(self._view.set_selected_file, e.file, e.channel, e.roi_id)
 
     def _on_roi_selection_changed(self, e: ROISelection) -> None:
         """Handle ROI selection change event.
@@ -109,8 +111,6 @@ class AnalysisToolbarBindings:
         Args:
             e: TaskStateChanged event containing task state information.
         """
-        from kymflow.core.utils.logging import get_logger
-        logger = get_logger(__name__)
         
         # logger.debug(
         #     f"Received TaskStateChanged: task_type={e.task_type}, running={e.running}, "

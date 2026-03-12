@@ -18,6 +18,7 @@ from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import ImageDisplayChange
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
 from kymflow.gui_v2.state import ImageDisplayParams
+from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.image_line_widget.image_contrast_widget import ImageContrastWidget
 
@@ -64,8 +65,9 @@ class LinePlotControlsView:
         self._contrast_widget: Optional[ImageContrastWidget] = None
 
         # State (for enabling/disabling controls)
-        self._current_file = None
+        self._current_file: KymImage | None = None
         self._current_roi_id: Optional[int] = None
+        self._current_channel: Optional[int] = None
 
     def render(self) -> None:
         """Create the line plot controls UI inside the current container.
@@ -90,34 +92,59 @@ class LinePlotControlsView:
         # Initialize button states
         self._update_control_states()
 
-    def set_selected_file(self, file) -> None:
+    def set_selected_file(
+        self,
+        file: KymImage | None,
+        channel: int | None,
+        roi_id: int | None,
+    ) -> None:
         """Update view for new file selection.
 
         Called by bindings when FileSelection(phase="state") event is received.
-        Enables/disables controls based on file selection.
+        Sets full selection state (file, channel, roi_id) and updates the contrast widget
+        so it can emit ContrastEvent (channel and roi must be set for _emit_event to run).
 
         Args:
             file: Selected file instance, or None if selection cleared.
+            channel: 1-based channel index, or None (e.g. no channels).
+            roi_id: Selected ROI id, or None if file has no ROIs.
         """
-        safe_call(self._set_selected_file_impl, file)
+        safe_call(self._set_selected_file_impl, file, channel, roi_id)
 
-    def _set_selected_file_impl(self, file) -> None:
+    def _set_selected_file_impl(
+        self,
+        file: KymImage | None,
+        channel: int | None,
+        roi_id: int | None,
+    ) -> None:
         """Internal implementation of set_selected_file."""
         self._current_file = file
-        # Clear ROI when file changes (ROI selection will be updated separately)
-        self._current_roi_id = None
+        self._current_channel = channel
+        self._current_roi_id = roi_id
         self._update_control_states()
 
-        # Update contrast widget image based on selected file (channel handled elsewhere).
-        if self._contrast_widget is not None:
-            if file is None:
-                self._contrast_widget.set_file(None)
-            else:
-                try:
-                    image = file.get_img_slice(channel=1)
-                except Exception:
-                    image = None
-                self._contrast_widget.set_file(image)
+        if self._contrast_widget is None:
+            return
+        if file is None:
+            self._contrast_widget.set_file(None)
+            self._contrast_widget.select_roi_by_index(None)
+            return
+        ch = channel
+        if ch is None:
+            try:
+                chans = file.channels_available()
+                ch = chans[0] if chans else None
+            except Exception:
+                ch = None
+        if ch is None:
+            self._contrast_widget.set_file(None)
+        else:
+            try:
+                image = file.get_img_slice(channel=ch)
+            except Exception:
+                image = None
+            self._contrast_widget.set_channel(ch, image)
+        self._contrast_widget.select_roi_by_index(roi_id)
 
     def set_selected_roi(self, roi_id: Optional[int]) -> None:
         """Update view for new ROI selection.

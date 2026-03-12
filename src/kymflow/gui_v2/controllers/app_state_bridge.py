@@ -117,8 +117,9 @@ class AppStateBridgeController:
         # Derive path from file if available
         path = str(kym_file.path) if kym_file and hasattr(kym_file, "path") else None
 
-        # Get ROI ID from AppState (set by select_file() before this callback)
+        # Get ROI ID and channel from AppState (set by select_file()/select_roi()/select_channel before this callback)
         roi_id = self._app_state.selected_roi_id
+        channel = self._app_state.selected_channel
 
         self._bus.emit(
             FileSelection(
@@ -127,6 +128,7 @@ class AppStateBridgeController:
                 origin=selection_origin,
                 phase="state",
                 roi_id=roi_id,
+                channel=channel,
                 kym_event_selection=None,  # Always None on file change (no active velocity event)
             )
         )
