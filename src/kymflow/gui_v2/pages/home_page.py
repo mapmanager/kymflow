@@ -53,8 +53,6 @@ from kymflow.gui_v2.views import (
     AboutTabView,
     AnalysisToolbarBindings,
     AnalysisToolbarView,
-    ContrastBindings,
-    ContrastView,
     DrawerView,
     FileTableBindings,
     FileTableView,
@@ -64,8 +62,6 @@ from kymflow.gui_v2.views import (
     ImageLineViewerV2View,
     KymEventBindings,
     KymEventView,
-    LinePlotControlsBindings,
-    LinePlotControlsView,
     MetadataExperimentalBindings,
     MetadataExperimentalView,
     MetadataHeaderBindings,
@@ -246,11 +242,6 @@ class HomePage(BasePage):
             on_detect_events=bus.emit,
         )
         self._drawer_task_progress_view = TaskProgressView()
-        self._drawer_contrast_view = ContrastView(on_image_display_change=bus.emit)
-        self._drawer_line_plot_controls_view = LinePlotControlsView(
-            on_full_zoom=self._on_drawer_full_zoom,
-            on_image_display_change=bus.emit,
-        )
         # Splitter pane metadata views
         def _get_metadata_field_options(field_name: str) -> list[str]:
             """Get unique experimental metadata values for a field from current file list."""
@@ -290,16 +281,12 @@ class HomePage(BasePage):
         # Drawer view (organizes all splitter pane content)
         self._drawer_view = DrawerView(
             analysis_toolbar_view=self._drawer_analysis_toolbar_view,
-            contrast_view=self._drawer_contrast_view,
-            line_plot_controls_view=self._drawer_line_plot_controls_view,
             metadata_tab_view=self._drawer_metadata_tab_view,
             about_tab_view=self._drawer_about_tab_view,
             options_tab_view=self._drawer_options_tab_view,
         )
         self._drawer_analysis_toolbar_bindings: AnalysisToolbarBindings | None = None
         self._drawer_task_progress_bindings: TaskProgressBindings | None = None
-        self._drawer_contrast_bindings: ContrastBindings | None = None
-        self._drawer_line_plot_controls_bindings: LinePlotControlsBindings | None = None
         self._drawer_metadata_experimental_bindings: MetadataExperimentalBindings | None = None
         self._drawer_metadata_header_bindings: MetadataHeaderBindings | None = None
 
@@ -404,12 +391,6 @@ class HomePage(BasePage):
         )
         self._drawer_task_progress_bindings = TaskProgressBindings(
             self.bus, self._drawer_task_progress_view
-        )
-        self._drawer_contrast_bindings = ContrastBindings(
-            self.bus, self._drawer_contrast_view
-        )
-        self._drawer_line_plot_controls_bindings = LinePlotControlsBindings(
-            self.bus, self._drawer_line_plot_controls_view
         )
         self._drawer_metadata_experimental_bindings = MetadataExperimentalBindings(
             self.bus, self._drawer_metadata_experimental_view, parent_tab_view=self._drawer_metadata_tab_view
@@ -939,6 +920,7 @@ class HomePage(BasePage):
                 # Initialize drawer views with current state
                 self._drawer_view.initialize_views(
                     current_file=self.context.app_state.selected_file,
+                    current_channel=self.context.app_state.selected_channel,
                     current_roi=self.context.app_state.selected_roi_id,
                     theme_mode=self.context.app_state.theme_mode,
                 )

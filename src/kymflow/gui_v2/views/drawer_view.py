@@ -1,14 +1,14 @@
 """Drawer view component.
 
 This module provides a view component that displays the left splitter pane with tabs
-for Analysis, Plotting, Metadata, and About. This component encapsulates the splitter pane layout and
+for Analysis, Metadata, Options, Diameter, and About. This component encapsulates the splitter pane layout and
 organization of toolbar widgets.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from nicegui import ui
 
@@ -16,8 +16,6 @@ from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.views.about_tab_view import AboutTabView
 from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
-from kymflow.gui_v2.views.contrast_view import ContrastView
-from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 from kymflow.gui_v2.views.options_tab_view import OptionsTabView
 
@@ -27,8 +25,8 @@ logger = get_logger(__name__)
 class DrawerView:
     """Drawer view component.
 
-    This view displays the left splitter pane with tabs for organizing analysis tools,
-    plotting controls, and metadata editing. It acts as a container that organizes multiple toolbar
+    This view displays the left splitter pane with tabs for organizing analysis tools
+    and metadata editing. It acts as a container that organizes multiple toolbar
     views and delegates operations to them.
 
     Lifecycle:
@@ -39,8 +37,6 @@ class DrawerView:
 
     Attributes:
         _analysis_toolbar_view: Analysis toolbar view instance.
-        _contrast_view: Contrast view instance.
-        _line_plot_controls_view: Line plot controls view instance.
         _metadata_tab_view: Metadata tab view instance.
         _options_tab_view: Options tab view instance.
         _about_tab_view: About tab view instance.
@@ -49,8 +45,6 @@ class DrawerView:
     def __init__(
         self,
         analysis_toolbar_view: AnalysisToolbarView,
-        contrast_view: ContrastView,
-        line_plot_controls_view: LinePlotControlsView,
         metadata_tab_view: MetadataTabView,
         about_tab_view: AboutTabView,
         options_tab_view: OptionsTabView,
@@ -59,15 +53,11 @@ class DrawerView:
 
         Args:
             analysis_toolbar_view: Analysis toolbar view instance.
-            contrast_view: Contrast view instance.
-            line_plot_controls_view: Line plot controls view instance.
             metadata_tab_view: Metadata tab view instance.
             about_tab_view: About tab view instance.
             options_tab_view: Options tab view instance.
         """
         self._analysis_toolbar_view = analysis_toolbar_view
-        self._contrast_view = contrast_view
-        self._line_plot_controls_view = line_plot_controls_view
         self._metadata_tab_view = metadata_tab_view
         self._about_tab_view = about_tab_view
         self._options_tab_view = options_tab_view
@@ -106,14 +96,13 @@ class DrawerView:
             with ui.tabs().props('vertical dense').classes("w-12 shrink-0 icon_only_tabs") as tabs:
                 tab_analysis = ui.tab("Analysis", icon="speed").tooltip("Analysis")
                 tab_diameter = ui.tab("Diameter", icon="straighten").tooltip("Diameter")
-                tab_plotting = ui.tab("Plotting", icon="bar_chart").tooltip("Plotting")
                 tab_metadata = ui.tab("Metadata", icon="description").tooltip("Metadata")
                 tab_options = ui.tab("Options", icon="settings").tooltip("Options")
                 tab_about = ui.tab("About", icon="info").tooltip("About")
             
             # Auto-expand left pane when user clicks a tab icon (while minimized)
             if on_tab_click is not None:
-                for t in (tab_analysis, tab_plotting, tab_metadata, tab_options, tab_diameter, tab_about):
+                for t in (tab_analysis, tab_metadata, tab_options, tab_diameter, tab_about):
                     t.on('click', lambda e: on_tab_click())
             
             # Right side: Tab panels - content for each tab
@@ -133,21 +122,6 @@ class DrawerView:
                             # to not update. Re-enable once multiprocessing task state communication is fixed.
                             # ui.label("Progress").classes("text-sm font-semibold mt-2")
                             # self._drawer_task_progress_view.render()
-                    
-                    # Plotting tab panel - contains plotting and visualization controls
-                    with ui.tab_panel(tab_plotting):
-                        with ui.column().classes("w-full gap-4"):
-
-                            # Line plot controls section - in disclosure triangle
-                            # with ui.expansion("Line Plot Controls", value=True).classes("w-full"):
-                            self._line_plot_controls_view.render()
-
-                            # Contrast section - in disclosure triangle
-                            with ui.expansion("Contrast", value=True) \
-                                .props('header-class="my-expansion-header-shift-left"') \
-                                .classes("w-full"):
-                                self._contrast_view.render()
-                            
                     
                     # Metadata tab panel - contains metadata editing widgets
                     with ui.tab_panel(tab_metadata):
@@ -172,6 +146,7 @@ class DrawerView:
     def initialize_views(
         self,
         current_file: Optional[KymImage],
+        current_channel: Optional[int],
         current_roi: Optional[int],
         theme_mode: str,
     ) -> None:
@@ -182,19 +157,16 @@ class DrawerView:
 
         Args:
             current_file: Currently selected file, or None if no selection.
+            current_channel: Currently selected channel index, or None.
             current_roi: Currently selected ROI ID, or None if no selection.
             theme_mode: Current theme mode (e.g., "dark" or "light").
         """
         if current_file is not None:
-            self._analysis_toolbar_view.set_selected_file(current_file)
-            self._contrast_view.set_selected_file(current_file)
-            self._line_plot_controls_view.set_selected_file(current_file)
+            self._analysis_toolbar_view.set_selected_file(
+                current_file, current_channel, current_roi
+            )
             self._metadata_tab_view.set_selected_file(current_file)
         
         if current_roi is not None:
             self._analysis_toolbar_view.set_selected_roi(current_roi)
-            self._line_plot_controls_view.set_selected_roi(current_roi)
-        
-        # Initialize contrast view theme
-        self._contrast_view.set_theme(theme_mode)
         # Note: Display params will be updated via ImageDisplayChange events from bindings

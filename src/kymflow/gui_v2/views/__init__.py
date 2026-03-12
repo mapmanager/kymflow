@@ -12,7 +12,6 @@ from kymflow.gui_v2.views.image_line_viewer_v2_view import (
     ImageLineViewerV2View,
 )
 from kymflow.gui_v2.views.kym_event_view import KymEventView
-from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
@@ -28,7 +27,6 @@ from kymflow.gui_v2.views.image_line_viewer_v2_bindings import (
     ImageLineViewerV2Bindings,
 )
 from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
-from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
 from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
 from kymflow.gui_v2.views.plot_pool_bindings import PlotPoolBindings  # 20260213ppc
@@ -44,7 +42,6 @@ __all__ = [
     "FolderSelectorView",
     "ImageLineViewerV2View",
     "KymEventView",
-    "LinePlotControlsView",
     "MetadataExperimentalView",
     "MetadataHeaderView",
     "MetadataTabView",
@@ -57,7 +54,6 @@ __all__ = [
     "FolderSelectorBindings",
     "ImageLineViewerV2Bindings",
     "KymEventBindings",
-    "LinePlotControlsBindings",
     "MetadataExperimentalBindings",
     "MetadataHeaderBindings",
     "PlotPoolBindings",  # 20260213ppc
