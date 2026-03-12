@@ -68,4 +68,4 @@ class AddRoiController:
                 )
             )
         except ValueError as exc:
-            logger.warning("AddRoi: failed to create ROI: %s", exc)
+            logger.error("AddRoi: failed to create ROI: %s", exc)

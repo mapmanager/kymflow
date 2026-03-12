@@ -38,9 +38,6 @@ def test_analysis_toolbar_bindings_subscribes_to_task_state(bus: EventBus, mock_
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 
@@ -67,9 +64,6 @@ def test_analysis_toolbar_bindings_filters_task_type(bus: EventBus, mock_app_con
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 

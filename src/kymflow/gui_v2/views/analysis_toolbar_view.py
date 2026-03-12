@@ -21,16 +21,11 @@ if TYPE_CHECKING:
     from kymflow.gui_v2.app_context import AppContext
 from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.config import MAX_NUM_ROI, ALLOW_EDIT_ROI
 from kymflow.gui_v2.events import (
     AddRoi,
     AnalysisCancel,
     AnalysisStart,
-    DeleteRoi,
     DetectEvents,
-    ROISelection,
-    SelectionOrigin,
-    SetRoiEditState,
 )
 from kymflow.gui_v2.events_state import TaskStateChanged
 from kymflow.core.utils.logging import get_logger
@@ -41,9 +36,6 @@ logger = get_logger(__name__)
 OnAnalysisStart = Callable[[AnalysisStart], None]
 OnAnalysisCancel = Callable[[AnalysisCancel], None]
 OnAddRoi = Callable[[AddRoi], None]
-OnDeleteRoi = Callable[[DeleteRoi], None]
-OnSetRoiEditState = Callable[[SetRoiEditState], None]
-OnROISelected = Callable[[ROISelection], None]
 OnDetectEvents = Callable[[DetectEvents], None]
 
 
@@ -78,9 +70,6 @@ class AnalysisToolbarView:
         on_analysis_start: OnAnalysisStart,
         on_analysis_cancel: OnAnalysisCancel,
         on_add_roi: OnAddRoi | None = None,
-        on_delete_roi: OnDeleteRoi,
-        on_set_roi_edit_state: OnSetRoiEditState,
-        on_roi_selected: OnROISelected,
         on_detect_events: OnDetectEvents,
     ) -> None:
         """Initialize analysis toolbar view.
@@ -90,27 +79,18 @@ class AnalysisToolbarView:
             on_analysis_start: Callback function that receives AnalysisStart events.
             on_analysis_cancel: Callback function that receives AnalysisCancel events.
             on_add_roi: Callback function that receives AddRoi events.
-            on_delete_roi: Callback function that receives DeleteRoi events.
-            on_set_roi_edit_state: Callback function that receives SetRoiEditState events.
-            on_roi_selected: Callback function that receives ROISelection events.
             on_detect_events: Callback function that receives DetectEvents events.
         """
         self._app_context = app_context
         self._on_analysis_start = on_analysis_start
         self._on_analysis_cancel = on_analysis_cancel
         self._on_add_roi = on_add_roi
-        self._on_delete_roi = on_delete_roi
-        self._on_set_roi_edit_state = on_set_roi_edit_state
-        self._on_roi_selected = on_roi_selected
         self._on_detect_events = on_detect_events
 
         # UI components (created in render())
         self._window_select: Optional[ui.select] = None
         self._start_button: Optional[ui.button] = None
         self._cancel_button: Optional[ui.button] = None
-        self._delete_roi_button: Optional[ui.button] = None
-        self._edit_roi_button: Optional[ui.button] = None
-        self._roi_select: Optional[ui.select] = None
         self._progress_bar: Optional[ui.linear_progress] = None
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
@@ -126,7 +106,6 @@ class AnalysisToolbarView:
         self._current_channel: Optional[int] = None
         self._current_roi_id: Optional[int] = None
         self._task_state: Optional[TaskStateChanged] = None
-        self._suppress_roi_emit: bool = False  # Suppress ROI dropdown on_change during programmatic updates
 
     def render(self) -> None:
         """Create the analysis toolbar UI inside the current container.
@@ -142,9 +121,6 @@ class AnalysisToolbarView:
         self._window_select: Optional[ui.select] = None
         self._start_button = None
         self._cancel_button = None
-        self._delete_roi_button = None
-        self._edit_roi_button = None
-        self._roi_select = None
         self._progress_bar = None
         # self._progress_label = None
         self._detect_events_button = None
@@ -154,20 +130,6 @@ class AnalysisToolbarView:
         self._smooth_sec_input = None
         self._mad_k_input = None
         self._abs_score_floor_input = None
-        # Reset suppression flag to ensure clean state
-        self._suppress_roi_emit = False
-        
-        # ROI management section
-        with ui.row().classes("items-end gap-2"):
-            # ROI selector dropdown (always visible, disabled when 0 ROIs)
-            self._roi_select = ui.select(
-                options={},
-                label="ROI",
-                on_change=self._on_roi_dropdown_change,
-            ).classes("min-w-32")
-        with ui.row().classes("items-end gap-2"):
-            self._delete_roi_button = ui.button("Delete ROI", on_click=self._on_delete_roi_click).props("dense").classes("text-sm")
-            self._edit_roi_button = ui.button("Edit ROI", on_click=self._on_edit_roi_click).props("dense").classes("text-sm")
 
         # Flow Analysis section
         # with ui.expansion("Flow Analysis", value=True).classes("w-full"):
@@ -228,7 +190,6 @@ class AnalysisToolbarView:
         self._current_file = file
         self._current_channel = channel
         self._current_roi_id = roi_id
-        self._update_roi_dropdown()
         self._update_button_states()
     
     def set_selected_roi(self, roi_id: Optional[int]) -> None:
@@ -245,7 +206,6 @@ class AnalysisToolbarView:
     def _set_selected_roi_impl(self, roi_id: Optional[int]) -> None:
         """Internal implementation of set_selected_roi."""
         self._current_roi_id = roi_id
-        self._update_roi_dropdown()
         self._update_button_states()
 
     def set_task_state(self, task_state: TaskStateChanged) -> None:
@@ -284,40 +244,6 @@ class AnalysisToolbarView:
             else:
                 self._window_select.enable()
 
-        if self._roi_select is not None:
-            if running:
-                self._roi_select.disable()
-            else:
-                if self._current_file is None:
-                    self._roi_select.disable()
-                else:
-                    num_rois = self._current_file.rois.numRois()
-                    if num_rois == 0:
-                        self._roi_select.disable()
-                    else:
-                        self._roi_select.enable()
-
-        # ROI button states
-        if self._delete_roi_button is not None:
-            # Delete ROI: enabled when file is selected AND ROI is selected
-            if running:
-                self._delete_roi_button.disable()
-            elif has_file and has_roi:
-                self._delete_roi_button.enable()
-            else:
-                self._delete_roi_button.disable()
-        
-        if self._edit_roi_button is not None:
-            # Edit ROI: enabled when file is selected AND ROI is selected AND editing is allowed
-            if running:
-                self._edit_roi_button.disable()
-            elif not ALLOW_EDIT_ROI:
-                self._edit_roi_button.disable()
-            elif has_file and has_roi:
-                self._edit_roi_button.enable()
-            else:
-                self._edit_roi_button.disable()
-        
         # Debug logging
         # logger.debug(
         #     f"Update button states: running={running}, cancellable={cancellable}, "
@@ -489,151 +415,6 @@ class AnalysisToolbarView:
         # Emit intent event
         self._on_analysis_cancel(
             AnalysisCancel(
-                phase="intent",
-            )
-        )
-
-    def _on_delete_roi_click(self) -> None:
-        """Handle Delete ROI button click."""
-        if self._current_file is None or self._current_roi_id is None:
-            return
-        
-        # Check if ROI has analysis or events
-        has_analysis = False
-        has_events = False
-        try:
-            kym_analysis = self._current_file.get_kym_analysis()
-            if kym_analysis.has_analysis(self._current_roi_id):
-                has_analysis = True
-            velocity_events = kym_analysis.get_velocity_events(self._current_roi_id)
-            if velocity_events and len(velocity_events) > 0:
-                has_events = True
-        except Exception:
-            pass
-        
-        # check if we have v0 analysis and do not allow delete
-        ka = self._current_file.get_kym_analysis()
-        _roiID = self._current_roi_id
-        if ka.has_v0_flow_analysis(_roiID):
-            logger.warning(f"ROI {_roiID} already has v0 analysis, cannot run new analysis")
-            
-            with ui.dialog() as dialog, ui.card():
-                ui.label("Not allowed to delete ROI").classes("text-lg font-semibold")
-                ui.label(
-                    f"{self._current_file.path.stem} roi {_roiID} has v0 flow analysis"
-                ).classes("text-sm")
-                with ui.row():
-                    ui.button("OK", on_click=dialog.close).props("outline")
-
-                dialog.open()
-                return
-
-        # Build warning message
-        warnings = ["This will delete the ROI"]
-        if has_analysis:
-            warnings.append("If kym analysis exists for this ROI, it will also be deleted")
-        if has_events:
-            warnings.append("If kym events exist for this ROI, they will also be deleted")
-        
-        warning_text = "\n".join(f"• {w}" for w in warnings)
-        
-        # Show confirmation dialog
-        with ui.dialog() as dialog, ui.card():
-            ui.label("Delete ROI?").classes("text-lg font-semibold")
-            ui.label(warning_text).classes("text-sm")
-            with ui.row():
-                ui.button("Cancel", on_click=dialog.close).props("outline")
-                ui.button("Delete", on_click=lambda: self._confirm_delete_roi(dialog)).props("color=red")
-        
-        dialog.open()
-
-    def _confirm_delete_roi(self, dialog) -> None:
-        """Confirm deletion and emit DeleteRoi event."""
-        dialog.close()
-        
-        if self._current_file is None or self._current_roi_id is None:
-            return
-        
-        path_str = str(self._current_file.path) if self._current_file.path else None
-        self._on_delete_roi(
-            DeleteRoi(
-                roi_id=self._current_roi_id,
-                path=path_str,
-                origin=SelectionOrigin.EXTERNAL,
-                phase="intent",
-            )
-        )
-
-    def _on_edit_roi_click(self) -> None:
-        """Handle Edit ROI button click."""
-        if self._current_file is None or self._current_roi_id is None:
-            return
-        
-        path_str = str(self._current_file.path) if self._current_file.path else None
-        self._on_set_roi_edit_state(
-            SetRoiEditState(
-                enabled=True,
-                roi_id=self._current_roi_id,
-                path=path_str,
-                origin=SelectionOrigin.EXTERNAL,
-                phase="intent",
-            )
-        )
-
-    def _update_roi_dropdown(self) -> None:
-        """Update ROI dropdown options based on current file.
-        
-        Always shows the dropdown (disabled when 0 ROIs, enabled when >=1 ROIs).
-        """
-        if self._roi_select is None:
-            return
-
-        kf = self._current_file
-        if kf is None:
-            # No file selected, clear options and disable
-            self._suppress_roi_emit = True
-            try:
-                self._roi_select.set_options({}, value=None)
-                self._roi_select.disable()
-            finally:
-                self._suppress_roi_emit = False
-            return
-
-        # Use RoiSet.get_roi_ids() public API
-        roi_ids = kf.rois.get_roi_ids()
-        options = {roi_id: f"ROI {roi_id}" for roi_id in roi_ids}
-        
-        # Suppress on_change callback during programmatic update to prevent feedback loop
-        self._suppress_roi_emit = True
-        try:
-            if self._current_roi_id is not None and self._current_roi_id in roi_ids:
-                self._roi_select.set_options(options, value=self._current_roi_id)
-            else:
-                # Current ROI is invalid or None, set options without value
-                self._roi_select.set_options(options, value=None)
-        finally:
-            self._suppress_roi_emit = False
-        
-        # Enable/disable based on number of ROIs
-        num_rois = kf.rois.numRois()
-        if num_rois == 0:
-            self._roi_select.disable()
-        else:
-            self._roi_select.enable()
-
-    def _on_roi_dropdown_change(self) -> None:
-        """Handle ROI dropdown selection change."""
-        if self._roi_select is None:
-            return
-        # Suppress events during programmatic updates to prevent feedback loop
-        if self._suppress_roi_emit:
-            return
-        roi_id = self._roi_select.value
-        # Emit intent event with ANALYSIS_TOOLBAR origin
-        self._on_roi_selected(
-            ROISelection(
-                roi_id=roi_id,
-                origin=SelectionOrigin.ANALYSIS_TOOLBAR,
                 phase="intent",
             )
         )

@@ -144,7 +144,7 @@ class AppStateBridgeController:
         """
         # Only emit if client is still alive
         if not is_client_alive():
-            logger.debug(
+            logger.error(
                 f"[bridge] Skipping ROISelection emit - client deleted (bus={self._bus._client_id[:8]}...)"
             )
             return

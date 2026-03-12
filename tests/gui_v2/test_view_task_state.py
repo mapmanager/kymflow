@@ -58,9 +58,6 @@ def test_analysis_toolbar_stores_task_state(
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 

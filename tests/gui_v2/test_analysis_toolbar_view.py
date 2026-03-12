@@ -62,9 +62,6 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 
@@ -72,8 +69,8 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
     view.render()
 
     # Set file and ROI
-    view.set_selected_file(kym_file_with_analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_file(kym_file_with_analysis, None, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -115,9 +112,6 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 
@@ -125,8 +119,8 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
     view.render()
 
     # Set file and ROI (but clear analysis)
-    view.set_selected_file(kym_file_with_analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_file(kym_file_with_analysis, None, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -165,9 +159,6 @@ def test_analysis_toolbar_cancel_blocks_analysis_start(
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 
@@ -175,8 +166,8 @@ def test_analysis_toolbar_cancel_blocks_analysis_start(
     view.render()
 
     # Set file and ROI
-    view.set_selected_file(kym_file_with_analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_file(kym_file_with_analysis, None, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -223,9 +214,6 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
         on_analysis_start=on_analysis_start,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=lambda e: None,
     )
 
@@ -233,8 +221,8 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
     view.render()
 
     # Set file and ROI
-    view.set_selected_file(kym_file_with_analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_file(kym_file_with_analysis, None, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -288,9 +276,6 @@ def test_detect_events_click_collects_ui_inputs(
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=on_detect_events,
     )
 
@@ -298,8 +283,8 @@ def test_detect_events_click_collects_ui_inputs(
     view.render()
 
     # Set file and ROI
-    view.set_selected_file(kym_file_with_analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_file(kym_file_with_analysis, None, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock UI inputs with specific values
@@ -348,9 +333,6 @@ def test_detect_events_click_handles_none_inputs(
         on_analysis_start=lambda e: None,
         on_analysis_cancel=lambda e: None,
         on_add_roi=lambda e: None,
-        on_delete_roi=lambda e: None,
-        on_set_roi_edit_state=lambda e: None,
-        on_roi_selected=lambda e: None,
         on_detect_events=on_detect_events,
     )
 
@@ -358,8 +340,8 @@ def test_detect_events_click_handles_none_inputs(
     view.render()
 
     # Set file and ROI
-    view.set_selected_file(kym_file_with_analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
+    view.set_selected_file(kym_file_with_analysis, None, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock UI inputs with None/invalid values

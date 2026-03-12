@@ -65,4 +65,4 @@ class EditRoiController:
                 )
             )
         except ValueError as exc:
-            logger.warning("EditRoi: failed to edit ROI: %s", exc)
+            logger.error("EditRoi: failed to edit ROI: %s", exc)

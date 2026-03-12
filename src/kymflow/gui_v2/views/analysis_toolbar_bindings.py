@@ -55,9 +55,9 @@ class AnalysisToolbarBindings:
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(ROISelection, self._on_roi_selection_changed)
         bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
-        bus.subscribe_state(AddRoi, self._on_roi_state_changed)
-        bus.subscribe_state(DeleteRoi, self._on_roi_state_changed)
-        bus.subscribe_state(EditRoi, self._on_roi_state_changed)
+        # bus.subscribe_state(AddRoi, self._on_roi_state_changed)
+        # bus.subscribe_state(DeleteRoi, self._on_roi_state_changed)
+        # bus.subscribe_state(EditRoi, self._on_roi_state_changed)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -73,9 +73,9 @@ class AnalysisToolbarBindings:
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
         self._bus.unsubscribe_state(ROISelection, self._on_roi_selection_changed)
         self._bus.unsubscribe_state(TaskStateChanged, self._on_task_state_changed)
-        self._bus.unsubscribe_state(AddRoi, self._on_roi_state_changed)
-        self._bus.unsubscribe_state(DeleteRoi, self._on_roi_state_changed)
-        self._bus.unsubscribe_state(EditRoi, self._on_roi_state_changed)
+        # self._bus.unsubscribe_state(AddRoi, self._on_roi_state_changed)
+        # self._bus.unsubscribe_state(DeleteRoi, self._on_roi_state_changed)
+        # self._bus.unsubscribe_state(EditRoi, self._on_roi_state_changed)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -125,13 +125,12 @@ class AnalysisToolbarBindings:
             # logger.debug(f"Ignoring TaskStateChanged for task_type={e.task_type} (not 'home')")
             pass
 
-    def _on_roi_state_changed(self, e: AddRoi | DeleteRoi | EditRoi) -> None:
-        """Handle ROI state change events (AddRoi, DeleteRoi, EditRoi).
+    # def _on_roi_state_changed(self, e: AddRoi | DeleteRoi | EditRoi) -> None:
+    #     """Handle ROI state change events (AddRoi, DeleteRoi, EditRoi).
 
-        Updates button states and ROI dropdown when ROI operations complete.
+    #     Updates button states when ROI operations complete.
 
-        Args:
-            e: ROI event (phase="state") indicating ROI was added, deleted, or edited.
-        """
-        safe_call(self._view._update_button_states)
-        safe_call(self._view._update_roi_dropdown)
+    #     Args:
+    #         e: ROI event (phase="state") indicating ROI was added, deleted, or edited.
+    #     """
+    #     safe_call(self._view._update_button_states)

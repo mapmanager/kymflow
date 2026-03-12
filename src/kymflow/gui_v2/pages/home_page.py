@@ -236,9 +236,6 @@ class HomePage(BasePage):
             app_context=context,
             on_analysis_start=bus.emit,
             on_analysis_cancel=bus.emit,
-            on_delete_roi=bus.emit,
-            on_set_roi_edit_state=bus.emit,
-            on_roi_selected=bus.emit,
             on_detect_events=bus.emit,
         )
         self._drawer_task_progress_view = TaskProgressView()
