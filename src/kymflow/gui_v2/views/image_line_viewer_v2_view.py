@@ -123,6 +123,9 @@ class ImageLineViewerV2View:
         self._selected_event_id: Optional[str] = None
         self._event_filter: Optional[dict[str, bool]] = None
         self._syncing_axes = False
+        self._kym_event_range_event_id: Optional[str] = None
+        self._kym_event_range_roi_id: Optional[int] = None
+        self._kym_event_range_path: Optional[str] = None
 
     def render(self) -> None:
         """Create the viewer UI: ImageRoiWidget + LinePlotWidget in a column."""
@@ -412,6 +415,8 @@ class ImageLineViewerV2View:
             self._line_plot_widget.clear_for_no_roi()
             return
         self._line_plot_widget.set_velocity_trace(time_arr, vel_arr, name="velocity")
+        self._line_plot_widget.set_x_axis_autorange()
+        self._line_plot_widget.set_y_axis_autorange()
 
     def _update_events_for_current_roi(self) -> None:
         """Recompute velocity-event rectangles for current file & ROI only."""
@@ -623,8 +628,35 @@ class ImageLineViewerV2View:
         roi_id: Optional[int] = None,
         path: Optional[str] = None,
     ) -> None:
-        """Stub: add-user-event API not yet in LinePlotWidget. No-op."""
-        pass
+        """Enable/disable draw-rect mode on LinePlotWidget for Add Event / Set Event Start/Stop."""
+        if self._line_plot_widget is None:
+            return
+        if enabled:
+            self._kym_event_range_event_id = event_id
+            self._kym_event_range_roi_id = roi_id
+            self._kym_event_range_path = path
+
+            def _on_rect_selection(x0: float, x1: float) -> None:
+                if self._on_kym_event_x_range is None:
+                    return
+                x_min, x_max = min(x0, x1), max(x0, x1)
+                self._on_kym_event_x_range(
+                    SetKymEventXRange(
+                        event_id=self._kym_event_range_event_id,
+                        roi_id=self._kym_event_range_roi_id,
+                        path=self._kym_event_range_path,
+                        x0=x_min,
+                        x1=x_max,
+                        origin=SelectionOrigin.EVENT_TABLE,
+                        phase="intent",
+                    )
+                )
+
+            self._line_plot_widget.set_on_rect_selection(_on_rect_selection)
+            self._line_plot_widget.set_draw_rect_mode(True)
+        else:
+            self._line_plot_widget.set_on_rect_selection(None)
+            self._line_plot_widget.set_draw_rect_mode(False)
 
     def refresh_velocity_events(self) -> None:
         """Re-refresh to pick up event changes."""

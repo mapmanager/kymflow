@@ -903,55 +903,6 @@ class KymAnalysis:
         # Call lower-level API on ROI
         return roi.get_time_bounds(voxels)
 
-    # DEPRECATED: Stall analysis is deprecated
-    # def run_stall_analysis(self, roi_id: int, params: StallAnalysisParams) -> StallAnalysis:
-    #     """Run stall analysis for a single ROI and store results.
-    #
-    #     This method is intentionally **on-demand**: it does not run automatically
-    #     when flow analysis is computed. A caller (GUI/script) supplies parameters and
-    #     explicitly requests stall detection once the underlying analysis values exist.
-    #
-    #     The source signal is selected via `params.velocity_key` (e.g. 'velocity',
-    #     'cleanVelocity', 'signedVelocity').
-    #
-    #     Args:
-    #         roi_id: Identifier of the ROI to analyze.
-    #         params: Stall analysis parameters.
-    #
-    #     Returns:
-    #         The computed `StallAnalysis` instance.
-    #
-    #     Raises:
-    #         ValueError: If the requested analysis values are missing for this ROI.
-    #     """
-    #     values = self.get_analysis_value(
-    #         roi_id=roi_id,
-    #         key=params.velocity_key,
-    #         remove_outliers=False,
-    #     )
-    #     if values is None:
-    #         raise ValueError(
-    #             f"Cannot run stall analysis: ROI {roi_id} has no analysis values for key '{params.velocity_key}'."
-    #         )
-    #
-    #     analysis = StallAnalysis.run(velocity=values, params=params)
-    #     self._stall_analysis[roi_id] = analysis
-    #     # Mark dirty so callers know there are unsaved results.
-    #     self._dirty = True
-    #     return analysis
-    #
-    # def get_stall_analysis(self, roi_id: int) -> Optional[StallAnalysis]:
-    #     """Return stall analysis results for roi_id, or None if not present.
-    #
-    #     Args:
-    #         roi_id: Identifier of the ROI.
-    #
-    #     Returns:
-    #         Stored `StallAnalysis` results, or None if stall analysis has not been run
-    #         for this ROI (or results were not loaded).
-    #     """
-    #     return self._stall_analysis.get(roi_id)
-
     def run_velocity_event_analysis(
         self,
         roi_id: int,

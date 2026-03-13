@@ -6,6 +6,8 @@ AppState events. No SetRoiEditState (ROI edit is ImageRoiWidget built-in only).
 
 from __future__ import annotations
 
+from nicegui import run
+
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
@@ -88,22 +90,26 @@ class ImageLineViewerV2Bindings:
         self._bus.unsubscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = False
 
-    def _on_file_selection_changed(self, e: FileSelection) -> None:
+    async def _on_file_selection_changed(self, e: FileSelection) -> None:
         """Update view with full selection state (file, channel, roi_id) from the event.
-        ROI is set as part of set_selected_file; ROISelection is handled in _on_roi_changed."""
-        safe_call(self._view.set_selected_file, e.file, e.channel, e.roi_id)
-        safe_call(
-            self._view.zoom_to_event,
-            EventSelection(
-                event_id=None,
-                roi_id=None,
-                path=None,
-                event=None,
-                options=None,
-                origin=e.origin,
-                phase="state",
-            ),
-        )
+        ROI is set as part of set_selected_file; ROISelection is handled in _on_roi_changed.
+        Heavy Plotly updates run off main loop via run.io_bound."""
+        def _do_update() -> None:
+            safe_call(self._view.set_selected_file, e.file, e.channel, e.roi_id)
+            safe_call(
+                self._view.zoom_to_event,
+                EventSelection(
+                    event_id=None,
+                    roi_id=None,
+                    path=None,
+                    event=None,
+                    options=None,
+                    origin=e.origin,
+                    phase="state",
+                ),
+            )
+
+        await run.io_bound(_do_update)
 
     def _on_file_changed(self, e: FileChanged) -> None:
         """Handle FileChanged state events and refresh ROIs when needed.
