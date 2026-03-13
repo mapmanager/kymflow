@@ -73,7 +73,7 @@ def test_save_selected_uses_is_dirty_not_has_analysis(
     # Update metadata only (no analysis data)
     kym_file.update_experiment_metadata(note="test note")
     assert kym_file.get_kym_analysis().is_dirty is True
-    assert not kym_file.get_kym_analysis().has_analysis()
+    assert not kym_file.get_kym_analysis().get_analysis_object("RadonAnalysis").has_analysis()
 
     # Mock save_analysis
     with patch.object(kym_file.get_kym_analysis(), "save_analysis") as mock_save:

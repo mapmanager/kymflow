@@ -99,8 +99,12 @@ def run_example(
         return
     logger.info(f'{stem} has {ka.num_rois} rois')
     roi_id = 1
-    t = ka.get_analysis_value(roi_id=roi_id, key="time")
-    v = ka.get_analysis_value(roi_id=roi_id, key="velocity")
+    channel = ka.get_channel_for_roi(roi_id)
+    if channel is None:
+        logger.error(f"No radon analysis for roi_id {roi_id}")
+        return
+    t = ka.get_analysis_value(roi_id=roi_id, channel=channel, key="time")
+    v = ka.get_analysis_value(roi_id=roi_id, channel=channel, key="velocity")
 
     import numpy as np
     logger.info(f'{stem} t: {type(t)} len:{len(t)} min:{np.min(t)} max:{np.max(t)} v: {type(v)} len:{len(v)} min:{np.min(v)} max:{np.max(v)}')

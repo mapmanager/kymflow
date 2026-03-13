@@ -12,6 +12,10 @@ import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.roi import RoiBounds
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.gui_v2.events import AnalysisStart, DetectEvents
 from kymflow.gui_v2.views.analysis_toolbar_view import AnalysisToolbarView
 
@@ -40,8 +44,8 @@ def kym_file_with_analysis() -> KymImage:
         # Create ROI and analyze
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi = kym_file.rois.create_roi(bounds=bounds)
-        kym_file.get_kym_analysis().analyze_roi(
-            roi.id, window_size=16, use_multiprocessing=False
+        _radon(kym_file.get_kym_analysis()).analyze_roi(
+            roi.id, roi.channel, window_size=16, use_multiprocessing=False
         )
 
         return kym_file
@@ -68,9 +72,11 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
     # Render view to create UI elements
     view.render()
 
-    # Set file and ROI
+    # Set file and ROI (with channel)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
-    view.set_selected_file(kym_file_with_analysis, None, roi_id)
+    roi = kym_file_with_analysis.rois.get(roi_id)
+    assert roi is not None
+    view.set_selected_file(kym_file_with_analysis, roi.channel, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -79,7 +85,7 @@ def test_analysis_toolbar_shows_dialog_when_analysis_exists(
     view._window_select.value = 16
 
     # Verify analysis exists
-    assert kym_file_with_analysis.get_kym_analysis().has_analysis(roi_id)
+    assert _radon(kym_file_with_analysis.get_kym_analysis()).has_analysis(roi_id, roi.channel)
 
     # Mock ui.dialog to verify it's created
     with patch("kymflow.gui_v2.views.analysis_toolbar_view.ui.dialog") as mock_dialog:
@@ -120,7 +126,9 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
 
     # Set file and ROI (but clear analysis)
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
-    view.set_selected_file(kym_file_with_analysis, None, roi_id)
+    roi = kym_file_with_analysis.rois.get(roi_id)
+    assert roi is not None
+    view.set_selected_file(kym_file_with_analysis, roi.channel, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -129,8 +137,8 @@ def test_analysis_toolbar_no_dialog_when_no_analysis(
     view._window_select.value = 16
 
     # Clear analysis
-    kym_file_with_analysis.get_kym_analysis().invalidate(roi_id)
-    assert not kym_file_with_analysis.get_kym_analysis().has_analysis(roi_id)
+    _radon(kym_file_with_analysis.get_kym_analysis()).invalidate(roi_id)  # channel=None removes all for roi
+    assert not _radon(kym_file_with_analysis.get_kym_analysis()).has_analysis(roi_id, 1)
 
     # Mock ui.dialog
     with patch("kymflow.gui_v2.views.analysis_toolbar_view.ui.dialog") as mock_dialog:
@@ -167,7 +175,9 @@ def test_analysis_toolbar_cancel_blocks_analysis_start(
 
     # Set file and ROI
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
-    view.set_selected_file(kym_file_with_analysis, None, roi_id)
+    roi = kym_file_with_analysis.rois.get(roi_id)
+    assert roi is not None
+    view.set_selected_file(kym_file_with_analysis, roi.channel, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -222,7 +232,9 @@ def test_analysis_toolbar_confirm_proceeds_with_analysis(
 
     # Set file and ROI
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
-    view.set_selected_file(kym_file_with_analysis, None, roi_id)
+    roi = kym_file_with_analysis.rois.get(roi_id)
+    assert roi is not None
+    view.set_selected_file(kym_file_with_analysis, roi.channel, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock window_select to return a value
@@ -284,7 +296,9 @@ def test_detect_events_click_collects_ui_inputs(
 
     # Set file and ROI
     roi_id = kym_file_with_analysis.rois.get_roi_ids()[0]
-    view.set_selected_file(kym_file_with_analysis, None, roi_id)
+    roi = kym_file_with_analysis.rois.get(roi_id)
+    assert roi is not None
+    view.set_selected_file(kym_file_with_analysis, roi.channel, roi_id)
     view.set_selected_roi(roi_id)
 
     # Mock UI inputs with specific values

@@ -7,7 +7,7 @@ analysis summary data for a single ROI.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, get_origin, get_args
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class RadonReport:
     
     Attributes:
         roi_id: ROI identifier.
-        channel: Channel index from the ROI (roi.channel), or None if not available.
+        channel: Channel index from radon metadata, or None if not available.
         vel_min: Minimum velocity value (mm/s), or None if not available.
         vel_max: Maximum velocity value (mm/s), or None if not available.
         vel_mean: Mean velocity value (mm/s), or None if not available.
@@ -85,55 +85,54 @@ class RadonReport:
     def from_dict(cls, data: Dict[str, Any]) -> "RadonReport":
         """Deserialize from a dictionary.
         
+        Type conversion is derived from dataclass field annotations, so new fields
+        are handled automatically. Unknown keys are ignored.
+        
         Args:
-            data: Dictionary containing RadonReport fields. Unknown keys are ignored.
-                Missing keys will use default values (None for optional fields).
+            data: Dictionary containing RadonReport fields.
         
         Returns:
             RadonReport instance with values from the dictionary.
         """
-        # Use dataclass fields to derive field names dynamically
-        known_field_names = {f.name for f in fields(cls)}
-        
-        def _is_none_or_nan(v: Any) -> bool:
-            if v is None:
-                return True
-            if isinstance(v, float) and v != v:  # NaN
-                return True
-            return False
+        from typing import get_type_hints
 
-        # Filter to only known fields and convert types
-        filtered_data: Dict[str, Any] = {}
-        for key in known_field_names:
-            if key in data:
-                value = data[key]
-                if _is_none_or_nan(value):
-                    value = None
-                # Type conversions for robustness
-                if key == "roi_id":
-                    filtered_data[key] = int(value) if value is not None else None
-                elif key == "channel":
-                    filtered_data[key] = int(value) if value is not None else None
-                elif key in ["img_min", "img_max", "vel_n_nan", "vel_n_zero", "vel_n_big"]:
-                    filtered_data[key] = int(value) if value is not None else None
-                elif key in ["vel_min", "vel_max", "vel_mean", "vel_std", "vel_se", "vel_cv", "img_mean", "img_std"]:
-                    filtered_data[key] = float(value) if value is not None else None
-                elif key == "accepted":
-                    # Handle bool conversion: bool, string "True"/"False", int 1/0, None
-                    if value is None:
-                        filtered_data[key] = None
-                    elif isinstance(value, bool):
-                        filtered_data[key] = value
-                    elif isinstance(value, str):
-                        filtered_data[key] = value.lower() in ("true", "1", "yes")
-                    else:
-                        # Convert int 1/0 or other truthy/falsy values
-                        filtered_data[key] = bool(value)
-                else:
-                    # Strings (path, file_name, parent_folder, grandparent_folder, rel_path, treatment, condition, date)
-                    filtered_data[key] = str(value) if value is not None else None
-        
-        if "roi_id" not in filtered_data:
+        hints = get_type_hints(cls)
+        known = {f.name for f in fields(cls)}
+
+        def _is_none_or_nan(v: Any) -> bool:
+            return v is None or (isinstance(v, float) and v != v)
+
+        def _convert(value: Any, hint: Any) -> Any:
+            if _is_none_or_nan(value):
+                return None
+            origin, args = get_origin(hint), get_args(hint)
+            # Handle Optional / Union[X, None]
+            if origin is not None and type(None) in args:
+                inner = next((a for a in args if a is not type(None)), None)
+                hint = inner if inner is not None else hint
+            if hint is int:
+                return int(value)
+            if hint is float:
+                return float(value)
+            if hint is bool:
+                if isinstance(value, bool):
+                    return value
+                if isinstance(value, str):
+                    return value.lower() in ("true", "1", "yes")
+                return bool(value)
+            if hint is str:
+                return str(value) if value is not None else None
+            return value
+
+        filtered: Dict[str, Any] = {}
+        for key in known:
+            if key not in data:
+                continue
+            value = data[key]
+            hint = hints.get(key, Any)
+            filtered[key] = _convert(value, hint) if not _is_none_or_nan(value) else None
+
+        if "roi_id" not in filtered:
             raise ValueError("roi_id is required in RadonReport.from_dict()")
-        
-        return cls(**filtered_data)
+
+        return cls(**filtered)

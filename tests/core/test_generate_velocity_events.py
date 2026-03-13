@@ -9,6 +9,10 @@ import pytest
 
 from kymflow.core.analysis.stall_analysis import detect_stalls
 from kymflow.core.image_loaders.kym_image import KymImage
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -35,7 +39,10 @@ def test_generate_velocity_events() -> None:
     # Get velocity data for ROI 1
     kym_analysis = kym_image.get_kym_analysis()
     roi_id = 1
-    velocity = kym_analysis.get_analysis_value(roi_id=roi_id, key="velocity")
+    channel = _radon(kym_analysis).get_channel_for_roi(roi_id)
+    if channel is None:
+        pytest.skip("No radon analysis for ROI 1")
+    velocity = _radon(kym_analysis).get_analysis_value(roi_id=roi_id, channel=channel, key="velocity")
     
     if velocity is None:
         pytest.skip("No velocity data available for ROI 1")

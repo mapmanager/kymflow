@@ -8,6 +8,10 @@ from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
 from kymflow.core.image_loaders.roi import RoiBounds
 
 
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
+
+
 def test_velocity_event_uuid_after_detection() -> None:
     """Test that events have _uuid set after run_velocity_event_analysis()."""
     # Create test image
@@ -22,7 +26,7 @@ def test_velocity_event_uuid_after_detection() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Run analysis to create some data
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Run velocity event detection
     events = kym_analysis.run_velocity_event_analysis(roi.id)
@@ -53,7 +57,7 @@ def test_velocity_event_uuid_after_get_velocity_events() -> None:
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
     
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     kym_analysis.run_velocity_event_analysis(roi.id)
     
     # Retrieve events via get_velocity_events()
@@ -244,7 +248,7 @@ def test_velocity_event_uuid_after_load_analysis() -> None:
         roi = kym_image.rois.create_roi(bounds=bounds)
         
         # Run analysis and create events
-        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
         # Add event directly (more reliable than detection for testing)
         kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
         

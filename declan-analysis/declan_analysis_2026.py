@@ -129,8 +129,11 @@ def analyze_flow(path: str, depth:int) -> None:
             ka = kymImage.get_kym_analysis()
             
             # analyze flow
+            # kymanalysis-radon-channel: analyze_roi now requires channel
             logger.info(f'   analyze flow for roi {roi.id} window:{window}...')
-            ka.analyze_roi(roi.id, window)
+            radon = ka.get_analysis_object("RadonAnalysis")
+            if radon is not None:
+                radon.analyze_roi(roi.id, 1, window)
 
         # save analysis
         success = kymImage.get_kym_analysis().save_analysis()

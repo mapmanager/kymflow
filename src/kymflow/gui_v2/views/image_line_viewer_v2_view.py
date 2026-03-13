@@ -406,11 +406,14 @@ class ImageLineViewerV2View:
             self._line_plot_widget.clear_for_no_roi()
             return
         kym_analysis = kf.get_kym_analysis()
-        if not kym_analysis.has_analysis(roi_id):
+        # Channel from metadata
+        radon = kym_analysis.get_analysis_object("RadonAnalysis")
+        channel = radon.get_channel_for_roi(roi_id) if radon else None
+        if radon is None or channel is None or not radon.has_analysis(roi_id, channel):
             self._line_plot_widget.clear_for_no_roi()
             return
-        time_arr = kym_analysis.get_analysis_value(roi_id, "time")
-        vel_arr = kym_analysis.get_analysis_value(roi_id, "velocity")
+        time_arr = radon.get_analysis_value(roi_id, channel, "time")
+        vel_arr = radon.get_analysis_value(roi_id, channel, "velocity")
         if time_arr is None or vel_arr is None:
             self._line_plot_widget.clear_for_no_roi()
             return

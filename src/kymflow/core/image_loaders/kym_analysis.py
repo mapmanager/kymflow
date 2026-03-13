@@ -24,6 +24,7 @@ import pandas as pd
 from kymflow.core.analysis.kym_flow_radon import mp_analyze_flow
 from kymflow.core.analysis.utils import _medianFilter, _removeOutliers_sd, _removeOutliers_analyzeflow
 from kymflow.core.utils.logging import get_logger
+from kymflow.core.image_loaders.radon_analysis import RoiAnalysisMetadata, RadonAnalysis
 from kymflow.core.image_loaders.radon_report import RadonReport
 from kymflow.core.image_loaders.roi import ROI
 from kymflow.core.image_loaders.velocity_event_report import VELOCITY_EVENT_CSV_ROUND_DECIMALS
@@ -80,25 +81,16 @@ def _check_gui_imports(context: str) -> None:
 
 CancelCallback = Callable[[], bool]
 
-
-@dataclass
-class RoiAnalysisMetadata:
-    """Analysis metadata for a specific ROI.
-
-    ROI geometry (dim0_start/dim0_stop/dim1_start/dim1_stop, channel, z) lives in AcqImage.rois.
-    This stores only analysis state/results metadata.
-    """
-
-    roi_id: int
-    algorithm: str = "mpRadon"
-    window_size: int | None = None
-    analyzed_at: str | None = None  # ISO-8601 UTC string
-    roi_revision_at_analysis: int = 0
+# Re-export for backward compatibility (RADON_JSON_VERSION used by tests)
+from kymflow.core.image_loaders.radon_analysis import RADON_JSON_VERSION
 
 
 class VelocityReportRow(TypedDict):
+    """Velocity event report row for export. Includes channel (anticipatory)."""
+
     event_id: str
     roi_id: int
+    channel: int
     path: Optional[str]
     file_name: Optional[str]
     event_type: str
@@ -130,8 +122,8 @@ class KymAnalysis:
     
     Attributes:
         acq_image: Reference to the parent AcqImage (typically KymImage).
-        _analysis_metadata: Dictionary mapping roi_id to RoiAnalysisMetadata instances.
-        _df: DataFrame containing all analysis results with 'roi_id' column.
+        _analysis_metadata: Dict mapping (roi_id, channel) to RoiAnalysisMetadata.
+        _df: DataFrame containing all analysis results with roi_id and channel columns.
         _dirty: Flag indicating if analysis needs to be saved.
         num_rois: Property returning the number of ROIs.
     """
@@ -149,14 +141,9 @@ class KymAnalysis:
             acq_image: Parent AcqImage instance (typically KymImage).
         """
         self.acq_image = acq_image
-        # ROI geometry lives in acq_image.rois; KymAnalysis stores only analysis state/results.
-        self._analysis_metadata: Dict[int, RoiAnalysisMetadata] = {}
-        self._df: Optional[pd.DataFrame] = None
+        self._analysis_children: Dict[str, Any] = {}
+        self._analysis_children["RadonAnalysis"] = RadonAnalysis(acq_image)
         self._dirty: bool = False
-        self._accepted: bool = True  # Default to True for new analyses
-        # DEPRECATED: Stall analysis is deprecated
-        # self._stall_analysis: Dict[int, StallAnalysis] = {}
-        # Stall analysis is computed on-demand from stored analysis values (e.g., velocity).
         self._velocity_events: Dict[int, List[VelocityEvent]] = {}
         # Velocity events are computed on-demand from stored analysis values (e.g., velocity).
         #
@@ -166,93 +153,37 @@ class KymAnalysis:
         # Always try to load analysis (handles path=None gracefully)
         self.load_analysis()
 
-    def _filter_df_by_roi(self, df: pd.DataFrame, roi_id: int) -> pd.DataFrame:
-        """Filter DataFrame to rows for a specific ROI.
-        
+    def get_analysis_object(self, name: str):
+        """Return the analysis object by name, or None.
+
         Args:
-            df: DataFrame to filter.
-            roi_id: ROI ID to filter by.
-        
+            name: Analysis name (e.g. "RadonAnalysis").
+
         Returns:
-            Filtered DataFrame with only rows for the specified ROI.
+            The analysis instance, or None if not found.
         """
-        if 'roi_id' not in df.columns:
-            return pd.DataFrame()  # Return empty DataFrame if no roi_id column
-        return df[df['roi_id'] == roi_id].copy()
-    
+        return self._analysis_children.get(name)
+
     @property
     def num_rois(self) -> int:
         """Number of ROIs on the parent image (single source of truth)."""
         return self.acq_image.rois.numRois()
 
-    def has_analysis(self, roi_id: int | None = None) -> bool:
-        """Return True if analysis exists for any ROI (or for a specific ROI)."""
-        if roi_id is None:
-            return bool(self._analysis_metadata)
-        return roi_id in self._analysis_metadata
-
     @property
     def is_dirty(self) -> bool:
         """Return True if analysis or metadata/ROI changes are unsaved."""
-        return self._dirty or self.acq_image.is_metadata_dirty
+        radon = self.get_analysis_object("RadonAnalysis")
+        return self._dirty or (radon.is_dirty if radon else False) or self.acq_image.is_metadata_dirty
 
     def get_accepted(self) -> bool:
-        """Return the accepted status of this analysis."""
-        return self._accepted
+        """Return the accepted status (delegates to AcqImage)."""
+        return self.acq_image.get_accepted()
 
     def set_accepted(self, value: bool) -> None:
-        """Set the accepted status of this analysis.
-        
-        Args:
-            value: New accepted status (True or False).
-        """
-        self._accepted = value
+        """Set the accepted status (delegates to AcqImage, marks dirty)."""
+        self.acq_image.set_accepted(value)
         self._dirty = True
 
-    def get_analysis_metadata(self, roi_id: int) -> RoiAnalysisMetadata | None:
-        """Return analysis metadata for roi_id, or None if not analyzed."""
-        return self._analysis_metadata.get(roi_id)
-
-    def has_v0_flow_analysis(self, roi_id:int) -> bool:
-        """Return True if roi has been analyzed (and imported) with v0 analysis.
-        """
-        amd = self.get_analysis_metadata(roi_id)
-        has_v0 = amd is not None and amd.algorithm == "mpRadon_v0"
-        return has_v0
-
-    def is_stale(self, roi_id: int) -> bool:
-        """Return True if roi_id is missing analysis or ROI has changed since analysis."""
-        roi = self.acq_image.rois.get(roi_id)
-        if roi is None:
-            return True
-        meta = self._analysis_metadata.get(roi_id)
-        if meta is None:
-            return True
-        return roi.revision != meta.roi_revision_at_analysis
-
-    def invalidate(self, roi_id: int) -> None:
-        """Drop analysis (df rows + metadata) for a specific ROI."""
-        self._analysis_metadata.pop(roi_id, None)
-        self._remove_roi_data_from_df(roi_id)
-        self._dirty = True
-    
-    def _remove_roi_data_from_df(self, roi_id: int) -> None:
-        """Remove all rows for a specific ROI from the analysis DataFrame.
-        
-        Helper method to centralize DataFrame filtering logic. If the DataFrame
-        becomes empty after removal, creates an empty DataFrame with correct columns
-        to preserve the schema (instead of setting to None).
-        
-        Args:
-            roi_id: ROI ID whose data should be removed.
-        """
-        if self._df is not None and 'roi_id' in self._df.columns:
-            self._df = self._df[self._df['roi_id'] != roi_id].copy()
-            # If DataFrame is now empty, create empty DataFrame with correct columns
-            # to preserve schema (instead of setting to None)
-            if len(self._df) == 0:
-                self._df = self._create_empty_velocity_df()
-    
     def _get_primary_path(self) -> Path | None:
         """Get the primary file path (representative path from any channel).
         
@@ -275,605 +206,133 @@ class KymAnalysis:
             raise ValueError("No file path available for analysis folder")
         return primary_path.parent / "flow-analysis"
     
-    def _get_save_paths(self) -> tuple[Path, Path]:
-        """Get the save paths for analysis files.
-        
-        Returns:
-            Tuple of (csv_path, json_path) for this acq_image's analysis.
-        """
+    def get_radon_save_paths(self) -> tuple[Path, Path] | None:
+        """Get (csv_path, json_path) for RadonAnalysis files. Returns None if no path available."""
+        try:
+            folder = self._get_analysis_folder_path()
+        except ValueError:
+            return None
+        radon = self.get_analysis_object("RadonAnalysis")
+        return radon._get_radon_paths(folder) if radon else None
+
+    def _get_events_json_path(self) -> Path:
+        """Get the path for velocity events JSON (*_events.json)."""
         analysis_folder = self._get_analysis_folder_path()
         primary_path = self._get_primary_path()
         if primary_path is None:
-            raise ValueError("No file path available for save paths")
-        base_name = primary_path.stem
-        csv_path = analysis_folder / f"{base_name}_kymanalysis.csv"
-        json_path = analysis_folder / f"{base_name}_kymanalysis.json"
-        return csv_path, json_path
-    
-    def analyze_roi(
-        self,
-        roi_id: int,
-        window_size: int,
-        *,
-        progress_queue: Optional[queue.Queue] = None,
-        is_cancelled: Optional[CancelCallback] = None,
-        use_multiprocessing: bool = True,
-    ) -> None:
-        """Run flow analysis on a specific ROI.
-        
-        Performs Radon-based flow analysis on the image region defined by the ROI
-        coordinates. Results are stored in the analysis DataFrame with a 'roi_id'
-        column. Analysis metadata is stored in RoiAnalysisMetadata.
-        
-        Args:
-            roi_id: Identifier of the ROI to analyze.
-            window_size: Number of time lines per analysis window. Must be a multiple of 4.
-            progress_queue: Optional queue to receive progress messages from the
-                parent process as tuples of the form ('progress', completed, total).
-                This is safe to consume from GUI/main threads. Progress is emitted
-                from the parent process only, never from worker processes.
-            is_cancelled: Optional callback function() -> bool to check for cancellation.
-            use_multiprocessing: If True, use multiprocessing for parallel computation.
-        
-        Raises:
-            ValueError: If roi_id is not found or window_size is invalid.
-            FlowCancelled: If analysis is cancelled via is_cancelled callback.
-        """
+            raise ValueError("No file path available for events JSON path")
+        return analysis_folder / f"{primary_path.stem}_events.json"
 
-        roi = self.acq_image.rois.get(roi_id)
-        if roi is None:
-            raise ValueError(f"ROI {roi_id} not found")
-
-        channel = roi.channel
-        
-        # Extract image region based on ROI coordinates
-        # ROI coordinates are already clamped to image bounds and properly ordered when added/edited
-        image = self.acq_image.get_img_slice(channel=channel)
-        
-        # Convert ROI coordinates to pixel/line indices (already clamped and ordered)
-        # For kymographs: dim0 = time (rows), dim1 = space (columns)
-        start_pixel = roi.bounds.dim0_start  # time dimension (rows)
-        stop_pixel = roi.bounds.dim0_stop    # time dimension (rows)
-        start_line = roi.bounds.dim1_start    # space dimension (columns)
-        stop_line = roi.bounds.dim1_stop      # space dimension (columns)
-        
-        # logger.info(f'calling mp_analyze_flow() with roi {roi_id}:')
-        # print(roi)
-        
-        # Temporary diagnostic: check GUI imports before calling mp_analyze_flow
-        # _check_gui_imports(f"analyze_roi before mp_analyze_flow (roi_id={roi_id})")
-        
-        # Run analysis on the ROI region
-        # mp_analyze_flow expects explicit dim0/dim1 bounds in the (time, space) convention.
-        thetas, the_t, spread = mp_analyze_flow(
-            image,
-            window_size,
-            start_pixel,
-            stop_pixel,
-            start_line,
-            stop_line,
-            progress_queue=progress_queue,
-            is_cancelled=is_cancelled,
-            use_multiprocessing=use_multiprocessing,
-            verbose=False,
-        )
-        
-        # Record analysis metadata (geometry lives in acq_image.rois)
-        self._analysis_metadata[roi_id] = RoiAnalysisMetadata(
-            roi_id=roi_id,
-            algorithm="mpRadon",
-            window_size=window_size,
-            analyzed_at=datetime.now(timezone.utc).isoformat(),
-            roi_revision_at_analysis=roi.revision,
-        )
-        
-        # Convert to physical units using KymImage properties
-        # KymImage knows which dimension is which
-        seconds_per_line = self.acq_image.seconds_per_line
-        um_per_pixel = self.acq_image.um_per_pixel
-        
-        drew_time = the_t * seconds_per_line
-        
-        # Convert radians to angle and then to velocity
-        _rad = np.deg2rad(thetas)
-        drew_velocity = (um_per_pixel / seconds_per_line) * np.tan(_rad)
-        drew_velocity = drew_velocity / 1000  # mm/s
-        
-        roi_df = self._make_velocity_df(drew_velocity, drew_time, roi)
-   
-        # Append to main DataFrame (or create if first analysis)
-        if self._df is None:
-            self._df = roi_df
-        else:
-            # Remove old data for this ROI if it exists
-            self._remove_roi_data_from_df(roi_id)
-            # Append new data
-            self._df = pd.concat([self._df, roi_df], ignore_index=True)
-        
-        self._dirty = True
-    
-    def _make_velocity_df(self, velocity: np.ndarray, time_values: np.ndarray, roi: ROI) -> pd.DataFrame:
-        """Given velocity, time, and an Roi, return a DataFrame with the velocity analysis.
-        """
-        # Apply filtering
-        clean_velocity = _removeOutliers_sd(velocity)
-        clean_velocity = _medianFilter(clean_velocity, window_size=3)
-        
-        # Create DataFrame for this ROI's analysis
-        primary_path = self._get_primary_path()
-        parent_name = primary_path.parent.name if primary_path is not None else ""
-        file_name = primary_path.name if primary_path is not None else ""
-        
-        # Get shape for numLines and pntsPerLine
-        shape = self.acq_image.img_shape
-        num_lines = shape[0] if shape is not None else 0
-        pixels_per_line = shape[1] if shape is not None else 0
-
-        seconds_per_line = self.acq_image.seconds_per_line
-        um_per_pixel = self.acq_image.um_per_pixel
-
-        roi_df = pd.DataFrame({
-            "roi_id": roi.id,
-            "channel": roi.channel,
-            "time": time_values,
-            "velocity": velocity,
-            "parentFolder": parent_name,
-            "file": file_name,
-            "algorithm": "mpRadon",
-            "delx": um_per_pixel,
-            "delt": seconds_per_line,
-            "numLines": num_lines,
-            "pntsPerLine": pixels_per_line,
-            "cleanVelocity": clean_velocity,
-            "absVelocity": abs(clean_velocity),
-        })
-
-        return roi_df
-
-    def _create_empty_velocity_df(self) -> pd.DataFrame:
-        """Create an empty DataFrame with the same columns as `_make_velocity_df()`.
-        
-        This method creates a DataFrame with 0 rows but all the correct columns
-        and dtypes, preserving the schema for when all ROIs are deleted.
-        
-        Returns:
-            Empty DataFrame with columns: roi_id, channel, time, velocity,
-            parentFolder, file, algorithm, delx, delt, numLines, pntsPerLine,
-            cleanVelocity, absVelocity
-        """
-        # Create empty DataFrame with correct columns and dtypes
-        # Note: We don't need actual values since DataFrame is empty,
-        # just the column definitions with correct dtypes
-        empty_df = pd.DataFrame({
-            "roi_id": pd.Series(dtype="int64"),
-            "channel": pd.Series(dtype="int64"),
-            "time": pd.Series(dtype="float64"),
-            "velocity": pd.Series(dtype="float64"),
-            "parentFolder": pd.Series(dtype="string"),
-            "file": pd.Series(dtype="string"),
-            "algorithm": pd.Series(dtype="string"),
-            "delx": pd.Series(dtype="float64"),
-            "delt": pd.Series(dtype="float64"),
-            "numLines": pd.Series(dtype="int64"),
-            "pntsPerLine": pd.Series(dtype="int64"),
-            "cleanVelocity": pd.Series(dtype="float64"),
-            "absVelocity": pd.Series(dtype="float64"),
-        })
-        
-        return empty_df
-
-    def _try_load_v0_into_existing_roi(self) -> bool:
-        """202602_v0_flowanalysis_bug: Fallback when flow-analysis JSON missing but v0 exists.
-
-        Load v0 analysis from <parent>-analysis/<stem>.csv into the single existing ROI
-        (from metadata.json). Does not create a new ROI. Returns True if loaded, False otherwise.
-        """
+    def _get_legacy_combined_paths(self) -> tuple[Path, Path]:
+        """Legacy combined CSV and JSON paths (for v2.0 migration)."""
+        analysis_folder = self._get_analysis_folder_path()
         primary_path = self._get_primary_path()
         if primary_path is None:
-            return False
-        if self.num_rois != 1:
-            return False
-        if self._analysis_metadata:
-            return False
-
-        v0_folder = primary_path.parent / f"{primary_path.parent.name}-analysis"
-        v0_csv = v0_folder / f"{primary_path.stem}.csv"
-        if not v0_folder.exists() or not v0_csv.exists():
-            return False
-
-        roi_ids = self.acq_image.rois.get_roi_ids()
-        if len(roi_ids) != 1:
-            return False
-        existing_roi = self.acq_image.rois.get(roi_ids[0])
-        if existing_roi is None:
-            return False
-
-        try:
-            old_vel_df = pd.read_csv(v0_csv)
-        except Exception as e:
-            logger.warning(f"Failed to read v0 CSV {v0_csv}: {e}")
-            return False
-        if "velocity" not in old_vel_df.columns or "time" not in old_vel_df.columns:
-            logger.warning(f"v0 CSV {v0_csv} missing velocity/time columns")
-            return False
-
-        old_vel = old_vel_df["velocity"].values
-        old_time = old_vel_df["time"].values
-
-        logger.info(
-            "202602_v0_flowanalysis_bug: loaded v0 analysis into existing ROI for %s (flow-analysis JSON missing)",
-            primary_path.stem,
-        )
-
-        roi_df = self._make_velocity_df(old_vel, old_time, existing_roi)
-        self._df = roi_df
-        self._analysis_metadata[existing_roi.id] = RoiAnalysisMetadata(
-            roi_id=existing_roi.id,
-            algorithm="mpRadon_v0",
-            window_size=16,  # intentionally hard coded from v0 analysis
-            analyzed_at=datetime.now(timezone.utc).isoformat(),
-            roi_revision_at_analysis=existing_roi.revision,
-        )
-        self._dirty = True
-        return True
-
-    def import_v0_analysis(self) -> Optional[bool]:
-        """Import v0 analysis results from CSV files.
-        
-        Only runs if num roi is 0.
-        
-        Steps
-        =====
-        - Create a new roi (always the first)
-        - set RoiAnalysisMetadata for new roi (uses algorithm='mpRadon_v0', window_size=16)
-        - Loads the analysis DataFrame from v0 CSV
-        - Create the velocity analysis df
-        
-        Returns:
-            True if analysis was loaded successfully, False if files don't exist.
-        """
-        
-        # never import if we have any rois
-        if self.num_rois > 0:
-            return
-        
-        # Check if path is available
-        if self.acq_image.path is None:
-            logger.warning('path is none -> happens when loaded with synth data in pytest')
-            return
-    
-        # old velocity is in folder <parent folder>-analysis,like "20251014-analysis"
-        _v0_analysis_folder = f"{self.acq_image.path.parent.name}-analysis"
-        old_analysis_folder_path = self.acq_image.path.parent / _v0_analysis_folder
-        # check if old analysis folder exists
-        if not old_analysis_folder_path.exists():
-            # raise FileNotFoundError(f"Old analysis folder not found: {old_analysis_folder_path}")
-            return
-        # old velocity csv is like "20251014_A98_0002.csv"
-        old_vel_csv = old_analysis_folder_path / f"{self.acq_image.path.stem}.csv"
-        # check that old csv exists
-        if not old_vel_csv.exists():
-            # raise FileNotFoundError(f"Old velocity CSV not found: {old_vel_csv}")
-            logger.error(f'found v0 analysis folder "{_v0_analysis_folder}" but no v0 csv')
-            return
-        
-        # make an roi, original analysis only had one channel
-        new_roi = self.acq_image.rois.create_roi()
-
-        # Record analysis metadata (geometry lives in acq_image.rois)
-        self._analysis_metadata[new_roi.id] = RoiAnalysisMetadata(
-            roi_id=new_roi.id,
-            algorithm="mpRadon_v0",
-            window_size=16,  # intentionally hard coded from v0 analysis
-            analyzed_at=datetime.now(timezone.utc).isoformat(),  # not true but not really used
-            roi_revision_at_analysis=new_roi.revision,
-        )
-
-        # load v0 csv
-        old_vel_df = pd.read_csv(old_vel_csv)
-        # logger.info('old_vel_df:')
-        # print(old_vel_df)
-
-        old_vel = old_vel_df["velocity"].values
-        old_time = old_vel_df["time"].values
-
-        logger.warning(f'importing v0 analysis n:{len(old_vel_df)} {self.acq_image.path.stem}')
-
-        roi_df = self._make_velocity_df(old_vel, old_time, new_roi)
-        self._df = roi_df
-        
-        # dirty because we just created roi and filled in velocity analysis
-        self._dirty = True
-
-        return True
+            raise ValueError("No file path available")
+        base = primary_path.stem
+        return analysis_folder / f"{base}_kymanalysis.csv", analysis_folder / f"{base}_kymanalysis.json"
 
     def save_analysis(self) -> bool:
-        """Save analysis results to CSV and JSON files.
-        
-        Saves the analysis DataFrame (with all ROI analyses) to CSV and ROI data
-        with analysis parameters to JSON. Also saves ROIs and metadata via AcqImage.
-        Only saves if dirty.
-        
-        Returns:
-            True if analysis was saved successfully, False if no analysis exists
-            or file is not dirty.
-        """
+        """Save analysis results. Delegates to RadonAnalysis and saves velocity events to *_events.json."""
         primary_path = self._get_primary_path()
         if primary_path is None:
             logger.warning("No path provided, analysis cannot be saved")
             return False
-
         if not self.is_dirty:
             logger.info(f"Analysis does not need to be saved for {primary_path.name}")
             return False
 
-        # Save ROIs and metadata first (ensures ROIs are persisted)
-        # This saves header, experiment_metadata, and ROIs to metadata.json
         metadata_saved = self.acq_image.save_metadata()
         if not metadata_saved:
             logger.warning("Failed to save metadata (ROIs), but continuing with analysis save")
 
-        csv_path, json_path = self._get_save_paths()
+        analysis_folder = self._get_analysis_folder_path()
+        analysis_folder.mkdir(parents=True, exist_ok=True)
+        radon = self.get_analysis_object("RadonAnalysis")
+        radon_saved = radon.save_analysis(analysis_folder) if radon else False
 
-        analysis_saved = False
-        if self._df is not None:
-            # Always save CSV if _df exists (even if 0 rows) to overwrite previous saves
-            # This ensures we can "clear" the CSV by saving an empty DataFrame
-
-            # Create analysis folder if it doesn't exist
-            analysis_folder = csv_path.parent
-            analysis_folder.mkdir(parents=True, exist_ok=True)
-
-            # Save CSV
-            self._df.to_csv(csv_path, index=False)
-
-            # logger.info(f"Saved analysis CSV to {csv_path}")
-
-        if self._dirty:
-            # Create analysis folder if it doesn't exist (needed for JSON even if no CSV)
-            analysis_folder = json_path.parent
-            analysis_folder.mkdir(parents=True, exist_ok=True)
-
-            # Reconcile to current ROIs (single source of truth)
-            current_roi_ids = {roi.id for roi in self.acq_image.rois}
-            if self._df is not None and 'roi_id' in self._df.columns:
-                self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
-            self._analysis_metadata = {
-                rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
-            }
-
-            # Prepare JSON data (analysis metadata only; no ROI geometry)
-            json_data = {
-                "version": "2.0",
-                "accepted": self._accepted,
-                "analysis_metadata": {
-                    str(rid): {
-                        "roi_id": meta.roi_id,
-                        "algorithm": meta.algorithm,
-                        "window_size": meta.window_size,
-                        "analyzed_at": meta.analyzed_at,
-                        "roi_revision_at_analysis": meta.roi_revision_at_analysis,
-                    }
-                    for rid, meta in self._analysis_metadata.items()
-                },
-                # DEPRECATED: Stall analysis is deprecated
-                # "stall_analysis": {
-                #     str(rid): sa.to_dict() for rid, sa in self._stall_analysis.items()
-                # },
-                "velocity_events": {
-                    str(rid): [ev.to_dict() for ev in evs]
-                    for rid, evs in self._velocity_events.items()
-                },
-            }
-
-            # Save JSON
-            with open(json_path, "w") as f:
-                json.dump(json_data, f, indent=2, default=str)
-
-            # logger.info(f"Saved analysis metadata to {json_path}")
-
-            self._dirty = False
-            analysis_saved = True
-
-        # elif self._dirty:
-        #     logger.info("Analysis dirty but no analysis data to save for %s", primary_path.name)
-
-        return metadata_saved or analysis_saved
+        events_path = self._get_events_json_path()
+        events_data = {
+            "version": "1.0",
+            "velocity_events": {
+                str(rid): [
+                    {**ev.to_dict(), "channel": (radon.get_channel_for_roi(rid) if radon else None) or 1}
+                    for ev in evs
+                ]
+                for rid, evs in self._velocity_events.items()
+            },
+        }
+        with open(events_path, "w") as f:
+            json.dump(events_data, f, indent=2, default=str)
+        self._dirty = False
+        return metadata_saved or radon_saved
     
     def load_analysis(self) -> bool:
-        """Load analysis results from CSV and JSON files.
-        
-        Loads the analysis DataFrame from CSV and restores ROIs with their
-        analysis parameters from JSON.
-        
-        Returns:
-            True if analysis was loaded successfully, False if files don't exist.
-        """
-        
-        # v0 flowanalysis version
-        if self.import_v0_analysis() is not None:
-            self._dirty = False
-            return True
-
-        # kymflow version
+        """Load analysis. RadonAnalysis loads its own files; v2.0 migration for legacy combined JSON."""
         primary_path = self._get_primary_path()
         if primary_path is None:
-            # logger.warning("No path provided, analysis cannot be loaded")
             return False
-        
-        csv_path, json_path = self._get_save_paths()
-        
-        # JSON is required, CSV is optional (may not exist if only accepted was saved)
-        # 202602_v0_flowanalysis_bug: fallback when flow-analysis JSON missing but v0 exists
-        if not json_path.exists():
-            if self._try_load_v0_into_existing_roi():
-                return True
+        try:
+            analysis_folder = self._get_analysis_folder_path()
+        except ValueError:
             return False
-        
-        # Load CSV if it exists
-        if csv_path.exists():
-            self._df = pd.read_csv(csv_path)
+        radon_json = analysis_folder / f"{primary_path.stem}_radon.json"
+        legacy_csv, legacy_json = self._get_legacy_combined_paths()
+
+        if radon_json.exists():
+            radon = self.get_analysis_object("RadonAnalysis")
+            if radon:
+                radon.load_analysis(analysis_folder)
+        elif legacy_json.exists():
+            with open(legacy_json, "r") as f:
+                data = json.load(f)
+            v = str(data.get("version", ""))
+            if "analysis_metadata" not in data or not (v.startswith("2.") or v.startswith("3.")):
+                return False
+            radon = self.get_analysis_object("RadonAnalysis")
+            if radon:
+                radon.load_from_combined_v2(data, legacy_csv)
+            if "accepted" in data:
+                object.__setattr__(self.acq_image, "_accepted", data.get("accepted", True))
+            self._load_velocity_events_from_dict(data.get("velocity_events", {}))
+            self._reconcile_velocity_events_to_rois()
+            self._dirty = False
+            return True
         else:
-            # No CSV - this is OK if we only have JSON (e.g., only accepted was saved)
-            self._df = None
-        
-        # Load JSON
-        with open(json_path, "r") as f:
-            json_data = json.load(f)
-        
-        # Load analysis metadata (v2.0 only). We do not recreate ROIs here.
-        version = str(json_data.get("version", ""))
-        if not version.startswith("2.") or "analysis_metadata" not in json_data:
-            logger.warning(
-                f"Unsupported analysis JSON schema for {primary_path.name}. "
-                "Expected version starting with '2.' and key 'analysis_metadata'."
-            )
-            return False
+            radon = self.get_analysis_object("RadonAnalysis")
+            if not radon or not radon.load_analysis(analysis_folder):
+                return False
 
-        # Load accepted status (default to True if not present for backward compatibility)
-        self._accepted = json_data.get("accepted", True)
-
-        self._analysis_metadata.clear()
-        for key, meta in json_data.get("analysis_metadata", {}).items():
-            try:
-                roi_id = int(meta.get("roi_id", key))
-                self._analysis_metadata[roi_id] = RoiAnalysisMetadata(
-                    roi_id=roi_id,
-                    algorithm=str(meta.get("algorithm", "mpRadon")),
-                    window_size=meta.get("window_size"),
-                    analyzed_at=meta.get("analyzed_at"),
-                    roi_revision_at_analysis=int(meta.get("roi_revision_at_analysis", 0)),
-                )
-            except Exception as e:
-                logger.warning(f"Skipping invalid analysis metadata entry {key}: {e}")
-
-        # DEPRECATED: Stall analysis is deprecated
-        # # Load stall analysis (optional; may be absent in older analysis JSON).
-        # self._stall_analysis.clear()
-        # for roi_id_str, payload in json_data.get("stall_analysis", {}).items():
-        #     try:
-        #         roi_id = int(roi_id_str)
-        #         self._stall_analysis[roi_id] = StallAnalysis.from_dict(payload)
-        #     except Exception as e:
-        #         logger.warning(f"Skipping invalid stall_analysis entry {roi_id_str}: {e}")
-
-        # Load velocity events (optional; may be absent in older analysis JSON).
-        self._velocity_events.clear()
-        for roi_id_str, events_list in json_data.get("velocity_events", {}).items():
-            try:
-                roi_id = int(roi_id_str)
-                events = [
-                    VelocityEvent.from_dict(ev_dict) for ev_dict in events_list
-                ]
-                # Assign a fresh UUID to every loaded event
-                for event in events:
-                    event_uuid = str(uuid4())
-                    object.__setattr__(event, "_uuid", event_uuid)
-                self._velocity_events[roi_id] = events
-            except Exception as e:
-                logger.warning(f"Skipping invalid velocity_events entry {roi_id_str}: {e}")
-
-        # Reconcile to current ROIs
-        current_roi_ids = {roi.id for roi in self.acq_image.rois}
-        self._analysis_metadata = {
-            rid: meta for rid, meta in self._analysis_metadata.items() if rid in current_roi_ids
-        }
-        # DEPRECATED: Stall analysis is deprecated
-        # self._stall_analysis = {
-        #     rid: sa for rid, sa in self._stall_analysis.items() if rid in current_roi_ids
-        # }
-        # Remove events for deleted ROIs
-        removed_roi_ids = set(self._velocity_events.keys()) - current_roi_ids
-        for removed_roi_id in removed_roi_ids:
-            del self._velocity_events[removed_roi_id]
-        self._velocity_events = {
-            rid: evs for rid, evs in self._velocity_events.items() if rid in current_roi_ids
-        }
-        if self._df is not None and 'roi_id' in self._df.columns:
-            self._df = self._df[self._df['roi_id'].isin(current_roi_ids)].copy()
-        
+        events_path = self._get_events_json_path()
+        if events_path.exists():
+            with open(events_path, "r") as f:
+                ev_data = json.load(f)
+            if "accepted" in ev_data:
+                object.__setattr__(self.acq_image, "_accepted", ev_data.get("accepted", True))
+            self._load_velocity_events_from_dict(ev_data.get("velocity_events", {}))
+        self._reconcile_velocity_events_to_rois()
         self._dirty = False
         return True
-    
-    def get_analysis(self, roi_id: Optional[int] = None) -> Optional[pd.DataFrame]:
-        """Get flow analysis DataFrame, optionally filtered by ROI.
-        
-        Args:
-            roi_id: If provided, return only data for this ROI. If None, return all data.
-        
-        Returns:
-            DataFrame with analysis results, or None if no analysis exists.
-        """
-        if self._df is None:
-            return None
-        
-        if roi_id is None:
-            return self._df.copy()
-        
-        return self._filter_df_by_roi(self._df, roi_id)
-    
-    def get_analysis_value(
-        self,
-        roi_id: int,
-        key: str,
-        remove_outliers: bool = False,
-        median_filter: int = 0,
-    ) -> Optional[np.ndarray]:
-        """Get a specific analysis value for an ROI.
-        
-        Args:
-            roi_id: Identifier of the ROI.
-            key: Column name to retrieve (e.g., "velocity", "time").
-            remove_outliers: If True, remove outliers using old v0 flowanalysis with _removeOutliers_analyzeflow.
-            median_filter: Median filter window size. 0 = disabled, >0 = enabled (must be odd).
-        
-        Returns:
-            Array of values for the specified key, or None if not found.
-        """
 
-        roi_df = self.get_analysis(roi_id=roi_id)
-        
-        # logger.info('roi_df:')
-        # print(roi_df)
+    def _load_velocity_events_from_dict(self, events_dict: dict) -> None:
+        self._velocity_events.clear()
+        for roi_id_str, events_list in events_dict.items():
+            try:
+                roi_id = int(roi_id_str)
+                events = [VelocityEvent.from_dict(ev) for ev in events_list]
+                for e in events:
+                    object.__setattr__(e, "_uuid", str(uuid4()))
+                self._velocity_events[roi_id] = events
+            except Exception:
+                pass
 
-        if roi_df is None:
-            logger.warning(f"No analysis found for ROI {roi_id}, requested key was:{key}")
-            return None
-        
-        if key not in roi_df.columns:
-            logger.warning(f"Key {key} not found in analysis DataFrame for ROI {roi_id}")
-            return None
-        
-        # Make a writeable copy to avoid "assignment destination is read-only" errors
-        # when arrays are passed to detection functions that may modify them in-place
-        
-        if remove_outliers or median_filter > 0:
-            values = roi_df[key].values.copy()
-        else:
-            values = roi_df[key].values
+    def _reconcile_velocity_events_to_rois(self) -> None:
+        current = {roi.id for roi in self.acq_image.rois}
+        for rid in list(self._velocity_events.keys()):
+            if rid not in current:
+                del self._velocity_events[rid]
+        self._velocity_events = {rid: evs for rid, evs in self._velocity_events.items() if rid in current}
 
-        # logger.warning(f"qqq {key} called too much: Made writeable copy of {key} for ROI {roi_id} (fix for read-only array issue)")
-        # from kymflow.core.utils.get_stack_trace import get_stack_trace
-        # print(get_stack_trace())
-
-        # logger.info(f'values: key:{key} n:{len(values)} min:{np.min(values)}, max:{np.max(values)}')
-        # print(values)
-
-        # newer version
-        # if remove_outliers:
-        #     values = _removeOutliers_sd(values)
-        #     # set to np.nan if values[i] < 100000
-        #     values[values < -100000] = np.nan
-
-        # older version
-        if remove_outliers:
-            values = _removeOutliers_analyzeflow(values)
-
-        if median_filter > 0:
-            values = _medianFilter(values, median_filter)
-        
-        return values
-    
     def get_time_bounds(self, roi_id: int) -> tuple[float, float] | None:
         """Get time range for ROI in physical units.
         
@@ -939,9 +398,17 @@ class KymAnalysis:
         Raises:
             ValueError: If the requested analysis values are missing for this ROI.
         """
-        # Get velocity values
-        velocity = self.get_analysis_value(
+        radon = self.get_analysis_object("RadonAnalysis")
+        if radon is None:
+            raise ValueError("RadonAnalysis not available.")
+        channel = radon.get_channel_for_roi(roi_id)
+        if channel is None:
+            raise ValueError(
+                f"Cannot run velocity event analysis: ROI {roi_id} has no radon analysis (channel from metadata)."
+            )
+        velocity = radon.get_analysis_value(
             roi_id=roi_id,
+            channel=channel,
             key=velocity_key,
             remove_outliers=remove_outliers,
         )
@@ -953,11 +420,10 @@ class KymAnalysis:
         # explicitly remove outlierss like old v0 flowanalysis
         # velocity = _removeOutliers_analyzeflow(velocity)
         
-        # Get time values (required for detect_events)
-        time_s = self.get_analysis_value(
+        time_s = radon.get_analysis_value(
             roi_id=roi_id,
+            channel=channel,
             key="time",
-            # remove_outliers=False,
         )
         if time_s is None:
             raise ValueError(
@@ -1418,8 +884,11 @@ class KymAnalysis:
                 #         event.t_start,
                 #         event_id,
                 #     )
+                radon = self.get_analysis_object("RadonAnalysis")
+                channel = (radon.get_channel_for_roi(rid) if radon else None) or 1
                 event_dict["event_id"] = event_id
                 event_dict["roi_id"] = rid
+                event_dict["channel"] = channel
                 event_dict["path"] = path
                 if blinded:
                     event_dict["file_name"] = "Blinded"
@@ -1461,15 +930,11 @@ class KymAnalysis:
         if grandparent_folder is None:
             grandparent_folder = ""
         
-        # 20260217_fix_t_peak: guard for missing t_peak
-        # if event.t_peak is None or (isinstance(event.t_peak, float) and not np.isfinite(event.t_peak)):
-        #     logger.warning(
-        #         "20260217_fix_t_peak: t_peak is missing/None for t_start:%s event_id=%s",
-        #         event.t_start,
-        #         event_id,
-        #     )
+        radon = self.get_analysis_object("RadonAnalysis")
+        channel = (radon.get_channel_for_roi(roi_id) if radon else None) or 1
         event_dict["event_id"] = event_id
         event_dict["roi_id"] = roi_id
+        event_dict["channel"] = channel
         event_dict["path"] = path
         if blinded:
             event_dict["file_name"] = "Blinded"
@@ -1480,158 +945,13 @@ class KymAnalysis:
         return event_dict
 
     def get_radon_report(self) -> List[RadonReport]:
-        """Generate radon velocity analysis summary report for all ROIs.
-        
-        Iterates through each ROI and collects velocity statistics (min, max, mean, std, se)
-        from the analysis data, along with ROI image statistics (min, max, mean, std) from
-        the ROI object. Logs warnings if ROI image statistics are not calculated.
-        
-        Returns:
-            List of RadonReport instances, one per ROI. Each report contains:
-            - roi_id: int - ROI identifier
-            - vel_min, vel_max, vel_mean, vel_std, vel_se, vel_cv: float | None - Velocity statistics
-            - vel_n_nan, vel_n_zero, vel_n_big: int | None - Velocity count statistics
-            - img_min, img_max, img_mean, img_std: int | float | None - ROI image statistics
-            - path: str | None - Full file path
-            - file_name: str | None - File name without extension
-            - accepted: bool | None - Whether analysis has been accepted (KymAnalysis-level)
-            
-        Note:
-            ROI image statistics (img_min, img_max, etc.) may be None if not calculated.
-            Use roi.calculate_image_stats(acq_image) to fill these values after loading image data.
-        """
-        report: List[RadonReport] = []
-        
-        # Get all ROI IDs from the parent AcqImage
-        roi_ids = self.acq_image.rois.get_roi_ids()
-        
-        # Get file metadata once (used for all ROIs in this image)
-        path = str(self.acq_image.path) if self.acq_image.path is not None else None
-        file_name = self.acq_image.path.stem if self.acq_image.path is not None else None
-        
-        parent_folder: Optional[str] = None
-        grandparent_folder: Optional[str] = None
-        if self.acq_image.path is not None and self.acq_image.path.parent:
-            parent_folder = self.acq_image.path.parent.name
-            if self.acq_image.path.parent.parent:
-                grandparent_folder = self.acq_image.path.parent.parent.name
-
-        # Experimental metadata from AcqImage (shared by all ROIs in this image)
-        em = self.acq_image.experiment_metadata
-        treatment = getattr(em, "treatment", None) or None
-        condition = getattr(em, "condition", None) or None
-        date = getattr(em, "date", None) or None
-        
-        # Get accepted status once per image (shared by all ROIs)
-        accepted = self.get_accepted()
-        
-        for roi_id in roi_ids:
-            # Fetch velocity data for this ROI
-            velocity = self.get_analysis_value(roi_id, 'velocity')
-            
-            # Initialize velocity statistics to None
-            vel_min: Optional[float] = None
-            vel_max: Optional[float] = None
-            vel_mean: Optional[float] = None
-            vel_std: Optional[float] = None
-            vel_se: Optional[float] = None
-            vel_cv: Optional[float] = None
-            vel_n_nan: Optional[int] = None
-            vel_n_zero: Optional[int] = None
-            vel_n_big: Optional[int] = None
-
-            if velocity is None:
-                # No analysis data for this ROI
-                logger.warning(f"ROI {roi_id} has no velocity analysis data")
-            elif len(velocity) == 0:
-                # Empty velocity array
-                pass  # All stats remain None
-            else:
-                # Calculate velocity statistics using numpy functions that handle NaN
-                # Use nanmean/nanstd to ignore NaN values in the velocity array
-                if not np.all(np.isnan(velocity)):
-                    vel_min = float(np.nanmin(velocity))
-                    vel_max = float(np.nanmax(velocity))
-                    vel_mean = float(np.nanmean(velocity))
-                    vel_std = float(np.nanstd(velocity))
-                    # Coefficient of variation: cv = std/mean (None if mean is zero or very small)
-                    if vel_mean is not None and abs(vel_mean) > 1e-10 and vel_std is not None:
-                        vel_cv = vel_std / vel_mean
-
-                    # Calculate standard error: SE = std / sqrt(n)
-                    # Count only non-NaN values for n
-                    n_valid = np.sum(~np.isnan(velocity))
-                    if vel_std is not None and n_valid > 0:
-                        vel_se = vel_std / np.sqrt(n_valid)
-                    
-                    # Calculate count statistics
-                    vel_n_nan = int(np.sum(np.isnan(velocity)))
-                    # Count zeros (excluding NaN values)
-                    vel_n_zero = int(np.sum((velocity == 0) & (~np.isnan(velocity))))
-                    # Count "big" velocities: values > mean + 2*std (excluding NaN values)
-                    if vel_mean is not None and vel_std is not None:
-                        big_threshold = vel_mean + 2.0 * vel_std
-                        vel_n_big = int(np.sum((velocity > big_threshold) & (~np.isnan(velocity))))
-                    else:
-                        vel_n_big = None
-            
-            # Fetch ROI image statistics and channel from the ROI object
-            roi = self.acq_image.rois.get(roi_id)
-            if roi is None:
-                logger.warning(f"ROI {roi_id} not found in rois collection")
-                img_min = None
-                img_max = None
-                img_mean = None
-                img_std = None
-                channel = None
-            else:
-                # Get image statistics (may be None for old ROIs)
-                img_min = roi.img_min
-                img_max = roi.img_max
-                img_mean = float(roi.img_mean) if roi.img_mean is not None else None
-                img_std = float(roi.img_std) if roi.img_std is not None else None
-                channel = roi.channel
-                # Log warning if any image stats are None (indicates they need to be calculated)
-                if any(stat is None for stat in [img_min, img_max, img_mean, img_std]):
-                    logger.warning(
-                        f"ROI {roi_id} image statistics not calculated "
-                        f"(img_min={img_min}, img_max={img_max}, img_mean={img_mean}, img_std={img_std}). "
-                        f"Call roi.calculate_image_stats(acq_image) after loading image data to fill these values."
-                    )
-            
-            # Create RadonReport instance
-            radon_report = RadonReport(
-                roi_id=roi_id,
-                channel=channel,
-                vel_min=vel_min,
-                vel_max=vel_max,
-                vel_mean=vel_mean,
-                vel_std=vel_std,
-                vel_se=vel_se,
-                vel_cv=vel_cv,
-                vel_n_nan=vel_n_nan,
-                vel_n_zero=vel_n_zero,
-                vel_n_big=vel_n_big,
-                img_min=img_min,
-                img_max=img_max,
-                img_mean=img_mean,
-                img_std=img_std,
-                path=path,
-                file_name=file_name,
-                parent_folder=parent_folder,
-                grandparent_folder=grandparent_folder,
-                accepted=accepted,
-                treatment=treatment,
-                condition=condition,
-                date=date,
-            )
-            
-            report.append(radon_report)
-        
-        return report
+        """Delegate to RadonAnalysis. Prefer get_analysis_object('RadonAnalysis').get_radon_report(accepted=...)."""
+        radon = self.get_analysis_object("RadonAnalysis")
+        return radon.get_radon_report(accepted=self.get_accepted()) if radon else []
 
     def __str__(self) -> str:
         """String representation."""
         roi_ids = [roi.id for roi in self.acq_image.rois]
-        analyzed = sorted(self._analysis_metadata.keys())
+        radon = self.get_analysis_object("RadonAnalysis")
+        analyzed = sorted(radon._analysis_metadata.keys()) if radon else []
         return f"KymAnalysis(roi_ids={roi_ids}, analyzed={analyzed}, dirty={self._dirty})"

@@ -41,6 +41,7 @@ def run_flow_analysis(
     *,
     window_size: int = 16,
     roi_id: int,
+    channel: int,
     on_result: Optional[Callable[[bool], None]] = None,
 ) -> None:
     """Run Radon flow analysis on a single ROI without blocking NiceGUI.
@@ -56,17 +57,10 @@ def run_flow_analysis(
         task_state: TaskState object for progress tracking and cancellation.
         window_size: Number of time lines per analysis window.
         roi_id: Identifier of the ROI to analyze. Must exist.
+        channel: 1-based channel index to analyze. Must be provided by caller.
         on_result: Optional callback invoked on successful completion.
             Runs on the NiceGUI main loop.
     """
-
-    # check if we have v0 analysis and do not run new analysis
-    # never allow new analysis on old v0 velocity
-    # in gui, we should never get here, button 'analyze flow' has guard
-    ka = kym_file.get_kym_analysis()
-    if ka.has_v0_flow_analysis(roi_id):
-        logger.warning(f"ROI {roi_id} already has v0 analysis, cannot run new analysis")
-        return
 
     # Validate roi_id early, while we still have UI context.
     if roi_id is None:
@@ -75,10 +69,20 @@ def run_flow_analysis(
         task_state.mark_finished()
         return
 
-    if kym_file.rois.get(roi_id) is None:
+    roi = kym_file.rois.get(roi_id)
+    if roi is None:
         task_state.set_running(True)
         task_state.message = f"Error: ROI {roi_id} not found"
         task_state.mark_finished()
+        return
+
+    # check if we have v0 analysis and do not run new analysis
+    # never allow new analysis on old v0 velocity
+    # in gui, we should never get here, button 'analyze flow' has guard
+    ka = kym_file.get_kym_analysis()
+    radon = ka.get_analysis_object("RadonAnalysis")
+    if radon is not None and radon.has_v0_flow_analysis(roi_id, channel):
+        logger.warning(f"ROI {roi_id} already has v0 analysis (channel={channel}), cannot run new analysis")
         return
 
     progress_q: queue.Queue[Msg] = queue.Queue()
@@ -152,13 +156,16 @@ def run_flow_analysis(
             # Show initial state quickly (but via queue to keep one pathway)
             progress_q.put(("progress", 0, 1))
 
-            kym_file.get_kym_analysis().analyze_roi(
-                roi_id,
-                window_size,
-                progress_queue=progress_q,
-                is_cancelled=cancel_event.is_set,
-                use_multiprocessing=True,
-            )
+            radon = kym_file.get_kym_analysis().get_analysis_object("RadonAnalysis")
+            if radon is not None:
+                radon.analyze_roi(
+                    roi_id,
+                    channel,
+                    window_size,
+                    progress_queue=progress_q,
+                    is_cancelled=cancel_event.is_set,
+                    use_multiprocessing=True,
+                )
         except FlowCancelled:
             progress_q.put(("cancelled", None))
         except Exception as exc:  # surfaced to UI
@@ -193,6 +200,7 @@ def run_batch_flow_analysis(
     overall_task: TaskState,
     *,
     window_size: int = 16,
+    channel: int,
     on_file_complete: Optional[Callable[[KymImage], None]] = None,
     on_batch_complete: Optional[Callable[[bool], None]] = None,
 ) -> None:
@@ -211,7 +219,8 @@ def run_batch_flow_analysis(
         kym_files: KymImage objects to analyze.
         per_file_task: TaskState for current file progress.
         overall_task: TaskState for overall batch progress.
-        window_size: Radon window size.
+            window_size: Radon window size.
+            channel: 1-based channel index to analyze for all ROIs in all files.
         on_file_complete: Callback after each file completes (NiceGUI thread).
         on_batch_complete: Callback after batch completes (NiceGUI thread).
     """
@@ -320,7 +329,7 @@ def run_batch_flow_analysis(
                     # Create per-ROI queue to forward progress to batch queue
                     roi_progress_q: queue.Queue[Msg] = queue.Queue()
                     file_name = str(kym_file.path.name)
-                    
+
                     # Start a thread to forward ROI progress to batch queue
                     def _forward_roi_progress() -> None:
                         """Forward ROI progress messages to batch queue."""
@@ -329,24 +338,27 @@ def run_batch_flow_analysis(
                                 msg = roi_progress_q.get(timeout=0.1)
                             except queue.Empty:
                                 continue
-                            
+
                             if msg[0] == "progress":
                                 # Forward as per_file message with file name
                                 _, completed, total = msg  # type: ignore[misc]
                                 progress_q.put(("per_file", (int(completed), int(total), file_name)))
                             elif msg[0] == "done":
                                 break
-                    
+
                     forward_thread = threading.Thread(target=_forward_roi_progress, daemon=True)
                     forward_thread.start()
-                    
-                    kym_file.get_kym_analysis().analyze_roi(
-                        roi_id,
-                        window_size,
-                        progress_queue=roi_progress_q,
-                        is_cancelled=cancel_event.is_set,
-                        use_multiprocessing=True,
-                    )
+
+                    radon = kym_file.get_kym_analysis().get_analysis_object("RadonAnalysis")
+                    if radon is not None:
+                        radon.analyze_roi(
+                            roi_id,
+                            channel,
+                            window_size,
+                            progress_queue=roi_progress_q,
+                            is_cancelled=cancel_event.is_set,
+                            use_multiprocessing=True,
+                        )
                     
                     # Signal done to forward thread
                     roi_progress_q.put(("done", None))

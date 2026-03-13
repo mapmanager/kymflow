@@ -33,6 +33,7 @@ def plot_stalls_matplotlib(
 ) -> Optional[plt.Figure]:
     """Plot velocity data with stall overlays using matplotlib.
 
+
     This function plots velocity vs bin number (or time) and overlays filled
     rectangles for each stall. It does NOT perform stall detection - stalls
     must be computed separately and passed in.
@@ -51,21 +52,20 @@ def plot_stalls_matplotlib(
     Returns:
         Matplotlib Figure object if data is available, None otherwise.
     """
-    # Get KymAnalysis from KymImage
-    kym_analysis = kym_image.get_kym_analysis()
+    ka = kym_image.get_kym_analysis()
+    radon = ka.get_analysis_object("RadonAnalysis")
+    channel = radon.get_channel_for_roi(roi_id) if radon else None
 
     # Collect data to plot
-    if not kym_analysis.has_analysis(roi_id):
+    if radon is None or channel is None or not radon.has_analysis(roi_id, channel):
         velocity = None
         x_values = None
     else:
-        velocity = kym_analysis.get_analysis_value(
-            roi_id, "velocity", remove_outliers, median_filter
+        velocity = radon.get_analysis_value(
+            roi_id, channel, "velocity", remove_outliers, median_filter
         )
-        # Get x-axis values (never filtered).
-        # If we are not using the time axis, plot in array-index space (0..N-1).
         if use_time_axis:
-            x_values = kym_analysis.get_analysis_value(roi_id, "time")
+            x_values = radon.get_analysis_value(roi_id, channel, "time")
         elif velocity is None:
             x_values = None
         else:
@@ -74,7 +74,7 @@ def plot_stalls_matplotlib(
     # Validate data and return None if data is not available
     if velocity is None or x_values is None:
         return None
-    
+
     # Ensure x_values and velocity have the same length (they should since they come from same DataFrame)
     if len(x_values) != len(velocity):
         logger.warning(f"x_values and velocity have different lengths: {len(x_values)} != {len(velocity)}")
@@ -203,21 +203,20 @@ def plot_stalls_plotly(
     font_dict = {"color": fg_color}
     grid_color = "rgba(255,255,255,0.2)" if theme is ThemeMode.DARK else "#cccccc"
 
-    # Get KymAnalysis from KymImage
-    kym_analysis = kym_image.get_kym_analysis()
+    ka = kym_image.get_kym_analysis()
+    radon = ka.get_analysis_object("RadonAnalysis")
+    channel = radon.get_channel_for_roi(roi_id) if radon else None
 
     # Collect data to plot
-    if not kym_analysis.has_analysis(roi_id):
+    if radon is None or channel is None or not radon.has_analysis(roi_id, channel):
         velocity = None
         x_values = None
     else:
-        velocity = kym_analysis.get_analysis_value(
-            roi_id, "velocity", remove_outliers, median_filter
+        velocity = radon.get_analysis_value(
+            roi_id, channel, "velocity", remove_outliers, median_filter
         )
-        # Get x-axis values (never filtered).
-        # If we are not using the time axis, plot in array-index space (0..N-1).
         if use_time_axis:
-            x_values = kym_analysis.get_analysis_value(roi_id, "time")
+            x_values = radon.get_analysis_value(roi_id, channel, "time")
         elif velocity is None:
             x_values = None
         else:

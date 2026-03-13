@@ -12,6 +12,10 @@ import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.kym_image_list import KymImageList
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.image_loaders.velocity_event_db import (
     VelocityEventDb,
     _norm_event_tuple,
@@ -477,7 +481,7 @@ def test_kym_image_list_detect_all_events_updates_velocity_cache() -> None:
     kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
     bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)

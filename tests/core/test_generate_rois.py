@@ -23,6 +23,10 @@ import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.roi import RoiBounds
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.core.utils import get_data_folder
 # Configure logging to show INFO level messages to console
@@ -162,8 +166,9 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     
     # Analyze ROI 1
     logger.info(f"\nAnalyzing ROI {roi1.id}...")
-    kym_image.get_kym_analysis().analyze_roi(
+    _radon(kym_image.get_kym_analysis()).analyze_roi(
         roi1.id,
+        roi1.channel,
         window_size,
         progress_queue=create_progress_queue(roi1.id, "Full Image"),
         use_multiprocessing=True,
@@ -172,8 +177,9 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     
     # Analyze ROI 2
     logger.info(f"\nAnalyzing ROI {roi2.id}...")
-    kym_image.get_kym_analysis().analyze_roi(
+    _radon(kym_image.get_kym_analysis()).analyze_roi(
         roi2.id,
+        roi2.channel,
         window_size,
         progress_queue=create_progress_queue(roi2.id, "Center Region"),
         use_multiprocessing=True,
@@ -182,8 +188,9 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     
     # Analyze ROI 3
     logger.info(f"\nAnalyzing ROI {roi3.id}...")
-    kym_image.get_kym_analysis().analyze_roi(
+    _radon(kym_image.get_kym_analysis()).analyze_roi(
         roi3.id,
+        roi3.channel,
         window_size,
         progress_queue=create_progress_queue(roi3.id, "Left Region"),
         use_multiprocessing=True,
@@ -196,12 +203,12 @@ def test_generate_rois(sample_tif_files: list[Path]) -> None:
     logger.info("="*60)
     
     success = kym_image.get_kym_analysis().save_analysis()
-    if success:
-        csv_path, json_path = kym_image.get_kym_analysis()._get_save_paths()
-        logger.info(f"✓ Analysis saved to:")
+    if success and (paths := kym_image.get_kym_analysis().get_radon_save_paths()):
+        csv_path, json_path = paths
+        logger.info("✓ Analysis saved to:")
         logger.info(f"  CSV: {csv_path}")
         logger.info(f"  JSON: {json_path}")
-    else:
+    elif not success:
         logger.error("Failed to save analysis")
         # sys.exit(1)
     

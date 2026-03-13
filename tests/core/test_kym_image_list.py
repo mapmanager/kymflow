@@ -19,6 +19,10 @@ import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.kym_image_list import KymImageList
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.image_loaders.acq_image_list import AcqImageList
 from kymflow.core.utils import get_data_folder
 from kymflow.core.utils.logging import get_logger, setup_logging
@@ -196,7 +200,7 @@ def test_kym_image_list_any_dirty_analysis_with_analysis() -> None:
     from kymflow.core.image_loaders.roi import RoiBounds
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Should be dirty after analysis
     assert kym_analysis.is_dirty is True
@@ -461,7 +465,7 @@ def test_kym_image_list_get_radon_report_df_has_row_id() -> None:
     from kymflow.core.image_loaders.roi import RoiBounds
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir).resolve()
@@ -491,7 +495,7 @@ def test_kym_image_list_update_radon_report_for_image() -> None:
     from kymflow.core.image_loaders.roi import RoiBounds
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
@@ -517,7 +521,7 @@ def test_kym_image_list_load_and_save_radon_report_db() -> None:
     from kymflow.core.image_loaders.roi import RoiBounds
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir).resolve()
@@ -562,7 +566,7 @@ def test_save_analysis_updates_radon_db_csv() -> None:
 
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir).resolve()
@@ -611,7 +615,7 @@ def test_radon_db_no_file_build_and_save() -> None:
 
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir).resolve()
@@ -647,7 +651,7 @@ def test_radon_db_stale_rebuild_and_save() -> None:
 
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_image.get_kym_analysis()).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir).resolve()

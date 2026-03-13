@@ -21,6 +21,10 @@ from kymflow.core.analysis.velocity_events.velocity_events import (
 )
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.roi import RoiBounds
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -626,7 +630,7 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(tif_file, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        if not kym_analysis.has_analysis(roi_id=1):
+        if not _radon(kym_analysis).has_analysis(roi_id=1, channel=1):
             pytest.skip("No analysis data available for ROI 1")
 
         # Run velocity event analysis
@@ -657,7 +661,7 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(img_data=test_image, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        with pytest.raises(ValueError, match="Cannot run velocity event analysis.*has no analysis values"):
+        with pytest.raises(ValueError, match="Cannot run velocity event analysis"):
             kym_analysis.run_velocity_event_analysis(roi_id=999)
 
     def test_get_velocity_events_returns_none_when_not_run(self) -> None:
@@ -687,7 +691,7 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(test_tif, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        if not kym_analysis.has_analysis(roi_id=1):
+        if not _radon(kym_analysis).has_analysis(roi_id=1, channel=1):
             pytest.skip("No analysis data available for ROI 1")
 
         # Run velocity event analysis
@@ -739,7 +743,7 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(tif_file, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        if not kym_analysis.has_analysis(roi_id=1):
+        if not _radon(kym_analysis).has_analysis(roi_id=1, channel=1):
             pytest.skip("No analysis data available for ROI 1")
 
         # Run velocity event analysis to generate events
@@ -873,7 +877,7 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(tif_file, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        if not kym_analysis.has_analysis(roi_id=1):
+        if not _radon(kym_analysis).has_analysis(roi_id=1, channel=1):
             pytest.skip("No analysis data available for ROI 1")
 
         # Run with conservative parameters (fewer events)
@@ -910,14 +914,14 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(tif_file, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        if not kym_analysis.has_analysis(roi_id=1):
+        if not _radon(kym_analysis).has_analysis(roi_id=1, channel=1):
             pytest.skip("No analysis data available for ROI 1")
 
         # Test with default "velocity" key
         events_velocity = kym_analysis.run_velocity_event_analysis(roi_id=1)
 
         # Test with "cleanVelocity" key (if available)
-        if kym_analysis.get_analysis_value(roi_id=1, key="cleanVelocity") is not None:
+        if _radon(kym_analysis).get_analysis_value(roi_id=1, channel=1, key="cleanVelocity") is not None:
             events_clean = kym_analysis.run_velocity_event_analysis(
                 roi_id=1,
                 velocity_key="cleanVelocity",
@@ -943,7 +947,7 @@ class TestKymAnalysisVelocityEvents:
         kym_image = KymImage(test_tif, load_image=False)
         kym_analysis = kym_image.get_kym_analysis()
 
-        if not kym_analysis.has_analysis(roi_id=1):
+        if not _radon(kym_analysis).has_analysis(roi_id=1, channel=1):
             pytest.skip("No analysis data available for ROI 1")
 
         # Run analysis for ROI 1
@@ -1141,10 +1145,11 @@ class TestVelocityEventLifecycle:
         roi_ids = {row["roi_id"] for row in report_all}
         assert roi_ids == {roi1.id, roi2.id}
         
-        # Verify report structure
+        # Verify report structure (includes channel from Phase 1 radon plan)
         for row in report_all:
             assert "event_id" in row
             assert "roi_id" in row
+            assert "channel" in row
             assert "event_type" in row
             assert "t_start" in row
             assert "user_type" in row

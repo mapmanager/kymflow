@@ -65,7 +65,7 @@ class AnalysisController:
         if no file is selected or no ROI is selected.
 
         Args:
-            e: AnalysisStart event (phase="intent") containing window_size and roi_id.
+            e: AnalysisStart event (phase="intent") containing window_size, roi_id, and channel.
         """
         kf = self._app_state.selected_file
         if not kf:
@@ -75,6 +75,10 @@ class AnalysisController:
         # Require ROI selection before starting analysis
         if e.roi_id is None:
             ui.notify("ROI selection required", color="warning")
+            return
+        # Require channel selection before starting analysis
+        if e.channel is None:
+            ui.notify("Channel selection required", color="warning")
             return
 
         # Verify ROI exists in the selected file
@@ -91,9 +95,10 @@ class AnalysisController:
 
         # Log for debugging
         logger.info(
-            "Starting analysis: file=%s, roi_id=%s, window_size=%s",
+            "Starting analysis: file=%s, roi_id=%s, channel=%s, window_size=%s",
             kf.path,
             e.roi_id,
+            e.channel,
             e.window_size,
         )
 
@@ -103,6 +108,7 @@ class AnalysisController:
             self._task_state,
             window_size=e.window_size,
             roi_id=e.roi_id,
+            channel=e.channel,
             on_result=lambda success: self._on_analysis_complete(kf, e.roi_id, success),
         )
 

@@ -455,6 +455,10 @@ class KymImageList(AcqImageList[KymImage]):
         """Update radon report cache in memory only (e.g. after Analyze Flow completes).
 
         Does NOT persist to CSV. Use update_radon_report_for_image when user explicitly saves.
+
+        Note: Images with path=None cannot contribute to the radon report cache (cache is
+        keyed by str(path)). Ensure images have a non-None path when used in folder or
+        file-list mode.
         """
         if kym_image.path is None:
             return
@@ -476,7 +480,10 @@ class KymImageList(AcqImageList[KymImage]):
             logger.warning(f"Failed to update radon report cache for {path_str}: {e}")
 
     def update_radon_report_for_image(self, kym_image: KymImage) -> None:
-        """Update radon report cache and persist to CSV (e.g. after user saves analysis)."""
+        """Update radon report cache and persist to CSV (e.g. after user saves analysis).
+
+        Note: Images with path=None are skipped (cache is keyed by str(path)).
+        """
         if kym_image.path is None:
             return
         self.update_radon_report_cache_only(kym_image)

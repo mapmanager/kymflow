@@ -92,7 +92,10 @@ class AcqImage:
         
         # ROI set (lazy initialization)
         self._roi_set: "RoiSet" | None = None
-        
+
+        # Accepted status (per-image QC flag; saved in metadata JSON, not in analysis)
+        self._accepted: bool = True
+
         # Internal blind index for blinded file name display (set by AcqImageList)
         self._blind_index: int | None = _blind_index
         
@@ -684,6 +687,15 @@ class AcqImage:
             dim1_stop=dim1_stop_physical,
         )
     
+    def get_accepted(self) -> bool:
+        """Return the accepted status of this image (QC flag)."""
+        return self._accepted
+
+    def set_accepted(self, value: bool) -> None:
+        """Set the accepted status. Marks metadata dirty for save."""
+        self._accepted = value
+        self._metadata_dirty = True
+
     def _get_metadata_path(self) -> Path | None:
         """Get metadata file path from representative image path.
         
@@ -728,6 +740,7 @@ class AcqImage:
             "header": header_dict,
             "experiment_metadata": experiment_dict,
             "rois": rois_list,
+            "accepted": self._accepted,
         }
         
         # Save to JSON file
@@ -775,6 +788,10 @@ class AcqImage:
             if "experiment_metadata" in metadata:
                 self._experiment_metadata = ExperimentMetadata.from_dict(metadata["experiment_metadata"])
             
+            # Load accepted (per-image QC flag)
+            if "accepted" in metadata:
+                self._accepted = bool(metadata["accepted"])
+
             # Load ROIs
             if "rois" in metadata:
                 rois_data = metadata["rois"]

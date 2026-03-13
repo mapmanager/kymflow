@@ -12,6 +12,10 @@ import tifffile
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.image_loaders.roi import RoiBounds
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.gui_v2.state import AppState
 
 
@@ -46,8 +50,9 @@ def test_analysis_form_populates_from_roi(
     roi = kym_file.rois.create_roi(bounds=bounds)
 
     # Analyze the ROI
-    kym_file.get_kym_analysis().analyze_roi(
+    _radon(kym_file.get_kym_analysis()).analyze_roi(
         roi.id,
+        roi.channel,
         window_size=16,
         use_multiprocessing=False,
     )
@@ -59,7 +64,7 @@ def test_analysis_form_populates_from_roi(
     roi_after = kym_file.rois.get(roi.id)
     assert roi_after is not None
     kym_analysis = kym_file.get_kym_analysis()
-    meta = kym_analysis.get_analysis_metadata(roi.id)
+    meta = _radon(kym_analysis).get_analysis_metadata(roi.id, roi.channel)
     assert meta is not None
     assert meta.algorithm is not None
     assert meta.window_size == 16
@@ -93,16 +98,17 @@ def test_save_buttons_logic_with_roi(
     # Create ROI and analyze
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_file.rois.create_roi(bounds=bounds)
-    kym_file.get_kym_analysis().analyze_roi(
+    _radon(kym_file.get_kym_analysis()).analyze_roi(
         roi.id,
+        roi.channel,
         window_size=16,
         use_multiprocessing=False,
     )
 
     # Verify has_analysis() works
     kym_analysis = kym_file.get_kym_analysis()
-    assert kym_analysis.has_analysis()
-    assert kym_analysis.has_analysis(roi.id)
+    assert _radon(kym_analysis).has_analysis()
+    assert _radon(kym_analysis).has_analysis(roi.id, roi.channel)
 
     # Verify save_analysis() works
     # Save to temporary location
@@ -130,8 +136,8 @@ def test_save_buttons_logic_no_analysis(
 
     # Verify has_analysis() returns False
     kym_analysis = kym_file.get_kym_analysis()
-    assert not kym_analysis.has_analysis()
-    assert not kym_analysis.has_analysis(roi.id)
+    assert not _radon(kym_analysis).has_analysis()
+    assert not _radon(kym_analysis).has_analysis(roi.id, roi.channel)
 
 
 def test_save_buttons_all_files(
@@ -156,13 +162,13 @@ def test_save_buttons_all_files(
         # Analyze first file
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi1 = kym_file.rois.create_roi(bounds=bounds)
-        kym_file.get_kym_analysis().analyze_roi(
-            roi1.id, window_size=16, use_multiprocessing=False
+        _radon(kym_file.get_kym_analysis()).analyze_roi(
+            roi1.id, roi1.channel, window_size=16, use_multiprocessing=False
         )
 
         # Verify has_analysis() logic
-        assert kym_file.get_kym_analysis().has_analysis()
-        assert not kym_file2.get_kym_analysis().has_analysis()
+        assert _radon(kym_file.get_kym_analysis()).has_analysis()
+        assert not _radon(kym_file2.get_kym_analysis()).has_analysis()
 
         # Files with analysis should be savable
         # Files without analysis should be skipped

@@ -337,13 +337,16 @@ class AnalysisToolbarView:
         if self._current_roi_id is None:
             ui.notify("Select an ROI first", color="warning")
             return
+        # Require channel selection before starting analysis
+        if self._current_channel is None:
+            ui.notify("Select a channel first", color="warning")
+            return
 
-        # Check for existing analysis on the selected ROI
-        # this will never except
+        # Check for existing analysis on the selected ROI and channel
+        ka = self._current_file.get_kym_analysis()
+        radon = ka.get_analysis_object("RadonAnalysis")
         try:
-            has_analysis = self._current_file.get_kym_analysis().has_analysis(
-                self._current_roi_id
-            )
+            has_analysis = radon.has_analysis(self._current_roi_id, self._current_channel) if radon else False
         except Exception:
             has_analysis = False
 
@@ -355,10 +358,11 @@ class AnalysisToolbarView:
                 else "unknown file"
             )
             roi_id = self._current_roi_id
+            channel = self._current_channel
 
             # check if we have v0 flow analysis and do not allow analysis
-            ka = self._current_file.get_kym_analysis()
-            if ka.has_v0_flow_analysis(roi_id):
+            radon = self._current_file.get_kym_analysis().get_analysis_object("RadonAnalysis")
+            if radon is not None and radon.has_v0_flow_analysis(roi_id, channel):
                 # raise ValueError(f"ROI {roi_id} already has v0 analysis, cannot run new analysis")
                 logger.warning(f"ROI {roi_id} already has v0 analysis, cannot run new analysis")
                 
@@ -401,6 +405,7 @@ class AnalysisToolbarView:
             AnalysisStart(
                 window_size=window_size,
                 roi_id=self._current_roi_id,
+                channel=self._current_channel,
                 phase="intent",
             )
         )

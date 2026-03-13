@@ -95,13 +95,15 @@ def line_plot_plotly(  # pragma: no cover
         x_values = None
         y_values = None
     else:
-        kym_analysis = kf.get_kym_analysis()
-        if not kym_analysis.has_analysis(roi_id):
+        ka = kf.get_kym_analysis()
+        radon = ka.get_analysis_object("RadonAnalysis")
+        channel = radon.get_channel_for_roi(roi_id) if radon else None
+        if radon is None or channel is None or not radon.has_analysis(roi_id, channel):
             x_values = None
             y_values = None
         else:
-            x_values = kym_analysis.get_analysis_value(roi_id, x, remove_outliers, median_filter)
-            y_values = kym_analysis.get_analysis_value(roi_id, y, remove_outliers, median_filter)
+            x_values = radon.get_analysis_value(roi_id, channel, x, remove_outliers, median_filter)
+            y_values = radon.get_analysis_value(roi_id, channel, y, remove_outliers, median_filter)
 
     # Handle None data (no analysis)
     if x_values is None or y_values is None:
@@ -193,7 +195,9 @@ def _add_single_roi_line_plot(  # pragma: no cover
     Returns:
         Tuple of (time_values, y_values) arrays, or (None, None) if no analysis data.
     """
-    if not kym_analysis.has_analysis(roi_id):
+    radon = kym_analysis.get_analysis_object("RadonAnalysis")
+    channel = radon.get_channel_for_roi(roi_id) if radon else None
+    if radon is None or channel is None or not radon.has_analysis(roi_id, channel):
         # No analysis data - show message
         fig.add_annotation(
             text="Analyze flow to see velocity trace",
@@ -208,8 +212,8 @@ def _add_single_roi_line_plot(  # pragma: no cover
         )
         return (None, None)
     
-    analysis_time_values = kym_analysis.get_analysis_value(roi_id, "time")
-    y_values = kym_analysis.get_analysis_value(roi_id, yStat, remove_outliers, median_filter)
+    analysis_time_values = radon.get_analysis_value(roi_id, channel, "time")
+    y_values = radon.get_analysis_value(roi_id, channel, yStat, remove_outliers, median_filter)
     
     if (
         analysis_time_values is not None

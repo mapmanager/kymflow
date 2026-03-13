@@ -13,6 +13,10 @@ import tifffile
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.roi import RoiBounds
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.state import TaskState
 from kymflow.gui_v2.tasks import run_batch_flow_analysis, run_flow_analysis
 
@@ -40,12 +44,14 @@ def test_run_flow_analysis_requires_roi_id(sample_kym_file: KymImage) -> None:
     task_state = TaskState()
     
     # Attempt to run analysis without roi_id (should raise TypeError)
-    # roi_id is now a required parameter, so this should fail at call time
+    # roi_id is now a required parameter, so this should fail at call time.
+    # Provide channel so the missing argument is specifically roi_id.
     with pytest.raises(TypeError, match="missing.*required.*argument.*roi_id"):
         run_flow_analysis(
             sample_kym_file,
             task_state,
             window_size=16,
+            channel=1,
         )
 
 
@@ -66,6 +72,7 @@ def test_run_flow_analysis_fails_with_invalid_roi_id(sample_kym_file: KymImage) 
         task_state,
         window_size=16,
         roi_id=invalid_roi_id,
+        channel=1,
     )
     
     # Wait for error to be set
@@ -108,6 +115,7 @@ def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> No
             task_state,
             window_size=16,
             roi_id=roi_id,
+            channel=roi.channel,
             on_result=on_result,
         )
         
@@ -120,7 +128,7 @@ def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> No
                 timer_callback()
             
             # Check if analysis completed
-            if sample_kym_file.get_kym_analysis().has_analysis(roi_id):
+            if _radon(sample_kym_file.get_kym_analysis()).has_analysis(roi_id, roi.channel):
                 # Continue draining queue until task_state is finished
                 # This ensures "done" message is processed even if progress messages arrive after
                 max_drain_iterations = 20
@@ -144,7 +152,7 @@ def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> No
     assert roi_ids[0] == roi_id
     
     # Check that analysis was performed on the correct ROI
-    assert sample_kym_file.get_kym_analysis().has_analysis(roi_id)
+    assert _radon(sample_kym_file.get_kym_analysis()).has_analysis(roi_id, roi.channel)
     
     # task_state should be finished (not running)
     # Note: On CI, timing differences might cause the final progress message
@@ -207,6 +215,7 @@ def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymIm
                 per_file_task,
                 overall_task,
                 window_size=16,
+                channel=roi1.channel,
                 on_file_complete=on_file_complete,
                 on_batch_complete=on_batch_complete,
             )
@@ -220,7 +229,8 @@ def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymIm
                     timer_callback()
                 
                 # Check if analysis completed for the file with ROI
-                if sample_kym_file.get_kym_analysis().has_analysis(roi1.id):
+                roi1_obj = sample_kym_file.rois.get(roi1.id)
+                if roi1_obj and _radon(sample_kym_file.get_kym_analysis()).has_analysis(roi1.id, roi1_obj.channel):
                     # Analysis completed, drain queue a few more times to ensure callbacks are processed
                     for _ in range(10):
                         if timer_callback is not None:
@@ -234,8 +244,10 @@ def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymIm
         assert kym_file2.rois.numRois() == 0  # Still no ROI (was skipped)
         
         # Check that only the first file was analyzed (second was skipped)
-        assert sample_kym_file.get_kym_analysis().has_analysis(roi1.id)
-        assert not kym_file2.get_kym_analysis().has_analysis()  # No analysis for skipped file
+        roi1_obj = sample_kym_file.rois.get(roi1.id)
+        assert roi1_obj is not None
+        assert _radon(sample_kym_file.get_kym_analysis()).has_analysis(roi1.id, roi1_obj.channel)
+        assert not _radon(kym_file2.get_kym_analysis()).has_analysis()  # No analysis for skipped file
         
         # Check that completion callback was only called once (for the file with ROI)
         # Note: The callback is called when the queue is drained, so we need to ensure
@@ -267,6 +279,7 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
             task_state,
             window_size=16,
             roi_id=roi.id,
+            channel=roi.channel,
         )
         
         # Wait a bit for analysis to start

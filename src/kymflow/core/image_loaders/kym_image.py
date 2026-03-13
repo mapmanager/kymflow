@@ -327,7 +327,7 @@ class KymImage(AcqImage):
         # Map to summary_row() keys and add analysis fields
         result = {
             "File Name": file_name,
-            "Analyzed": "True" if self.get_kym_analysis().has_analysis() else "False",
+            "Analyzed": "True" if (radon := self.get_kym_analysis().get_analysis_object("RadonAnalysis")) and radon.has_analysis() else "False",
             "Saved": "True" if not self.get_kym_analysis().is_dirty else "False",
             "Num ROIS": self.rois.numRois(),
             "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),

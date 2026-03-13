@@ -46,7 +46,9 @@ def _analyze_flow(path: str, depth:int) -> None:
             continue
 
         # ensure roi 1 is mpRadon_v0
-        meta = kymImage.get_kym_analysis().get_analysis_metadata(1)
+        # kymanalysis-radon-channel: get_analysis_metadata now requires channel
+        radon = kymImage.get_kym_analysis().get_analysis_object("RadonAnalysis")
+        meta = radon.get_analysis_metadata(1, 1) if radon else None
         if meta is None or meta.algorithm != "mpRadon_v0":
             # logger.error(f'{kymImage.path.name} roi 1 is not mpRadon_v0, it is {meta.algorithm}')
             continue
@@ -76,8 +78,11 @@ def _analyze_flow(path: str, depth:int) -> None:
             roi.calculate_image_stats(kymImage)
             
             # analyze flow
+            # kymanalysis-radon-channel: analyze_roi now requires channel
             logger.info(f'   analyze flow for roi {roi.id} window:{window}...')
-            kymImage.get_kym_analysis().analyze_roi(roi.id, window)
+            radon = kymImage.get_kym_analysis().get_analysis_object("RadonAnalysis")
+            if radon is not None:
+                radon.analyze_roi(roi.id, 1, window)
             any_changes = True
 
             # update the radon cache

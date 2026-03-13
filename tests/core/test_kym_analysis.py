@@ -9,12 +9,87 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from kymflow.core.image_loaders.kym_analysis import RADON_JSON_VERSION, RoiAnalysisMetadata
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.roi import RoiBounds
 from kymflow.core.utils.logging import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)
+
+
+def _radon(ka):
+    """Get RadonAnalysis from KymAnalysis (Phase 9)."""
+    return ka.get_analysis_object("RadonAnalysis")
+
+
+def _get_radon_save_paths(ka):
+    """Get (csv_path, json_path) for RadonAnalysis files (Phase 9)."""
+    r = _radon(ka)
+    return r._get_radon_paths(ka._get_analysis_folder_path())
+
+
+def _get_events_json_path(ka):
+    """Get path for velocity events JSON (Phase 9)."""
+    return ka._get_events_json_path()
+
+
+def _get_metadata_path(kym_image):
+    """Get path for AcqImage metadata JSON (Phase 10: accepted is stored here)."""
+    return kym_image._get_metadata_path()
+
+
+def test_roi_analysis_metadata_channel_and_analyzed_on() -> None:
+    """Test RoiAnalysisMetadata has required channel and optional analyzed_on (Phase 1)."""
+    meta = RoiAnalysisMetadata(
+        roi_id=1,
+        channel=1,
+        algorithm="mpRadon",
+        window_size=16,
+        analyzed_at="2025-01-15T12:00:00+00:00",
+        analyzed_on="2025-01-15T12:00:00+00:00",
+        roi_revision_at_analysis=0,
+    )
+    assert meta.roi_id == 1
+    assert meta.channel == 1
+    assert meta.analyzed_on == "2025-01-15T12:00:00+00:00"
+    assert meta.algorithm == "mpRadon"
+
+
+def test_radon_json_version_constant() -> None:
+    """Test RADON_JSON_VERSION constant is defined (Phase 1)."""
+    assert RADON_JSON_VERSION == "3.0"
+
+
+def test_get_analysis_object_returns_radon_analysis() -> None:
+    """Test get_analysis_object returns RadonAnalysis (Phase 10)."""
+    from kymflow.core.image_loaders.acq_analysis_base import AcqAnalysisBase
+    from kymflow.core.image_loaders.radon_analysis import RadonAnalysis
+
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=False)
+    kym_analysis = kym_image.get_kym_analysis()
+    radon = kym_analysis.get_analysis_object("RadonAnalysis")
+    assert radon is not None
+    assert isinstance(radon, RadonAnalysis)
+    assert isinstance(radon, AcqAnalysisBase)
+    assert radon.analysis_name == "RadonAnalysis"
+    assert kym_analysis.get_analysis_object("NonExistent") is None
+
+
+def test_analysis_metadata_composite_key() -> None:
+    """Test _analysis_metadata uses (roi_id, channel) composite key (Phase 2)."""
+    test_image = np.zeros((100, 100), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    radon = _radon(kym_analysis)
+    radon.analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
+    # Keys should be (roi_id, channel)
+    keys = list(radon._analysis_metadata.keys())
+    assert len(keys) == 1
+    assert keys[0] == (roi.id, roi.channel)
 
 
 @pytest.mark.requires_data
@@ -108,11 +183,11 @@ def test_kymanalysis_edit_roi_coordinates_invalidates_analysis() -> None:
     # Add and analyze ROI
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Verify analysis exists
-    assert kym_analysis.has_analysis(roi.id)
-    meta = kym_analysis.get_analysis_metadata(roi.id)
+    assert _radon(kym_analysis).has_analysis(roi.id, roi.channel)
+    meta = _radon(kym_analysis).get_analysis_metadata(roi.id, roi.channel)
     assert meta is not None
     assert meta.analyzed_at is not None
     assert meta.algorithm == "mpRadon"
@@ -123,9 +198,9 @@ def test_kymanalysis_edit_roi_coordinates_invalidates_analysis() -> None:
     
     assert roi.bounds.dim1_start == 15
     # Analysis should be stale after coordinate change
-    assert kym_analysis.is_stale(roi.id) is True
+    assert _radon(kym_analysis).is_stale(roi.id, roi.channel) is True
     # Metadata may still exist but is stale
-    assert not kym_analysis.has_analysis(roi.id) or kym_analysis.is_stale(roi.id)
+    assert not _radon(kym_analysis).has_analysis(roi.id, roi.channel) or _radon(kym_analysis).is_stale(roi.id, roi.channel)
 
 
 def test_kymanalysis_edit_roi_note_preserves_analysis() -> None:
@@ -138,9 +213,9 @@ def test_kymanalysis_edit_roi_note_preserves_analysis() -> None:
     # Add and analyze ROI
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Original note")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
-    original_meta = kym_analysis.get_analysis_metadata(roi.id)
+    original_meta = _radon(kym_analysis).get_analysis_metadata(roi.id, roi.channel)
     assert original_meta is not None
     original_analyzed_at = original_meta.analyzed_at
     
@@ -149,12 +224,12 @@ def test_kymanalysis_edit_roi_note_preserves_analysis() -> None:
     
     assert roi.note == "Updated note"
     # Analysis should still be valid (not stale)
-    assert kym_analysis.is_stale(roi.id) is False
-    meta = kym_analysis.get_analysis_metadata(roi.id)
+    assert _radon(kym_analysis).is_stale(roi.id, roi.channel) is False
+    meta = _radon(kym_analysis).get_analysis_metadata(roi.id, roi.channel)
     assert meta is not None
     assert meta.analyzed_at == original_analyzed_at  # Analysis preserved
     assert meta.algorithm == "mpRadon"
-    assert kym_analysis.has_analysis(roi.id)
+    assert _radon(kym_analysis).has_analysis(roi.id, roi.channel)
 
 
 @pytest.mark.requires_data
@@ -183,7 +258,7 @@ def test_kymanalysis_save_and_load_analysis(test_data_dir: Path) -> None:
     # Add and analyze ROI
     bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
-    kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi1.id, roi1.channel, window_size=16, use_multiprocessing=False)
     
     # Save metadata (ROIs are saved in metadata.json)
     saved_metadata = kym_image.save_metadata()
@@ -210,8 +285,8 @@ def test_kymanalysis_save_and_load_analysis(test_data_dir: Path) -> None:
     kym_analysis2 = kym_image2.get_kym_analysis()
     
     # Analysis metadata should be loaded (auto-loaded by KymAnalysis.__init__)
-    assert kym_analysis2.has_analysis(roi1.id)
-    meta = kym_analysis2.get_analysis_metadata(roi1.id)
+    assert _radon(kym_analysis2).has_analysis(roi1.id, roi1.channel)
+    meta = _radon(kym_analysis2).get_analysis_metadata(roi1.id, roi1.channel)
     assert meta is not None
     assert meta.analyzed_at is not None
     
@@ -232,20 +307,22 @@ def test_kymanalysis_multi_roi_analysis() -> None:
     bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
     roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
     
-    kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
-    kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi1.id, roi1.channel, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi2.id, roi2.channel, window_size=16, use_multiprocessing=False)
     
     # Check that both have analysis
-    assert kym_analysis.has_analysis(roi1.id)
-    assert kym_analysis.has_analysis(roi2.id)
+    assert _radon(kym_analysis).has_analysis(roi1.id, roi1.channel)
+    assert _radon(kym_analysis).has_analysis(roi2.id, roi2.channel)
     
     # Get analysis for specific ROI
-    roi1_df = kym_analysis.get_analysis(roi_id=roi1.id)
+    ch1 = _radon(kym_analysis).get_channel_for_roi(roi1.id)
+    assert ch1 is not None
+    roi1_df = _radon(kym_analysis).get_analysis(roi_id=roi1.id, channel=ch1)
     assert roi1_df is not None
     assert all(roi1_df['roi_id'] == roi1.id)
     
     # Get all analysis
-    all_df = kym_analysis.get_analysis()
+    all_df = _radon(kym_analysis).get_analysis()
     assert all_df is not None
     assert len(all_df[all_df['roi_id'] == roi1.id]) > 0
     assert len(all_df[all_df['roi_id'] == roi2.id]) > 0
@@ -261,11 +338,13 @@ def test_kymanalysis_get_analysis_value() -> None:
     # Add and analyze ROI
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Get analysis values
-    time_values = kym_analysis.get_analysis_value(roi.id, "time")
-    velocity_values = kym_analysis.get_analysis_value(roi.id, "velocity")
+    channel = _radon(kym_analysis).get_channel_for_roi(roi.id)
+    assert channel is not None
+    time_values = _radon(kym_analysis).get_analysis_value(roi.id, channel, "time")
+    velocity_values = _radon(kym_analysis).get_analysis_value(roi.id, channel, "velocity")
     
     assert time_values is not None
     assert velocity_values is not None
@@ -290,7 +369,7 @@ def test_kymanalysis_dirty_flag() -> None:
     
     roi = kym_image.rois.get(1)
     assert roi is not None
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     assert kym_analysis.is_dirty is True
     
     # After saving, should not be dirty
@@ -819,23 +898,27 @@ def test_kymanalysis_has_v0_flow_analysis() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Initially should be False
-    assert kym_analysis.has_v0_flow_analysis(roi.id) is False
+    assert _radon(kym_analysis).has_v0_flow_analysis(roi.id, roi.channel) is False
     
     # Analyze with regular algorithm
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
-    assert kym_analysis.has_v0_flow_analysis(roi.id) is False
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
+    assert _radon(kym_analysis).has_v0_flow_analysis(roi.id, roi.channel) is False
     
-    # Manually set v0 algorithm (simulating import)
-    from kymflow.core.image_loaders.kym_analysis import RoiAnalysisMetadata
+    # Manually set v0 algorithm (simulating import); key is (roi_id, channel)
+    from kymflow.core.image_loaders.radon_analysis import RoiAnalysisMetadata
     from datetime import datetime, timezone
-    kym_analysis._analysis_metadata[roi.id] = RoiAnalysisMetadata(
+    now_iso = datetime.now(timezone.utc).isoformat()
+    key = _radon(kym_analysis)._meta_key(roi.id, roi.channel)
+    _radon(kym_analysis)._analysis_metadata[key] = RoiAnalysisMetadata(
         roi_id=roi.id,
+        channel=roi.channel,
         algorithm="mpRadon_v0",
         window_size=16,
-        analyzed_at=datetime.now(timezone.utc).isoformat(),
+        analyzed_at=now_iso,
+        analyzed_on=now_iso,
         roi_revision_at_analysis=roi.revision,
     )
-    assert kym_analysis.has_v0_flow_analysis(roi.id) is True
+    assert _radon(kym_analysis).has_v0_flow_analysis(roi.id, roi.channel) is True
 
 
 def test_kymanalysis_accepted_default_value() -> None:
@@ -886,12 +969,11 @@ def test_kymanalysis_accepted_save_and_load() -> None:
         saved = kym_analysis.save_analysis()
         assert saved is True
         
-        # Verify accepted is in JSON
+        # Verify accepted is in metadata JSON (Phase 10: accepted lives in AcqImage)
         import json
-        json_path = kym_analysis._get_save_paths()[1]
-        assert json_path.exists()
-        
-        with open(json_path, 'r') as f:
+        metadata_path = _get_metadata_path(kym_image)
+        assert metadata_path is not None and metadata_path.exists()
+        with open(metadata_path, 'r') as f:
             data = json.load(f)
         assert data["accepted"] is False
         
@@ -921,13 +1003,14 @@ def test_kymanalysis_accepted_load_defaults_to_true() -> None:
         saved = kym_analysis.save_analysis()
         assert saved is True
         
-        # Manually remove accepted from JSON to simulate old format
+        # Manually remove accepted from metadata JSON to simulate old format
         import json
-        json_path = kym_analysis._get_save_paths()[1]
-        with open(json_path, 'r') as f:
+        metadata_path = _get_metadata_path(kym_image)
+        assert metadata_path is not None and metadata_path.exists()
+        with open(metadata_path, 'r') as f:
             data = json.load(f)
         del data["accepted"]
-        with open(json_path, 'w') as f:
+        with open(metadata_path, 'w') as f:
             json.dump(data, f, indent=2)
         
         # Create new instance and load
@@ -953,15 +1036,17 @@ def test_kymanalysis_round_trip_with_accepted_edit() -> None:
     # Add and analyze ROI (creates CSV data)
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Verify analysis exists
-    assert kym_analysis.has_analysis(roi.id)
+    assert _radon(kym_analysis).has_analysis(roi.id, roi.channel)
     assert kym_analysis.get_accepted() is True  # Default
     assert kym_analysis.is_dirty is True
     
     # Get original analysis data
-    original_df = kym_analysis.get_analysis(roi.id)
+    ch = _radon(kym_analysis).get_channel_for_roi(roi.id)
+    assert ch is not None
+    original_df = _radon(kym_analysis).get_analysis(roi.id, channel=ch)
     assert original_df is not None
     assert len(original_df) > 0
     
@@ -974,24 +1059,32 @@ def test_kymanalysis_round_trip_with_accepted_edit() -> None:
         assert saved is True
         assert kym_analysis.is_dirty is False
         
-        csv_path, json_path = kym_analysis._get_save_paths()
+        csv_path, json_path = _get_radon_save_paths(kym_analysis)
         assert csv_path.exists(), "CSV should be saved when df exists"
         assert json_path.exists(), "JSON should be saved when dirty"
         
-        # Verify JSON contains accepted=True
+        # Verify radon JSON is v3.0; events JSON has accepted (Phase 9)
         import json
-        with open(json_path, 'r') as f:
-            json_data = json.load(f)
-        assert json_data["accepted"] is True
+        radon_path = _get_radon_save_paths(kym_analysis)[1]
+        with open(radon_path, 'r') as f:
+            radon_data = json.load(f)
+        assert radon_data["version"] == RADON_JSON_VERSION
+        am = radon_data.get("analysis_metadata", {})
+        if am:
+            first_meta = next(iter(am.values()))
+            assert "channel" in first_meta
+            assert "analyzed_on" in first_meta or "analyzed_at" in first_meta
         
         # Load and verify round-trip
         kym_image2 = KymImage(test_file, load_image=False)
         kym_image2.load_metadata()  # Load ROIs first
         kym_analysis2 = kym_image2.get_kym_analysis()
         
-        assert kym_analysis2.has_analysis(roi.id)
+        assert _radon(kym_analysis2).has_analysis(roi.id, roi.channel)
         assert kym_analysis2.get_accepted() is True
-        loaded_df = kym_analysis2.get_analysis(roi.id)
+        ch2 = _radon(kym_analysis2).get_channel_for_roi(roi.id)
+        assert ch2 is not None
+        loaded_df = _radon(kym_analysis2).get_analysis(roi.id, channel=ch2)
         assert loaded_df is not None
         assert len(loaded_df) == len(original_df)
         
@@ -1007,32 +1100,33 @@ def test_kymanalysis_round_trip_with_accepted_edit() -> None:
         
         # Verify CSV still exists and is unchanged
         assert csv_path.exists(), "CSV should still exist after editing accepted"
-        csv_path2, json_path2 = kym_analysis2._get_save_paths()
+        csv_path2, json_path2 = _get_radon_save_paths(kym_analysis2)
         assert csv_path2 == csv_path  # Same path
         
-        # Verify JSON was updated with accepted=False
-        with open(json_path2, 'r') as f:
-            json_data2 = json.load(f)
-        assert json_data2["accepted"] is False
-        # Verify other data is still there
-        assert "analysis_metadata" in json_data2
-        assert "velocity_events" in json_data2
+        # Verify metadata JSON was updated with accepted=False (Phase 10)
+        metadata_path2 = _get_metadata_path(kym_image2)
+        assert metadata_path2 is not None and metadata_path2.exists()
+        with open(metadata_path2, 'r') as f:
+            meta_data2 = json.load(f)
+        assert meta_data2["accepted"] is False
         
         # Final round-trip: load again and verify everything persisted
         kym_image3 = KymImage(test_file, load_image=False)
         kym_image3.load_metadata()
         kym_analysis3 = kym_image3.get_kym_analysis()
         
-        assert kym_analysis3.has_analysis(roi.id)
+        assert _radon(kym_analysis3).has_analysis(roi.id, roi.channel)
         assert kym_analysis3.get_accepted() is False, "accepted=False should persist"
         
         # Verify CSV data is still intact
-        final_df = kym_analysis3.get_analysis(roi.id)
+        ch3 = _radon(kym_analysis3).get_channel_for_roi(roi.id)
+        assert ch3 is not None
+        final_df = _radon(kym_analysis3).get_analysis(roi.id, channel=ch3)
         assert final_df is not None
         assert len(final_df) == len(original_df), "CSV data should be unchanged"
         
         # Verify analysis metadata is still there
-        meta = kym_analysis3.get_analysis_metadata(roi.id)
+        meta = _radon(kym_analysis3).get_analysis_metadata(roi.id, roi.channel)
         assert meta is not None
         assert meta.algorithm == "mpRadon"
 
@@ -1044,7 +1138,7 @@ def test_kymanalysis_save_json_only_when_dirty_no_df() -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # No analysis data, but we can still save accepted
-    assert kym_analysis._df is None or len(kym_analysis._df) == 0
+    assert _radon(kym_analysis)._df is None or len(_radon(kym_analysis)._df) == 0
     kym_analysis.set_accepted(False)
     assert kym_analysis.is_dirty is True
     
@@ -1056,17 +1150,19 @@ def test_kymanalysis_save_json_only_when_dirty_no_df() -> None:
         saved = kym_analysis.save_analysis()
         assert saved is True
         
-        csv_path, json_path = kym_analysis._get_save_paths()
+        csv_path, json_path = _get_radon_save_paths(kym_analysis)
         # CSV should not exist (no df data)
         assert not csv_path.exists() or csv_path.stat().st_size == 0
         # JSON should exist (dirty flag was set)
         assert json_path.exists()
         
-        # Verify JSON contains accepted
+        # Verify metadata JSON contains accepted (Phase 10)
         import json
-        with open(json_path, 'r') as f:
-            json_data = json.load(f)
-        assert json_data["accepted"] is False
+        metadata_path = _get_metadata_path(kym_image)
+        assert metadata_path is not None and metadata_path.exists()
+        with open(metadata_path, 'r') as f:
+            meta_data = json.load(f)
+        assert meta_data["accepted"] is False
 
 
 def test_kymanalysis_accepted_in_getRowDict() -> None:
@@ -1098,7 +1194,7 @@ def test_kymanalysis_create_empty_velocity_df() -> None:
     kym_analysis = kym_image.get_kym_analysis()
     
     # Create empty DataFrame
-    empty_df = kym_analysis._create_empty_velocity_df()
+    empty_df = _radon(kym_analysis)._create_empty_velocity_df()
     
     # Verify it's a DataFrame
     assert isinstance(empty_df, pd.DataFrame)
@@ -1139,14 +1235,16 @@ def test_kymanalysis_empty_df_columns_match_schema() -> None:
     # Create a sample ROI and analyze to get actual schema
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Get actual DataFrame from analysis
-    actual_df = kym_analysis.get_analysis(roi.id)
+    ch = _radon(kym_analysis).get_channel_for_roi(roi.id)
+    assert ch is not None
+    actual_df = _radon(kym_analysis).get_analysis(roi.id, channel=ch)
     assert actual_df is not None
     
     # Create empty DataFrame
-    empty_df = kym_analysis._create_empty_velocity_df()
+    empty_df = _radon(kym_analysis)._create_empty_velocity_df()
     
     # Verify columns match exactly (order and names)
     assert list(empty_df.columns) == list(actual_df.columns)
@@ -1158,7 +1256,7 @@ def test_kymanalysis_empty_df_has_correct_dtypes() -> None:
     kym_image = KymImage(img_data=test_image, load_image=False)
     kym_analysis = kym_image.get_kym_analysis()
     
-    empty_df = kym_analysis._create_empty_velocity_df()
+    empty_df = _radon(kym_analysis)._create_empty_velocity_df()
     
     # Verify integer columns
     assert empty_df["roi_id"].dtype == "int64"
@@ -1191,7 +1289,7 @@ def test_kymanalysis_no_analysis_df_stays_none() -> None:
     kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
     
     # Verify _df is still None (should not create empty DataFrame)
-    assert kym_analysis._df is None
+    assert _radon(kym_analysis)._df is None
 
 
 def test_kymanalysis_empty_df_after_delete_all_rois() -> None:
@@ -1203,20 +1301,20 @@ def test_kymanalysis_empty_df_after_delete_all_rois() -> None:
     # Add and analyze ROI
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Verify analysis exists
-    assert kym_analysis.has_analysis(roi.id)
-    assert kym_analysis._df is not None
-    assert len(kym_analysis._df) > 0
+    assert _radon(kym_analysis).has_analysis(roi.id, roi.channel)
+    assert _radon(kym_analysis)._df is not None
+    assert len(_radon(kym_analysis)._df) > 0
     
     # Delete the ROI (this should invalidate analysis)
     kym_image.rois.delete(roi.id)
-    kym_analysis.invalidate(roi.id)
+    _radon(kym_analysis).invalidate(roi.id)
     
     # Verify _df is now empty DataFrame (not None) with correct columns
-    assert kym_analysis._df is not None
-    assert len(kym_analysis._df) == 0
+    assert _radon(kym_analysis)._df is not None
+    assert len(_radon(kym_analysis)._df) == 0
     
     # Verify it has correct columns
     expected_columns = [
@@ -1224,7 +1322,7 @@ def test_kymanalysis_empty_df_after_delete_all_rois() -> None:
         "algorithm", "delx", "delt", "numLines", "pntsPerLine",
         "cleanVelocity", "absVelocity"
     ]
-    assert list(kym_analysis._df.columns) == expected_columns
+    assert list(_radon(kym_analysis)._df.columns) == expected_columns
 
 
 def test_kymanalysis_remove_roi_data_preserves_other_rois() -> None:
@@ -1236,35 +1334,38 @@ def test_kymanalysis_remove_roi_data_preserves_other_rois() -> None:
     # Create and analyze two ROIs
     bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
     roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
-    kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi1.id, roi1.channel, window_size=16, use_multiprocessing=False)
     
     bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
     roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
-    kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi2.id, roi2.channel, window_size=16, use_multiprocessing=False)
     
     # Verify both ROIs have analysis
-    assert kym_analysis.has_analysis(roi1.id)
-    assert kym_analysis.has_analysis(roi2.id)
+    assert _radon(kym_analysis).has_analysis(roi1.id, roi1.channel)
+    assert _radon(kym_analysis).has_analysis(roi2.id, roi2.channel)
     
     # Get data for both ROIs
-    df1_before = kym_analysis.get_analysis(roi1.id)
-    df2_before = kym_analysis.get_analysis(roi2.id)
+    ch1 = _radon(kym_analysis).get_channel_for_roi(roi1.id)
+    ch2 = _radon(kym_analysis).get_channel_for_roi(roi2.id)
+    assert ch1 is not None and ch2 is not None
+    df1_before = _radon(kym_analysis).get_analysis(roi1.id, channel=ch1)
+    df2_before = _radon(kym_analysis).get_analysis(roi2.id, channel=ch2)
     assert df1_before is not None
     assert df2_before is not None
     assert len(df1_before) > 0
     assert len(df2_before) > 0
     
-    # Remove ROI1 data
-    kym_analysis._remove_roi_data_from_df(roi1.id)
+    # Remove ROI1 data (all channels)
+    _radon(kym_analysis)._remove_all_roi_data_from_df(roi1.id)
     
     # Verify ROI2 data is still intact
-    df2_after = kym_analysis.get_analysis(roi2.id)
+    df2_after = _radon(kym_analysis).get_analysis(roi2.id, channel=ch2)
     assert df2_after is not None
     assert len(df2_after) == len(df2_before)
     assert list(df2_after["roi_id"].unique()) == [roi2.id]
     
     # Verify ROI1 data is gone
-    df1_after = kym_analysis.get_analysis(roi1.id)
+    df1_after = _radon(kym_analysis).get_analysis(roi1.id, channel=ch1)
     assert df1_after is None or len(df1_after) == 0
 
 
@@ -1277,15 +1378,15 @@ def test_kymanalysis_save_empty_df() -> None:
     # Add and analyze ROI, then delete it to get empty DataFrame
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Delete ROI to create empty DataFrame
     kym_image.rois.delete(roi.id)
-    kym_analysis.invalidate(roi.id)
+    _radon(kym_analysis).invalidate(roi.id)
     
     # Verify we have empty DataFrame
-    assert kym_analysis._df is not None
-    assert len(kym_analysis._df) == 0
+    assert _radon(kym_analysis)._df is not None
+    assert len(_radon(kym_analysis)._df) == 0
     assert kym_analysis.is_dirty is True
     
     # Save analysis
@@ -1297,7 +1398,7 @@ def test_kymanalysis_save_empty_df() -> None:
         assert saved is True
         
         # Verify CSV file exists
-        csv_path, json_path = kym_analysis._get_save_paths()
+        csv_path, json_path = _get_radon_save_paths(kym_analysis)
         assert csv_path.exists(), "CSV file should exist even when empty"
         
         # Verify CSV has header row
@@ -1328,9 +1429,9 @@ def test_kymanalysis_save_empty_csv_has_header() -> None:
     # Create empty DataFrame by analyzing then deleting
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     kym_image.rois.delete(roi.id)
-    kym_analysis.invalidate(roi.id)
+    _radon(kym_analysis).invalidate(roi.id)
     
     with TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "test.tif"
@@ -1338,7 +1439,7 @@ def test_kymanalysis_save_empty_csv_has_header() -> None:
         
         kym_analysis.save_analysis()
         
-        csv_path, _ = kym_analysis._get_save_paths()
+        csv_path, _ = _get_radon_save_paths(kym_analysis)
         assert csv_path.exists()
         
         # Read CSV file and check header
@@ -1364,9 +1465,9 @@ def test_kymanalysis_save_empty_csv_file_exists() -> None:
     # Create empty DataFrame
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     kym_image.rois.delete(roi.id)
-    kym_analysis.invalidate(roi.id)
+    _radon(kym_analysis).invalidate(roi.id)
     
     with TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "test.tif"
@@ -1374,7 +1475,7 @@ def test_kymanalysis_save_empty_csv_file_exists() -> None:
         
         kym_analysis.save_analysis()
         
-        csv_path, _ = kym_analysis._get_save_paths()
+        csv_path, _ = _get_radon_save_paths(kym_analysis)
         assert csv_path.exists(), "Empty CSV file should exist after save"
         assert csv_path.is_file(), "CSV path should be a file"
 
@@ -1388,9 +1489,9 @@ def test_kymanalysis_load_empty_csv() -> None:
     # Create empty DataFrame and save it
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     kym_image.rois.delete(roi.id)
-    kym_analysis.invalidate(roi.id)
+    _radon(kym_analysis).invalidate(roi.id)
     
     with TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "test.tif"
@@ -1406,8 +1507,8 @@ def test_kymanalysis_load_empty_csv() -> None:
         kym_analysis2 = kym_image2.get_kym_analysis()
         
         # Verify empty DataFrame was loaded
-        assert kym_analysis2._df is not None
-        assert len(kym_analysis2._df) == 0
+        assert _radon(kym_analysis2)._df is not None
+        assert len(_radon(kym_analysis2)._df) == 0
         
         # Verify columns are correct
         expected_columns = [
@@ -1415,7 +1516,7 @@ def test_kymanalysis_load_empty_csv() -> None:
             "algorithm", "delx", "delt", "numLines", "pntsPerLine",
             "cleanVelocity", "absVelocity"
         ]
-        assert list(kym_analysis2._df.columns) == expected_columns
+        assert list(_radon(kym_analysis2)._df.columns) == expected_columns
 
 
 def test_kymanalysis_load_empty_csv_preserves_schema() -> None:
@@ -1433,9 +1534,9 @@ def test_kymanalysis_load_empty_csv_preserves_schema() -> None:
     # Create and save empty DataFrame
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-    kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     kym_image.rois.delete(roi.id)
-    kym_analysis.invalidate(roi.id)
+    _radon(kym_analysis).invalidate(roi.id)
     
     with TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "test.tif"
@@ -1450,8 +1551,8 @@ def test_kymanalysis_load_empty_csv_preserves_schema() -> None:
         kym_analysis2 = kym_image2.get_kym_analysis()
         
         # Verify DataFrame exists and is empty
-        assert kym_analysis2._df is not None
-        assert len(kym_analysis2._df) == 0
+        assert _radon(kym_analysis2)._df is not None
+        assert len(_radon(kym_analysis2)._df) == 0
         
         # Verify all expected columns exist (this is what matters for schema preservation)
         expected_columns = [
@@ -1459,7 +1560,7 @@ def test_kymanalysis_load_empty_csv_preserves_schema() -> None:
             "algorithm", "delx", "delt", "numLines", "pntsPerLine",
             "cleanVelocity", "absVelocity"
         ]
-        assert list(kym_analysis2._df.columns) == expected_columns
+        assert list(_radon(kym_analysis2)._df.columns) == expected_columns
         
         # Note: Dtypes may be 'object' when loading empty CSV (pandas behavior),
         # but this is acceptable - when data is added, dtypes will be correct
@@ -1478,12 +1579,12 @@ def test_kymanalysis_csv_overwrite_not_append() -> None:
         # Step 1: Analyze ROI and save (CSV has data)
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
         
         kym_image.save_metadata()
         kym_analysis.save_analysis()
         
-        csv_path, _ = kym_analysis._get_save_paths()
+        csv_path, _ = _get_radon_save_paths(kym_analysis)
         assert csv_path.exists()
         
         # Get file size with data
@@ -1496,7 +1597,7 @@ def test_kymanalysis_csv_overwrite_not_append() -> None:
         
         # Step 2: Delete ROI and save empty (should overwrite)
         kym_image.rois.delete(roi.id)
-        kym_analysis.invalidate(roi.id)
+        _radon(kym_analysis).invalidate(roi.id)
         kym_analysis.save_analysis()
         
         # Verify file size is smaller (only header now)
@@ -1529,23 +1630,23 @@ def test_kymanalysis_save_empty_df_overwrites_previous() -> None:
         # Step 1: Analyze ROI → save (CSV has data)
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
         
         kym_image.save_metadata()
         saved1 = kym_analysis.save_analysis()
         assert saved1 is True
         
-        csv_path, json_path = kym_analysis._get_save_paths()
+        csv_path, json_path = _get_radon_save_paths(kym_analysis)
         assert csv_path.exists()
         file_size_with_data = csv_path.stat().st_size
         assert file_size_with_data > 0, "CSV should have data"
         
         # Step 2: Delete all ROIs → save (CSV should be empty with correct columns)
         kym_image.rois.delete(roi.id)
-        kym_analysis.invalidate(roi.id)
+        _radon(kym_analysis).invalidate(roi.id)
         
-        assert kym_analysis._df is not None
-        assert len(kym_analysis._df) == 0
+        assert _radon(kym_analysis)._df is not None
+        assert len(_radon(kym_analysis)._df) == 0
         
         saved2 = kym_analysis.save_analysis()
         assert saved2 is True
@@ -1561,8 +1662,8 @@ def test_kymanalysis_save_empty_df_overwrites_previous() -> None:
         kym_analysis2 = kym_image2.get_kym_analysis()
         
         # CRITICAL: Verify empty DataFrame, not old data
-        assert kym_analysis2._df is not None
-        assert len(kym_analysis2._df) == 0, "Loaded DataFrame should be empty, not contain old ROI data"
+        assert _radon(kym_analysis2)._df is not None
+        assert len(_radon(kym_analysis2)._df) == 0, "Loaded DataFrame should be empty, not contain old ROI data"
         
         # Verify correct columns
         expected_columns = [
@@ -1570,11 +1671,11 @@ def test_kymanalysis_save_empty_df_overwrites_previous() -> None:
             "algorithm", "delx", "delt", "numLines", "pntsPerLine",
             "cleanVelocity", "absVelocity"
         ]
-        assert list(kym_analysis2._df.columns) == expected_columns
+        assert list(_radon(kym_analysis2)._df.columns) == expected_columns
         
         # Verify no old ROI data
-        if len(kym_analysis2._df) > 0:
-            assert roi.id not in kym_analysis2._df["roi_id"].values, "Old ROI data should not be present"
+        if len(_radon(kym_analysis2)._df) > 0:
+            assert roi.id not in _radon(kym_analysis2)._df["roi_id"].values, "Old ROI data should not be present"
 
 
 def test_kymanalysis_round_trip_delete_all_rois() -> None:
@@ -1590,7 +1691,7 @@ def test_kymanalysis_round_trip_delete_all_rois() -> None:
         # Create ROI → analyze → save
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds, note="Test ROI")
-        kym_analysis.analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
         
         kym_image.save_metadata()
         kym_analysis.save_analysis()
@@ -1600,13 +1701,13 @@ def test_kymanalysis_round_trip_delete_all_rois() -> None:
         kym_image2.load_metadata()
         kym_analysis2 = kym_image2.get_kym_analysis()
         
-        assert kym_analysis2.has_analysis(roi.id)
-        assert kym_analysis2._df is not None
-        assert len(kym_analysis2._df) > 0
+        assert _radon(kym_analysis2).has_analysis(roi.id, roi.channel)
+        assert _radon(kym_analysis2)._df is not None
+        assert len(_radon(kym_analysis2)._df) > 0
         
         # Delete all ROIs → save
         kym_image2.rois.delete(roi.id)
-        kym_analysis2.invalidate(roi.id)
+        _radon(kym_analysis2).invalidate(roi.id)
         kym_analysis2.save_analysis()
         
         # Load again → verify empty DataFrame with correct columns
@@ -1614,15 +1715,15 @@ def test_kymanalysis_round_trip_delete_all_rois() -> None:
         kym_image3.load_metadata()
         kym_analysis3 = kym_image3.get_kym_analysis()
         
-        assert kym_analysis3._df is not None
-        assert len(kym_analysis3._df) == 0
+        assert _radon(kym_analysis3)._df is not None
+        assert len(_radon(kym_analysis3)._df) == 0
         
         expected_columns = [
             "roi_id", "channel", "time", "velocity", "parentFolder", "file",
             "algorithm", "delx", "delt", "numLines", "pntsPerLine",
             "cleanVelocity", "absVelocity"
         ]
-        assert list(kym_analysis3._df.columns) == expected_columns
+        assert list(_radon(kym_analysis3)._df.columns) == expected_columns
 
 
 def test_kymanalysis_round_trip_delete_then_reanalyze() -> None:
@@ -1638,19 +1739,19 @@ def test_kymanalysis_round_trip_delete_then_reanalyze() -> None:
         # Create, analyze, and delete ROI
         bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
-        kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi1.id, roi1.channel, window_size=16, use_multiprocessing=False)
         kym_image.save_metadata()
         kym_analysis.save_analysis()
         
         # Delete all ROIs → save empty
         kym_image.rois.delete(roi1.id)
-        kym_analysis.invalidate(roi1.id)
+        _radon(kym_analysis).invalidate(roi1.id)
         kym_analysis.save_analysis()
         
         # Add new ROI → analyze
         bounds2 = RoiBounds(dim0_start=20, dim0_stop=60, dim1_start=20, dim1_stop=60)
         roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
-        kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi2.id, roi2.channel, window_size=16, use_multiprocessing=False)
         kym_image.save_metadata()
         kym_analysis.save_analysis()
         
@@ -1659,12 +1760,14 @@ def test_kymanalysis_round_trip_delete_then_reanalyze() -> None:
         kym_image2.load_metadata()
         kym_analysis2 = kym_image2.get_kym_analysis()
         
-        assert kym_analysis2._df is not None
-        assert len(kym_analysis2._df) > 0, "Should have new ROI data, not empty"
-        assert kym_analysis2.has_analysis(roi2.id)
+        assert _radon(kym_analysis2)._df is not None
+        assert len(_radon(kym_analysis2)._df) > 0, "Should have new ROI data, not empty"
+        assert _radon(kym_analysis2).has_analysis(roi2.id, roi2.channel)
         
         # Verify it's ROI2's data, not ROI1's
-        df_loaded = kym_analysis2.get_analysis(roi2.id)
+        ch2 = _radon(kym_analysis2).get_channel_for_roi(roi2.id)
+        assert ch2 is not None
+        df_loaded = _radon(kym_analysis2).get_analysis(roi2.id, channel=ch2)
         assert df_loaded is not None
         assert len(df_loaded) > 0
         assert roi2.id in df_loaded["roi_id"].values
@@ -1684,18 +1787,18 @@ def test_kymanalysis_round_trip_multiple_rois_delete_one() -> None:
         # Create and analyze two ROIs
         bounds1 = RoiBounds(dim0_start=10, dim0_stop=30, dim1_start=10, dim1_stop=30)
         roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
-        kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi1.id, roi1.channel, window_size=16, use_multiprocessing=False)
         
         bounds2 = RoiBounds(dim0_start=50, dim0_stop=70, dim1_start=50, dim1_stop=70)
         roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
-        kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi2.id, roi2.channel, window_size=16, use_multiprocessing=False)
         
         kym_image.save_metadata()
         kym_analysis.save_analysis()
         
         # Delete one ROI
         kym_image.rois.delete(roi1.id)
-        kym_analysis.invalidate(roi1.id)
+        _radon(kym_analysis).invalidate(roi1.id)
         kym_analysis.save_analysis()
         
         # Load → verify remaining ROI data intact
@@ -1703,18 +1806,20 @@ def test_kymanalysis_round_trip_multiple_rois_delete_one() -> None:
         kym_image2.load_metadata()
         kym_analysis2 = kym_image2.get_kym_analysis()
         
-        assert kym_analysis2._df is not None
-        assert kym_analysis2.has_analysis(roi2.id)
-        assert not kym_analysis2.has_analysis(roi1.id)
-        
+        assert _radon(kym_analysis2)._df is not None
+        ch2 = _radon(kym_analysis2).get_channel_for_roi(roi2.id)
+        assert ch2 is not None
+        assert _radon(kym_analysis2).has_analysis(roi2.id, ch2)
+        assert not _radon(kym_analysis2).has_analysis(roi1.id, 1)  # roi1 invalidated, no metadata
+
         # Verify ROI2 data is present
-        df2 = kym_analysis2.get_analysis(roi2.id)
+        df2 = _radon(kym_analysis2).get_analysis(roi2.id, channel=ch2)
         assert df2 is not None
         assert len(df2) > 0
         assert roi2.id in df2["roi_id"].values
         
-        # Verify ROI1 data is gone
-        df1 = kym_analysis2.get_analysis(roi1.id)
+        # Verify ROI1 data is gone (roi1 invalidated; use channel 1 for lookup)
+        df1 = _radon(kym_analysis2).get_analysis(roi1.id, channel=1)
         assert df1 is None or len(df1) == 0
 
 
@@ -1731,23 +1836,23 @@ def test_kymanalysis_round_trip_delete_all_then_add_roi() -> None:
         # Create, analyze, delete all, save empty
         bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi1 = kym_image.rois.create_roi(bounds=bounds1, note="ROI 1")
-        kym_analysis.analyze_roi(roi1.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi1.id, roi1.channel, window_size=16, use_multiprocessing=False)
         kym_image.rois.delete(roi1.id)
-        kym_analysis.invalidate(roi1.id)
+        _radon(kym_analysis).invalidate(roi1.id)
         kym_image.save_metadata()
         kym_analysis.save_analysis()
         
         # Verify DataFrame is empty
-        assert kym_analysis._df is not None
-        assert len(kym_analysis._df) == 0
+        assert _radon(kym_analysis)._df is not None
+        assert len(_radon(kym_analysis)._df) == 0
         
         # Add ROI → analyze → verify DataFrame transitions from empty to populated
         bounds2 = RoiBounds(dim0_start=20, dim0_stop=60, dim1_start=20, dim1_stop=60)
         roi2 = kym_image.rois.create_roi(bounds=bounds2, note="ROI 2")
-        kym_analysis.analyze_roi(roi2.id, window_size=16, use_multiprocessing=False)
+        _radon(kym_analysis).analyze_roi(roi2.id, roi2.channel, window_size=16, use_multiprocessing=False)
         
         # Verify DataFrame now has data
-        assert kym_analysis._df is not None
-        assert len(kym_analysis._df) > 0
-        assert kym_analysis.has_analysis(roi2.id)
+        assert _radon(kym_analysis)._df is not None
+        assert len(_radon(kym_analysis)._df) > 0
+        assert _radon(kym_analysis).has_analysis(roi2.id, roi2.channel)
 

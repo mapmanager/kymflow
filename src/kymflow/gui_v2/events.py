@@ -380,11 +380,13 @@ class AnalysisStart:
     Attributes:
         window_size: Number of time lines per analysis window.
         roi_id: ROI ID to analyze, or None to use default/selected ROI.
+        channel: 1-based channel index to analyze, or None if not yet selected.
         phase: Event phase - "intent" or "state".
     """
 
     window_size: int
     roi_id: int | None
+    channel: int | None
     phase: EventPhase
 
 
