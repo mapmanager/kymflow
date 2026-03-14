@@ -72,8 +72,8 @@ def test_velocity_event_db_update_from_image_with_events() -> None:
     kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
     bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
-    kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=2.0, t_end=3.0)
+    kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
+    kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=2.0, t_end=3.0)
     kym_image._file_path_dict[1] = Path("/tmp/test.tif")
 
     db = VelocityEventDb(db_path=None)
@@ -94,7 +94,7 @@ def test_velocity_event_db_update_from_image_includes_channel() -> None:
     bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
     # create_roi uses channel=1 by default; image has only channel 1
     roi = kym_image.rois.create_roi(bounds=bounds, channel=1)
-    kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
     kym_image._file_path_dict[1] = Path("/tmp/test.tif")
 
     db = VelocityEventDb(db_path=None)
@@ -116,7 +116,7 @@ def test_velocity_event_db_save_and_load() -> None:
             kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
             bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
             roi = kym_image.rois.create_roi(bounds=bounds)
-            kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+            kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
             kym_image._file_path_dict[1] = Path(tmpdir) / "test.tif"
             return kym_image
 
@@ -156,8 +156,8 @@ def test_velocity_event_db_roundtrip_cache_csv_load() -> None:
         bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds)
         kym_image._file_path_dict[1] = test_file
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.01, t_end=None)
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.5)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.01, t_end=None)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.5)
 
         db = VelocityEventDb(db_path=db_path)
         db.update_from_image(kym_image)
@@ -200,7 +200,7 @@ def test_velocity_event_db_save_empty_cache_roundtrip() -> None:
         bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds)
         kym_image._file_path_dict[1] = test_file
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
 
         db = VelocityEventDb(db_path=db_path)
         db.update_from_image(kym_image)
@@ -240,7 +240,7 @@ def test_velocity_event_db_rebuild_from_images() -> None:
     kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
     bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
     kym_image._file_path_dict[1] = Path("/tmp/test.tif")
 
     db = VelocityEventDb(db_path=None)
@@ -293,7 +293,7 @@ def test_kym_image_list_update_velocity_event_for_image() -> None:
     kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
     bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
@@ -378,8 +378,8 @@ def test_is_cache_stale_handles_same_t_start_mixed_nan_t_end() -> None:
         bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds)
         # Exact scenario: same t_start, one t_end=None, one t_end=float
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=32.556, t_end=None)
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=32.556, t_end=32.798)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=32.556, t_end=None)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=32.556, t_end=32.798)
         kym_image._file_path_dict[1] = test_file
 
         db = VelocityEventDb(db_path=db_path)
@@ -409,8 +409,8 @@ def test_is_cache_stale_handles_none_t_start_t_end_in_cache() -> None:
         kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
         bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds)
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=None)
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=None)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
         kym_image._file_path_dict[1] = test_file
 
         db = VelocityEventDb(db_path=db_path)
@@ -442,8 +442,8 @@ def test_load_handles_nan_t_start_t_end_in_csv() -> None:
         kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
         bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
         roi = kym_image.rois.create_roi(bounds=bounds)
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=None)
-        kym_image.get_kym_analysis().add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=None)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
         kym_image._file_path_dict[1] = test_file
 
         # Build minimal CSV: same (path, roi_id), one t_end=NaN and one t_end=1.0

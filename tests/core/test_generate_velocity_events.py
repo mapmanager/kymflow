@@ -39,8 +39,8 @@ def test_generate_velocity_events() -> None:
     # Get velocity data for ROI 1
     kym_analysis = kym_image.get_kym_analysis()
     roi_id = 1
-    channel = _radon(kym_analysis).get_channel_for_roi(roi_id)
-    if channel is None:
+    channel = 1
+    if not _radon(kym_analysis).has_analysis(roi_id=roi_id, channel=channel):
         pytest.skip("No radon analysis for ROI 1")
     velocity = _radon(kym_analysis).get_analysis_value(roi_id=roi_id, channel=channel, key="velocity")
     
@@ -50,9 +50,9 @@ def test_generate_velocity_events() -> None:
     logger.info(f"Velocity array length: {len(velocity)}")
     logger.info(f"Number of NaN values: {np.sum(np.isnan(velocity))}")
     
-    kym_analysis.run_velocity_event_analysis(roi_id=roi_id)
-    
-    velocityEvents = kym_analysis.get_velocity_events(roi_id=roi_id)
+    kym_analysis.run_velocity_event_analysis(roi_id=roi_id, channel=channel)
+
+    velocityEvents = kym_analysis.get_velocity_events(roi_id=roi_id, channel=channel)
     assert velocityEvents is not None
     assert len(velocityEvents) > 0
     for velocityEvent in velocityEvents:

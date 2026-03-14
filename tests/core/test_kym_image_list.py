@@ -235,49 +235,51 @@ def test_kym_image_list_detect_all_events() -> None:
     # Create a KymImageList with mock KymImage instances
     image_list = KymImageList(path=None, file_extension=".tif")
     
-    # Create mock images with different ROI configurations
+    # Create mock images with radon _analysis_metadata (detect_all_events iterates over it)
+    mock_radon1 = MagicMock()
+    mock_radon1._analysis_metadata = {(1, 1): None, (2, 1): None}  # (roi_id, channel)
     mock_image1 = MagicMock(spec=KymImage)
-    mock_image1.rois = MagicMock()
-    mock_image1.rois.get_roi_ids.return_value = [1, 2]
     mock_kym_analysis1 = MagicMock()
+    mock_kym_analysis1.get_analysis_object.return_value = mock_radon1
     mock_kym_analysis1.run_velocity_event_analysis = MagicMock()
     mock_image1.get_kym_analysis.return_value = mock_kym_analysis1
-    
+
+    mock_radon2 = MagicMock()
+    mock_radon2._analysis_metadata = {(1, 1): None}
     mock_image2 = MagicMock(spec=KymImage)
-    mock_image2.rois = MagicMock()
-    mock_image2.rois.get_roi_ids.return_value = [1]
     mock_kym_analysis2 = MagicMock()
+    mock_kym_analysis2.get_analysis_object.return_value = mock_radon2
     mock_kym_analysis2.run_velocity_event_analysis = MagicMock()
     mock_image2.get_kym_analysis.return_value = mock_kym_analysis2
-    
-    # Image without ROIs (should still call get_roi_ids but return empty list)
+
+    mock_radon3 = MagicMock()
+    mock_radon3._analysis_metadata = {}
     mock_image3 = MagicMock(spec=KymImage)
-    mock_image3.rois = MagicMock()
-    mock_image3.rois.get_roi_ids.return_value = []
     mock_kym_analysis3 = MagicMock()
+    mock_kym_analysis3.get_analysis_object.return_value = mock_radon3
     mock_kym_analysis3.run_velocity_event_analysis = MagicMock()
     mock_image3.get_kym_analysis.return_value = mock_kym_analysis3
-    
+
     # Add images to the list
     image_list.images = [mock_image1, mock_image2, mock_image3]
-    
+
     # Call detect_all_events()
     image_list.detect_all_events()
-    
-    # Verify run_velocity_event_analysis was called for each ROI in each file
-    # Image 1: ROIs 1 and 2
+
+    # Verify run_velocity_event_analysis was called for each (roi_id, channel) in each file
+    # Image 1: (1,1) and (2,1)
     assert mock_kym_analysis1.run_velocity_event_analysis.call_count == 2
     mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(
-        1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
+        1, 1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
     )
     mock_kym_analysis1.run_velocity_event_analysis.assert_any_call(
-        2, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
+        2, 1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
     )
-    
-    # Image 2: ROI 1
+
+    # Image 2: (1,1)
     assert mock_kym_analysis2.run_velocity_event_analysis.call_count == 1
     mock_kym_analysis2.run_velocity_event_analysis.assert_called_once_with(
-        1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
+        1, 1, baseline_drop_params=None, nan_gap_params=None, zero_gap_params=None
     )
     
     # Image 3: No ROIs, should not call run_velocity_event_analysis
@@ -323,12 +325,12 @@ def test_kym_image_list_total_number_of_event() -> None:
     from kymflow.core.image_loaders.roi import RoiBounds
     bounds1 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi1 = kym_image1.rois.create_roi(bounds=bounds1)
-    kym_image1.get_kym_analysis().add_velocity_event(roi1.id, t_start=0.5, t_end=1.0)
-    kym_image1.get_kym_analysis().add_velocity_event(roi1.id, t_start=2.0, t_end=3.0)
+    kym_image1.get_kym_analysis().add_velocity_event(roi1.id, 1, t_start=0.5, t_end=1.0)
+    kym_image1.get_kym_analysis().add_velocity_event(roi1.id, 1, t_start=2.0, t_end=3.0)
     
     bounds2 = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi2 = kym_image2.rois.create_roi(bounds=bounds2)
-    kym_image2.get_kym_analysis().add_velocity_event(roi2.id, t_start=1.0, t_end=2.0)
+    kym_image2.get_kym_analysis().add_velocity_event(roi2.id, 1, t_start=1.0, t_end=2.0)
     
     # Should count all events across all images
     assert image_list.total_number_of_event() == 3

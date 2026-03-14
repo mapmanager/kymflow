@@ -12,6 +12,10 @@ def _radon(ka):
     return ka.get_analysis_object("RadonAnalysis")
 
 
+# Default channel for single-channel tests
+_CH = 1
+
+
 def test_velocity_event_uuid_after_detection() -> None:
     """Test that events have _uuid set after run_velocity_event_analysis()."""
     # Create test image
@@ -29,7 +33,7 @@ def test_velocity_event_uuid_after_detection() -> None:
     _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
     
     # Run velocity event detection
-    events = kym_analysis.run_velocity_event_analysis(roi.id)
+    events = kym_analysis.run_velocity_event_analysis(roi.id, _CH)
     
     # Verify all returned events have UUIDs
     assert events is not None
@@ -39,7 +43,7 @@ def test_velocity_event_uuid_after_detection() -> None:
         assert isinstance(event._uuid, str), f"Event._uuid is not a string: {type(event._uuid)}"
     
     # Also verify events retrieved via get_velocity_events() have UUIDs
-    stored_events = kym_analysis.get_velocity_events(roi.id)
+    stored_events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert stored_events is not None
     for event in stored_events:
         assert hasattr(event, '_uuid'), f"Stored event missing _uuid attribute: {event}"
@@ -58,10 +62,10 @@ def test_velocity_event_uuid_after_get_velocity_events() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
-    kym_analysis.run_velocity_event_analysis(roi.id)
-    
+    kym_analysis.run_velocity_event_analysis(roi.id, _CH)
+
     # Retrieve events via get_velocity_events()
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     
     assert events is not None
     for event in events:
@@ -81,11 +85,11 @@ def test_velocity_event_uuid_after_find_event_by_uuid() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event directly (more reliable than detection for testing)
-    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     assert event_id is not None
     
     # Get an event_id from the first event
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events is not None and len(events) > 0
     first_event = events[0]
     assert first_event._uuid is not None
@@ -95,7 +99,7 @@ def test_velocity_event_uuid_after_find_event_by_uuid() -> None:
     result = kym_analysis.find_event_by_uuid(event_id)
     assert result is not None
     
-    roi_id, index, event = result
+    roi_id, channel, index, event = result
     assert event._uuid is not None, f"Event from find_event_by_uuid() has _uuid=None: {event}"
     assert event._uuid == event_id, "UUID mismatch"
 
@@ -112,11 +116,11 @@ def test_velocity_event_uuid_after_add_velocity_event() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event
-    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     assert event_id is not None
     
     # Retrieve and verify UUID
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events is not None and len(events) > 0
     assert events[0]._uuid is not None
     assert events[0]._uuid == event_id
@@ -134,7 +138,7 @@ def test_velocity_event_uuid_after_update_velocity_event_field() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event
-    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     
     # Update event field
     kym_analysis.update_velocity_event_field(event_id, "user_type", "true_stall")
@@ -142,7 +146,7 @@ def test_velocity_event_uuid_after_update_velocity_event_field() -> None:
     # Retrieve and verify UUID is preserved
     result = kym_analysis.find_event_by_uuid(event_id)
     assert result is not None
-    roi_id, index, event = result
+    roi_id, channel, index, event = result
     assert event._uuid is not None, f"Event has _uuid=None after update: {event}"
     assert event._uuid == event_id, "UUID changed after update"
 
@@ -200,8 +204,8 @@ def test_find_event_by_uuid_after_reorder() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
 
     # Add two events with different t_start (order will be normalized by sort)
-    event_id1 = kym_analysis.add_velocity_event(roi.id, t_start=5.0, t_end=6.0)
-    event_id2 = kym_analysis.add_velocity_event(roi.id, t_start=1.0, t_end=2.0)
+    event_id1 = kym_analysis.add_velocity_event(roi.id, _CH, t_start=5.0, t_end=6.0)
+    event_id2 = kym_analysis.add_velocity_event(roi.id, _CH, t_start=1.0, t_end=2.0)
 
     # After sorting by t_start, event2 should come before event1 in the list,
     # but find_event_by_uuid must still find the correct event by UUID.
@@ -211,8 +215,8 @@ def test_find_event_by_uuid_after_reorder() -> None:
     assert result1 is not None
     assert result2 is not None
 
-    roi_id1, idx1, ev1 = result1
-    roi_id2, idx2, ev2 = result2
+    roi_id1, ch1, idx1, ev1 = result1
+    roi_id2, ch2, idx2, ev2 = result2
 
     assert roi_id1 == roi.id
     assert roi_id2 == roi.id
@@ -220,7 +224,7 @@ def test_find_event_by_uuid_after_reorder() -> None:
     assert ev2._uuid == event_id2
 
     # Ensure ordering by t_start is as expected
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events is not None
     assert [e.t_start for e in events] == sorted(e.t_start for e in events)
 
@@ -250,7 +254,7 @@ def test_velocity_event_uuid_after_load_analysis() -> None:
         # Run analysis and create events
         _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=16, use_multiprocessing=False)
         # Add event directly (more reliable than detection for testing)
-        kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+        kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
         
         # Save metadata (ROIs) and analysis to disk
         kym_image.save_metadata()
@@ -271,7 +275,7 @@ def test_velocity_event_uuid_after_load_analysis() -> None:
         roi2_id = roi_ids[0]
         
         # Verify events loaded from disk have UUIDs
-        events = kym_analysis2.get_velocity_events(roi2_id)
+        events = kym_analysis2.get_velocity_events(roi2_id, _CH)
         assert events is not None and len(events) > 0
         for event in events:
             assert hasattr(event, '_uuid'), f"Loaded event missing _uuid attribute: {event}"

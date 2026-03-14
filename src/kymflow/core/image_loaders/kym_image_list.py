@@ -277,13 +277,17 @@ class KymImageList(AcqImageList[KymImage]):
                 If None, uses default ZeroGapParams().
         """
         for image in self.images:
-            for roi_id in image.rois.get_roi_ids():
-                image.get_kym_analysis().run_velocity_event_analysis(
-                    roi_id,
-                    baseline_drop_params=baseline_drop_params,
-                    nan_gap_params=nan_gap_params,
-                    zero_gap_params=zero_gap_params,
-                )
+            ka = image.get_kym_analysis()
+            radon = ka.get_analysis_object("RadonAnalysis")
+            if radon is not None:
+                for (roi_id, channel) in radon._analysis_metadata.keys():
+                    ka.run_velocity_event_analysis(
+                        roi_id,
+                        channel,
+                        baseline_drop_params=baseline_drop_params,
+                        nan_gap_params=nan_gap_params,
+                        zero_gap_params=zero_gap_params,
+                    )
             self.update_velocity_event_cache_only(image)
 
     def get_velocity_event_df(self) -> pd.DataFrame:

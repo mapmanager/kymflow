@@ -431,7 +431,8 @@ class DetectEvents:
     """
 
     roi_id: int | None
-    path: str | None
+    channel: int | None = None
+    path: str | None = None
     all_files: bool = False
     baseline_drop_params: "BaselineDropParams | None" = None
     nan_gap_params: "NanGapParams | None" = None
@@ -573,6 +574,7 @@ class AddKymEvent:
 
     event_id: str | None
     roi_id: int
+    channel: int
     path: str | None
     t_start: float
     t_end: float | None

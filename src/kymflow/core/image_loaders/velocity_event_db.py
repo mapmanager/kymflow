@@ -217,11 +217,14 @@ class VelocityEventDb:
             path_str = str(img.path)
             try:
                 ka = img.get_kym_analysis()
-                for roi_id in img.rois.get_roi_ids():
-                    events = ka.get_velocity_events(roi_id)
+                rea = ka.get_analysis_object("RadonEventAnalysis")
+                if rea is None:
+                    continue
+                for (roi_id, channel) in rea.get_all_roi_channel_pairs():
+                    events = rea.get_velocity_events(roi_id, channel)
                     if events is None:
                         events = []
-                    key = (path_str, roi_id)
+                    key = (path_str, roi_id, channel)
                     current[key] = [
                         (e.t_start, e.t_end, getattr(e.event_type, "value", e.event_type))
                         for e in events
@@ -235,9 +238,11 @@ class VelocityEventDb:
         for row in self._cache:
             path_val = row.get("path")
             roi_id = row.get("roi_id")
+            ch = row.get("channel")
             if path_val is None or pd.isna(path_val) or roi_id is None:
                 continue
-            key = (str(path_val), int(roi_id))
+            channel_val = int(ch) if ch is not None and not pd.isna(ch) else 1
+            key = (str(path_val), int(roi_id), channel_val)
             if key not in cache_by_key:
                 cache_by_key[key] = []
             t_start = row.get("t_start")
@@ -338,10 +343,11 @@ class VelocityEventDb:
             ka = kym_image.get_kym_analysis()
             accepted = ka.get_accepted()
             rows: List[dict] = []
-            for roi_id in kym_image.rois.get_roi_ids():
-                roi = kym_image.rois.get(roi_id)
-                channel = roi.channel if roi is not None else None
-                events = ka.get_velocity_events(roi_id)
+            rea = ka.get_analysis_object("RadonEventAnalysis")
+            if rea is None:
+                return
+            for (roi_id, channel) in rea.get_all_roi_channel_pairs():
+                events = rea.get_velocity_events(roi_id, channel)
                 if events is None:
                     events = []
                 for idx, event in enumerate(events):

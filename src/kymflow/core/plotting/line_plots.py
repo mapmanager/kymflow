@@ -333,6 +333,7 @@ def _add_velocity_event_overlays(  # pragma: no cover
     fig: go.Figure,
     kym_analysis,
     roi_id: int,
+    channel: int,
     time_bounds: tuple[float, float] | None,
     row: int,
     span_sec_if_no_end: float = 0.20,
@@ -352,9 +353,11 @@ def _add_velocity_event_overlays(  # pragma: no cover
         event_filter: Optional dict mapping event_type (str) to bool (True = include, False = exclude).
     """
     if event_filter is None:
-        velocity_events = kym_analysis.get_velocity_events(roi_id)
+        velocity_events = kym_analysis.get_velocity_events(roi_id, channel)
     else:
-        velocity_events = kym_analysis.get_velocity_events_filtered(roi_id, event_filter)
+        velocity_events = kym_analysis.get_velocity_events_filtered(
+            roi_id, channel, event_filter
+        )
     # logger.warning(f'adding velocity events for roi {roi_id}: {len(velocity_events)}')
     if velocity_events is None or len(velocity_events) == 0:
         # logger.warning(f'no velocity events for roi {roi_id}')
@@ -671,6 +674,7 @@ def plot_image_line_plotly_v3(
                     fig,
                     kym_analysis,
                     roi_id,
+                    channel,
                     time_bounds,
                     row_num,
                     span_sec_if_no_end,
@@ -1152,6 +1156,7 @@ def refresh_kym_event_rects(
     kym_analysis,
     roi_id: int,
     time_range: tuple[float, float],
+    channel: int = 1,
     row: int = 2,
     event_filter: Optional[dict[str, bool]] = None,
     selected_event_id: Optional[str] = None,
@@ -1175,9 +1180,11 @@ def refresh_kym_event_rects(
 
     # Get filtered or unfiltered events
     if event_filter is None:
-        velocity_events = kym_analysis.get_velocity_events(roi_id)
+        velocity_events = kym_analysis.get_velocity_events(roi_id, channel)
     else:
-        velocity_events = kym_analysis.get_velocity_events_filtered(roi_id, event_filter)
+        velocity_events = kym_analysis.get_velocity_events_filtered(
+            roi_id, channel, event_filter
+        )
 
     if velocity_events is None:
         # Nothing to draw; also clear selection

@@ -427,14 +427,17 @@ class ImageLineViewerV2View:
             return
         kf = self._current_file
         roi_id = self._current_roi_id
-        if kf is None or roi_id is None:
+        channel = self._current_channel
+        if kf is None or roi_id is None or channel is None:
             self._line_plot_widget.set_events([])
             return
         kym_analysis = kf.get_kym_analysis()
         if self._event_filter:
-            events_raw = kym_analysis.get_velocity_events_filtered(roi_id, self._event_filter)
+            events_raw = kym_analysis.get_velocity_events_filtered(
+                roi_id, channel, self._event_filter
+            )
         else:
-            events_raw = kym_analysis.get_velocity_events(roi_id)
+            events_raw = kym_analysis.get_velocity_events(roi_id, channel)
         acq_events = velocity_events_to_acq_image_events(events_raw)
         self._line_plot_widget.set_events(acq_events or [])
         if self._selected_event_id:

@@ -8,10 +8,40 @@ pattern: identity + event fields, with to_dict/from_dict for CSV I/O.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, TypedDict
 
 # Single source of truth for CSV float precision. Used by save, load, and staleness comparison.
 VELOCITY_EVENT_CSV_ROUND_DECIMALS = 3
+
+
+class VelocityReportRow(TypedDict, total=False):
+    """Velocity event report row for export. Includes (roi_id, channel)."""
+
+    event_id: str
+    roi_id: int
+    channel: int
+    path: Optional[str]
+    file_name: Optional[str]
+    grandparent_folder: Optional[str]
+    event_type: str
+    i_start: int
+    t_start: float
+    i_peak: Optional[int]
+    t_peak: Optional[float]
+    i_end: Optional[int]
+    t_end: Optional[float]
+    score_peak: Optional[float]
+    baseline_before: Optional[float]
+    baseline_after: Optional[float]
+    strength: Optional[float]
+    nan_fraction_in_event: Optional[float]
+    n_valid_in_event: Optional[int]
+    duration_sec: Optional[float]
+    machine_type: str
+    user_type: str
+    note: str
+
+
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
 

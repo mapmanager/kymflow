@@ -601,10 +601,19 @@ class KymEventView:
             if self._roi_filter is None:
                 logger.warning("handle_set_kym_event_x_range: roi_filter is None, cannot add event")
                 return
+            channel = 1
+            if self._roi_filter is not None:
+                matching = [
+                    r for r in self._all_rows
+                    if r.get("roi_id") == self._roi_filter
+                ]
+                if matching and matching[0].get("channel") is not None:
+                    channel = int(matching[0]["channel"])
             self._on_add_event(
                 AddKymEvent(
                     event_id=None,  # Will be set by controller after creation
                     roi_id=self._roi_filter,
+                    channel=channel,
                     path=self._current_file_path,
                     t_start=e.x0,
                     t_end=e.x1,

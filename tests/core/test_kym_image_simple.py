@@ -221,8 +221,8 @@ def test_kym_image_getrowdict_user_event_count() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
 
     kym_analysis = kym_image.get_kym_analysis()
-    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
-    kym_analysis.add_velocity_event(roi.id, t_start=2.0, t_end=3.0)
+    kym_analysis.add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi.id, 1, t_start=2.0, t_end=3.0)
 
     row_dict = kym_image.getRowDict()
 

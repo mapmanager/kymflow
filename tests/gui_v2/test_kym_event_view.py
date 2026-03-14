@@ -438,7 +438,7 @@ def test_kym_event_view_blinded_displays_blinded_data() -> None:
     from kymflow.core.image_loaders.roi import RoiBounds
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = kym_image.rois.create_roi(bounds=bounds)
-    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
     
     # Create view with blinded context
     view = KymEventView(
@@ -447,7 +447,7 @@ def test_kym_event_view_blinded_displays_blinded_data() -> None:
     )
     
     # Get velocity report (should be blinded)
-    report = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=True)
+    report = kym_analysis.get_velocity_report(roi_id=roi.id, channel=1, blinded=True)
     view.set_events(report)
     
     # Check that all_rows has blinded data

@@ -557,6 +557,7 @@ class AnalysisToolbarView:
         self._on_detect_events(
             DetectEvents(
                 roi_id=self._current_roi_id,
+                channel=self._current_channel,
                 path=path_str,
                 baseline_drop_params=baseline_drop_params,
                 phase="intent",

@@ -55,7 +55,7 @@ def test_on_velocity_event_update_uses_row_level_update(
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = sample_kym_file.rois.create_roi(bounds=bounds)
     kym_analysis = sample_kym_file.get_kym_analysis()
-    event_id = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+    event_id = kym_analysis.add_velocity_event(roi_id=roi.id, channel=1, t_start=1.0, t_end=1.5)
 
     # Set events and render grid
     blinded = mock_app_context.app_config.get_blinded()
@@ -110,7 +110,7 @@ def test_on_velocity_event_update_falls_back_when_no_event_id(
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = sample_kym_file.rois.create_roi(bounds=bounds)
     kym_analysis = sample_kym_file.get_kym_analysis()
-    kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+    kym_analysis.add_velocity_event(roi_id=roi.id, channel=1, t_start=1.0, t_end=1.5)
 
     # Set events and render grid
     blinded = mock_app_context.app_config.get_blinded()
@@ -156,7 +156,7 @@ def test_on_velocity_event_update_falls_back_when_grid_none(
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = sample_kym_file.rois.create_roi(bounds=bounds)
     kym_analysis = sample_kym_file.get_kym_analysis()
-    event_id = kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+    event_id = kym_analysis.add_velocity_event(roi_id=roi.id, channel=1, t_start=1.0, t_end=1.5)
 
     # Set events but don't render, so _grid is None
     blinded = mock_app_context.app_config.get_blinded()
@@ -199,7 +199,7 @@ def test_on_velocity_event_update_falls_back_when_event_not_found(
     bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
     roi = sample_kym_file.rois.create_roi(bounds=bounds)
     kym_analysis = sample_kym_file.get_kym_analysis()
-    kym_analysis.add_velocity_event(roi_id=roi.id, t_start=1.0, t_end=1.5)
+    kym_analysis.add_velocity_event(roi_id=roi.id, channel=1, t_start=1.0, t_end=1.5)
 
     # Set events and render grid
     blinded = mock_app_context.app_config.get_blinded()

@@ -23,6 +23,15 @@ def _radon(ka):
     return ka.get_analysis_object("RadonAnalysis")
 
 
+def _radon_events(ka):
+    """Get RadonEventAnalysis from KymAnalysis (Phase 10b)."""
+    return ka.get_analysis_object("RadonEventAnalysis")
+
+
+# Default channel for single-channel tests
+_CH = 1
+
+
 def _get_radon_save_paths(ka):
     """Get (csv_path, json_path) for RadonAnalysis files (Phase 9)."""
     r = _radon(ka)
@@ -432,12 +441,12 @@ def test_kymanalysis_velocity_event_add() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add velocity event
-    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     assert event_id is not None
     assert isinstance(event_id, str)  # Should be UUID
     
     # Verify event was added
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events is not None
     assert len(events) == 1
     assert events[0].t_start == 0.5
@@ -445,9 +454,9 @@ def test_kymanalysis_velocity_event_add() -> None:
     assert events[0].event_type == "User Added"
     
     # Add another event without end time
-    event_id2 = kym_analysis.add_velocity_event(roi.id, t_start=2.0, t_end=None)
+    event_id2 = kym_analysis.add_velocity_event(roi.id, _CH, t_start=2.0, t_end=None)
     assert event_id2 is not None
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert len(events) == 2
     assert events[1].t_end is None
 
@@ -464,15 +473,15 @@ def test_kymanalysis_velocity_event_delete() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add two events
-    event_id1 = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
-    event_id2 = kym_analysis.add_velocity_event(roi.id, t_start=2.0, t_end=3.0)
+    event_id1 = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
+    event_id2 = kym_analysis.add_velocity_event(roi.id, _CH, t_start=2.0, t_end=3.0)
     
-    assert kym_analysis.num_velocity_events(roi.id) == 2
+    assert kym_analysis.num_velocity_events(roi.id, _CH) == 2
     
     # Delete first event
     deleted = kym_analysis.delete_velocity_event(event_id1)
     assert deleted is True
-    assert kym_analysis.num_velocity_events(roi.id) == 1
+    assert kym_analysis.num_velocity_events(roi.id, _CH) == 1
     
     # Try to delete non-existent event
     deleted = kym_analysis.delete_velocity_event("non-existent-uuid")
@@ -491,26 +500,26 @@ def test_kymanalysis_velocity_event_update_field() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event
-    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     
     # Update user_type
     from kymflow.core.analysis.velocity_events.velocity_events import UserType
     updated_id = kym_analysis.update_velocity_event_field(event_id, "user_type", UserType.TRUE_STALL.value)
     assert updated_id == event_id  # UUID doesn't change
     
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events[0].user_type == UserType.TRUE_STALL
     
     # Update t_start
     updated_id = kym_analysis.update_velocity_event_field(event_id, "t_start", 0.6)
     assert updated_id == event_id
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events[0].t_start == 0.6
     
     # Update t_end
     updated_id = kym_analysis.update_velocity_event_field(event_id, "t_end", 1.1)
     assert updated_id == event_id
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events[0].t_end == 1.1
 
 
@@ -526,13 +535,13 @@ def test_kymanalysis_velocity_event_update_range() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event
-    event_id = kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    event_id = kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     
     # Update both t_start and t_end atomically
     updated_id = kym_analysis.update_velocity_event_range(event_id, t_start=0.6, t_end=1.1)
     assert updated_id == event_id
     
-    events = kym_analysis.get_velocity_events(roi.id)
+    events = kym_analysis.get_velocity_events(roi.id, _CH)
     assert events[0].t_start == 0.6
     assert events[0].t_end == 1.1
 
@@ -549,10 +558,10 @@ def test_kymanalysis_velocity_event_get_report() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event
-    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     
     # Get report for specific ROI
-    report = kym_analysis.get_velocity_report(roi_id=roi.id)
+    report = kym_analysis.get_velocity_report(roi_id=roi.id, channel=_CH)
     assert len(report) == 1
     assert report[0]["roi_id"] == roi.id
     assert report[0]["event_id"] is not None
@@ -579,10 +588,10 @@ def test_kymanalysis_get_velocity_report_blinded() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add event
-    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     
     # Get report with blinded=True
-    report = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=True)
+    report = kym_analysis.get_velocity_report(roi_id=roi.id, channel=_CH, blinded=True)
     assert len(report) == 1
     
     # Check that file_name is blinded
@@ -597,7 +606,7 @@ def test_kymanalysis_get_velocity_report_blinded() -> None:
     assert report[0]["t_end"] == 1.0
     
     # Get report with blinded=False (should have real values)
-    report_unblinded = kym_analysis.get_velocity_report(roi_id=roi.id, blinded=False)
+    report_unblinded = kym_analysis.get_velocity_report(roi_id=roi.id, channel=_CH, blinded=False)
     assert len(report_unblinded) == 1
     assert report_unblinded[0]["file_name"] == "test_file"  # Path.stem
     # Grandparent Folder now uses parent2 (not parent3) - for /a/b/c/test_file.tif, parent2 = "b"
@@ -616,7 +625,7 @@ def test_kymanalysis_velocity_event_remove() -> None:
     roi = kym_image.rois.create_roi(bounds=bounds)
     
     # Add user-added event
-    kym_analysis.add_velocity_event(roi.id, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi.id, _CH, t_start=0.5, t_end=1.0)
     
     # Simulate auto-detected event (would normally come from run_velocity_event_analysis)
     from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent, UserType
@@ -628,19 +637,21 @@ def test_kymanalysis_velocity_event_remove() -> None:
         t_end=2.0,
         user_type=UserType.UNREVIEWED,
     )
-    if roi.id not in kym_analysis._velocity_events:
-        kym_analysis._velocity_events[roi.id] = []
-    kym_analysis._velocity_events[roi.id].append(auto_event)
+    rea = _radon_events(kym_analysis)
+    key = (roi.id, _CH)
+    if key not in rea._velocity_events:
+        rea._velocity_events[key] = []
+    rea._velocity_events[key].append(auto_event)
     
-    assert kym_analysis.num_velocity_events(roi.id) == 2
+    assert kym_analysis.num_velocity_events(roi.id, _CH) == 2
     
     # Remove only auto-detected events (keeps user-added)
-    kym_analysis.remove_velocity_event(roi.id, "auto_detected")
-    assert kym_analysis.num_velocity_events(roi.id) == 1  # User-added event remains
+    kym_analysis.remove_velocity_event(roi.id, _CH, "auto_detected")
+    assert kym_analysis.num_velocity_events(roi.id, _CH) == 1  # User-added event remains
     
     # Remove all events
-    kym_analysis.remove_velocity_event(roi.id, "_remove_all")
-    assert kym_analysis.num_velocity_events(roi.id) == 0
+    kym_analysis.remove_velocity_event(roi.id, _CH, "_remove_all")
+    assert kym_analysis.num_velocity_events(roi.id, _CH) == 0
 
 
 def test_kymanalysis_total_num_velocity_events() -> None:
@@ -658,13 +669,13 @@ def test_kymanalysis_total_num_velocity_events() -> None:
     roi2 = kym_image.rois.create_roi(bounds=bounds2)
     
     # Add events to both ROIs
-    kym_analysis.add_velocity_event(roi1.id, t_start=0.5, t_end=1.0)
-    kym_analysis.add_velocity_event(roi1.id, t_start=2.0, t_end=3.0)
-    kym_analysis.add_velocity_event(roi2.id, t_start=1.0, t_end=2.0)
+    kym_analysis.add_velocity_event(roi1.id, _CH, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi1.id, _CH, t_start=2.0, t_end=3.0)
+    kym_analysis.add_velocity_event(roi2.id, _CH, t_start=1.0, t_end=2.0)
     
     assert kym_analysis.total_num_velocity_events() == 3
-    assert kym_analysis.num_velocity_events(roi1.id) == 2
-    assert kym_analysis.num_velocity_events(roi2.id) == 1
+    assert kym_analysis.num_velocity_events(roi1.id, _CH) == 2
+    assert kym_analysis.num_velocity_events(roi2.id, _CH) == 1
 
 
 def test_kymanalysis_num_user_added_velocity_events() -> None:
@@ -681,9 +692,9 @@ def test_kymanalysis_num_user_added_velocity_events() -> None:
     roi2 = kym_image.rois.create_roi(bounds=bounds2)
 
     # add_velocity_event creates events with event_type="User Added"
-    kym_analysis.add_velocity_event(roi1.id, t_start=0.5, t_end=1.0)
-    kym_analysis.add_velocity_event(roi1.id, t_start=2.0, t_end=3.0)
-    kym_analysis.add_velocity_event(roi2.id, t_start=1.0, t_end=2.0)
+    kym_analysis.add_velocity_event(roi1.id, _CH, t_start=0.5, t_end=1.0)
+    kym_analysis.add_velocity_event(roi1.id, _CH, t_start=2.0, t_end=3.0)
+    kym_analysis.add_velocity_event(roi2.id, _CH, t_start=1.0, t_end=2.0)
 
     assert kym_analysis.num_user_added_velocity_events() == 3
     assert kym_analysis.total_num_velocity_events() == 3
@@ -699,7 +710,7 @@ def test_kymanalysis_get_velocity_events_filtered_returns_none_when_not_run() ->
     roi = kym_image.rois.create_roi(bounds=bounds)
 
     event_filter = {"baseline_drop": True, "baseline_rise": True}
-    events = kym_analysis.get_velocity_events_filtered(roi.id, event_filter)
+    events = kym_analysis.get_velocity_events_filtered(roi.id, _CH, event_filter)
     assert events is None
 
 
@@ -741,8 +752,9 @@ def test_kymanalysis_get_velocity_events_filtered_filters_by_type() -> None:
         t_start=0.4,
     )
 
-    # Store events directly
-    kym_analysis._velocity_events[roi.id] = [event1, event2, event3, event4, event5]
+    # Store events directly via RadonEventAnalysis (keyed by roi_id, channel)
+    rea = _radon_events(kym_analysis)
+    rea._velocity_events[(roi.id, _CH)] = [event1, event2, event3, event4, event5]
 
     # Test filtering: show only baseline_drop
     filter_drop_only = {
@@ -752,7 +764,7 @@ def test_kymanalysis_get_velocity_events_filtered_filters_by_type() -> None:
         "zero_gap": False,
         "User Added": False,
     }
-    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_drop_only)
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, _CH, filter_drop_only)
     assert filtered is not None
     assert len(filtered) == 1
     assert filtered[0].event_type == "baseline_drop"
@@ -765,7 +777,7 @@ def test_kymanalysis_get_velocity_events_filtered_filters_by_type() -> None:
         "zero_gap": False,
         "User Added": False,
     }
-    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_multiple)
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, _CH, filter_multiple)
     assert filtered is not None
     assert len(filtered) == 2
     event_types = {e.event_type for e in filtered}
@@ -780,7 +792,7 @@ def test_kymanalysis_get_velocity_events_filtered_filters_by_type() -> None:
         "zero_gap": False,
         "User Added": False,
     }
-    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_all_disabled)
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, _CH, filter_all_disabled)
     assert filtered is not None
     assert len(filtered) == 0
 
@@ -792,7 +804,7 @@ def test_kymanalysis_get_velocity_events_filtered_filters_by_type() -> None:
         "zero_gap": True,
         "User Added": True,
     }
-    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_all_enabled)
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, _CH, filter_all_enabled)
     assert filtered is not None
     assert len(filtered) == 5
 
@@ -833,7 +845,8 @@ def test_kymanalysis_get_velocity_events_filtered_with_partial_filter() -> None:
         t_start=0.2,
     )
 
-    kym_analysis._velocity_events[roi.id] = [event1, event2, event3]
+    rea = _radon_events(kym_analysis)
+    rea._velocity_events[(roi.id, _CH)] = [event1, event2, event3]
 
     # Filter with only some event types specified (others default to True)
     partial_filter = {
@@ -841,7 +854,7 @@ def test_kymanalysis_get_velocity_events_filtered_with_partial_filter() -> None:
         "baseline_rise": True,
         # nan_gap not in filter, should default to True
     }
-    filtered = kym_analysis.get_velocity_events_filtered(roi.id, partial_filter)
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, _CH, partial_filter)
     assert filtered is not None
     # Should include baseline_rise (True) and nan_gap (defaults to True), exclude baseline_drop (False)
     assert len(filtered) == 2
@@ -868,7 +881,8 @@ def test_kymanalysis_get_velocity_events_filtered_preserves_order() -> None:
     event3 = VelocityEvent(event_type="baseline_drop", i_start=20, t_start=0.2)
     event4 = VelocityEvent(event_type="nan_gap", i_start=30, t_start=0.3)
 
-    kym_analysis._velocity_events[roi.id] = [event1, event2, event3, event4]
+    rea = _radon_events(kym_analysis)
+    rea._velocity_events[(roi.id, _CH)] = [event1, event2, event3, event4]
 
     # Filter to show only baseline_drop (should preserve order of remaining events)
     filter_drop_only = {
@@ -878,7 +892,7 @@ def test_kymanalysis_get_velocity_events_filtered_preserves_order() -> None:
         "zero_gap": False,
         "User Added": False,
     }
-    filtered = kym_analysis.get_velocity_events_filtered(roi.id, filter_drop_only)
+    filtered = kym_analysis.get_velocity_events_filtered(roi.id, _CH, filter_drop_only)
     assert filtered is not None
     assert len(filtered) == 2
     # Should preserve original order: event1 (baseline_drop), then event3 (baseline_drop)

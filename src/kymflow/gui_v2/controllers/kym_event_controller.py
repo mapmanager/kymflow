@@ -138,6 +138,7 @@ class KymEventController:
             # Delegate actual creation to the KymAnalysis attached to the file.
             event_id = kym_file.get_kym_analysis().add_velocity_event(
                 roi_id=e.roi_id,
+                channel=e.channel,
                 t_start=e.t_start,
                 t_end=e.t_end,
             )
@@ -148,6 +149,7 @@ class KymEventController:
                 AddKymEvent(
                     event_id=event_id,
                     roi_id=e.roi_id,
+                    channel=e.channel,
                     path=e.path,
                     t_start=e.t_start,
                     t_end=e.t_end,

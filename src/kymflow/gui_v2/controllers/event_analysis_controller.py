@@ -122,9 +122,12 @@ class EventAnalysisController:
             ui.notify("Select a file first", color="warning")
             return
 
-        # Require ROI selection before starting detection
+        # Require ROI and channel selection before starting detection
         if e.roi_id is None:
             ui.notify("ROI selection required", color="warning")
+            return
+        if e.channel is None:
+            ui.notify("Channel selection required", color="warning")
             return
 
         # Verify ROI exists in the selected file
@@ -154,6 +157,7 @@ class EventAnalysisController:
             kym_analysis = kf.get_kym_analysis()
             events = kym_analysis.run_velocity_event_analysis(
                 roi_id=e.roi_id,
+                channel=e.channel,
                 remove_outliers=True,
                 baseline_drop_params=e.baseline_drop_params,
                 nan_gap_params=e.nan_gap_params,
@@ -172,6 +176,7 @@ class EventAnalysisController:
             self._bus.emit(
                 DetectEvents(
                     roi_id=e.roi_id,
+                    channel=e.channel,
                     path=path_str,
                     all_files=False,
                     # int_param=e.int_param,
