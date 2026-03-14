@@ -339,6 +339,7 @@ class KymAnalysis:
 
         Args:
             roi_id: Identifier of the ROI to analyze.
+            channel: 1-based channel index to analyze.
             velocity_key: Column name to retrieve from analysis (default: "velocity").
             remove_outliers: If True, remove outliers using 2*std threshold before detection.
             baseline_drop_params: Optional BaselineDropParams instance for baseline-drop detection.
@@ -370,13 +371,27 @@ class KymAnalysis:
     def remove_velocity_event(
         self, roi_id: int, channel: int, remove_these: str
     ) -> None:
-        """Remove velocity events by type for (roi_id, channel)."""
+        """Remove velocity events by type for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+            remove_these: "_remove_all" or "auto_detected".
+        """
         rea = self.get_analysis_object("RadonEventAnalysis")
         if rea:
             rea.remove_velocity_event(roi_id, channel, remove_these)
 
     def num_velocity_events(self, roi_id: int, channel: int) -> int:
-        """Return the number of velocity events for (roi_id, channel)."""
+        """Return the number of velocity events for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+
+        Returns:
+            Count of velocity events.
+        """
         rea = self.get_analysis_object("RadonEventAnalysis")
         return rea.num_velocity_events(roi_id, channel) if rea else 0
 
@@ -392,14 +407,31 @@ class KymAnalysis:
         return rea.num_user_added_velocity_events() if rea else 0
 
     def get_velocity_events(self, roi_id: int, channel: int) -> Optional[list[VelocityEvent]]:
-        """Return velocity event results for (roi_id, channel), or None."""
+        """Return velocity event results for (roi_id, channel), or None.
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+
+        Returns:
+            List of VelocityEvent, or None if no events for (roi_id, channel).
+        """
         rea = self.get_analysis_object("RadonEventAnalysis")
         return rea.get_velocity_events(roi_id, channel) if rea else None
 
     def get_velocity_events_filtered(
         self, roi_id: int, channel: int, event_filter: dict[str, bool]
     ) -> Optional[list[VelocityEvent]]:
-        """Return filtered velocity event results for (roi_id, channel)."""
+        """Return filtered velocity event results for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+            event_filter: Dict mapping event_type to bool (True = include).
+
+        Returns:
+            Filtered list of VelocityEvent, or None if no events for (roi_id, channel).
+        """
         rea = self.get_analysis_object("RadonEventAnalysis")
         return (
             rea.get_velocity_events_filtered(roi_id, channel, event_filter)
@@ -448,7 +480,17 @@ class KymAnalysis:
     def add_velocity_event(
         self, roi_id: int, channel: int, t_start: float, t_end: float | None = None
     ) -> str:
-        """Add a new velocity event for (roi_id, channel)."""
+        """Add a new velocity event for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+            t_start: Event start time in seconds.
+            t_end: Event end time in seconds, or None.
+
+        Returns:
+            UUID of the new event.
+        """
         rea = self.get_analysis_object("RadonEventAnalysis")
         if rea is None:
             raise ValueError("RadonEventAnalysis not available.")
@@ -466,7 +508,17 @@ class KymAnalysis:
         *,
         blinded: bool = False,
     ) -> list[VelocityReportRow]:
-        """Return velocity report rows. Pass (roi_id, channel) or both None for all."""
+        """Return velocity report rows.
+
+        Args:
+            roi_id: ROI identifier, or None for all ROIs.
+            channel: 1-based channel index, or None. When roi_id is given, channel must
+                also be given. Pass both None for all (roi_id, channel) pairs.
+            blinded: If True, blind file_name and grandparent_folder in output.
+
+        Returns:
+            List of VelocityReportRow dicts.
+        """
         rea = self.get_analysis_object("RadonEventAnalysis")
         return (
             rea.get_velocity_report(roi_id, channel, blinded=blinded) if rea else []

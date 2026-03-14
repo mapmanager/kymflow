@@ -419,6 +419,7 @@ class DetectEvents:
 
     Attributes:
         roi_id: ROI ID to analyze, or None. Ignored when all_files=True.
+        channel: 1-based channel index, or None. Ignored when all_files=True.
         path: File path (optional, for validation). Ignored when all_files=True.
         all_files: If True, detect events for all ROIs in all files in AcqImageList. Defaults to False.
         baseline_drop_params: Optional BaselineDropParams instance for baseline-drop detection parameters.
@@ -570,16 +571,17 @@ class AddKymEvent:
         t_end: Event end time in seconds (optional).
         origin: SelectionOrigin indicating where the add came from.
         phase: Event phase - "intent" or "state".
+        channel: 1-based channel index. Defaults to 1.
     """
 
     event_id: str | None
     roi_id: int
-    channel: int
     path: str | None
     t_start: float
     t_end: float | None
     origin: SelectionOrigin
     phase: EventPhase
+    channel: int = 1
 
 
 @dataclass(frozen=True, slots=True)

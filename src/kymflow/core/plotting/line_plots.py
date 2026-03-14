@@ -341,11 +341,12 @@ def _add_velocity_event_overlays(  # pragma: no cover
     event_filter: Optional[dict[str, bool]] = None,
 ) -> None:
     """Add velocity event overlays as rectangles on a line plot subplot.
-    
+
     Args:
         fig: Plotly figure to add shapes to.
         kym_analysis: KymAnalysis instance to get velocity events from.
         roi_id: ROI identifier to get events for.
+        channel: 1-based channel index to get events for.
         time_bounds: Time bounds (time_min, time_max) in seconds for validation.
         row: Subplot row number (1-based).
         span_sec_if_no_end: Fixed width in seconds when t_end is None (default: 0.20).
@@ -1170,6 +1171,7 @@ def refresh_kym_event_rects(
         kym_analysis: KymAnalysis instance to get events from.
         roi_id: ROI identifier to get events for.
         time_range: Tuple of (time_min, time_max) for coordinate calculation and clamping.
+        channel: 1-based channel index. Defaults to 1.
         row: Subplot row number (default: 2 for line plot).
         event_filter: Optional dict mapping event_type (str) to bool (True = include, False = exclude).
         selected_event_id: Optional UUID string of currently selected event; if not

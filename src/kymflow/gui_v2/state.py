@@ -190,6 +190,10 @@ class AppState:
     def _apply_loaded_files(self, files: KymImageList, selected_path: Path) -> None:
         """Apply loaded files to UI state and fire handlers (UI-thread only)."""
         self.files = files
+        mode = self.files._get_mode() if hasattr(self.files, "_get_mode") else "?"
+        logger.info(
+            f"channelfix2026 Loaded files: len={len(self.files)}, mode={mode}, radon_cache_len={len(getattr(self.files, '_radon_report_cache', {}))}"
+        )
 
         # Store the actual selected path (file, folder, or CSV), not the parent directory
         # AcqImageList.folder is for internal use (parent dir for files), but AppState.folder

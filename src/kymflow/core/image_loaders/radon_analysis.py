@@ -94,6 +94,18 @@ class RadonAnalysis(AcqAnalysisBase):
         return self._dirty
 
     def has_analysis(self, roi_id: int | None = None, channel: int | None = None) -> bool:
+        """Check if radon analysis exists for (roi_id, channel) or any analysis.
+
+        Args:
+            roi_id: ROI identifier, or None to check if any analysis exists.
+            channel: 1-based channel index. Required when roi_id is given.
+
+        Returns:
+            True if analysis exists.
+
+        Raises:
+            TypeError: If roi_id is given but channel is None.
+        """
         if roi_id is None:
             return bool(self._analysis_metadata)
         if channel is None:
@@ -101,17 +113,52 @@ class RadonAnalysis(AcqAnalysisBase):
         return self._meta_key(roi_id, channel) in self._analysis_metadata
 
     def get_analysis_metadata(self, roi_id: int, channel: int) -> RoiAnalysisMetadata | None:
+        """Get analysis metadata for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+
+        Returns:
+            RoiAnalysisMetadata or None if not found.
+        """
         return self._analysis_metadata.get(self._meta_key(roi_id, channel))
 
     def get_channel_for_roi(self, roi_id: int) -> int | None:
+        """Return channel index for first analysis found for roi_id.
+
+        Args:
+            roi_id: ROI identifier.
+
+        Returns:
+            1-based channel index, or None if no analysis for this ROI.
+        """
         meta = self._get_first_meta_for_roi(roi_id)
         return meta.channel if meta is not None else None
 
     def has_v0_flow_analysis(self, roi_id: int, channel: int) -> bool:
+        """Check if (roi_id, channel) has legacy v0 flow analysis.
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+
+        Returns:
+            True if v0 analysis exists.
+        """
         amd = self.get_analysis_metadata(roi_id, channel)
         return amd is not None and amd.algorithm == "mpRadon_v0"
 
     def is_stale(self, roi_id: int, channel: int) -> bool:
+        """Check if analysis for (roi_id, channel) is stale (ROI geometry changed).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+
+        Returns:
+            True if stale or ROI not found.
+        """
         roi = self.acq_image.rois.get(roi_id)
         if roi is None:
             return True
@@ -121,6 +168,12 @@ class RadonAnalysis(AcqAnalysisBase):
         return roi.revision != meta.roi_revision_at_analysis
 
     def invalidate(self, roi_id: int, channel: int | None = None) -> None:
+        """Invalidate radon analysis for (roi_id, channel) or all channels for roi_id.
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index, or None to invalidate all channels for roi_id.
+        """
         if channel is not None:
             key = self._meta_key(roi_id, channel)
             if key in self._analysis_metadata:
@@ -167,6 +220,19 @@ class RadonAnalysis(AcqAnalysisBase):
         is_cancelled: Optional[CancelCallback] = None,
         use_multiprocessing: bool = True,
     ) -> None:
+        """Run radon flow analysis for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+            window_size: Number of time lines per analysis window.
+            progress_queue: Optional queue for progress updates.
+            is_cancelled: Optional callback to check for cancellation.
+            use_multiprocessing: If True, use multiprocessing for flow computation.
+
+        Raises:
+            ValueError: If ROI not found.
+        """
         roi = self.acq_image.rois.get(roi_id)
         if roi is None:
             raise ValueError(f"ROI {roi_id} not found")
@@ -487,6 +553,18 @@ class RadonAnalysis(AcqAnalysisBase):
     def get_analysis(
         self, roi_id: Optional[int] = None, channel: Optional[int] = None
     ) -> Optional[pd.DataFrame]:
+        """Get velocity DataFrame for (roi_id, channel) or full DataFrame.
+
+        Args:
+            roi_id: ROI identifier, or None for full DataFrame.
+            channel: 1-based channel index. Required when roi_id is given.
+
+        Returns:
+            Filtered or full DataFrame, or None if no analysis.
+
+        Raises:
+            TypeError: If roi_id is given but channel is None.
+        """
         if self._df is None:
             return None
         if roi_id is None:
@@ -503,6 +581,18 @@ class RadonAnalysis(AcqAnalysisBase):
         remove_outliers: bool = False,
         median_filter: int = 0,
     ) -> Optional[np.ndarray]:
+        """Return analysis column values for (roi_id, channel).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+            key: Column name (e.g. "velocity", "time").
+            remove_outliers: If True, apply outlier removal.
+            median_filter: Median filter window size, 0 to disable.
+
+        Returns:
+            NumPy array of values, or None if analysis or column not found.
+        """
         roi_df = self.get_analysis(roi_id=roi_id, channel=channel)
         if roi_df is None or key not in roi_df.columns:
             return None

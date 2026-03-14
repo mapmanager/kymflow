@@ -461,18 +461,16 @@ class HomePage(BasePage):
                 return
 
             # Radon Pool Plot
-            has_radon = False
-            if hasattr(app_state.files, "get_radon_report_df"):
-                try:
-                    df = app_state.files.get_radon_report_df()
-                    has_radon = (
-                        df is not None
-                        and not df.empty
-                        and hasattr(df, "columns")
-                        and "_unique_row_id" in df.columns
-                    )
-                except Exception as ex:
-                    logger.warning("20260213ppc get_radon_report_df failed: %s", ex)
+            logger.info(
+                f"channelfix2026 Plot pool build: files_id={id(app_state.files)}, len={len(app_state.files)}, radon_cache_len={len(getattr(app_state.files, '_radon_report_cache', {}))}"
+            )
+            df = app_state.files.get_radon_report_df()
+            has_radon = (
+                df is not None
+                and not df.empty
+                and hasattr(df, "columns")
+                and "_unique_row_id" in df.columns
+            )
 
             if has_radon:
 

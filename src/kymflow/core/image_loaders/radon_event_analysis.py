@@ -201,7 +201,7 @@ class RadonEventAnalysis(AcqAnalysisBase):
 
         Args:
             roi_id: ROI identifier.
-            channel: Channel identifier.
+            channel: 1-based channel index.
             velocity_key: Column name for velocity (e.g. "velocity", "cleanVelocity").
             remove_outliers: If True, remove outliers before detection.
             baseline_drop_params: Optional params for baseline-drop detection.
@@ -261,7 +261,7 @@ class RadonEventAnalysis(AcqAnalysisBase):
 
         Args:
             roi_id: ROI identifier.
-            channel: Channel identifier.
+            channel: 1-based channel index.
             remove_these: "_remove_all" or "auto_detected".
 
         Raises:
@@ -310,7 +310,7 @@ class RadonEventAnalysis(AcqAnalysisBase):
 
         Args:
             roi_id: ROI identifier.
-            channel: Channel identifier.
+            channel: 1-based channel index.
             event_filter: Dict mapping event_type to bool; True = include.
 
         Returns:
