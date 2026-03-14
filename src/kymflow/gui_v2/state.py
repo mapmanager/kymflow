@@ -259,6 +259,7 @@ class AppState:
         match = self.files.find_by_path(path)
         return match if match is not None else self.selected_file
     
+    # abb 20260314 declan, depreciate this, use state event FileListChanged instead
     def refresh_file_rows(self) -> None:
         """Refresh file list (reloads current folder), preserving current file/ROI selection."""
         if not self.folder:

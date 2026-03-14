@@ -209,7 +209,7 @@ class ImageLineViewerView:
             y1  = payload.get('selections[0].y1')
             logger.info(f"  -> update Selection: x-range = [{x0}, {x1}], y-range = [{y0}, {y1}]")
         elif 'selections' not in payload.keys():
-            print('  no selection found')
+            # print('  no selection found')
             return
 
         # on new selection ?

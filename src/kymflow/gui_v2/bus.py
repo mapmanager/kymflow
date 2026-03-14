@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, DefaultDict, Dict, List, Literal, Tuple, Type, TypeVar
+import inspect
 
-from nicegui import ui
+from nicegui import ui, background_tasks, context
 
 from kymflow.core.utils.logging import get_logger
 
@@ -238,7 +239,22 @@ class EventBus:
                 logger.info(f"[bus] emit -> {etype.__name__} handling by {name}")
                 logger.info(f"  phase={event_phase}, client={self._client_id}")
             try:
-                handler(event)
+                # abb 20260314 declan, implementing xxx
+                if inspect.iscoroutinefunction(handler):
+                    # fails if handler tries to use nicegui context, like ui.notify()
+                    # background_tasks.create(handler(event))
+                    current_client = context.client
+
+                    async def task_with_context():
+                                with current_client:
+                                    await handler(event)
+                            
+                    background_tasks.create(task_with_context())
+
+                else:
+                    # was this
+                    handler(event)
+                    
             except Exception:
                 handler_name = getattr(handler, "__qualname__", repr(handler))
                 logger.exception(

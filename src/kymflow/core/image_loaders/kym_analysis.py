@@ -557,6 +557,10 @@ class KymAnalysis:
             logger.error(f'found v0 analysis folder "{_v0_analysis_folder}" but no v0 csv')
             return
         
+        # abb 20260314 declan
+        # before make roi, ensure we have channel data loaded
+        self.acq_image.load_channel(channel=1)
+
         # make an roi, original analysis only had one channel
         new_roi = self.acq_image.rois.create_roi()
 
@@ -577,7 +581,7 @@ class KymAnalysis:
         old_vel = old_vel_df["velocity"].values
         old_time = old_vel_df["time"].values
 
-        logger.warning(f'importing v0 analysis n:{len(old_vel_df)} {self.acq_image.path.stem}')
+        # logger.warning(f'imported v0 analysis n:{len(old_vel_df)} {self.acq_image.path.stem}')
 
         roi_df = self._make_velocity_df(old_vel, old_time, new_roi)
         self._df = roi_df

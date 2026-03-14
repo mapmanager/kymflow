@@ -524,12 +524,17 @@ class FolderSelectorView:
     
     def _on_save_all_click(self) -> None:
         """Handle Save All button click."""
+        logger.warning(f'=== start button callback 20260314 declan')
+
         if self._on_save_all is not None:
+            # this is eventually handled by the SaveController._on_save_all() (because it subscribed to SaveAll events)
             self._on_save_all(
                 SaveAll(
                     phase="intent",
                 )
             )
+
+        logger.warning(f'=== end button callback 20260314 declan')
 
     def set_folder_from_state(self) -> None:
         """Update folder display to match AppState."""
