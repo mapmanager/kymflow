@@ -601,7 +601,7 @@ def test_save_analysis_updates_radon_db_csv() -> None:
 
 
 def test_radon_db_no_file_build_and_save() -> None:
-    """No DB file on load: build entire DB and save (same worker, progress)."""
+    """No DB file on load: rebuild populates cache only; CSV is written when user saves."""
     import pandas as pd
 
     test_image = np.zeros((100, 100), dtype=np.uint16)
@@ -625,19 +625,29 @@ def test_radon_db_no_file_build_and_save() -> None:
 
         image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
 
+        # API: rebuild does not auto-save; cache is populated only
+        assert not db_path.exists(), "Radon DB CSV is only written when user saves, not on rebuild"
+        reports = image_list.get_radon_report()
+        assert len(reports) >= 1, "Cache should be rebuilt from images"
+        df_cache = image_list.get_radon_report_df()
+        assert "vel_cv" in df_cache.columns
+        assert len(df_cache) >= 1
+        assert df_cache.iloc[0]["roi_id"] == roi.id
+
+        # When user (or caller) saves, CSV and hidden copy are written
+        saved = image_list.save_radon_report_db()
+        assert saved is True
         assert db_path.exists()
         df = pd.read_csv(db_path)
         assert "vel_cv" in df.columns
         assert len(df) >= 1
         assert df.iloc[0]["roi_id"] == roi.id
-
-        # Hidden copy should also exist after rebuild-and-save
         hidden_path = get_hidden_cache_path(db_path)
         assert hidden_path.exists()
 
 
 def test_radon_db_stale_rebuild_and_save() -> None:
-    """Stale DB (missing vel_cv): rebuild and save (same worker, progress)."""
+    """Stale DB (missing vel_cv): rebuild populates cache only; CSV updated when user saves."""
     import pandas as pd
 
     test_image = np.zeros((100, 100), dtype=np.uint16)
@@ -664,6 +674,15 @@ def test_radon_db_stale_rebuild_and_save() -> None:
 
         image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
 
+        # API: rebuild does not overwrite CSV; cache has current schema (vel_cv)
+        df_cache = image_list.get_radon_report_df()
+        assert "vel_cv" in df_cache.columns
+        assert len(df_cache) >= 1
+        # Stale file on disk is unchanged until user saves
+        assert "vel_cv" not in pd.read_csv(old_db).columns
+
+        # When user saves, CSV gets current schema
+        image_list.save_radon_report_db()
         df = pd.read_csv(old_db)
         assert "vel_cv" in df.columns
         assert len(df) >= 1

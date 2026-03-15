@@ -283,31 +283,75 @@ class AcqImageList(Generic[T]):
 
         return True
 
+    # def _instantiate_image(self, file_path: Path, *, blind_index: int | None = None) -> Optional[T]:
+    #     """Instantiate an image_cls for the file path, without loading image data when possible.
+        
+    #     Args:
+    #         file_path: Path to the image file.
+    #         blind_index: Optional index for blinded display (0-based).
+    #     """
+    #     try:
+    #         import inspect
+
+    #         sig = inspect.signature(self.image_cls.__init__)
+            
+    #         # Build kwargs based on signature
+    #         kwargs = {"path": file_path}
+    #         if "load_image" in sig.parameters:
+    #             kwargs["load_image"] = False
+    #         if "_blind_index" in sig.parameters:
+    #             kwargs["_blind_index"] = blind_index
+            
+    #         return self.image_cls(**kwargs)
+    #     except Exception as e:
+    #         # declan 202602 fail
+    #         logger.error(f"AcqImageList: could not load file: {file_path}")
+    #         logger.error(f"  -->> e:{e}")
+    #         return None
+
+    # abb 20260314 declan new version to run in frozen
+    # the only frozen error we were getting was on import v0
     def _instantiate_image(self, file_path: Path, *, blind_index: int | None = None) -> Optional[T]:
         """Instantiate an image_cls for the file path, without loading image data when possible.
-        
+
+        Uses try/retry with reduced kwargs instead of inspect.signature() so that
+        frozen apps (e.g. PyInstaller) do not hit "assignment destination is read-only".
+
         Args:
             file_path: Path to the image file.
             blind_index: Optional index for blinded display (0-based).
         """
         try:
-            import inspect
+            # Full kwargs matching AcqImage (and subclasses). No inspect.
+            kwargs_full = {
+                "path": file_path,
+                "load_image": False,
+                "_blind_index": blind_index,
+            }
+            try:
+                return self.image_cls(**kwargs_full)
+            except TypeError:
+                pass
+            # Retry without _blind_index (constructor may not accept it)
+            logger.error('  retry without _blind_index')
 
-            sig = inspect.signature(self.image_cls.__init__)
-            
-            # Build kwargs based on signature
-            kwargs = {"path": file_path}
-            if "load_image" in sig.parameters:
-                kwargs["load_image"] = False
-            if "_blind_index" in sig.parameters:
-                kwargs["_blind_index"] = blind_index
-            
-            return self.image_cls(**kwargs)
+            kwargs_no_blind = {"path": file_path, "load_image": False}
+            try:
+                return self.image_cls(**kwargs_no_blind)
+            except TypeError:
+                pass
+            # Retry with path only (minimal constructor)
+            logger.error('  retry with path only')
+
+            return self.image_cls(path=file_path)
         except Exception as e:
-            # declan 202602 fail
-            logger.error(f"AcqImageList: could not load file: {file_path}")
+            logger.exception(f"AcqImageList: could not load file: {file_path}")
             logger.error(f"  -->> e:{e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
+
+
 
     def _load_files(
         self,
@@ -358,8 +402,8 @@ class AcqImageList(Generic[T]):
 
         # Build glob pattern from file extension
         # Convert ".tif" to "*.tif"
-        ext = self._normalized_ext()
-        glob_pattern = f"*{ext}" if ext else "*"
+        # ext = self._normalized_ext()
+        # glob_pattern = f"*{ext}" if ext else "*"
 
         paths_to_wrap = self.collect_paths_from_folder(
             self._folder,

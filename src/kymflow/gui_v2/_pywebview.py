@@ -388,7 +388,6 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
     """
     import multiprocessing as mp
 
-    # MainProcess
     logger.warning(f'current_process_name: {mp.current_process().name}')
 
     native = getattr(app, "native", None)

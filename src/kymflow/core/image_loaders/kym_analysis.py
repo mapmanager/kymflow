@@ -590,16 +590,14 @@ class KymAnalysis:
         roi_df = self._make_velocity_df(old_vel, old_time, new_roi)
         self._df = roi_df
         
-        # set some acqimage experimentalmetadata (treatment, date)
-        # treatment is grandparent folder
-        # Safely get grandparent folder name: handles edge cases like /file.tif or /folder/file.tif
+        # abb 20260314 declan
+        # set some acqimage experimentalmetadata (treatment, date) via API to avoid direct dataclass assignment (frozen-app safe)
+        # treatment is grandparent folder; date is parent folder
         parent = self.acq_image.path.parent
         grandparent = parent.parent if parent != parent.anchor else None
         grandparent_folder = grandparent.name if grandparent and grandparent != grandparent.anchor else ""
-        self.acq_image.experiment_metadata.treatment = grandparent_folder
-        # date is parent folder
         parent_folder = self.acq_image.path.parent.name
-        self.acq_image.experiment_metadata.date = parent_folder
+        self.acq_image.update_experiment_metadata(treatment=grandparent_folder, date=parent_folder)
 
         # dirty because we just created roi and filled in velocity analysis
         self._dirty = True
@@ -655,8 +653,8 @@ class KymAnalysis:
 
         # determine if we need to save metadata json
         if not self._dirty:
-            logger.info(f"Analysis dirty but no analysis data to save for {primary_path.name} self._dirty:{self._dirty} self.is_dirty:{self.is_dirty}")
-            return False
+            # Metadata-only dirty: metadata already saved above; report success so caller sees save completed.
+            return metadata_saved
 
         else:
             # Create analysis folder if it doesn't exist (needed for JSON even if no CSV)
