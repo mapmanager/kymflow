@@ -167,8 +167,10 @@ class VelocityEventDb:
             if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
                 return
 
+            # abb 20260314 declan
             # Persist to both visible and hidden CSV so they exist after first run or recovery.
-            self.save()
+            # self.save()
+
             logger.info("Velocity event DB load complete (rebuilt from images: %s)", rebuild_reason)
 
             if progress_cb is not None and n > 0:

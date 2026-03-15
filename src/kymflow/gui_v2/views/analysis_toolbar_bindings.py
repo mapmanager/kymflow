@@ -109,8 +109,8 @@ class AnalysisToolbarBindings:
         Args:
             e: TaskStateChanged event containing task state information.
         """
-        from kymflow.core.utils.logging import get_logger
-        logger = get_logger(__name__)
+        # from kymflow.core.utils.logging import get_logger
+        # logger = get_logger(__name__)
         
         # logger.debug(
         #     f"Received TaskStateChanged: task_type={e.task_type}, running={e.running}, "

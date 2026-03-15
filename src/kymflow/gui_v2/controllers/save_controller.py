@@ -17,8 +17,8 @@ from kymflow.core.image_loaders.kym_image import KymImage
 
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import SaveAll, SaveSelected
-from kymflow.gui_v2.events_state import VelocityEventDbUpdated, FileListChanged
+from kymflow.gui_v2.events import SaveAll, SaveSelected, FileChanged, SelectionOrigin
+from kymflow.gui_v2.events_state import VelocityEventDbUpdated, FileListChanged, RadonReportUpdated
 from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -57,15 +57,102 @@ class SaveController:
         self._app_state: AppState = app_state
         self._task_state: TaskState = task_state
         self._bus: EventBus = bus
-        bus.subscribe_intent(SaveSelected, self._on_save_selected)
+        bus.subscribe_intent(SaveSelected, self._on_save_selected_async)
 
         # abb 20260314 declan
         # subscribe to SaveAll async
         # bus.subscribe_intent(SaveAll, self._on_save_all)
-        logger.warning('abb 20260314 declan, subscribe to _on_save_all_async')
+        # logger.warning('abb 20260314 declan, subscribe to _on_save_all_async')
         bus.subscribe_intent(SaveAll, self._on_save_all_async)
 
-    def _on_save_selected(self, e: SaveSelected) -> None:
+    # def _on_save_selected(self, e: SaveSelected) -> None:
+    #     """Handle save selected intent event.
+
+    #     Saves the currently selected file if it has analysis. Shows a notification
+    #     if no file is selected or no analysis is found.
+
+    #     Args:
+    #         e: SaveSelected event (phase="intent").
+    #     """
+    #     kf = self._app_state.selected_file
+    #     if not kf:
+    #         ui.notify("No file selected", color="warning")
+    #         return
+
+    #     kym_analysis = kf.get_kym_analysis()
+    #     if not kym_analysis.is_dirty:
+    #         ui.notify(f"Nothing to save for {kf.path.name}", color="info")
+    #         return
+
+    #     try:
+    #         success = kym_analysis.save_analysis()
+    #         if success:
+    #             if hasattr(self._app_state.files, "update_radon_report_for_image"):
+    #                 self._app_state.files.update_radon_report_for_image(kf)
+    #             if hasattr(self._app_state.files, "update_velocity_event_for_image"):
+    #                 self._app_state.files.update_velocity_event_for_image(kf)
+    #                 self._bus.emit(VelocityEventDbUpdated())
+    #             ui.notify(f"Saved {kf.path.name}", color="positive")
+    #             self._app_state.refresh_file_rows()
+    #         else:
+    #             ui.notify(f"Nothing to save for {kf.path.name}", color="info")
+    #     except Exception as exc:
+    #         logger.exception(f"Error saving {kf.path.name}")
+    #         ui.notify(f"Error saving {kf.path.name}: {str(exc)}", color="negative")
+
+    # def _on_save_all(self, e: SaveAll) -> None:
+    #     """Handle save all intent event.
+
+    #     Saves all files that have analysis. Shows notifications for results.
+
+    #     Args:
+    #         e: SaveAll event (phase="intent").
+    #     """
+    #     if not self._app_state.files:
+    #         ui.notify("No files loaded", color="warning")
+    #         return
+
+    #     saved_count = 0
+    #     skipped_count = 0
+    #     error_count = 0
+
+    #     for kf in self._app_state.files:
+    #         kym_analysis = kf.get_kym_analysis()
+    #         if not kym_analysis.is_dirty:
+    #             skipped_count += 1
+    #             continue
+
+    #         try:
+    #             success = kym_analysis.save_analysis()
+    #             if success:
+    #                 if hasattr(self._app_state.files, "update_radon_report_for_image"):
+    #                     self._app_state.files.update_radon_report_for_image(kf)
+    #                 if hasattr(self._app_state.files, "update_velocity_event_for_image"):
+    #                     self._app_state.files.update_velocity_event_for_image(kf)
+    #                     self._bus.emit(VelocityEventDbUpdated())
+    #                 saved_count += 1
+    #             else:
+    #                 skipped_count += 1
+    #         except Exception as e:
+    #             logger.exception(f"Error saving {kf.path.name}")
+    #             logger.error(f'  exception is: {e}')
+    #             error_count += 1
+    #             # abb 20260314 declan
+    #             # ui.notify(f"Error saving {kf.path.name}: {str(exc)}", color="negative")
+
+    #     if saved_count > 0:
+    #         ui.notify(f"Saved {saved_count} file(s)", color="positive")
+    #         self._app_state.refresh_file_rows()
+    #     if skipped_count > 0 and saved_count == 0:
+    #         ui.notify(
+    #             f"Skipped {skipped_count} file(s) (no changes or no analysis)",
+    #             color="info",
+    #         )
+    #     if error_count > 0:
+    #         ui.notify(f"Errors saving {error_count} file(s)", color="negative")
+
+    # abb 20260314 declan
+    async def _on_save_selected_async(self, e: SaveSelected) -> None:
         """Handle save selected intent event.
 
         Saves the currently selected file if it has analysis. Shows a notification
@@ -74,82 +161,47 @@ class SaveController:
         Args:
             e: SaveSelected event (phase="intent").
         """
-        kf = self._app_state.selected_file
-        if not kf:
+        kym_file = self._app_state.selected_file
+        if not kym_file:
             ui.notify("No file selected", color="warning")
             return
 
-        kym_analysis = kf.get_kym_analysis()
+        kym_analysis = kym_file.get_kym_analysis()
         if not kym_analysis.is_dirty:
-            ui.notify(f"Nothing to save for {kf.path.name}", color="info")
+            ui.notify(f"Nothing to save for {kym_file.path.name}", color="info")
             return
 
         try:
-            success = kym_analysis.save_analysis()
+            self._task_state.set_running(True)  # turn off gui
+            
+            success = await run.io_bound(kym_analysis.save_analysis)
+
             if success:
-                if hasattr(self._app_state.files, "update_radon_report_for_image"):
-                    self._app_state.files.update_radon_report_for_image(kf)
-                if hasattr(self._app_state.files, "update_velocity_event_for_image"):
-                    self._app_state.files.update_velocity_event_for_image(kf)
-                    self._bus.emit(VelocityEventDbUpdated())
-                ui.notify(f"Saved {kf.path.name}", color="positive")
-                self._app_state.refresh_file_rows()
+                self._app_state.files.update_radon_report_for_image(kym_file)
+                self._app_state.files.update_velocity_event_for_image(kym_file)
+
+                # afaik, this updates our nicewidgets plotpoolplot gui?
+                self._bus.emit(RadonReportUpdated())
+                self._bus.emit(VelocityEventDbUpdated())
+                
+                self._bus.emit(
+                    FileChanged(
+                        file=kym_file,
+                        change_type="analysis",
+                        origin=SelectionOrigin.EXTERNAL,
+                    )
+                )
+
+                ui.notify(f"Saved {kym_file.path.name}", color="positive")
+
             else:
-                ui.notify(f"Nothing to save for {kf.path.name}", color="info")
+                ui.notify(f"Nothing to save for {kym_file.path.name}", color="info")
+
         except Exception as exc:
-            logger.exception(f"Error saving {kf.path.name}")
-            ui.notify(f"Error saving {kf.path.name}: {str(exc)}", color="negative")
-
-    def _on_save_all(self, e: SaveAll) -> None:
-        """Handle save all intent event.
-
-        Saves all files that have analysis. Shows notifications for results.
-
-        Args:
-            e: SaveAll event (phase="intent").
-        """
-        if not self._app_state.files:
-            ui.notify("No files loaded", color="warning")
-            return
-
-        saved_count = 0
-        skipped_count = 0
-        error_count = 0
-
-        for kf in self._app_state.files:
-            kym_analysis = kf.get_kym_analysis()
-            if not kym_analysis.is_dirty:
-                skipped_count += 1
-                continue
-
-            try:
-                success = kym_analysis.save_analysis()
-                if success:
-                    if hasattr(self._app_state.files, "update_radon_report_for_image"):
-                        self._app_state.files.update_radon_report_for_image(kf)
-                    if hasattr(self._app_state.files, "update_velocity_event_for_image"):
-                        self._app_state.files.update_velocity_event_for_image(kf)
-                        self._bus.emit(VelocityEventDbUpdated())
-                    saved_count += 1
-                else:
-                    skipped_count += 1
-            except Exception as e:
-                logger.exception(f"Error saving {kf.path.name}")
-                logger.error(f'  exception is: {e}')
-                error_count += 1
-                # abb 20260314 declan
-                # ui.notify(f"Error saving {kf.path.name}: {str(exc)}", color="negative")
-
-        if saved_count > 0:
-            ui.notify(f"Saved {saved_count} file(s)", color="positive")
-            self._app_state.refresh_file_rows()
-        if skipped_count > 0 and saved_count == 0:
-            ui.notify(
-                f"Skipped {skipped_count} file(s) (no changes or no analysis)",
-                color="info",
-            )
-        if error_count > 0:
-            ui.notify(f"Errors saving {error_count} file(s)", color="negative")
+            logger.exception(f"Error saving {kym_file.path.name}")
+            ui.notify(f"Error saving {kym_file.path.name}: {str(exc)}", color="negative")
+        finally:
+            self._task_state.mark_finished()  # re-anable gui
 
     # abb 20260314 declan
     async def _on_save_all_async(self, e: SaveAll) -> None:
@@ -172,81 +224,86 @@ class SaveController:
         # abb to defer radon and velocity event cache updates
         defer_cache_updates:List[KymImage] = []
 
-        for kf in self._app_state.files:
-            kym_analysis = kf.get_kym_analysis()
-            if not kym_analysis.is_dirty:
-                skipped_count += 1
-                continue
-
-            try:
-                # abb was this
-                # success = kym_analysis.save_analysis()
-
-                # Because you await it, the loop will pause at that line, let the file write happen in the background,
-                # and then move to the next file without freezing the "Save All" button                
-                success = await run.io_bound(kym_analysis.save_analysis)
-
-                if success:
-                    # self._app_state.files.update_radon_report_for_image(kf)
-                    # self._app_state.files.update_velocity_event_for_image(kf)
-                    # self._bus.emit(VelocityEventDbUpdated())
-                    defer_cache_updates.append(kf)
-                    saved_count += 1
-                else:
+        self._task_state.set_running(True)  # turn off gui
+        
+        try:
+            for kf in self._app_state.files:
+                kym_analysis = kf.get_kym_analysis()
+                if not kym_analysis.is_dirty:
                     skipped_count += 1
-            except Exception as e:
-                logger.exception(f"Error saving {kf.path.name}")
-                logger.error(f'  exception is: {e}')
-                error_count += 1
-                # abb 20260314 declan
-                # ui.notify(f"Error saving {kf.path.name}: {str(exc)}", color="negative")
+                    continue
 
-            # D. IMPORTANT: Yield control to the UI occasionally
-            # This ensures that even if the bus events take time, the UI 
-            # doesn't show the "Loading" spinning circle of death.
-            await asyncio.sleep(0)
+                try:
+                    # abb was this
+                    # success = kym_analysis.save_analysis()
 
-        # abb to update radon and velocity event cache
-        logger.warning(f'---> abb calling cache update for radon and velocity event defer_cache_updates n:{len(defer_cache_updates)}')
+                    # Because you await it, the loop will pause at that line, let the file write happen in the background,
+                    # and then move to the next file without freezing the "Save All" button                
+                    success = await run.io_bound(kym_analysis.save_analysis)
 
-        for kf in defer_cache_updates:
-            # self._app_state.files.update_radon_report_for_image(kf)  # this saves csv
-            self._app_state.files.update_radon_report_cache_only(kf)
-            # self._app_state.files.update_velocity_event_for_image(kf)  # this saves csv
-            self._app_state.files.update_velocity_event_cache_only(kf)
-        
-        # save the radon and velocity cache to csv (2 files)
-        logger.warning('saving radon and velocity csv files')
-        self._app_state.files.save_radon_report_db()
-        self._app_state.files.rebuild_velocity_event_db_and_save()
+                    if success:
+                        # self._app_state.files.update_radon_report_for_image(kf)
+                        # self._app_state.files.update_velocity_event_for_image(kf)
+                        # self._bus.emit(VelocityEventDbUpdated())
+                        defer_cache_updates.append(kf)
+                        saved_count += 1
+                    else:
+                        skipped_count += 1
+                except Exception as e:
+                    logger.exception(f"Error saving {kf.path.name}")
+                    logger.error(f'  exception is: {e}')
+                    error_count += 1
+                    # abb 20260314 declan
+                    # ui.notify(f"Error saving {kf.path.name}: {str(exc)}", color="negative")
 
-        # afaik, this updates our nicewidgets plotpoolplot gui?
-        # self._bus.emit(RadonReportUpdated())
-        self._bus.emit(VelocityEventDbUpdated())
-        
-        logger.warning('---> abb DONE calling cache update for radon and velocity event')
+                # D. IMPORTANT: Yield control to the UI occasionally
+                # This ensures that even if the bus events take time, the UI 
+                # doesn't show the "Loading" spinning circle of death.
+                await asyncio.sleep(0)
 
-        if saved_count > 0:
-            _saved_str = f"Saved {saved_count} file(s)"
-            logger.info(f'  {_saved_str}')
-            ui.notify(_saved_str, color="positive")
+            # abb to update radon and velocity event cache
+            # logger.warning(f'---> abb calling cache update for radon and velocity event defer_cache_updates n:{len(defer_cache_updates)}')
 
-            # abb 20260314, this is OVERKILL, consider removing? nobody calls it?
-            # self._app_state.refresh_file_rows()
+            for kf in defer_cache_updates:
+                # self._app_state.files.update_radon_report_for_image(kf)  # this saves csv
+                self._app_state.files.update_radon_report_cache_only(kf)
+                # self._app_state.files.update_velocity_event_for_image(kf)  # this saves csv
+                self._app_state.files.update_velocity_event_cache_only(kf)
+            
+            # save the radon and velocity cache to csv (2 files)
+            # logger.warning('saving radon and velocity csv files')
+            self._app_state.files.save_radon_report_db()
+            self._app_state.files.rebuild_velocity_event_db_and_save()
 
-            self._bus.emit(FileListChanged(files=list(self._app_state.files)))
+            # afaik, this updates our nicewidgets plotpoolplot gui?
+            # self._bus.emit(RadonReportUpdated())
+            self._bus.emit(VelocityEventDbUpdated())
+            
+            # logger.warning('---> abb DONE calling cache update for radon and velocity event')
 
-        if skipped_count > 0 and saved_count == 0:
-            _skipped_str = f"Skipped {skipped_count} file(s) (no changes or no analysis)"
-            logger.info(f'  {_skipped_str}')
-            ui.notify(
-                _skipped_str,
-                color="info",
-            )
-        if error_count > 0:
-            _errors_str = f"Errors saving {error_count} file(s)"
-            logger.info(f'  {_errors_str}')
-            ui.notify(
-                _errors_str,
-                color="negative",
-            )
+            if saved_count > 0:
+                _saved_str = f"Saved {saved_count} file(s)"
+                logger.info(f'  {_saved_str}')
+                ui.notify(_saved_str, color="positive")
+
+                # abb 20260314, this is OVERKILL, consider removing? nobody calls it?
+                # self._app_state.refresh_file_rows()
+
+                self._bus.emit(FileListChanged(files=list(self._app_state.files)))
+
+            if skipped_count > 0 and saved_count == 0:
+                _skipped_str = f"Skipped {skipped_count} file(s) (no changes or no analysis)"
+                logger.info(f'  {_skipped_str}')
+                ui.notify(
+                    _skipped_str,
+                    color="info",
+                )
+            if error_count > 0:
+                _errors_str = f"Errors saving {error_count} file(s)"
+                logger.info(f'  {_errors_str}')
+                ui.notify(
+                    _errors_str,
+                    color="negative",
+                )
+        finally:
+            self._task_state.mark_finished()  # re-anable gui

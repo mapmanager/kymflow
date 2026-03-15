@@ -104,7 +104,7 @@ class DrawerView:
         with ui.row(wrap=False).classes("w-full h-full items-start"):
             # Left side: Vertical tabs for organizing splitter pane content
             with ui.tabs().props('vertical dense').classes("w-12 shrink-0 icon_only_tabs") as tabs:
-                tab_analysis = ui.tab("Analysis", icon="science").tooltip("Analysis")
+                tab_analysis = ui.tab("Velocity Analysis", icon="speed").tooltip("Analysis")
                 tab_plotting = ui.tab("Plotting", icon="bar_chart").tooltip("Plotting")
                 tab_metadata = ui.tab("Metadata", icon="description").tooltip("Metadata")
                 tab_options = ui.tab("Options", icon="settings").tooltip("Options")

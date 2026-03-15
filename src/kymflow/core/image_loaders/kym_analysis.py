@@ -363,7 +363,8 @@ class KymAnalysis:
             roi_id=roi_id,
             algorithm="mpRadon",
             window_size=window_size,
-            analyzed_at=datetime.now(timezone.utc).isoformat(),
+            # analyzed_at=datetime.now(timezone.utc).isoformat(),
+            analyzed_at=datetime.now().astimezone().isoformat(),
             roi_revision_at_analysis=roi.revision,
         )
         
@@ -507,11 +508,13 @@ class KymAnalysis:
 
         roi_df = self._make_velocity_df(old_vel, old_time, existing_roi)
         self._df = roi_df
+
         self._analysis_metadata[existing_roi.id] = RoiAnalysisMetadata(
             roi_id=existing_roi.id,
             algorithm="mpRadon_v0",
             window_size=16,  # intentionally hard coded from v0 analysis
-            analyzed_at=datetime.now(timezone.utc).isoformat(),
+            # analyzed_at=datetime.now(timezone.utc).isoformat(),
+            analyzed_at=datetime.now().astimezone().isoformat(),
             roi_revision_at_analysis=existing_roi.revision,
         )
         self._dirty = True
@@ -567,9 +570,10 @@ class KymAnalysis:
         # Record analysis metadata (geometry lives in acq_image.rois)
         self._analysis_metadata[new_roi.id] = RoiAnalysisMetadata(
             roi_id=new_roi.id,
-            algorithm="mpRadon_v0",
+            algorithm="mpRadon_v0",  # IMPORTANT!
             window_size=16,  # intentionally hard coded from v0 analysis
-            analyzed_at=datetime.now(timezone.utc).isoformat(),  # not true but not really used
+            # analyzed_at=datetime.now(timezone.utc).isoformat(),  # not true but not really used
+            analyzed_at=datetime.now().astimezone().isoformat(),
             roi_revision_at_analysis=new_roi.revision,
         )
 
@@ -586,8 +590,21 @@ class KymAnalysis:
         roi_df = self._make_velocity_df(old_vel, old_time, new_roi)
         self._df = roi_df
         
+        # set some acqimage experimentalmetadata (treatment, date)
+        # treatment is grandparent folder
+        # Safely get grandparent folder name: handles edge cases like /file.tif or /folder/file.tif
+        parent = self.acq_image.path.parent
+        grandparent = parent.parent if parent != parent.anchor else None
+        grandparent_folder = grandparent.name if grandparent and grandparent != grandparent.anchor else ""
+        self.acq_image.experiment_metadata.treatment = grandparent_folder
+        # date is parent folder
+        parent_folder = self.acq_image.path.parent.name
+        self.acq_image.experiment_metadata.date = parent_folder
+
         # dirty because we just created roi and filled in velocity analysis
         self._dirty = True
+
+        logger.info(f'on first load (no rois), imported v0 analysis for {self.acq_image.path.name}')
 
         return True
 
@@ -611,6 +628,8 @@ class KymAnalysis:
             logger.info(f"Analysis does not need to be saved for {primary_path.name}")
             return False
 
+        # logger.info(f"BEGIN: {primary_path.name} self._dirty:{self._dirty} self.is_dirty:{self.is_dirty}")
+
         # Save ROIs and metadata first (ensures ROIs are persisted)
         # This saves header, experiment_metadata, and ROIs to metadata.json
         metadata_saved = self.acq_image.save_metadata()
@@ -618,6 +637,7 @@ class KymAnalysis:
             logger.warning("Failed to save metadata (ROIs), but continuing with analysis save")
 
         csv_path, json_path = self._get_save_paths()
+
 
         analysis_saved = False
         if self._df is not None:
@@ -633,7 +653,12 @@ class KymAnalysis:
 
             # logger.info(f"Saved analysis CSV to {csv_path}")
 
-        if self._dirty:
+        # determine if we need to save metadata json
+        if not self._dirty:
+            logger.info(f"Analysis dirty but no analysis data to save for {primary_path.name} self._dirty:{self._dirty} self.is_dirty:{self.is_dirty}")
+            return False
+
+        else:
             # Create analysis folder if it doesn't exist (needed for JSON even if no CSV)
             analysis_folder = json_path.parent
             analysis_folder.mkdir(parents=True, exist_ok=True)
@@ -695,8 +720,9 @@ class KymAnalysis:
         """
         
         # v0 flowanalysis version
+        # only runs if num roi is 0 (first load)
         if self.import_v0_analysis() is not None:
-            self._dirty = False
+            self._dirty = True
             return True
 
         # kymflow version
@@ -710,8 +736,9 @@ class KymAnalysis:
         # JSON is required, CSV is optional (may not exist if only accepted was saved)
         # 202602_v0_flowanalysis_bug: fallback when flow-analysis JSON missing but v0 exists
         if not json_path.exists():
-            if self._try_load_v0_into_existing_roi():
-                return True
+            # abb 20260314 declan (removed)
+            # if self._try_load_v0_into_existing_roi():
+            #     return True
             return False
         
         # Load CSV if it exists
