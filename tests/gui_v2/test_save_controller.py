@@ -41,55 +41,68 @@ def app_state_with_file() -> tuple[AppState, KymImage]:
         return app_state, kym_file
 
 
-def test_save_selected_metadata_only_dirty(
+@pytest.mark.asyncio
+async def test_save_selected_metadata_only_dirty(
     bus: EventBus, app_state_with_file: tuple[AppState, KymImage]
 ) -> None:
     """Test that SaveController saves files with metadata-only dirty state."""
     app_state, kym_file = app_state_with_file
     task_state = TaskState()
-    SaveController(app_state, task_state, bus)  # Subscribes to events
+    controller = SaveController(app_state, task_state, bus)  # Subscribes to events
 
     # Update metadata only (no analysis)
     kym_file.update_experiment_metadata(species="mouse", region="cortex")
     assert kym_file.is_metadata_dirty is True
     assert kym_file.get_kym_analysis().is_dirty is True
 
-    # Mock save_analysis to verify it's called
+    # Mock save_analysis to verify it's called (handler is async; run it with patched run.io_bound)
     with patch.object(kym_file.get_kym_analysis(), "save_analysis") as mock_save:
         mock_save.return_value = True
 
-        # Emit save selected intent
-        bus.emit(SaveSelected(phase="intent"))
+        async def mock_io_bound(fn):
+            return fn()
+
+        with patch("kymflow.gui_v2.controllers.save_controller.ui.notify"):
+            with patch("kymflow.gui_v2.controllers.save_controller.run") as mock_run:
+                mock_run.io_bound = mock_io_bound
+                await controller._on_save_selected_async(SaveSelected(phase="intent"))
 
         # Verify save_analysis was called (even without analysis data)
         mock_save.assert_called_once()
 
 
-def test_save_selected_uses_is_dirty_not_has_analysis(
+@pytest.mark.asyncio
+async def test_save_selected_uses_is_dirty_not_has_analysis(
     bus: EventBus, app_state_with_file: tuple[AppState, KymImage]
 ) -> None:
     """Test that SaveController uses is_dirty property (not has_analysis gate)."""
     app_state, kym_file = app_state_with_file
     task_state = TaskState()
-    SaveController(app_state, task_state, bus)  # Subscribes to events
+    controller = SaveController(app_state, task_state, bus)  # Subscribes to events
 
     # Update metadata only (no analysis data)
     kym_file.update_experiment_metadata(note="test note")
     assert kym_file.get_kym_analysis().is_dirty is True
     assert not kym_file.get_kym_analysis().has_analysis()
 
-    # Mock save_analysis
+    # Mock save_analysis (handler is async; run it with patched run.io_bound)
     with patch.object(kym_file.get_kym_analysis(), "save_analysis") as mock_save:
         mock_save.return_value = True
 
-        # Emit save selected intent
-        bus.emit(SaveSelected(phase="intent"))
+        async def mock_io_bound(fn):
+            return fn()
+
+        with patch("kymflow.gui_v2.controllers.save_controller.ui.notify"):
+            with patch("kymflow.gui_v2.controllers.save_controller.run") as mock_run:
+                mock_run.io_bound = mock_io_bound
+                await controller._on_save_selected_async(SaveSelected(phase="intent"))
 
         # Should call save_analysis even though has_analysis() is False
         mock_save.assert_called_once()
 
 
-def test_save_all_metadata_only_dirty(
+@pytest.mark.asyncio
+async def test_save_all_metadata_only_dirty(
     bus: EventBus, app_state_with_file: tuple[AppState, KymImage]
 ) -> None:
     """Test that SaveController saves all files with metadata-only dirty state."""
@@ -112,49 +125,61 @@ def test_save_all_metadata_only_dirty(
         kym_file2.update_experiment_metadata(region="cortex")
 
         task_state = TaskState()
-        SaveController(app_state, task_state, bus)  # Subscribes to events
+        controller = SaveController(app_state, task_state, bus)  # Subscribes to events
 
-        # Mock save_analysis for both files
+        # Mock save_analysis for both files (handler is async; run it with patched run.io_bound)
         with patch.object(kym_file.get_kym_analysis(), "save_analysis") as mock_save1:
             with patch.object(kym_file2.get_kym_analysis(), "save_analysis") as mock_save2:
                 mock_save1.return_value = True
                 mock_save2.return_value = True
 
-                # Emit save all intent
-                bus.emit(SaveAll(phase="intent"))
+                async def mock_io_bound(fn):
+                    return fn()
+
+                with patch("kymflow.gui_v2.controllers.save_controller.ui.notify"):
+                    with patch("kymflow.gui_v2.controllers.save_controller.run") as mock_run:
+                        mock_run.io_bound = mock_io_bound
+                        await controller._on_save_all_async(SaveAll(phase="intent"))
 
                 # Both should be saved (even without analysis data)
                 mock_save1.assert_called_once()
                 mock_save2.assert_called_once()
 
 
-def test_save_selected_skips_when_not_dirty(
+@pytest.mark.asyncio
+async def test_save_selected_skips_when_not_dirty(
     bus: EventBus, app_state_with_file: tuple[AppState, KymImage]
 ) -> None:
     """Test that SaveController skips save when file is not dirty."""
     app_state, kym_file = app_state_with_file
     task_state = TaskState()
-    SaveController(app_state, task_state, bus)  # Subscribes to events
+    controller = SaveController(app_state, task_state, bus)  # Subscribes to events
 
     # File is not dirty
     assert not kym_file.get_kym_analysis().is_dirty
 
-    # Mock save_analysis
+    # Mock save_analysis; run handler (it should return early and not call save_analysis)
     with patch.object(kym_file.get_kym_analysis(), "save_analysis") as mock_save:
-        # Emit save selected intent
-        bus.emit(SaveSelected(phase="intent"))
+        async def mock_io_bound(fn):
+            return fn()
+
+        with patch("kymflow.gui_v2.controllers.save_controller.ui.notify"):
+            with patch("kymflow.gui_v2.controllers.save_controller.run") as mock_run:
+                mock_run.io_bound = mock_io_bound
+                await controller._on_save_selected_async(SaveSelected(phase="intent"))
 
         # Should not call save_analysis when not dirty
         mock_save.assert_not_called()
 
 
-def test_save_selected_calls_update_radon_report_for_image(
+@pytest.mark.asyncio
+async def test_save_selected_calls_update_radon_report_for_image(
     bus: EventBus, app_state_with_file: tuple[AppState, KymImage]
 ) -> None:
     """Test that SaveController calls update_radon_report_for_image after successful save."""
     app_state, kym_file = app_state_with_file
     task_state = TaskState()
-    SaveController(app_state, task_state, bus)
+    controller = SaveController(app_state, task_state, bus)
 
     kym_file.update_experiment_metadata(species="mouse")
     assert kym_file.get_kym_analysis().is_dirty is True
@@ -164,7 +189,14 @@ def test_save_selected_calls_update_radon_report_for_image(
         with patch.object(
             app_state.files, "update_radon_report_for_image"
         ) as mock_update:
-            bus.emit(SaveSelected(phase="intent"))
+            async def mock_io_bound(fn):
+                return fn()
+
+            with patch("kymflow.gui_v2.controllers.save_controller.ui.notify"):
+                with patch("kymflow.gui_v2.controllers.save_controller.run") as mock_run:
+                    mock_run.io_bound = mock_io_bound
+                    await controller._on_save_selected_async(SaveSelected(phase="intent"))
+
             mock_save.assert_called_once()
             mock_update.assert_called_once_with(kym_file)
 
