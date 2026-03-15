@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../images/kymflow.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
     
     
       
@@ -385,34 +385,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#first-time-run-of-kymflow-app" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First time run of KymFlow app
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="First time run of KymFlow app">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#do-this" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Do this
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#once-the-kymflow-app-is-running" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -749,34 +721,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#first-time-run-of-kymflow-app" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First time run of KymFlow app
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="First time run of KymFlow app">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#do-this" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Do this
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#once-the-kymflow-app-is-running" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -882,23 +826,6 @@
 <p>We will be working in the raw data folder you just unzipped, <code>declan-stall-v1/</code>.</p>
 <p>All your work will be saved into <code>declan-stall-v1/</code>. You can then zip the entire folder and put it back on box for me to analyze the results. <strong>Important</strong> when putting the new declan-stall-v1.zip on box, be sure to put it into a <strong>new folder</strong>, do not replace the original declan-stall-v1.zip on box.</p>
 <p>Now that you have a local copy of <code>declan-stall-v1/</code>. Run the KymFlow app ...</p>
-<h2 id="first-time-run-of-kymflow-app">First time run of KymFlow app<a class="headerlink" href="#first-time-run-of-kymflow-app" title="Permanent link">¤</a></h2>
-<p><img align="right" alt="macOS Open Warning" class="img-small" src="../images/macos-open-warning.png" /></p>
-<p>The first time you run the kymflow app you need to do this.</p>
-<ul>
-<li>[[[THIS NO LONGER WORKS]]] Option + Right-click (or Control + Click) on KymFlow.app and select 'Open' from the context menu</li>
-</ul>
-<p>This gets you around the initial warning of "KymFlow.app Not opened".</p>
-<h3 id="do-this">Do this<a class="headerlink" href="#do-this" title="Permanent link">¤</a></h3>
-<ol>
-<li>Download the zip into your Downloads folder</li>
-<li>Double-click the KymFlow.zip to extract KymFlow.app</li>
-<li>Open a terminal window and type (copy and paste this to get it correct)</li>
-</ol>
-<div class="highlight"><pre><span></span><code>   xattr -dr com.apple.quarantine ~/Downloads/KymFlow.app
-</code></pre></div>
-<p>After that little hoop, the app should run normally.</p>
-<p>If you have any problems with this, email and I will get back asap. This is a one time 'first run' thing. Next time you open (double-click), this is not needed.</p>
 <h2 id="once-the-kymflow-app-is-running">Once the KymFlow app is running ...<a class="headerlink" href="#once-the-kymflow-app-is-running" title="Permanent link">¤</a></h2>
 <p>Click 'open csv', find you local <code>declan-stall-v1/</code> folder and open the provided <code>declan-random-v1.csv</code></p>
 <p>This will populate KymFlow with 50 files for scoring.</p>
@@ -927,10 +854,11 @@
 <h2 id="some-gui-niceties">Some GUI niceties<a class="headerlink" href="#some-gui-niceties" title="Permanent link">¤</a></h2>
 <ul>
 <li>Keyboard <code>enter</code> will always set the view to full scale. You can also double-click on the plot to set full scale.</li>
-<li>When you are zoomed in, use the '&lt;' and '&gt;' buttons to scroll throught the kymograph.</li>
+<li>When you are zoomed in, use the '&lt;' and '&gt;' buttons or keyboard left-arrow and right-arrow to scroll throught the kymograph.</li>
+<li>You can always go to the previous and next file in the list with keyboard shift + up-arrow and down-arrow.</li>
 </ul>
 <h2 id="blind-analysis">Blind analysis<a class="headerlink" href="#blind-analysis" title="Permanent link">¤</a></h2>
-<p>To turn on blind analysis. Go to the options toolbar, by clicking the gear icon in the left toolbar. Click on the 'Blinded Analysis' checkbox.</p>
+<p>To turn on blind analysis. Go to the options toolbar and click on the 'Blinded Analysis' checkbox.</p>
 <p><strong>Important.</strong> Blinded analysis is a honesty contract. The gui will in general blind your analysis by not showing filenames, dates, treatments, conditions, etc. There are plenty of ways around it. Be honest!!!</p>
 <h2 id="always-save-your-work">Always save your work<a class="headerlink" href="#always-save-your-work" title="Permanent link">¤</a></h2>
 <p>As you add user events, the top table of files will show which have been edited with a red X. </p>
@@ -941,7 +869,6 @@
 <h2 id="what-is-next">What is next<a class="headerlink" href="#what-is-next" title="Permanent link">¤</a></h2>
 <p>This is just the first step.</p>
 <p>Score all 50 files in <code>declan-stall-v1/</code> <code>declan-random-v1.csv</code>. Zip the <code>declan-stall-v1/</code> and put the zip into a new folder on box.</p>
-<p>I have scripts to test the null hypothesis, 'number of stalls is significantly different between condiitons`.</p>
 <p>This little tutorial is really the beginning of a lot of fun with GUIs. There is a ton more but I will leave it at that for now.</p>
 
 
