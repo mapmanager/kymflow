@@ -37,7 +37,10 @@ def mock_bus() -> MagicMock:
     return MagicMock()
 
 
-def test_file_selection_calls_view(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_file_selection_calls_view(
+    mock_v2_view: MagicMock, mock_bus: MagicMock
+) -> None:
     """FileSelection(state) calls set_selected_file with full selection state."""
     bindings = ImageLineViewerV2Bindings(mock_bus, mock_v2_view)
     file_mock = MagicMock()
@@ -48,7 +51,7 @@ def test_file_selection_calls_view(mock_v2_view: MagicMock, mock_bus: MagicMock)
         origin=SelectionOrigin.FILE_TABLE,
         phase="state",
     )
-    bindings._on_file_selection_changed(event)
+    await bindings._on_file_selection_changed(event)
     # v2 view set_selected_file receives (file, channel, roi_id); channel is None
     # in this test to keep focus on ROI selection behavior.
     mock_v2_view.set_selected_file.assert_called_once_with(file_mock, None, 1)

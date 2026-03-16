@@ -220,7 +220,8 @@ async def test_save_selected_integration_radon_and_velocity_event_csv_written(
         kym_file = KymImage(test_file, load_image=True)
         bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
         roi = kym_file.rois.create_roi(bounds=bounds)
-        kym_file.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+        radon = kym_file.get_kym_analysis().get_analysis_object("RadonAnalysis")
+        radon.analyze_roi(roi.id, 1, window_size=16, use_multiprocessing=False)
         kym_file.update_experiment_metadata(species="mouse")
         assert kym_file.get_kym_analysis().is_dirty is True
 
@@ -285,7 +286,8 @@ async def test_save_all_integration_radon_and_velocity_event_csv_written(
             kym = KymImage(path, load_image=True)
             bounds = RoiBounds(dim0_start=10, dim0_stop=50, dim1_start=10, dim1_stop=50)
             roi = kym.rois.create_roi(bounds=bounds)
-            kym.get_kym_analysis().analyze_roi(roi.id, window_size=16, use_multiprocessing=False)
+            radon = kym.get_kym_analysis().get_analysis_object("RadonAnalysis")
+            radon.analyze_roi(roi.id, 1, window_size=16, use_multiprocessing=False)
             kym.update_experiment_metadata(species="mouse")
             return kym
 

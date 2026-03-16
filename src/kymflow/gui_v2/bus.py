@@ -240,16 +240,28 @@ class EventBus:
                 logger.info(f"[bus] emit -> {etype.__name__} handling by {name}")
                 logger.info(f"  phase={event_phase}, client={self._client_id}")
             try:
+                # Skip invalid or missing handlers defensively
+                if handler is None or not callable(handler):
+                    logger.warning(
+                        f"[bus] Skipping non-callable handler {handler!r} for {etype.__name__} "
+                        f"(phase={phase}, client={self._client_id})"
+                    )
+                    continue
+
                 # abb 20260314 declan, implementing xxx
                 if inspect.iscoroutinefunction(handler):
                     # fails if handler tries to use nicegui context, like ui.notify()
                     # background_tasks.create(handler(event))
                     current_client = context.client
 
-                    async def task_with_context():
-                                with current_client:
-                                    await handler(event)
-                            
+                    async def task_with_context(
+                        h=handler,
+                        ev=event,
+                        client=current_client,
+                    ):
+                        with client:
+                            await h(ev)
+
                     background_tasks.create(task_with_context())
 
                 else:
