@@ -78,7 +78,9 @@ def danger_delete_kym_analysis(path, dry_run:bool = True):
 if __name__ == "__main__":
     setup_logging()
 
-    path = '/Users/cudmore/Downloads/kymflow_app/declan_20260313/small-data'
+    # path = '/Users/cudmore/Downloads/kymflow_app/declan_20260313/small-data'
     
+    path = '/Users/cudmore/data/declan_20260313/data'
+
     dry_run = False
     danger_delete_kym_analysis(path, dry_run=dry_run)

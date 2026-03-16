@@ -56,6 +56,7 @@ def _removeOutliers_sd(y: np.ndarray) -> np.ndarray:
         logger.exception(f'Error e: {e}')
         import traceback
         logger.error(traceback.format_exc())
+        _y = y
 
     return _y
 

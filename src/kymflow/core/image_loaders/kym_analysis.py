@@ -397,14 +397,17 @@ class KymAnalysis:
         """Given velocity, time, and an Roi, return a DataFrame with the velocity analysis.
         """
         # Apply filtering
-        try:
-            clean_velocity = _removeOutliers_sd(velocity)
-            clean_velocity = _medianFilter(clean_velocity, window_size=3)
-        except Exception as e:
-            logger.exception(f'Error e: {e}')
-            import traceback
-            logger.error(traceback.format_exc())
-            
+        # try:
+        #     clean_velocity = _removeOutliers_sd(velocity)
+        #     clean_velocity = _medianFilter(clean_velocity, window_size=3)
+        # except Exception as e:
+        #     logger.exception(f'Error e: {e}')
+        #     import traceback
+        #     logger.error(traceback.format_exc())
+
+        clean_velocity = _removeOutliers_sd(velocity)
+        clean_velocity = _medianFilter(clean_velocity, window_size=3)
+
         # Create DataFrame for this ROI's analysis
         primary_path = self._get_primary_path()
         parent_name = primary_path.parent.name if primary_path is not None else ""

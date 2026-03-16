@@ -452,7 +452,7 @@ class FileTableView:
                 )
             )
 
-    def get_table_as_text(self) -> str:
+    def get_table_as_text_v0(self) -> str:
         """Get current table data as tab-separated values (TSV) string.
 
         Includes all columns (ignores hide=True). Empty string if no data.
@@ -476,6 +476,36 @@ class FileTableView:
                 if value is None:
                     value_str = ""
                 elif value == "":
+                    value_str = ""
+                else:
+                    value_str = str(value)
+                value_str = value_str.replace("\t", " ").replace("\n", " ").replace("\r", " ")
+                row_values.append(value_str)
+            rows.append("\t".join(row_values))
+
+        return "\t".join(headers) + "\n" + "\n".join(rows)
+
+    def get_table_as_text(self) -> str:
+        """Get current table data as tab-separated values (TSV) using raw row dicts.
+
+        Uses the full dicts in self._pending_rows. Column order is taken from the
+        keys of the first row. Empty string if no data.
+
+        Returns:
+            TSV-formatted string with one header row (keys) and one row per dict.
+        """
+        if not self._pending_rows:
+            return ""
+
+        columns = list(self._pending_rows[0].keys())
+        headers = columns
+
+        rows: list[str] = []
+        for row_dict in self._pending_rows:
+            row_values = []
+            for key in columns:
+                value = row_dict.get(key, "")
+                if value is None:
                     value_str = ""
                 else:
                     value_str = str(value)
