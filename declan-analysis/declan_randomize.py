@@ -90,11 +90,13 @@ def makeRandomAcqImageList(_random_path: str) -> KymImageList:
 
 def subsample_from_random_csv(_random_path: str, n: int, output_folder: str | None = None) -> str:
     """
-    Load randomized CSV file and subsample n rows per 'Grandparent Folder'.
+    Load randomized CSV file and take the first n rows per 'Grandparent Folder'.
     
-    Uses pandas groupby().sample() to randomly select n rows from each group.
-    If a group has fewer than n rows, all rows from that group are included.
-    Saves results to a new CSV file with '-n-{n}' suffix.
+    Assumes the input CSV has already been randomized within each group (e.g. by
+    `_randomize_declan`). This function **does not perform additional randomization**:
+    it preserves the existing per-group order and takes the first n rows using
+    groupby().head(n). If a group has fewer than n rows, all rows from that group
+    are included. Saves results to a new CSV file with '-n-{n}' suffix.
     
     Args:
         _random_path: str
@@ -104,7 +106,7 @@ def subsample_from_random_csv(_random_path: str, n: int, output_folder: str | No
         output_folder: str | None
             Optional output folder. If provided, saves the subsampled CSV to this folder.
             If None, saves in the same directory as _random_path.
-
+    
     Returns:
         str
             Path to the subsampled CSV file
@@ -118,17 +120,17 @@ def subsample_from_random_csv(_random_path: str, n: int, output_folder: str | No
     
     logger.info('orig df is:')
     
-    print(df[['File Name', 'Grandparent Folder', 'path']])
+    print(df[['File Name', 'Grandparent Folder', 'path']].head())
 
 
     # Log group information before subsampling
     group_counts = df['Grandparent Folder'].value_counts()
-    logger.info(f'Subsampling: {len(group_counts)} groups found')
+    logger.info(f'Subsampling (first {n} per group, no re-randomization): {len(group_counts)} groups found')
     logger.info(f'Group sizes: {dict(group_counts)}')
     
-    # Sample n rows from each group
-    # If a group has fewer than n rows, sample() will return all rows from that group
-    df_sampled = df.groupby('Grandparent Folder', group_keys=False).sample(n=n, replace=False)
+    # Take the first n rows from each group in the existing (already randomized) order.
+    # If a group has fewer than n rows, head(n) will return all rows from that group.
+    df_sampled = df.groupby('Grandparent Folder', group_keys=False).head(n)
     
     # Log results after subsampling
     sampled_counts = df_sampled['Grandparent Folder'].value_counts()
@@ -275,8 +277,10 @@ def _randomize_declan(path: str, results_folder: str, date_str: str) -> str:
 
 if __name__ == "__main__":
     # Base path to directory containing kymograph images
-    path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v1-analysis"
-    
+    # path = "/Users/cudmore/Dropbox/data/declan/2026/compare-condiitons/v1-analysis"
+    # path = '/Users/cudmore/data/declan_20260313/data'
+    path = '/Users/cudmore/Downloads/kymflow_app/declan_random_20260313/data-random-20260313'
+
     # Generate date string in yyyymmdd format
     # Future API extension: kymflow.core.utils.date_utils.get_date_string() could provide this
     date_str = datetime.now().strftime('%Y%m%d')
@@ -294,7 +298,7 @@ if __name__ == "__main__":
 
     # Step 2: Subsample from randomized CSV
     # Save subsampled CSV to the same versioned folder
-    nSamplePerGrandparent = 5
+    nSamplePerGrandparent = 10
     _subsampledPath = subsample_from_random_csv(_randomPath, nSamplePerGrandparent, output_folder=results_folder)
     logger.info(f'Subsampled n={nSamplePerGrandparent} per group, saved to: "{_subsampledPath}"')
 

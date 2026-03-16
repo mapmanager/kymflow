@@ -36,20 +36,27 @@ def _removeOutliers_sd(y: np.ndarray) -> np.ndarray:
     This is different from old flow analysis in that it does not remove 0 values."""
 
     # trying to fix plotly refresh bug
-    # _y = y.copy()
-    _y = y
+    # abb 20260314 declan, without copy we get error in pyinstaller frozen
+    try:
+        _y = y.copy()
+        # _y = y
 
-    _mean = np.nanmean(_y)
-    _std = np.nanstd(_y)
+        _mean = np.nanmean(_y)
+        _std = np.nanstd(_y)
 
-    _greater = _y > (_mean + 2 * _std)
-    _y[_greater] = np.nan  # float('nan')
+        _greater = _y > (_mean + 2 * _std)
+        _y[_greater] = np.nan  # float('nan')
 
-    _less = _y < (_mean - 2 * _std)
-    _y[_less] = np.nan  # float('nan')
+        _less = _y < (_mean - 2 * _std)
+        _y[_less] = np.nan  # float('nan')
 
-    # _greaterLess = (_y > (_mean + 2*_std)) | (_y < (_mean - 2*_std))
-    # _y[_greaterLess] = np.nan #float('nan')
+        # _greaterLess = (_y > (_mean + 2*_std)) | (_y < (_mean - 2*_std))
+        # _y[_greaterLess] = np.nan #float('nan')
+    except Exception as e:
+        logger.exception(f'Error e: {e}')
+        import traceback
+        logger.error(traceback.format_exc())
+        _y = y
 
     return _y
 

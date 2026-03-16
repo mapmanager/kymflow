@@ -104,8 +104,8 @@ class TaskStateBridgeController:
         if not self._is_client_alive():
             return
 
-        from kymflow.core.utils.logging import get_logger
-        logger = get_logger(__name__)
+        # from kymflow.core.utils.logging import get_logger
+        # logger = get_logger(__name__)
         
         # logger.debug(
         #     f"Emitting TaskStateChanged: running={self._task_state.running}, "

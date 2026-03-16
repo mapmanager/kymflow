@@ -491,6 +491,7 @@ class FolderSelectorView:
         if running or not has_file_access:
             self._save_selected_button.disable()
             self._save_all_button.disable()
+            # self._save_all_button.props('loading')
         else:
             # Save Selected: enabled when file is selected (and not running and has file access)
             has_file = self._current_file is not None
@@ -501,6 +502,7 @@ class FolderSelectorView:
             
             # Save All: always enabled when not running and has file access (will check files in controller)
             self._save_all_button.enable()
+            # self._save_all_button.props(remove='loading')
     
     def _on_file_selection_changed(self, e: FileSelection) -> None:
         """Handle file selection change event for save button state."""
@@ -524,12 +526,17 @@ class FolderSelectorView:
     
     def _on_save_all_click(self) -> None:
         """Handle Save All button click."""
+        logger.warning(f'=== start button callback 20260314 declan')
+
         if self._on_save_all is not None:
+            # this is eventually handled by the SaveController._on_save_all() (because it subscribed to SaveAll events)
             self._on_save_all(
                 SaveAll(
                     phase="intent",
                 )
             )
+
+        logger.warning(f'=== end button callback 20260314 declan')
 
     def set_folder_from_state(self) -> None:
         """Update folder display to match AppState."""

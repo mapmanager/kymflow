@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable, DefaultDict, Dict, List, Literal, Tuple, Type, TypeVar
+import inspect
 
-from nicegui import core, ui
+from nicegui import ui, background_tasks, context
 
 from kymflow.core.utils.logging import get_logger
 
@@ -236,34 +237,31 @@ class EventBus:
         for _idx, (handler, phase) in enumerate(filtered_handlers):
             if 1 or self._config.trace:
                 name = getattr(handler, "__qualname__", repr(handler))
-                logger.debug(f"[bus] emit -> {etype.__name__} handling by {name}")
-                logger.debug(f"  phase={event_phase}, client={self._client_id}")
-                logger.debug(f"  {_idx}: {handler}")
-            if asyncio.iscoroutinefunction(handler):
-                task = core.loop.create_task(handler(event))
+                logger.info(f"[bus] emit -> {etype.__name__} handling by {name}")
+                logger.info(f"  phase={event_phase}, client={self._client_id}")
+            try:
+                # abb 20260314 declan, implementing xxx
+                if inspect.iscoroutinefunction(handler):
+                    # fails if handler tries to use nicegui context, like ui.notify()
+                    # background_tasks.create(handler(event))
+                    current_client = context.client
 
-                def _log_task_exception(t: asyncio.Task, h=handler, et=etype) -> None:
-                    if t.cancelled():
-                        return
-                    exc = t.exception()
-                    if exc is not None:
-                        handler_name = getattr(h, "__qualname__", repr(h))
-                        logger.exception(
-                            f"[bus] Async exception in handler {handler_name} for {et.__name__} "
-                            f"(client={self._client_id})",
-                            exc_info=(type(exc), exc, exc.__traceback__),
-                        )
+                    async def task_with_context():
+                                with current_client:
+                                    await handler(event)
+                            
+                    background_tasks.create(task_with_context())
 
-                task.add_done_callback(_log_task_exception)
-            else:
-                try:
+                else:
+                    # was this
                     handler(event)
-                except Exception:
-                    handler_name = getattr(handler, "__qualname__", repr(handler))
-                    logger.exception(
-                        f"[bus] Exception in handler {handler_name} for {etype.__name__} "
-                        f"(client={self._client_id})"
-                    )
+                    
+            except Exception:
+                handler_name = getattr(handler, "__qualname__", repr(handler))
+                logger.exception(
+                    f"[bus] Exception in handler {handler_name} for {etype.__name__} "
+                    f"(client={self._client_id})"
+                )
 
     def clear(self) -> None:
         """Clear all subscriptions from this bus.

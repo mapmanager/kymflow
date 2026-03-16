@@ -312,26 +312,21 @@ def test_kym_image_list_update_velocity_event_for_image() -> None:
 
 
 def test_kym_event_db_no_hidden_rebuild_saves_both_visible_and_hidden() -> None:
-    """When hidden kym event CSV is missing, load triggers rebuild then saves both visible and hidden."""
-    expected_cols = {f.name for f in fields(VelocityEventReport)}
+    """When kym event CSV is missing, load triggers rebuild only; cache is not saved until user saves."""
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         (tmp_path / "a.tif").touch()
-        # No visible or hidden kym_event_db.csv yet
         visible_path = tmp_path / "kym_event_db.csv"
         hidden_path = get_hidden_cache_path(visible_path)
         assert not visible_path.exists()
         assert not hidden_path.exists()
 
-        # KymImageList init triggers _velocity_event_db.load(); no hidden -> rebuild -> save()
-        KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        # KymImageList init triggers _velocity_event_db.load(); no DB -> rebuild in memory only (no save)
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
 
-        assert visible_path.exists()
-        assert hidden_path.exists()
-        df_visible = pd.read_csv(visible_path)
-        df_hidden = pd.read_csv(hidden_path)
-        assert set(df_visible.columns) == set(df_hidden.columns)
-        assert expected_cols.issubset(set(df_visible.columns))
+        # API: rebuild does not auto-save; CSV files only written when user clicks Save
+        assert not visible_path.exists()
+        assert not hidden_path.exists()
 
 
 # ---------------------------------------------------------------------------
