@@ -16,6 +16,7 @@ from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
 from kymflow.gui_v2.views.options_tab_view import OptionsTabView
 from kymflow.gui_v2.views.task_progress_view import TaskProgressView
+from kymflow.gui_v2.views.footer_view import FooterView
 
 # Bindings
 from kymflow.gui_v2.views.analysis_toolbar_bindings import AnalysisToolbarBindings
@@ -46,6 +47,7 @@ __all__ = [
     "MetadataTabView",
     "OptionsTabView",
     "TaskProgressView",
+    "FooterView",
     # Bindings
     "AnalysisToolbarBindings",
     "ContrastBindings",

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Optional
 
 from nicegui import ui
 
+from kymflow.core.state import TaskState
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events_folder import SelectPathEvent, CancelSelectPathEvent
@@ -48,7 +49,13 @@ class FolderController:
         _bus: EventBus instance for emitting state/cancel events.
     """
 
-    def __init__(self, app_state: AppState, bus: EventBus, user_config: UserConfig | None = None) -> None:
+    def __init__(
+        self,
+        app_state: AppState,
+        bus: EventBus,
+        user_config: UserConfig | None = None,
+        load_task_state: TaskState | None = None,
+    ) -> None:
         """Initialize folder controller.
 
         Subscribes to SelectPathEvent intent-phase events from the bus.
@@ -62,6 +69,8 @@ class FolderController:
         self._user_config: UserConfig | None = user_config
         self._bus: EventBus = bus
         self._thread_runner: ThreadJobRunner[tuple["KymImageList", Path]] = ThreadJobRunner()
+        # Optional TaskState dedicated to load progress (task_type='load').
+        self._load_task_state: TaskState | None = load_task_state
         bus.subscribe_intent(SelectPathEvent, self._on_select_path_event)
     
     def _detect_path_type(self, path: Path) -> tuple[bool, bool, bool]:
@@ -241,6 +250,12 @@ class FolderController:
         progress_bar = None
         cancel_button = None
 
+        # If a dedicated load TaskState is provided, mark the beginning of a load task.
+        if self._load_task_state is not None:
+            self._load_task_state.cancellable = True
+            self._load_task_state.set_running(True)
+            self._load_task_state.set_progress(0.0, "Loading files...")
+
         def on_cancel_click() -> None:
             if cancel_button is not None:
                 cancel_button.props("disable")
@@ -263,6 +278,9 @@ class FolderController:
                     progress_bar.value = min(1.0, msg.done / msg.total)
                 else:
                     progress_bar.value = 0.0
+            if self._load_task_state is not None and msg.total is not None and msg.total > 0:
+                fraction = min(1.0, msg.done / msg.total)
+                self._load_task_state.set_progress(float(fraction), self._format_progress_message(msg))
 
         def on_done(result: tuple["KymImageList", Path]) -> None:
             dialog.close()
@@ -291,6 +309,9 @@ class FolderController:
                     logger.error(f"Skipping notification - UI context deleted: {e}")
                 else:
                     raise
+            if self._load_task_state is not None:
+                self._load_task_state.message = "Load complete"
+                self._load_task_state.mark_finished()
 
         def on_cancelled() -> None:
             dialog.close()
@@ -304,6 +325,9 @@ class FolderController:
                     raise
             if previous_path:
                 self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+            if self._load_task_state is not None:
+                self._load_task_state.message = "Load cancelled"
+                self._load_task_state.mark_finished()
 
         def on_error(exc: BaseException, tb: str) -> None:
             dialog.close()
@@ -321,6 +345,9 @@ class FolderController:
                     raise
             if previous_path:
                 self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+            if self._load_task_state is not None:
+                self._load_task_state.message = f"Load error: {exc}"
+                self._load_task_state.mark_finished()
 
         def worker_fn(cancel_event, progress_cb):
             result = self._app_state._build_files_for_path(

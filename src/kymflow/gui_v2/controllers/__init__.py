@@ -34,6 +34,7 @@ from kymflow.gui_v2.controllers.edit_roi_controller import EditRoiController
 from kymflow.gui_v2.controllers.roi_edit_state_controller import (
     RoiEditStateController,
 )
+from kymflow.gui_v2.controllers.footer_controller import FooterController
 
 __all__ = [
     "AnalysisController",
@@ -56,6 +57,7 @@ __all__ = [
     "NextPrevFileController",
     "ROISelectionController",
     "RoiEditStateController",
+    "FooterController",
     "SaveController",
     "TaskStateBridgeController",
     "VelocityEventUpdateController",
