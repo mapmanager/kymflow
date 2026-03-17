@@ -12,6 +12,7 @@ from kymflow.gui_v2.events import (
     EventSelection,
     FileSelection,
     KymScrollXEvent,
+    FileChanged,
     ROISelection,
     SelectionOrigin,
 )
@@ -133,6 +134,22 @@ def test_kym_scroll_x_calls_view(mock_v2_view: MagicMock, mock_bus: MagicMock) -
     )
     bindings._on_kym_scroll_x(event)
     mock_v2_view.scroll_x.assert_called_once_with("next")
+
+
+def test_file_changed_roi_triggers_refresh_for_current_file(
+    mock_v2_view: MagicMock, mock_bus: MagicMock
+) -> None:
+    """FileChanged(change_type='roi') for current file calls refresh_rois_for_current_file."""
+    from kymflow.gui_v2.events import SelectionOrigin
+
+    bindings = ImageLineViewerV2Bindings(mock_bus, mock_v2_view)
+    event = FileChanged(
+        file=mock_v2_view._current_file,
+        change_type="roi",
+        origin=SelectionOrigin.IMAGE_VIEWER,
+    )
+    bindings._on_file_changed(event)
+    mock_v2_view.refresh_rois_for_current_file.assert_called_once()
 
 
 def test_teardown_unsubscribes(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:

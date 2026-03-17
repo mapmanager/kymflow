@@ -70,6 +70,9 @@ class TestKymimageToChannelManager:
         assert len(rois) == 2
         for roi in rois:
             assert roi.name.isdigit()
+            # Adapter must return fully-formed RegionOfInterest instances
+            assert hasattr(roi, "is_selected")
+            assert hasattr(roi, "is_editing")
         assert rois[0].r0 == 0 and rois[0].r1 == 5
         assert rois[1].r0 == 10 and rois[1].r1 == 15
 

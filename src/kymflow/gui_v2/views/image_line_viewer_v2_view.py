@@ -14,7 +14,7 @@ from typing import Callable, Literal, Optional
 from nicegui import ui
 
 from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.roi import RoiBounds
+from kymflow.core.image_loaders.roi import RectROI, RoiBounds
 from kymflow.core.plotting.theme import ThemeMode as KymflowThemeMode
 from kymflow.gui_v2.adapters import (
     create_full_roi_for_widget,
@@ -82,6 +82,24 @@ def _parse_roi_id_from_name(name: str) -> int | None:
 def _to_nicewidgets_theme(kymflow_theme: KymflowThemeMode) -> str:
     """Map kymflow ThemeMode to nicewidgets-compatible theme string."""
     return "dark" if kymflow_theme is KymflowThemeMode.DARK else "light"
+
+
+def _rectroi_to_region_of_interest(roi_id: int, rect: RectROI):
+    """Convert kymflow RectROI to nicewidgets RegionOfInterest.
+
+    Uses RoiBounds dim0 as rows (r0/r1) and dim1 as cols (c0/c1), matching
+    _region_of_interest_to_roi_bounds in the opposite direction.
+    """
+    from nicewidgets.image_line_widget.models import RegionOfInterest
+
+    b = rect.bounds
+    return RegionOfInterest(
+        name=str(roi_id),
+        r0=int(b.dim0_start),
+        r1=int(b.dim0_stop),
+        c0=int(b.dim1_start),
+        c1=int(b.dim1_stop),
+    )
 
 
 class ImageLineViewerV2View:
@@ -368,8 +386,6 @@ class ImageLineViewerV2View:
         kf = self._current_file
         if kf is None:
             # No file: clear ROIs and selection in the widget.
-            from nicewidgets.image_line_widget.image_roi_widget import RegionOfInterest
-
             self._image_roi_widget.set_rois({})
             self._image_roi_widget.set_selected_roi(None)
             return
@@ -377,15 +393,14 @@ class ImageLineViewerV2View:
         # Derive the ROI mapping from the KymImage.rois container. We use the
         # ROI id as the canonical name (string) so that it remains stable across
         # updates and matches the adapter conventions.
+        from nicewidgets.image_line_widget.models import RegionOfInterest
+
         rois_dict: dict[str, RegionOfInterest] = {}
         for roi_id in kf.rois.get_roi_ids():
-            roi = kf.rois.get(roi_id)
-            if roi is None:
+            rect = kf.rois.get(roi_id)
+            if rect is None:
                 continue
-            # RegionOfInterest stored on KymImage uses integer ids; convert to
-            # string name for the widget-level mapping.
-            roi_name = str(roi_id)
-            rois_dict[roi_name] = roi
+            rois_dict[str(roi_id)] = _rectroi_to_region_of_interest(roi_id, rect)
 
         self._image_roi_widget.set_rois(rois_dict)
 

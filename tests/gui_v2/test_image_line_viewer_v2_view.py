@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kymflow.gui_v2.events import EditRoi, SelectionOrigin
+from kymflow.gui_v2.events import EditRoi, ROISelection, SelectionOrigin
+from .test_nicewidgets_adapter import _make_synthetic_kym
 from kymflow.gui_v2.views.image_line_viewer_v2_view import (
     ImageLineViewerV2View,
     _region_of_interest_to_roi_bounds,
@@ -211,3 +212,60 @@ def test_suppress_roi_select_emit_initialized_false() -> None:
     """Phase 6: _suppress_roi_select_emit starts False to allow user-initiated ROI selection."""
     view = ImageLineViewerV2View()
     assert view._suppress_roi_select_emit is False
+
+
+def test_refresh_rois_for_current_file_converts_rectroi_to_region_of_interest(
+    v2_view: ImageLineViewerV2View,
+) -> None:
+    """refresh_rois_for_current_file passes RegionOfInterest objects to widget."""
+    from nicewidgets.image_line_widget.models import RegionOfInterest
+    # Build synthetic KymImage with one RectROI using shared helper
+    kym = _make_synthetic_kym(rois=[(1, 5, 2, 7)])
+
+    v2_view._current_file = kym
+    mock_widget = MagicMock()
+    v2_view._image_roi_widget = mock_widget
+
+    v2_view.refresh_rois_for_current_file()
+
+    mock_widget.set_rois.assert_called_once()
+    (rois_dict,) = mock_widget.set_rois.call_args.args
+    assert isinstance(rois_dict, dict)
+    assert rois_dict, "Expected at least one ROI in mapping"
+    for name, roi in rois_dict.items():
+        assert isinstance(name, str)
+        assert isinstance(roi, RegionOfInterest)
+        assert roi.r0 == 1
+        assert roi.r1 == 5
+        assert roi.c0 == 2
+        assert roi.c1 == 7
+
+
+def test_refresh_rois_for_current_file_preserves_selection(
+    v2_view: ImageLineViewerV2View,
+) -> None:
+    """refresh_rois_for_current_file sets selected ROI when current id exists."""
+    kym = _make_synthetic_kym(rois=[(0, 3, 0, 3)])
+
+    v2_view._current_file = kym
+    v2_view._current_roi_id = 1
+    mock_widget = MagicMock()
+    v2_view._image_roi_widget = mock_widget
+
+    v2_view.refresh_rois_for_current_file()
+
+    mock_widget.set_selected_roi.assert_called_once_with("1")
+
+
+def test_refresh_rois_for_current_file_no_file_clears_widget(
+    v2_view: ImageLineViewerV2View,
+) -> None:
+    """refresh_rois_for_current_file clears ROIs when no current file."""
+    mock_widget = MagicMock()
+    v2_view._image_roi_widget = mock_widget
+    v2_view._current_file = None
+
+    v2_view.refresh_rois_for_current_file()
+
+    mock_widget.set_rois.assert_called_once_with({})
+    mock_widget.set_selected_roi.assert_called_once_with(None)
