@@ -160,13 +160,13 @@ def test_run_flow_analysis_uses_provided_roi_id(sample_kym_file: KymImage) -> No
     # check is that the task is finished (not running), not the exact message.
     assert not task_state.running, f"Task should be finished but running={task_state.running}, message={task_state.message}"
     
-    # The message should be "Done" after all queue messages are processed.
+    # The message should be "Flow analysis complete" after all queue messages are processed.
     # However, if the final progress message ("7/7 windows") arrives after
     # "done", it will overwrite it. We check that either:
-    # 1. Message is "Done" (expected)
-    # 2. Message contains "windows" and task is finished (acceptable - final progress overwrote "Done")
-    assert task_state.message == "Done" or (not task_state.running and "windows" in task_state.message), \
-        f"Expected 'Done' or final progress message when finished, got: running={task_state.running}, message='{task_state.message}'"
+    # 1. Message is "Flow analysis complete" (expected)
+    # 2. Message contains "windows" and task is finished (acceptable - final progress overwrote completion)
+    assert task_state.message == "Flow analysis complete" or (not task_state.running and "windows" in task_state.message), \
+        f"Expected 'Flow analysis complete' or final progress message when finished, got: running={task_state.running}, message='{task_state.message}'"
 
 
 def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymImage) -> None:
@@ -302,7 +302,7 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
             
             time.sleep(0.1)
     
-    # Check that analysis was cancelled
+    # Check that analysis was cancelled (message is "Flow analysis cancelled" or contains "Cancelled")
     assert not task_state.running
-    assert "Cancelled" in task_state.message or task_state.message == "Done"
+    assert "Cancelled" in task_state.message or task_state.message == "Flow analysis cancelled"
 

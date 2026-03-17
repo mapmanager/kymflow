@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
-from kymflow.gui_v2.window_utils import set_window_title_for_file
 
 if TYPE_CHECKING:
     from kymflow.gui_v2.app_context import AppContext
@@ -89,6 +88,5 @@ class FileSelectionController:
         if match is not None and e.roi_id is not None:
             self._app_state.select_roi(e.roi_id)
         
-        # Set window title for selected file (use file object for blinded support)
-        if match is not None:
-            set_window_title_for_file(match, self._app_context)
+        # Window title now reflects only the loaded path (folder/CSV/file).
+        # Per-file selection is surfaced via the footer rather than title bar.

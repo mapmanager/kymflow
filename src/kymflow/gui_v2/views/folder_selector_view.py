@@ -295,10 +295,6 @@ class FolderSelectorView:
                     depth=depth,
                     phase="intent",
                 ))
-                
-                # Show success notification
-                path_type_str = path_type.value.capitalize()
-                ui.notify(f"{path_type_str} selected: {selected}", type="positive")
         except Exception as exc:
             logger.error(f"{path_type.value.capitalize()} selection failed: %s", exc, exc_info=True)
             ui.notify(f"Failed to select {path_type.value}: {exc}", type="negative")

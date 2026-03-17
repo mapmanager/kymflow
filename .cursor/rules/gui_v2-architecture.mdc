@@ -1,0 +1,27 @@
+## GUI v2 architecture rule
+
+When working on `kymflow/src/kymflow/gui_v2/`:
+
+1. **Read and follow the architecture doc**
+   - Before making non-trivial changes (new controllers, views, bindings, or
+     new cross-cutting flows), read:
+     - `kymflow/src/kymflow/gui_v2/ARCHITECTURE.md`
+   - Keep that document up to date when you:
+     - Introduce new long-running tasks or task types.
+     - Change how selection, loading, saving, or analysis flows work.
+
+2. **Use the established signal flow pattern**
+   - Prefer the pattern:
+     - Intent event → controller → `AppState` / `TaskState` →
+       bridge/controller → state events → bindings → views.
+   - Avoid pushing NiceGUI updates directly from background threads or from
+     arbitrary modules; route through controllers and the bus instead.
+
+3. **Footer and task progress**
+   - For long-running work on the Home page:
+     - Drive progress through `AppContext.home_task` (`TaskState`).
+     - Rely on `TaskStateBridgeController` to emit `TaskStateChanged` with
+       `task_type="home"`.
+     - Let `TaskProgressView` and `FooterView` consume `TaskStateChanged` from
+       the bus rather than introducing parallel ad hoc progress mechanisms.
+

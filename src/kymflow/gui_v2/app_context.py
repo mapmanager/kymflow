@@ -176,6 +176,8 @@ class AppContext:
         # install_global_styles()
         
         self.home_task = TaskState()
+        # Dedicated TaskState for folder / CSV loads (task_type='load')
+        self.load_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
         
@@ -241,6 +243,7 @@ class AppContext:
         self.user_config = UserConfig.load()
         self.app_config = AppConfig.load()
         self.home_task = TaskState()
+        self.load_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
         

@@ -234,24 +234,25 @@ class EventBus:
             logger.debug(f'  num handlers={len(filtered_handlers)}')
 
 
-        for _idx, (handler, phase) in enumerate(filtered_handlers):
-            if 1 or self._config.trace:
+        for handler, phase in filtered_handlers:
+            # Defensive guard: skip any non-callable handlers so a bad subscription
+            # entry cannot crash the entire bus.
+            if handler is None or not callable(handler):
+                logger.warning(
+                    f"[bus] Skipping non-callable handler {handler!r} for {etype.__name__} "
+                    f"(phase={phase}, client={self._client_id})"
+                )
+                continue
+
+            if self._config.trace:
                 name = getattr(handler, "__qualname__", repr(handler))
                 logger.info(f"[bus] emit -> {etype.__name__} handling by {name}")
                 logger.info(f"  phase={event_phase}, client={self._client_id}")
-            try:
-                # Skip invalid or missing handlers defensively
-                if handler is None or not callable(handler):
-                    logger.warning(
-                        f"[bus] Skipping non-callable handler {handler!r} for {etype.__name__} "
-                        f"(phase={phase}, client={self._client_id})"
-                    )
-                    continue
 
-                # abb 20260314 declan, implementing xxx
+            try:
+                # Async handler path: capture current handler, event, and client in default
+                # arguments to avoid late-binding closure bugs when scheduling the task.
                 if inspect.iscoroutinefunction(handler):
-                    # fails if handler tries to use nicegui context, like ui.notify()
-                    # background_tasks.create(handler(event))
                     current_client = context.client
 
                     async def task_with_context(
@@ -259,15 +260,16 @@ class EventBus:
                         ev=event,
                         client=current_client,
                     ):
+                        # Re-enter the NiceGUI client context and invoke the handler.
                         with client:
                             await h(ev)
 
                     background_tasks.create(task_with_context())
 
                 else:
-                    # was this
+                    # Synchronous handlers are invoked inline.
                     handler(event)
-                    
+
             except Exception:
                 handler_name = getattr(handler, "__qualname__", repr(handler))
                 logger.exception(

@@ -111,7 +111,7 @@ def run_flow_analysis(
                 pct = max(0.0, min(1.0, float(pct)))
                 task_state.set_progress(pct, f"{completed}/{total} windows")
             elif tag == "done":
-                task_state.message = "Done"
+                task_state.message = "Flow analysis complete"
                 task_state.mark_finished()
                 
                 # Log success with details
@@ -131,13 +131,13 @@ def run_flow_analysis(
                 if timer is not None:
                     timer.cancel()
             elif tag == "cancelled":
-                task_state.message = "Cancelled"
+                task_state.message = "Flow analysis cancelled"
                 task_state.mark_finished()
                 if timer is not None:
                     timer.cancel()
             elif tag == "error":
                 # ('error', 'message')
-                task_state.message = f"Error: {msg[1]}"
+                task_state.message = f"Flow analysis error: {msg[1]}"
                 task_state.mark_finished()
                 if timer is not None:
                     timer.cancel()

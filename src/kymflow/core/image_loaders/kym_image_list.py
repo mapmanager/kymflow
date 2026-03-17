@@ -89,6 +89,8 @@ class KymImageList(AcqImageList[KymImage]):
         *,
         file_path_list: list[str] | list[Path] | None = None,
         csv_source_path: Path | None = None,
+        csv_total_rows: int | None = None,
+        csv_skipped_count: int | None = None,
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
         depth: int = 4,
@@ -103,6 +105,9 @@ class KymImageList(AcqImageList[KymImage]):
                 Mutually exclusive with `file_path_list`.
             file_path_list: List of file paths to load. Each path should be a full path to a .tif file.
                 Mutually exclusive with `path`. If provided, `path` must be None.
+            csv_source_path: When loading from a CSV, the path to the CSV file. None otherwise.
+            csv_total_rows: When loading from CSV, total rows with non-empty rel_path (M). None otherwise.
+            csv_skipped_count: When loading from CSV, number of rows skipped (path missing). None otherwise.
             file_extension: File extension to match (e.g., ".tif"). Defaults to ".tif".
                 Applies to all modes (directory scan, single file, and file_path_list).
             ignore_file_stub: Stub string to ignore in filenames. If a filename contains
@@ -123,6 +128,8 @@ class KymImageList(AcqImageList[KymImage]):
             path=path,
             file_path_list=file_path_list,
             csv_source_path=csv_source_path,
+            csv_total_rows=csv_total_rows,
+            csv_skipped_count=csv_skipped_count,
             image_cls=KymImage,  # Always KymImage, no parameter
             file_extension=file_extension,
             ignore_file_stub=ignore_file_stub,
@@ -183,14 +190,16 @@ class KymImageList(AcqImageList[KymImage]):
         path_obj = Path(path).expanduser().resolve()
 
         if path_obj.is_file() and path_obj.suffix.lower() == ".csv":
-            file_path_list = cls.collect_paths_from_csv(
+            result = cls.collect_paths_from_csv(
                 path_obj,
                 cancel_event=cancel_event,
                 progress_cb=progress_cb,
             )
             return cls(
-                file_path_list=file_path_list,
+                file_path_list=result.path_list,
                 csv_source_path=path_obj,
+                csv_total_rows=result.total_rows,
+                csv_skipped_count=result.skipped_count,
                 file_extension=file_extension,
                 ignore_file_stub=ignore_file_stub,
                 cancel_event=cancel_event,

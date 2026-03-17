@@ -17,6 +17,7 @@ from kymflow.gui_v2.controllers import (
     FileSelectionController,
     FileTablePersistenceController,
     FolderController,
+    FooterController,
     ImageDisplayController,
     KymEventCacheSyncController,
     KymEventController,
@@ -67,6 +68,7 @@ from kymflow.gui_v2.views import (
     PlotPoolBindings,  # 20260213ppc
     TaskProgressBindings,
     TaskProgressView,
+    FooterView,
 )
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.utils.lazy_section import LazySection, LazySectionConfig  # 20260213ppc
@@ -128,7 +130,9 @@ class HomePage(BasePage):
         self._analysis_controller: AnalysisController | None = None
         self._save_controller: SaveController | None = None
         self._task_state_bridge: TaskStateBridgeController | None = None
+        self._load_task_bridge: TaskStateBridgeController | None = None
         self._persistence: FileTablePersistenceController | None = None
+        self._footer_controller: FooterController | None = None
 
         # View objects (created in __init__, UI elements created in build())
         self._folder_view = FolderSelectorView(
@@ -293,6 +297,9 @@ class HomePage(BasePage):
         self._save_selected_shortcut_registered: bool = False
         self._save_selected_shortcut_event: str = "kymflow_save_selected"
 
+        # Footer view (controller wired in _ensure_setup)
+        self._footer_view = FooterView()
+
     def _ensure_setup(self) -> None:
         """Ensure controllers and bindings are set up once per client.
 
@@ -305,7 +312,10 @@ class HomePage(BasePage):
         # Controllers (subscribe to events once per client)
         self._bridge = AppStateBridgeController(self.context.app_state, self.bus)
         self._folder_controller = FolderController(
-            self.context.app_state, self.bus, self.context.user_config
+            self.context.app_state,
+            self.bus,
+            self.context.user_config,
+            load_task_state=self.context.load_task,
         )
         self._file_selection_controller = FileSelectionController(
             self.context.app_state, self.bus, self.context
@@ -345,6 +355,19 @@ class HomePage(BasePage):
         self._task_state_bridge = TaskStateBridgeController(
             self.context.home_task, self.bus, task_type="home"
         )
+        self._load_task_bridge = TaskStateBridgeController(
+            self.context.load_task, self.bus, task_type="load"
+        )
+        self._add_roi_controller = AddRoiController(
+            self.context.app_state, self.bus
+        )
+        self._delete_roi_controller = DeleteRoiController(
+            self.context.app_state, self.bus
+        )
+        self._edit_roi_controller = EditRoiController(
+            self.context.app_state, self.bus
+        )
+        self._roi_edit_state_controller = RoiEditStateController(self.bus)
         self._event_analysis_controller = EventAnalysisController(
             self.context.app_state, self.bus
         )
@@ -353,6 +376,13 @@ class HomePage(BasePage):
             self.context.app_state,
             self.bus,
             storage_key="kymflow_selected_file_path_v2",
+        )
+
+        # Footer controller (subscribes to selection + task events)
+        self._footer_controller = FooterController(
+            self.context.app_state,
+            self.bus,
+            self._footer_view,
         )
 
         # Bindings (subscribe to events once per client)
@@ -871,6 +901,9 @@ class HomePage(BasePage):
         
         # Build header without drawer toggle (no drawer needed with splitter)
         build_header(self.context, dark_mode, drawer_toggle_callback=None)
+
+        # Build global footer once per render
+        self._footer_view.render()
         # self._register_full_zoom_shortcut()
         # self._register_next_prev_file_shortcuts()
         self._register_save_selected_shortcut()
@@ -879,6 +912,9 @@ class HomePage(BasePage):
         CLOSED = 6
         OPEN_DEFAULT = 28
         last_open = {'value': OPEN_DEFAULT}
+        # Tab that currently "has" the drawer open; used so we only close when same tab is clicked again.
+        # We track this ourselves because the tab panel may update to the clicked tab before our handler runs.
+        last_open_tab = {'value': None}
 
         # ui.keyboard(on_key=self._on_key, ignore=['input', 'select', 'button', 'textarea'])
         ui.keyboard(on_key=self._on_key)  # no ignore will ignore when defaults active
@@ -890,10 +926,19 @@ class HomePage(BasePage):
                 if splitter.value <= (CLOSED + 2):
                     splitter.value = last_open['value']
 
+            def _on_tab_click(clicked_tab) -> None:
+                """Open drawer when closed; close drawer only when the same tab that has it open is clicked again."""
+                if splitter.value > (CLOSED + 2) and last_open_tab['value'] is not None and last_open_tab['value'] == clicked_tab:
+                    last_open['value'] = splitter.value
+                    splitter.value = CLOSED
+                else:
+                    last_open_tab['value'] = clicked_tab
+                    ensure_open()
+
             # LEFT: Splitter pane with tabs and toolbars
             with splitter.before:
                 # Render drawer view content into splitter before pane
-                self._drawer_view.render(on_tab_click=ensure_open)
+                self._drawer_view.render(on_tab_click=_on_tab_click)
                 
                 # Initialize drawer views with current state
                 self._drawer_view.initialize_views(
