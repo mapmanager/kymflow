@@ -116,24 +116,19 @@ class DrawerView:
 
             # Tab click: pass clicked tab to callback (for open/toggle behavior)
             if on_tab_click is not None:
-                for t in (tab_analysis, tab_plotting, tab_metadata, tab_options, tab_about):
+                for t in (tab_analysis, tab_diameter, tab_metadata, tab_options, tab_about):
                     t.on("click", lambda e, tab=t: on_tab_click(tab))
 
             with tab_panels:
                 # Analysis tab panel - contains analysis tools
                 with ui.tab_panel(tab_analysis):
                     with ui.column().classes("w-full gap-4"):
-                        # Analysis toolbar section
                         self._analysis_toolbar_view.render()
 
-                # Plotting tab panel - contains plotting and visualization controls
-                with ui.tab_panel(tab_plotting):
+                # Diameter tab panel
+                with ui.tab_panel(tab_diameter):
                     with ui.column().classes("w-full gap-4"):
-                        self._line_plot_controls_view.render()
-                        with ui.expansion("Contrast", value=True) \
-                                .props('header-class="my-expansion-header-shift-left"') \
-                                .classes("w-full"):
-                            self._contrast_view.render()
+                        pass  # placeholder
 
                 # Metadata tab panel - contains metadata editing widgets
                 with ui.tab_panel(tab_metadata):

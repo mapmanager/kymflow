@@ -9,6 +9,7 @@ from kymflow.gui_v2.controllers.event_selection_controller import EventSelection
 from kymflow.gui_v2.controllers.file_selection_controller import FileSelectionController
 from kymflow.gui_v2.controllers.file_table_persistence import FileTablePersistenceController
 from kymflow.gui_v2.controllers.folder_controller import FolderController
+from kymflow.gui_v2.controllers.footer_controller import FooterController
 from kymflow.gui_v2.controllers.image_display_controller import ImageDisplayController
 from kymflow.gui_v2.controllers.kym_event_cache_sync_controller import (
     KymEventCacheSyncController,

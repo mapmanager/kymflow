@@ -358,16 +358,6 @@ class HomePage(BasePage):
         self._load_task_bridge = TaskStateBridgeController(
             self.context.load_task, self.bus, task_type="load"
         )
-        self._add_roi_controller = AddRoiController(
-            self.context.app_state, self.bus
-        )
-        self._delete_roi_controller = DeleteRoiController(
-            self.context.app_state, self.bus
-        )
-        self._edit_roi_controller = EditRoiController(
-            self.context.app_state, self.bus
-        )
-        self._roi_edit_state_controller = RoiEditStateController(self.bus)
         self._event_analysis_controller = EventAnalysisController(
             self.context.app_state, self.bus
         )
