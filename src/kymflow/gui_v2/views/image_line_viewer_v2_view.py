@@ -147,9 +147,10 @@ class ImageLineViewerV2View:
 
     def render(self) -> None:
         """Create the viewer UI: ImageRoiWidget + LinePlotWidget in a column."""
-        from nicewidgets.image_line_widget.image_roi_widget import ImageRoiWidget
         from nicewidgets.image_line_widget.image_contrast_widget import ImageContrastWidget
-        from nicewidgets.image_line_widget.line_plot_widget import LinePlotWidget
+        from nicewidgets.image_line_widget.image_line_combined_widget import (
+            ImageLineCombinedWidget,
+        )
         from nicewidgets.image_line_widget.models import (
             AxisEvent,
             ChannelEvent,
@@ -276,30 +277,20 @@ class ImageLineViewerV2View:
                 theme=theme_str,
             )
 
-            self._image_roi_widget = ImageRoiWidget(
-                widget_name="image_roi_widget",
+            combined = ImageLineCombinedWidget(
+                widget_name="image_line_combined",
                 manager=placeholder_manager,
                 initial_rois=[],
                 on_roi_event=on_roi_event,
                 on_axis_change=on_axis_change,
-                on_request_add_roi=on_request_add_roi,
-                 on_channel_event=on_channel_event,
+                on_channel_event=on_channel_event,
+                on_rect_selection=None,
                 theme=theme_str,
             )
 
-            # LinePlotWidget with placeholder data
-            x_placeholder = np.arange(10, dtype=float)
-            y_placeholder = np.zeros(10)
-            self._line_plot_widget = LinePlotWidget(
-                widget_name="line_plot_1",
-                x=x_placeholder,
-                y=y_placeholder,
-                name="velocity",
-                x_label="Time (s)",
-                y_label="Velocity",
-                on_axis_change=on_axis_change,
-                theme=theme_str,
-            )
+            # Expose compatibility handles used throughout this view.
+            self._image_roi_widget = combined.image_roi_widget
+            self._line_plot_widget = combined.line_plot_widget
 
         # Populate from current state if we have file/roi
         self._refresh_from_state()
