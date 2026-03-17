@@ -20,6 +20,7 @@ from kymflow.gui_v2.window_utils import set_window_title_for_path
 from kymflow.core.user_config import UserConfig
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import ProgressMessage
+from kymflow.gui_v2.footer_status import set_footer_status
 
 logger = get_logger(__name__)
 
@@ -98,6 +99,8 @@ class FolderController:
             True if thread runner is available, False if busy (and emits CancelSelectPathEvent).
         """
         if self._thread_runner.is_running():
+            # Surface status via footer rather than only a toast.
+            set_footer_status(self._bus, "Load: a load is already in progress", level="warning")
             ui.notify("A load is already in progress", type="warning")
             if current_path:
                 self._bus.emit(CancelSelectPathEvent(previous_path=current_path))
@@ -152,6 +155,8 @@ class FolderController:
         # 3. Validation (path exists)
         if not (is_file or is_folder):
             logger.error(f'Path does not exist: "{new_path}"')
+            msg = f"Load error: path does not exist: {new_path}"
+            set_footer_status(self._bus, msg, level="warning")
             ui.notify(f"Path does not exist: {new_path}", type="warning")
             if current_path:
                 logger.debug(f'emitting CancelSelectPathEvent for previous path: "{current_path}"')
@@ -298,23 +303,27 @@ class FolderController:
                 phase="state",
             ))
 
-            try:
-                if is_csv:
-                    ui.notify(f"Loaded CSV: {path.name}", type="positive")
+            n = len(files)
+            if is_csv:
+                # files is always KymImageList; csv_total_rows/csv_skipped_count are set only when loaded from CSV
+                m = files.csv_total_rows
+                k = files.csv_skipped_count or 0
+                if m is not None:
+                    message = f"Loaded CSV: {path.name} ({n} of {m} files)"
+                    if k > 0:
+                        message += f" · {k} skipped"
                 else:
-                    ui.notify(f"Loaded: {path.name}", type="positive")
-            except RuntimeError as e:
-                if "parent element" in str(e) or "slot" in str(e).lower():
-                    # UI context is gone, skip notification
-                    logger.error(f"Skipping notification - UI context deleted: {e}")
-                else:
-                    raise
+                    message = f"Loaded CSV: {path.name} ({n} files)"
+            else:
+                message = f"Loaded {n} file(s) from {path.name}"
+            set_footer_status(self._bus, message, level="success")
             if self._load_task_state is not None:
-                self._load_task_state.message = "Load complete"
+                self._load_task_state.message = message
                 self._load_task_state.mark_finished()
 
         def on_cancelled() -> None:
             dialog.close()
+            set_footer_status(self._bus, "Load: cancelled", level="warning")
             try:
                 ui.notify("Load cancelled", type="warning")
             except RuntimeError as e:
@@ -345,8 +354,10 @@ class FolderController:
                     raise
             if previous_path:
                 self._bus.emit(CancelSelectPathEvent(previous_path=previous_path))
+            error_msg = f"Load error: {exc}"
+            set_footer_status(self._bus, error_msg, level="error")
             if self._load_task_state is not None:
-                self._load_task_state.message = f"Load error: {exc}"
+                self._load_task_state.message = error_msg
                 self._load_task_state.mark_finished()
 
         def worker_fn(cancel_event, progress_cb):

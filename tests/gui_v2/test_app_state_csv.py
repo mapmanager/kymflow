@@ -113,10 +113,13 @@ def test_load_path_csv_empty_paths(app_state: AppState) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_file = Path(tmpdir) / "test.csv"
         csv_file.write_text("rel_path\n")
-        
-        # Empty path_list should raise ValueError (AcqImageList doesn't allow empty file_path_list)
-        with pytest.raises(ValueError, match="file_path_list cannot be empty"):
-            app_state.load_path(csv_file)
+
+        app_state.load_path(csv_file)
+
+        # Load succeeds with 0 files; list has csv_total_rows=0
+        assert len(app_state.files.images) == 0
+        assert app_state.files.csv_total_rows == 0
+        assert app_state.files.csv_skipped_count == 0
 
 
 def test_load_path_csv_sets_folder(app_state: AppState) -> None:
@@ -153,6 +156,24 @@ def test_load_path_csv_triggers_callbacks(app_state: AppState) -> None:
         app_state.load_path(csv_file)
         
         assert handler_called
+
+
+def test_load_path_csv_with_invalid_rows_sets_counts(app_state: AppState) -> None:
+    """Test load_path() with CSV that has some invalid rows sets csv_total_rows and csv_skipped_count."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_file = Path(tmpdir) / "test.csv"
+        file1 = Path(tmpdir) / "file1.tif"
+        test_image = np.zeros((100, 200), dtype=np.uint16)
+        tifffile.imwrite(file1, test_image)
+
+        # One valid, one invalid rel_path
+        csv_file.write_text("rel_path\nfile1.tif\nmissing.tif\n")
+
+        app_state.load_path(csv_file)
+
+        assert len(app_state.files.images) == 1
+        assert app_state.files.csv_total_rows == 2
+        assert app_state.files.csv_skipped_count == 1
 
 
 def test_refresh_file_rows_with_csv(app_state: AppState) -> None:

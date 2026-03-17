@@ -8,7 +8,7 @@ import pytest
 import tifffile
 
 from kymflow.core.image_loaders.kym_image_list import KymImageList
-from kymflow.core.image_loaders.acq_image_list import AcqImageList
+from kymflow.core.image_loaders.acq_image_list import AcqImageList, CsvCollectResult
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.utils.progress import CancelledError, ProgressMessage
 
@@ -31,10 +31,13 @@ def test_collect_paths_from_csv_valid(tmp_path: Path) -> None:
     csv_path = tmp_path / "files.csv"
     csv_path.write_text("rel_path\nsubdir/a.tif\nsubdir/b.tif\n")
 
-    paths = AcqImageList.collect_paths_from_csv(csv_path)
-    assert len(paths) == 2
-    assert paths[0].name == "a.tif"
-    assert paths[1].name == "b.tif"
+    result = AcqImageList.collect_paths_from_csv(csv_path)
+    assert isinstance(result, CsvCollectResult)
+    assert len(result.path_list) == 2
+    assert result.path_list[0].name == "a.tif"
+    assert result.path_list[1].name == "b.tif"
+    assert result.total_rows == 2
+    assert result.skipped_count == 0
 
 
 def test_collect_paths_from_csv_missing_column(tmp_path: Path) -> None:
@@ -93,16 +96,20 @@ def test_collect_paths_from_csv_nested_structure(tmp_path: Path) -> None:
     csv_path.write_text(csv_content)
     
     # Test collect_paths_from_csv
-    paths = AcqImageList.collect_paths_from_csv(csv_path)
-    
+    result = AcqImageList.collect_paths_from_csv(csv_path)
+    assert isinstance(result, CsvCollectResult)
+    paths = result.path_list
+
     # Verify all paths were found
     assert len(paths) == 3
-    
+    assert result.total_rows == 3
+    assert result.skipped_count == 0
+
     # Verify paths are correct
     assert paths[0] == file1.resolve()
     assert paths[1] == file2.resolve()
     assert paths[2] == file3.resolve()
-    
+
     # Verify file names
     assert paths[0].name == "20251014_A100_0001.tif"
     assert paths[1].name == "20251015_A101_0002.tif"
@@ -110,17 +117,56 @@ def test_collect_paths_from_csv_nested_structure(tmp_path: Path) -> None:
 
 
 def test_collect_paths_from_csv_invalid_rel_path(tmp_path: Path) -> None:
-    """Test collect_paths_from_csv() raises ValueError when rel_path doesn't exist."""
-    # Create CSV with invalid rel_path
+    """Test collect_paths_from_csv() skips invalid rel_path and returns counts."""
     csv_path = tmp_path / "files.csv"
     csv_content = """rel_path
 nonexistent/file.tif
 """
     csv_path.write_text(csv_content)
-    
-    # Should raise ValueError because file doesn't exist
-    with pytest.raises(ValueError, match="invalid rel_path values that don't exist"):
-        AcqImageList.collect_paths_from_csv(csv_path)
+
+    result = AcqImageList.collect_paths_from_csv(csv_path)
+    assert isinstance(result, CsvCollectResult)
+    assert len(result.path_list) == 0
+    assert result.total_rows == 1
+    assert result.skipped_count == 1
+
+
+def test_collect_paths_from_csv_mixed_valid_invalid(tmp_path: Path) -> None:
+    """Test collect_paths_from_csv() with mix of valid and invalid rows."""
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    file1 = subdir / "a.tif"
+    file2 = subdir / "c.tif"
+    _make_tif(file1)
+    _make_tif(file2)
+
+    csv_path = tmp_path / "files.csv"
+    csv_path.write_text("rel_path\nsubdir/a.tif\nnonexistent/b.tif\nsubdir/c.tif\n")
+
+    result = AcqImageList.collect_paths_from_csv(csv_path)
+    assert isinstance(result, CsvCollectResult)
+    assert len(result.path_list) == 2  # a.tif and c.tif
+    assert result.path_list[0].name == "a.tif"
+    assert result.path_list[1].name == "c.tif"
+    assert result.total_rows == 3
+    assert result.skipped_count == 1
+
+
+def test_load_from_path_csv_sets_csv_counts(tmp_path: Path) -> None:
+    """Test KymImageList.load_from_path(CSV) sets csv_total_rows and csv_skipped_count."""
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    file1 = subdir / "a.tif"
+    _make_tif(file1)
+
+    csv_path = tmp_path / "files.csv"
+    csv_path.write_text("rel_path\nsubdir/a.tif\nnonexistent/b.tif\n")
+
+    files = KymImageList.load_from_path(csv_path)
+
+    assert len(files) == 1
+    assert files.csv_total_rows == 2
+    assert files.csv_skipped_count == 1
 
 
 def test_load_from_path_emits_progress_for_csv(tmp_path: Path) -> None:

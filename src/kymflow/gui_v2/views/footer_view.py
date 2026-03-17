@@ -10,9 +10,25 @@ The view does not emit events; it is updated by FooterController.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from nicegui import ui
+
+
+# Status label styling by level. Change these to switch background vs text color.
+# "none" / "info" / "success" clear any previous warning/error styling.
+STATUS_LABEL_BASE_CLASSES = "truncate max-w-[420px] text-gray-300"
+STATUS_LEVEL_CLASSES: dict[str, str] = {
+    "none": "",
+    "info": "",
+    "success": "",
+    "warning": "bg-yellow-500/80 text-gray-900",
+    "error": "bg-red-600/80 text-white",
+}
+# Alternative: text-only colors: "warning": "text-yellow-400", "error": "text-red-400"
+
+
+FooterStatusLevel = Literal["info", "warning", "error", "success", "none"]
 
 
 class FooterView:
@@ -41,7 +57,7 @@ class FooterView:
 
             with ui.row().classes("items-center gap-2 min-w-0"):
                 self._status_label = ui.label("").classes(
-                    "truncate max-w-[420px] text-gray-300"
+                    f"{STATUS_LABEL_BASE_CLASSES} {STATUS_LEVEL_CLASSES['none']}".strip()
                 )
 
             with ui.row().classes("items-center gap-2"):
@@ -52,7 +68,7 @@ class FooterView:
 
         # Initial visibility/state
         self.set_selection_summary(None, None, None)
-        self.set_last_event("")
+        self.set_last_event("", level="none")
         self.set_progress(running=False, progress=0.0, message="")
 
     def set_selection_summary(
@@ -76,11 +92,19 @@ class FooterView:
         text = " · ".join(parts) if parts else ""
         self._selection_label.text = text
 
-    def set_last_event(self, text: str) -> None:
-        """Update center 'last event' label."""
+    def set_last_event(self, text: str, level: FooterStatusLevel = "info") -> None:
+        """Update center 'last event' label and its style by level.
+
+        level 'none', 'info', or 'success' clears warning/error styling.
+        level 'warning' / 'error' applies background (or text) color per STATUS_LEVEL_CLASSES.
+        """
         if self._status_label is None:
             return
         self._status_label.text = text or ""
+        extra = STATUS_LEVEL_CLASSES.get(level, "")
+        self._status_label.classes(
+            replace=f"{STATUS_LABEL_BASE_CLASSES} {extra}".strip()
+        )
 
     def set_progress(self, *, running: bool, progress: float, message: str) -> None:
         """Update right-hand progress bar and label from TaskState."""

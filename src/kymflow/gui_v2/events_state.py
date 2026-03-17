@@ -114,3 +114,21 @@ class AnalysisCompleted:
     success: bool
     phase: Literal["state"] = "state"
 
+
+@dataclass(frozen=True, slots=True)
+class FooterStatusMessage:
+    """Ad-hoc footer status message.
+
+    Lightweight, bus-visible status event for the footer. This lets controllers
+    and views surface one-off messages (e.g. validation, short info/warn/error)
+    without introducing dedicated event types for each case.
+
+    Attributes:
+        text: Human-readable status text to show in the footer.
+        level: Optional severity hint ("info", "warning", "error", "success").
+            Currently used only for styling; defaults to "info".
+    """
+
+    text: str
+    level: Literal["info", "warning", "error", "success"] = "info"
+

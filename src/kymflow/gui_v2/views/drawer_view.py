@@ -8,7 +8,7 @@ organization of toolbar widgets.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from nicegui import ui
 
@@ -71,8 +71,15 @@ class DrawerView:
         self._metadata_tab_view = metadata_tab_view
         self._about_tab_view = about_tab_view
         self._options_tab_view = options_tab_view
+        self._tab_panels: Any = None  # Set in render(); used by get_current_tab()
 
-    def render(self, *, on_tab_click: Optional[Callable[[], None]] = None) -> None:
+    def get_current_tab(self) -> Any:
+        """Return the currently selected tab element, or None if not yet rendered."""
+        if self._tab_panels is None:
+            return None
+        return getattr(self._tab_panels, "value", None)
+
+    def render(self, *, on_tab_click: Optional[Callable[[Any], None]] = None) -> None:
         """Create the splitter pane UI.
 
         Always creates fresh UI elements because NiceGUI creates a new container
@@ -84,7 +91,8 @@ class DrawerView:
         directly into the parent container.
 
         Args:
-            on_tab_click: Optional callback to call when a tab is clicked (for auto-expand behavior).
+            on_tab_click: Optional callback(clicked_tab) when a tab is clicked.
+                Receives the tab element that was clicked (for open/toggle behavior).
         """
         # Add CSS for icon-only tabs with smaller icons/fonts
         ui.add_css("""
@@ -110,58 +118,47 @@ class DrawerView:
                 tab_options = ui.tab("Options", icon="settings").tooltip("Options")
                 tab_about = ui.tab("About", icon="info").tooltip("About")
             
-            # Auto-expand left pane when user clicks a tab icon (while minimized)
+            # Right side: Tab panels - content for each tab (store ref for get_current_tab)
+            tab_panels = ui.tab_panels(tabs, value=tab_analysis).props("vertical animated").classes(
+                "flex-grow min-w-0 p-4"
+            )
+            self._tab_panels = tab_panels
+
+            # Tab click: pass clicked tab to callback (for open/toggle behavior)
             if on_tab_click is not None:
                 for t in (tab_analysis, tab_plotting, tab_metadata, tab_options, tab_about):
-                    t.on('click', lambda e: on_tab_click())
-            
-            # Right side: Tab panels - content for each tab
-            with ui.tab_panels(tabs, value=tab_analysis) \
-                    .props('vertical animated') \
-                    .classes("flex-grow min-w-0 p-4"):
-                    # Analysis tab panel - contains analysis tools
-                    with ui.tab_panel(tab_analysis):
-                        with ui.column().classes("w-full gap-4"):
-                            # Analysis toolbar section
-                            self._analysis_toolbar_view.render()
-                            
-                            # Task progress section
-                            # COMMENTED OUT: Progress toolbar is currently broken because multiprocessing
-                            # for 'analyze flow' does not work properly. Task state updates are not
-                            # being communicated correctly across processes, causing the progress bar
-                            # to not update. Re-enable once multiprocessing task state communication is fixed.
-                            # ui.label("Progress").classes("text-sm font-semibold mt-2")
-                            # self._drawer_task_progress_view.render()
-                    
-                    # Plotting tab panel - contains plotting and visualization controls
-                    with ui.tab_panel(tab_plotting):
-                        with ui.column().classes("w-full gap-4"):
+                    t.on("click", lambda e, tab=t: on_tab_click(tab))
 
-                            # Line plot controls section - in disclosure triangle
-                            # with ui.expansion("Line Plot Controls", value=True).classes("w-full"):
-                            self._line_plot_controls_view.render()
+            with tab_panels:
+                # Analysis tab panel - contains analysis tools
+                with ui.tab_panel(tab_analysis):
+                    with ui.column().classes("w-full gap-4"):
+                        # Analysis toolbar section
+                        self._analysis_toolbar_view.render()
 
-                            # Contrast section - in disclosure triangle
-                            with ui.expansion("Contrast", value=True) \
+                # Plotting tab panel - contains plotting and visualization controls
+                with ui.tab_panel(tab_plotting):
+                    with ui.column().classes("w-full gap-4"):
+                        self._line_plot_controls_view.render()
+                        with ui.expansion("Contrast", value=True) \
                                 .props('header-class="my-expansion-header-shift-left"') \
                                 .classes("w-full"):
-                                self._contrast_view.render()
-                            
-                    
-                    # Metadata tab panel - contains metadata editing widgets
-                    with ui.tab_panel(tab_metadata):
-                        with ui.column().classes("w-full gap-4"):
-                            self._metadata_tab_view.render()
-                    
-                    # Options tab panel - contains app configuration settings
-                    with ui.tab_panel(tab_options):
-                        with ui.column().classes("w-full gap-4"):
-                            self._options_tab_view.render()
-                    
-                    # About tab panel - contains version info and logs
-                    with ui.tab_panel(tab_about):
-                        with ui.column().classes("w-full gap-4"):
-                            self._about_tab_view.render()
+                            self._contrast_view.render()
+
+                # Metadata tab panel - contains metadata editing widgets
+                with ui.tab_panel(tab_metadata):
+                    with ui.column().classes("w-full gap-4"):
+                        self._metadata_tab_view.render()
+
+                # Options tab panel - contains app configuration settings
+                with ui.tab_panel(tab_options):
+                    with ui.column().classes("w-full gap-4"):
+                        self._options_tab_view.render()
+
+                # About tab panel - contains version info and logs
+                with ui.tab_panel(tab_about):
+                    with ui.column().classes("w-full gap-4"):
+                        self._about_tab_view.render()
 
     def initialize_views(
         self,

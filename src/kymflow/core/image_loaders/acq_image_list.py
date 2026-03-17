@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import threading
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
@@ -34,6 +35,21 @@ from kymflow.core.utils.progress import CancelledError, ProgressCallback, Progre
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound=AcqImage)
+
+
+@dataclass(frozen=True)
+class CsvCollectResult:
+    """Result of collecting paths from a CSV with optional row failures.
+
+    Attributes:
+        path_list: Valid resolved paths (length N).
+        total_rows: Number of CSV rows with non-empty rel_path (M).
+        skipped_count: Number of rows where resolved path did not exist (K).
+    """
+
+    path_list: List[Path]
+    total_rows: int
+    skipped_count: int
 
 
 class AcqImageList(Generic[T]):
@@ -75,6 +91,8 @@ class AcqImageList(Generic[T]):
         *,
         file_path_list: list[str] | list[Path] | None = None,
         csv_source_path: Path | None = None,
+        csv_total_rows: Optional[int] = None,
+        csv_skipped_count: Optional[int] = None,
         image_cls: Type[T] = AcqImage,
         file_extension: str = ".tif",
         ignore_file_stub: str | None = None,
@@ -90,6 +108,12 @@ class AcqImageList(Generic[T]):
                 Mutually exclusive with `file_path_list`.
             file_path_list: List of file paths to load. Each path should be a full path to a .tif file.
                 Mutually exclusive with `path`. If provided, `path` must be None.
+            csv_source_path: When loading from a CSV, the path to the CSV file. Used for
+                base path and UI summary. None for folder/single-file mode.
+            csv_total_rows: When loading from CSV, total number of rows with non-empty rel_path (M).
+                None for folder/single-file mode. Used for "N of M files" in UI.
+            csv_skipped_count: When loading from CSV, number of rows skipped (path did not exist).
+                None for folder/single-file mode.
             image_cls: Class to instantiate for each file. Defaults to AcqImage.
             file_extension: File extension to match (e.g., ".tif"). Defaults to ".tif".
                 Applies to all modes (directory scan, single file, and file_path_list).
@@ -118,10 +142,12 @@ class AcqImageList(Generic[T]):
         self._single_file: Optional[Path] = None
         self._file_path_list: Optional[List[Path]] = None
         self._csv_source_path: Optional[Path] = None
+        self._csv_total_rows: Optional[int] = None
+        self._csv_skipped_count: Optional[int] = None
 
         # Handle file_path_list mode
         if file_path_list is not None:
-            if not file_path_list:
+            if not file_path_list and not (csv_source_path is not None and csv_total_rows is not None):
                 raise ValueError("file_path_list cannot be empty")
             
             # Normalize and validate paths
@@ -149,13 +175,16 @@ class AcqImageList(Generic[T]):
             self._path: Optional[Path] = None
             self._folder: Optional[Path] = None
             self._csv_source_path = Path(csv_source_path).resolve() if csv_source_path is not None else None
-            
-            # Automatically load files during initialization
-            self._load_files(
-                follow_symlinks=follow_symlinks,
-                cancel_event=cancel_event,
-                progress_cb=progress_cb,
-            )
+            self._csv_total_rows = csv_total_rows
+            self._csv_skipped_count = csv_skipped_count
+
+            # Automatically load files during initialization (skip if empty from CSV)
+            if normalized_paths:
+                self._load_files(
+                    follow_symlinks=follow_symlinks,
+                    cancel_event=cancel_event,
+                    progress_cb=progress_cb,
+                )
             return
 
         # Allow initializing an empty list (backwards-compat)
@@ -215,6 +244,16 @@ class AcqImageList(Generic[T]):
         if self._single_file is not None:
             return "file"
         return "folder"
+
+    @property
+    def csv_total_rows(self) -> Optional[int]:
+        """Total CSV rows with non-empty rel_path (M). Set only when loaded from CSV."""
+        return self._csv_total_rows
+
+    @property
+    def csv_skipped_count(self) -> Optional[int]:
+        """Number of CSV rows skipped (path did not exist). Set only when loaded from CSV."""
+        return self._csv_skipped_count
 
     def _get_base_path(self) -> Optional[Path]:
         """Get the base path for computing relative paths.
@@ -511,14 +550,16 @@ class AcqImageList(Generic[T]):
         path_obj = Path(path).expanduser().resolve()
 
         if path_obj.is_file() and path_obj.suffix.lower() == ".csv":
-            file_path_list = cls.collect_paths_from_csv(
+            result = cls.collect_paths_from_csv(
                 path_obj,
                 cancel_event=cancel_event,
                 progress_cb=progress_cb,
             )
             return cls(
-                file_path_list=file_path_list,
+                file_path_list=result.path_list,
                 csv_source_path=path_obj,
+                csv_total_rows=result.total_rows,
+                csv_skipped_count=result.skipped_count,
                 image_cls=image_cls,
                 file_extension=file_extension,
                 ignore_file_stub=ignore_file_stub,
@@ -555,23 +596,23 @@ class AcqImageList(Generic[T]):
         *,
         cancel_event: threading.Event | None = None,
         progress_cb: ProgressCallback | None = None,
-    ) -> List[Path]:
+    ) -> CsvCollectResult:
         """Collect file paths from a CSV with a required 'rel_path' column.
-        
-        Constructs full paths by combining the CSV file's parent directory with
-        each 'rel_path' value from the CSV. Validates that all constructed paths exist.
-        
+
+        Rows whose resolved path does not exist are skipped and logged; they
+        do not cause a raise. Only hard errors (CSV unreadable, missing column) raise.
+
         Args:
             csv_path: Path to CSV file containing 'rel_path' column.
             cancel_event: Optional cancellation event.
             progress_cb: Optional progress callback.
-            
+
         Returns:
-            List of validated absolute Path objects.
-            
+            CsvCollectResult with path_list (valid paths), total_rows (non-empty
+            rel_path rows), and skipped_count (rows where path did not exist).
+
         Raises:
-            ValueError: If CSV is invalid, missing 'rel_path' column, or any
-                constructed path doesn't exist.
+            ValueError: If CSV is invalid or missing 'rel_path' column.
         """
         if cancel_event is not None and cancel_event.is_set():
             raise CancelledError("Cancelled before reading CSV.")
@@ -587,37 +628,29 @@ class AcqImageList(Generic[T]):
         if "rel_path" not in df.columns:
             raise ValueError("CSV must have a 'rel_path' column")
 
-        # Get CSV file's parent directory (base directory for relative paths)
         csv_parent_dir = csv_path.parent.resolve()
-        
-        # Construct full paths from CSV parent directory + rel_path values
         path_list: List[Path] = []
-        invalid_paths: List[str] = []
-        
+        skipped_count = 0
+
         for idx, rel_path_value in enumerate(df["rel_path"].tolist()):
             if cancel_event is not None and cancel_event.is_set():
                 raise CancelledError("Cancelled during CSV path construction.")
-            
-            # Skip None/NaN values
+
             if pd.isna(rel_path_value) or not rel_path_value:
                 continue
-            
-            # Construct full path: csv_parent_dir / rel_path_value
+
             full_path = (csv_parent_dir / str(rel_path_value)).resolve()
-            
-            # Validate path exists
+
             if not full_path.exists():
-                invalid_paths.append(str(rel_path_value))
+                logger.warning(
+                    f"CSV row failed to load: path does not exist (row {idx + 1}, rel_path={rel_path_value}, resolved={full_path})",
+                )
+                skipped_count += 1
             else:
                 path_list.append(full_path)
-        
-        # Raise error if any paths don't exist
-        if invalid_paths:
-            raise ValueError(
-                f"CSV contains {len(invalid_paths)} invalid rel_path values that don't exist: "
-                f"{', '.join(invalid_paths[:5])}" + ("..." if len(invalid_paths) > 5 else "")
-            )
-        
+
+        total_rows = len(path_list) + skipped_count
+
         if progress_cb is not None:
             progress_cb(
                 ProgressMessage(
@@ -628,7 +661,11 @@ class AcqImageList(Generic[T]):
                 )
             )
 
-        return path_list
+        return CsvCollectResult(
+            path_list=path_list,
+            total_rows=total_rows,
+            skipped_count=skipped_count,
+        )
 
     @staticmethod
     def collect_paths_from_file(

@@ -46,39 +46,10 @@ def set_window_title_for_path(path: Path | str, *, is_file: bool = False) -> Non
 
 
 def set_window_title_for_file(file: "KymImage", app_context: "AppContext") -> None:
-    """Set native window title based on KymImage with blinded support.
-    
-    Only sets title in native mode. Does nothing in web mode.
-    
-    Args:
-        file: KymImage instance.
-        app_context: AppContext to get blinded setting.
-    """
-    if file is None:
-        return
-    
-    blinded = app_context.app_config.get_blinded() if app_context.app_config else False
+    """Deprecated: window title now reflects only the loaded path.
 
-    if blinded:
-        _parents = file._compute_parents_from_path(file.path)
-        _parents = _parents[::-1]
-        _parents_str = "/".join([p for p in _parents if p is not None])
-        if _parents_str:
-            _parents_str = "Blinded"
-        file_name = file.get_file_name(blinded=True) or "unknown"
-        title = f"KymFlow - {_parents_str} - {file_name}"
-    else:
-        # In non-blinded mode, show the full path to the selected file.
-        title = f"KymFlow - {file.path}"
-    
-    # Only set window title in native mode
-    native = getattr(app, "native", None)
-    if native is not None:
-        main_window = getattr(native, "main_window", None)
-        if main_window is not None:
-            # logger.debug(f'=== setting window title to "{title}"')
-            main_window.set_title(title)
-        else:
-            pass
-            # perfectly fine in native=False mode
-            # logger.error(f'=== main_window is None for title:{title}')
+    The main window title is set via set_window_title_for_path() when a folder,
+    CSV, or single file is loaded. Per-file selection is shown in the footer
+    rather than in the native window title.
+    """
+    return

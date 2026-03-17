@@ -900,6 +900,9 @@ class HomePage(BasePage):
         CLOSED = 6
         OPEN_DEFAULT = 28
         last_open = {'value': OPEN_DEFAULT}
+        # Tab that currently "has" the drawer open; used so we only close when same tab is clicked again.
+        # We track this ourselves because the tab panel may update to the clicked tab before our handler runs.
+        last_open_tab = {'value': None}
 
         # ui.keyboard(on_key=self._on_key, ignore=['input', 'select', 'button', 'textarea'])
         ui.keyboard(on_key=self._on_key)  # no ignore will ignore when defaults active
@@ -911,10 +914,19 @@ class HomePage(BasePage):
                 if splitter.value <= (CLOSED + 2):
                     splitter.value = last_open['value']
 
+            def _on_tab_click(clicked_tab) -> None:
+                """Open drawer when closed; close drawer only when the same tab that has it open is clicked again."""
+                if splitter.value > (CLOSED + 2) and last_open_tab['value'] is not None and last_open_tab['value'] == clicked_tab:
+                    last_open['value'] = splitter.value
+                    splitter.value = CLOSED
+                else:
+                    last_open_tab['value'] = clicked_tab
+                    ensure_open()
+
             # LEFT: Splitter pane with tabs and toolbars
             with splitter.before:
                 # Render drawer view content into splitter before pane
-                self._drawer_view.render(on_tab_click=ensure_open)
+                self._drawer_view.render(on_tab_click=_on_tab_click)
                 
                 # Initialize drawer views with current state
                 self._drawer_view.initialize_views(

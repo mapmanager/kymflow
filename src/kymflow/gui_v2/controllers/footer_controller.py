@@ -20,7 +20,7 @@ from kymflow.gui_v2.events import (
     SaveSelected,
 )
 from kymflow.gui_v2.events_folder import SelectPathEvent
-from kymflow.gui_v2.events_state import TaskStateChanged
+from kymflow.gui_v2.events_state import TaskStateChanged, FooterStatusMessage
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.views.footer_view import FooterView
 from kymflow.core.utils.logging import get_logger
@@ -48,6 +48,7 @@ class FooterController:
         bus.subscribe_state(FileSelection, self._on_file_selection_state)
         bus.subscribe_state(ROISelection, self._on_roi_selection_state)
         bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
+        bus.subscribe(FooterStatusMessage, self._on_footer_status_message)
 
         bus.subscribe_intent(AnalysisStart, self._on_analysis_start_intent)
         bus.subscribe_intent(SaveSelected, self._on_save_selected_intent)
@@ -85,18 +86,31 @@ class FooterController:
     # --- Last event text from high-level intents ---------------------------
 
     def _on_analysis_start_intent(self, e: AnalysisStart) -> None:
-        self._view.set_last_event("Analysis: starting flow analysis")
+        self._view.set_last_event("Analysis: starting flow analysis", level="none")
 
     def _on_save_selected_intent(self, e: SaveSelected) -> None:
-        self._view.set_last_event("Save: saving selected file")
+        self._view.set_last_event("Save: saving selected file", level="none")
 
     def _on_save_all_intent(self, e: SaveAll) -> None:
-        self._view.set_last_event("Save: saving all files")
+        self._view.set_last_event("Save: saving all files", level="none")
 
     def _on_select_path_intent(self, e: SelectPathEvent) -> None:
         path = Path(e.new_path)
         label = path.name or str(path)
-        self._view.set_last_event(f"Load: {label}")
+        self._view.set_last_event(f"Load: {label}", level="none")
+
+    def _on_footer_status_message(self, e: FooterStatusMessage) -> None:
+        """Handle ad-hoc footer status messages.
+
+        This provides a simple, global way for GUI controllers/views to set the
+        footer status text (and warning/error styling) without wiring dedicated
+        events for each case.
+
+        Note: task-driven messages (from TaskStateChanged) may later overwrite
+        this text when tasks start or finish; that's intentional so long-running
+        operations remain the primary status source while active.
+        """
+        self._view.set_last_event(e.text, level=e.level)
 
     # --- Progress bar + status from TaskStateChanged ----------------------
 
@@ -123,8 +137,9 @@ class FooterController:
                 message=display_message,
             )
             # For very first tick (progress may still be 0), also treat as a start event.
+            # Use level="none" to clear any previous warning/error styling.
             if e.progress == 0.0:
-                self._view.set_last_event(display_message)
+                self._view.set_last_event(display_message, level="none")
         else:
             # Task finished: hide progress bar, but keep a concise final status in last-event.
             self._view.set_progress(
@@ -133,5 +148,5 @@ class FooterController:
                 message="",
             )
             if message:
-                self._view.set_last_event(display_message)
+                self._view.set_last_event(display_message, level="none")
 
