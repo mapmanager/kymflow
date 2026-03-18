@@ -63,6 +63,10 @@ class RadonAnalysis(AcqAnalysisBase):
         self._df: Optional[pd.DataFrame] = None
         self._dirty: bool = False
 
+    def iter_roi_channel_keys(self) -> list[tuple[int, int]]:
+        """Return all (roi_id, channel) keys that have radon analysis metadata."""
+        return list(self._analysis_metadata.keys())
+
     @staticmethod
     def _meta_key(roi_id: int, channel: int) -> tuple[int, int]:
         return (roi_id, channel)

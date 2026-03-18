@@ -69,6 +69,10 @@ class VelocityEventUpdateController:
                 # Update event_id if it changed (e.g., when updating t_start or t_end)
                 new_event_id = result
 
+        # Fetch full updated VelocityEvent for state payload.
+        updated = kym_file.get_kym_analysis().find_event_by_uuid(new_event_id)
+        velocity_event = updated[3] if updated is not None else None
+
         self._bus.emit(
             VelocityEventUpdate(
                 event_id=new_event_id,  # Use new event_id in state event
@@ -76,6 +80,7 @@ class VelocityEventUpdateController:
                 updates=updates,
                 origin=e.origin,
                 phase="state",
+                velocity_event=velocity_event,
             )
         )
         self._bus.emit(

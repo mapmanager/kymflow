@@ -368,6 +368,8 @@ class VelocityEventUpdate:
     updates: dict[str, Any] | None = None
     origin: SelectionOrigin = SelectionOrigin.EXTERNAL
     phase: EventPhase = "intent"
+    # Full VelocityEvent snapshot after update (state phase only).
+    velocity_event: "VelocityEvent" | None = None
 
 
 @dataclass(frozen=True, slots=True)

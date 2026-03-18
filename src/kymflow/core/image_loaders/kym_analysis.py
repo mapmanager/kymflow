@@ -542,3 +542,26 @@ class KymAnalysis:
         radon = self.get_analysis_object("RadonAnalysis")
         analyzed = sorted(radon._analysis_metadata.keys()) if radon else []
         return f"KymAnalysis(roi_ids={roi_ids}, analyzed={analyzed}, dirty={self._dirty})"
+
+    def get_roi_dependencies(self, roi_id: int, channel: int) -> list[dict]:
+        """Aggregate dependency metadata for (roi_id, channel) across all analyses.
+
+        Each child analysis is expected to implement the AcqAnalysisBase
+        contract, including get_roi_dependencies.
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+
+        Returns:
+            List of minimal dependency dicts, one per analysis that has state
+            for (roi_id, channel).
+        """
+        deps: list[dict] = []
+        for child in self._analysis_children.values():
+            deps.extend(child.get_roi_dependencies(roi_id, channel))
+        return deps
+
+    def has_any_analysis_for_roi_channel(self, roi_id: int, channel: int) -> bool:
+        """Return True if any analysis has state for (roi_id, channel)."""
+        return bool(self.get_roi_dependencies(roi_id, channel))

@@ -68,6 +68,10 @@ class RadonEventAnalysis(AcqAnalysisBase):
         self._velocity_events: Dict[Tuple[int, int], List[VelocityEvent]] = {}
         self._dirty: bool = False
 
+    def iter_roi_channel_keys(self) -> List[Tuple[int, int]]:
+        """Return all (roi_id, channel) keys that have velocity events."""
+        return list(self._velocity_events.keys())
+
     @property
     def is_dirty(self) -> bool:
         """Return True if this analysis has unsaved changes."""

@@ -202,28 +202,16 @@ class ImageLineViewerV2Bindings:
         )
 
     def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:
-        # VelocityEventUpdate only affects event rectangles.
-        safe_call(self._view.refresh_events_for_current_roi)
+        safe_call(self._view.on_edit_kym_event, e)
 
     def _on_add_kym_event(self, e: AddKymEvent) -> None:
-        """Handle AddKymEvent(state) with a single atomic UI update.
-
-        For state-phase events with an event_id, delegate to the view's
-        add_kym_event_and_zoom helper so that:
-        - AcqImageEvents are recomputed from analysis
-        - the new event's rects are rebuilt and selected
-        - the x-axis is zoomed around the event
-        - exactly one plot.update() is emitted by the combined widget.
-        """
-        if e.phase == "state" and e.event_id:
-            safe_call(self._view.add_kym_event_and_zoom, e)
+        if e.event_id:
+            safe_call(self._view.on_add_kym_event, e)
         else:
-            # Intent or missing event_id: fall back to a generic refresh.
             safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
-        # DeleteKymEvent only affects event rectangles.
-        safe_call(self._view.refresh_events_for_current_roi)
+        safe_call(self._view.on_delete_kym_event, e)
 
     def _on_roi_bounds(self, e: SetRoiBounds) -> None:
         from kymflow.core.image_loaders.roi import RoiBounds

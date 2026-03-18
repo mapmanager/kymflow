@@ -25,12 +25,14 @@ from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.events import (
     AddKymEvent,
     ChannelSelection,
+    DeleteKymEvent,
     DeleteRoi,
     EditRoi,
     EventSelection,
     SelectionOrigin,
     SetKymEventXRange,
     SetRoiBounds,
+    VelocityEventUpdate,
 )
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.utils.logging import get_logger
@@ -564,93 +566,86 @@ class ImageLineViewerV2View:
         # own explicit flows that operate on the current event set.
         self._line_plot_widget.set_events(acq_events or [])
 
-    def add_kym_event_and_zoom(self, e: "AddKymEvent") -> None:
-        """Handle AddKymEvent(state) by appending a rect, selecting it, and zooming.
+    def _kym_event_plot(self) -> tuple[object, dict] | tuple[None, None]:
+        """Return (plot element, plot_dict) for velocity-event rect edits."""
+        if self._combined is not None:
+            return self._combined.plot, self._combined.plot_dict
+        if self._line_plot_widget is not None:
+            return self._line_plot_widget.plot, self._line_plot_widget.plot_dict
+        return None, None
 
-        This does NOT attempt to be atomic or minimize plot.update() calls; it is
-        intentionally straightforward:
-        - create an AcqImageEvent from the AddKymEvent payload
-        - append it to the existing rects without clearing others
-        - select the new event (highlight its rect)
-        - zoom the x-axis around its time window
-        """
-        if self._line_plot_widget is None:
-            return
-        if e.phase != "state" or not e.event_id:
-            return
+    @staticmethod
+    def _pop_shape_for_event_id(shapes: list, event_id: str) -> bool:
+        eid = str(event_id)
+        for i, s in enumerate(shapes):
+            if str(s.get("event_id", "")) == eid:
+                shapes.pop(i)
+                return True
+        return False
 
-        # Construct a single AcqImageEvent from the AddKymEvent payload.
+    def on_add_kym_event(self, e: AddKymEvent) -> None:
+        """Append one event rect shape; plot.update()."""
+        if e.phase != "state" or not e.event_id or self._line_plot_widget is None:
+            return
+        if e.path and self._current_file and str(self._current_file.path) != str(e.path):
+            return
+        plot, plot_dict = self._kym_event_plot()
+        if plot is None:
+            return
         from nicewidgets.image_line_widget.models import AcqImageEvent
 
-        start_t = float(e.t_start)
-        stop_t = float(e.t_end) if e.t_end is not None else None
-        new_evt = AcqImageEvent(
-            start_t=start_t,
-            stop_t=stop_t,
+        mgr = self._line_plot_widget.acq_image_events
+        evt = AcqImageEvent(
+            start_t=float(e.t_start),
+            stop_t=float(e.t_end) if e.t_end is not None else None,
             event_type="User Added",
             user_type="unreviewed",
             event_id=str(e.event_id),
         )
+        shapes = plot_dict.setdefault("layout", {}).setdefault("shapes", [])
+        self._pop_shape_for_event_id(shapes, str(e.event_id))
+        shapes.append(mgr._make_rect(evt, is_selected=False))
+        self._selected_event_id = str(e.event_id)
+        plot.update()
 
+    def on_delete_kym_event(self, e: DeleteKymEvent) -> None:
+        """Remove one event rect shape; plot.update()."""
+        if e.phase != "state" or self._line_plot_widget is None:
+            return
+        if e.path and self._current_file and str(self._current_file.path) != str(e.path):
+            return
+        plot, plot_dict = self._kym_event_plot()
+        if plot is None:
+            return
+        shapes = plot_dict.setdefault("layout", {}).setdefault("shapes", [])
+        self._pop_shape_for_event_id(shapes, str(e.event_id))
         mgr = self._line_plot_widget.acq_image_events
-        # Append the new rect without clearing existing ones.
-        mgr.add_events([new_evt])
+        if mgr._selected_event_id == str(e.event_id):
+            mgr._selected_event_id = None
+        if self._selected_event_id == str(e.event_id):
+            self._selected_event_id = None
+        plot.update()
 
-        # Select the new event and zoom its window via the manager; this will also
-        # call plot.update() internally.
-        pad = abs(stop_t - start_t) if stop_t is not None else 1.0
-        mgr.select_event(str(e.event_id), event_window_t=2 * pad)
-
-    def add_kym_event_and_zoom(self, e: "AddKymEvent") -> None:
-        """Handle AddKymEvent(state) as a single atomic UI operation.
-
-        This recomputes AcqImageEvents for the current ROI/channel from the analysis
-        object, then uses the combined widget's add_event_and_zoom API to:
-        - replace all rects
-        - select the new event
-        - zoom the shared x-axis
-        - emit exactly one plot.update() via the combined widget's batching helper.
-        """
-        if self._combined is None or self._line_plot_widget is None:
-            # Fallback: rebuild events the usual way.
-            self.refresh_events_for_current_roi()
+    def on_edit_kym_event(self, e: VelocityEventUpdate) -> None:
+        """Pop rect for event_id, rebuild from e.velocity_event; plot.update()."""
+        if e.phase != "state" or self._line_plot_widget is None:
             return
-
-        kf = self._current_file
-        roi_id = self._current_roi_id
-        channel = self._current_channel
-        if kf is None or roi_id is None or channel is None:
+        if e.path and self._current_file and str(self._current_file.path) != str(e.path):
             return
-
-        kym_analysis = kf.get_kym_analysis()
-        if self._event_filter:
-            events_raw = kym_analysis.get_velocity_events_filtered(
-                roi_id, channel, self._event_filter
-            )
-        else:
-            events_raw = kym_analysis.get_velocity_events(roi_id, channel)
-        acq_events = velocity_events_to_acq_image_events(events_raw)
-
-        # Remember selection for subsequent generic refreshes, but drive the UX here.
-        self._selected_event_id = e.event_id
-        if not e.event_id:
-            # No concrete event to select; just rebuild events.
-            self._line_plot_widget.set_events(acq_events or [])
+        if e.velocity_event is None:
             return
-
-        for ev in events_raw:
-            if str(getattr(ev, "event_id", None)) == str(e.event_id):
-                pad = 0.1
-                self._combined.add_event_and_zoom(
-                    events=acq_events or [],
-                    selected_event_id=e.event_id,
-                    t_start=ev.t_start,
-                    pad=pad,
-                )
-                return
-
-        # If event not found in analysis list (unexpected), fall back to a generic refresh.
-        self._line_plot_widget.set_events(acq_events or [])
+        plot, plot_dict = self._kym_event_plot()
+        if plot is None:
+            return
+        acq_list = velocity_events_to_acq_image_events([e.velocity_event])
+        if not acq_list:
+            return
+        mgr = self._line_plot_widget.acq_image_events
+        shapes = plot_dict.setdefault("layout", {}).setdefault("shapes", [])
+        self._pop_shape_for_event_id(shapes, str(e.event_id))
+        sel = mgr._selected_event_id == str(e.event_id)
+        shapes.append(mgr._make_rect(acq_list[0], is_selected=sel))
+        plot.update()
 
     def _apply_zoom_to_event(self, e: EventSelection) -> None:
         """Select and zoom to an event without recomputing data."""
