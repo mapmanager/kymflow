@@ -144,6 +144,8 @@ class ImageLineViewerV2View:
         self._kym_event_range_event_id: Optional[str] = None
         self._kym_event_range_roi_id: Optional[int] = None
         self._kym_event_range_path: Optional[str] = None
+        # Combined widget instance (ImageLineCombinedWidget); set in render().
+        self._combined = None
 
     def render(self) -> None:
         """Create the viewer UI: ImageRoiWidget + LinePlotWidget in a column."""
@@ -285,10 +287,13 @@ class ImageLineViewerV2View:
                 on_axis_change=on_axis_change,
                 on_channel_event=on_channel_event,
                 on_rect_selection=None,
+                on_request_add_roi=on_request_add_roi,
                 theme=theme_str,
             )
 
-            # Expose compatibility handles used throughout this view.
+            # Expose compatibility handles used throughout this view, and keep a
+            # private handle to the combined widget for whole-view operations.
+            self._combined = combined
             self._image_roi_widget = combined.image_roi_widget
             self._line_plot_widget = combined.line_plot_widget
 
@@ -297,7 +302,7 @@ class ImageLineViewerV2View:
 
     def _refresh_from_state(self) -> None:
         """Update widgets from _current_file and _current_roi_id."""
-        if self._image_roi_widget is None or self._line_plot_widget is None:
+        if self._combined is None or self._image_roi_widget is None or self._line_plot_widget is None:
             return
 
         kf = self._current_file
@@ -308,13 +313,122 @@ class ImageLineViewerV2View:
             return
 
         try:
-            # image roi widget
-            self._update_image_for_file_change()
-            # line plot widget
-            self._update_line_for_current_roi()
-            self._update_events_for_current_roi()
+            self._switch_file_to_current_state()
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("ImageLineViewerV2View _refresh_from_state failed: %s", exc)
+
+    def _switch_file_to_current_state(self) -> None:
+        """Drive the combined widget to represent the current file/ROI state.
+
+        This batches image data, ROIs, velocity line, and velocity events into a
+        single ``switch_file`` call on ``ImageLineCombinedWidget`` to avoid
+        duplicated Plotly updates. Public view APIs remain unchanged; this
+        helper is an internal implementation detail invoked from
+        ``_refresh_from_state``.
+
+        Args:
+            None. Uses ``self._current_file``, ``self._current_roi_id``, and
+            ``self._current_channel`` as implicit inputs.
+
+        Returns:
+            None. Updates the underlying combined widget in place.
+        """
+        if self._combined is None or self._current_file is None:
+            return
+
+        kf = self._current_file
+
+        # Rebuild ChannelManager and ROI list exactly as before.
+        manager, rois = kymimage_to_channel_manager(kf)
+
+        # Derive velocity trace for the current ROI using existing logic.
+        time_arr = None
+        vel_arr = None
+        if self._current_roi_id is not None:
+            kym_analysis = kf.get_kym_analysis()
+            radon = kym_analysis.get_analysis_object("RadonAnalysis")
+            channel = radon.get_channel_for_roi(self._current_roi_id) if radon else None
+            if radon is not None and channel is not None and radon.has_analysis(self._current_roi_id, channel):
+                time_arr = radon.get_analysis_value(self._current_roi_id, channel, "time")
+                vel_arr = radon.get_analysis_value(self._current_roi_id, channel, "velocity")
+
+        # Derive events for the current ROI/channel using existing logic.
+        acq_events = []
+        if self._current_roi_id is not None and self._current_channel is not None:
+            kym_analysis = kf.get_kym_analysis()
+            if self._event_filter:
+                events_raw = kym_analysis.get_velocity_events_filtered(
+                    self._current_roi_id, self._current_channel, self._event_filter
+                )
+            else:
+                events_raw = kym_analysis.get_velocity_events(self._current_roi_id, self._current_channel)
+            acq_events = velocity_events_to_acq_image_events(events_raw) or []
+
+        # Single combined update for image + line + events.
+        self._combined.switch_file(
+            manager,
+            rois,
+            velocity_x=time_arr,
+            velocity_y=vel_arr,
+            events=acq_events,
+            reset_axes=True,
+        )
+
+        # Re-apply display params and current selection/contrast.
+        self._apply_display_params_and_selection(manager)
+
+    def _apply_display_params_and_selection(self, manager) -> None:
+        """Re-apply colorscale/contrast, ROI selection, and contrast state.
+
+        This helper reapplies view-local image display parameters and ROI
+        selection after a combined ``switch_file`` update, and keeps the
+        separate contrast widget in sync with the active channel.
+
+        Args:
+            manager: The current ``ChannelManager`` associated with the
+                displayed image.
+
+        Returns:
+            None. Mutates ``_image_roi_widget`` and ``_contrast_widget`` state.
+        """
+        if self._image_roi_widget is None:
+            return
+
+        if self._display_params:
+            self._image_roi_widget.set_colorscale(self._display_params.colorscale)
+            if self._display_params.zmin is not None or self._display_params.zmax is not None:
+                self._image_roi_widget.set_contrast(
+                    zmin=self._display_params.zmin,
+                    zmax=self._display_params.zmax,
+                )
+        if self._current_roi_id is not None:
+            self._suppress_roi_select_emit = True
+            try:
+                self._image_roi_widget.select_roi_by_name(str(self._current_roi_id))
+            finally:
+                self._suppress_roi_select_emit = False
+
+        # Sync contrast widget with new image and display params (view-local only).
+        if self._contrast_widget is not None:
+            names = list(manager.channels.keys())
+            if names:
+                active_name = manager.active_channel_name
+                if active_name not in names:
+                    active_name = names[0]
+                ch = manager.channels[active_name]
+                # Treat channel as opaque int defined by caller; derive from name when possible.
+                try:
+                    channel_idx = int(active_name)
+                except ValueError:
+                    channel_idx = names.index(active_name)
+                self._contrast_widget.set_channel(channel_idx, ch.data)
+                self._contrast_widget.select_roi_by_index(self._current_roi_id)
+                if self._display_params:
+                    self._contrast_widget.set_colorscale(self._display_params.colorscale)
+                    self._contrast_widget.set_contrast(
+                        zmin=self._display_params.zmin,
+                        zmax=self._display_params.zmax,
+                    )
 
     def _update_image_for_file_change(self) -> None:
         """Rebuild ImageRoiWidget for the current file (image + ROIs only)."""
@@ -540,10 +654,13 @@ class ImageLineViewerV2View:
     def _set_theme_impl(self, theme: KymflowThemeMode) -> None:
         self._theme = theme
         theme_str = _to_nicewidgets_theme(theme)
-        if self._image_roi_widget:
-            self._image_roi_widget.set_theme(theme_str)
-        if self._line_plot_widget:
-            self._line_plot_widget.set_theme(theme_str)
+        if self._combined is not None:
+            self._combined.set_theme(theme_str)
+        else:
+            if self._image_roi_widget:
+                self._image_roi_widget.set_theme(theme_str)
+            if self._line_plot_widget:
+                self._line_plot_widget.set_theme(theme_str)
 
     def set_image_display(self, params: ImageDisplayParams) -> None:
         """Update colorscale/contrast on ImageRoiWidget."""

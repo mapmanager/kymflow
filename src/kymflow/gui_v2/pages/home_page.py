@@ -38,7 +38,7 @@ from kymflow.gui_v2.events import (
     SaveSelected,
     SelectionOrigin,
 )
-from kymflow.gui_v2.events_state import FileListChanged
+from kymflow.gui_v2.events_state import FileListChanged, ThemeChanged
 from kymflow.gui_v2.pages.base_page import BasePage
 from kymflow.gui_v2.utils.splitter_handle import add_splitter_handle
 from kymflow.gui_v2.menus import FileTableContextMenu
@@ -1073,6 +1073,11 @@ class HomePage(BasePage):
                                 app_state.selected_roi_id,
                             )
                             self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+                            # Bus subscribers (e.g. plot pool) may have missed early AppState theme;
+                            # re-broadcast so all Plotly UIs match app dark/light.
+                            self.bus.emit(
+                                ThemeChanged(theme=self.context.app_state.theme_mode)
+                            )
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:
