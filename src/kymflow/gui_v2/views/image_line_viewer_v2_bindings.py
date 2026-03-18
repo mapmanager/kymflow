@@ -50,6 +50,9 @@ class ImageLineViewerV2Bindings:
         self._bus = bus
         self._view = view
         self._subscribed = False
+        # Tracks ROI applied as part of FileSelection so we can skip the
+        # immediately following ROISelection(state) echo from AppState.
+        self._last_file_selection_roi_id: int | None = None
 
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(FileChanged, self._on_file_changed)
@@ -96,18 +99,9 @@ class ImageLineViewerV2Bindings:
         Heavy Plotly updates run off main loop via run.io_bound."""
         def _do_update() -> None:
             safe_call(self._view.set_selected_file, e.file, e.channel, e.roi_id)
-            safe_call(
-                self._view.zoom_to_event,
-                EventSelection(
-                    event_id=None,
-                    roi_id=None,
-                    path=None,
-                    event=None,
-                    options=None,
-                    origin=e.origin,
-                    phase="state",
-                ),
-            )
+            # Remember ROI applied as part of FileSelection so we can ignore the
+            # redundant ROISelection(state) that follows from AppState.
+            self._last_file_selection_roi_id = e.roi_id
 
         await run.io_bound(_do_update)
 
@@ -135,9 +129,23 @@ class ImageLineViewerV2Bindings:
         safe_call(self._view.refresh_rois_for_current_file)
 
     def _on_roi_changed(self, e: ROISelection) -> None:
-        # For FILE_TABLE origin, FileSelection already set ROI; avoid duplicate work.
+        # For FILE_TABLE origin (file table click), FileSelection already set ROI and
+        # switch_file rebuilt shapes; avoid duplicate ROI-based refresh here.
         if e.origin == SelectionOrigin.FILE_TABLE:
             return
+
+        # When ROISelection(state, origin=EXTERNAL) is just echoing the ROI that
+        # was already applied by the most recent FileSelection, skip it to avoid
+        # an extra ROI-shape rebuild and Plotly update.
+        if (
+            self._last_file_selection_roi_id is not None
+            and e.roi_id == self._last_file_selection_roi_id
+            and e.origin == SelectionOrigin.EXTERNAL
+        ):
+            self._last_file_selection_roi_id = None
+            return
+
+        self._last_file_selection_roi_id = None
         safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_theme_changed(self, e: ThemeChanged) -> None:
@@ -198,8 +206,20 @@ class ImageLineViewerV2Bindings:
         safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_add_kym_event(self, e: AddKymEvent) -> None:
-        # AddKymEvent only affects event rectangles.
-        safe_call(self._view.refresh_events_for_current_roi)
+        """Handle AddKymEvent(state) with a single atomic UI update.
+
+        For state-phase events with an event_id, delegate to the view's
+        add_kym_event_and_zoom helper so that:
+        - AcqImageEvents are recomputed from analysis
+        - the new event's rects are rebuilt and selected
+        - the x-axis is zoomed around the event
+        - exactly one plot.update() is emitted by the combined widget.
+        """
+        if e.phase == "state" and e.event_id:
+            safe_call(self._view.add_kym_event_and_zoom, e)
+        else:
+            # Intent or missing event_id: fall back to a generic refresh.
+            safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
         # DeleteKymEvent only affects event rectangles.

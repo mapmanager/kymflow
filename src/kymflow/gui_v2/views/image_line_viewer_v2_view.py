@@ -23,6 +23,7 @@ from kymflow.gui_v2.adapters import (
 )
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.events import (
+    AddKymEvent,
     ChannelSelection,
     DeleteRoi,
     EditRoi,
@@ -364,7 +365,8 @@ class ImageLineViewerV2View:
                 events_raw = kym_analysis.get_velocity_events(self._current_roi_id, self._current_channel)
             acq_events = velocity_events_to_acq_image_events(events_raw) or []
 
-        # Single combined update for image + line + events.
+        # Single combined update for image + line + events (including ROI selection).
+        selected_roi_name = str(self._current_roi_id) if self._current_roi_id is not None else None
         self._combined.switch_file(
             manager,
             rois,
@@ -372,9 +374,10 @@ class ImageLineViewerV2View:
             velocity_y=vel_arr,
             events=acq_events,
             reset_axes=True,
+            selected_roi_name=selected_roi_name,
         )
 
-        # Re-apply display params and current selection/contrast.
+        # Re-apply display params and contrast state (selection is handled in switch_file).
         self._apply_display_params_and_selection(manager)
 
     def _apply_display_params_and_selection(self, manager) -> None:
@@ -401,12 +404,9 @@ class ImageLineViewerV2View:
                     zmin=self._display_params.zmin,
                     zmax=self._display_params.zmax,
                 )
-        if self._current_roi_id is not None:
-            self._suppress_roi_select_emit = True
-            try:
-                self._image_roi_widget.select_roi_by_name(str(self._current_roi_id))
-            finally:
-                self._suppress_roi_select_emit = False
+        # ROI selection on the image widget is handled inside the combined switch_file
+        # call when using ImageLineCombinedWidget; here we only need to sync the
+        # separate contrast widget's notion of the active ROI.
 
         # Sync contrast widget with new image and display params (view-local only).
         if self._contrast_widget is not None:
@@ -559,12 +559,98 @@ class ImageLineViewerV2View:
         else:
             events_raw = kym_analysis.get_velocity_events(roi_id, channel)
         acq_events = velocity_events_to_acq_image_events(events_raw)
+        # Simple, state-driven behavior: just rebuild event rectangles on the line widget.
+        # Do not try to select or zoom here; Add Event and row selection have their
+        # own explicit flows that operate on the current event set.
         self._line_plot_widget.set_events(acq_events or [])
-        if self._selected_event_id:
-            self._line_plot_widget.acq_image_events.select_event(
-                self._selected_event_id,
-                event_window_t=0.2,
+
+    def add_kym_event_and_zoom(self, e: "AddKymEvent") -> None:
+        """Handle AddKymEvent(state) by appending a rect, selecting it, and zooming.
+
+        This does NOT attempt to be atomic or minimize plot.update() calls; it is
+        intentionally straightforward:
+        - create an AcqImageEvent from the AddKymEvent payload
+        - append it to the existing rects without clearing others
+        - select the new event (highlight its rect)
+        - zoom the x-axis around its time window
+        """
+        if self._line_plot_widget is None:
+            return
+        if e.phase != "state" or not e.event_id:
+            return
+
+        # Construct a single AcqImageEvent from the AddKymEvent payload.
+        from nicewidgets.image_line_widget.models import AcqImageEvent
+
+        start_t = float(e.t_start)
+        stop_t = float(e.t_end) if e.t_end is not None else None
+        new_evt = AcqImageEvent(
+            start_t=start_t,
+            stop_t=stop_t,
+            event_type="User Added",
+            user_type="unreviewed",
+            event_id=str(e.event_id),
+        )
+
+        mgr = self._line_plot_widget.acq_image_events
+        # Append the new rect without clearing existing ones.
+        mgr.add_events([new_evt])
+
+        # Select the new event and zoom its window via the manager; this will also
+        # call plot.update() internally.
+        pad = abs(stop_t - start_t) if stop_t is not None else 1.0
+        mgr.select_event(str(e.event_id), event_window_t=2 * pad)
+
+    def add_kym_event_and_zoom(self, e: "AddKymEvent") -> None:
+        """Handle AddKymEvent(state) as a single atomic UI operation.
+
+        This recomputes AcqImageEvents for the current ROI/channel from the analysis
+        object, then uses the combined widget's add_event_and_zoom API to:
+        - replace all rects
+        - select the new event
+        - zoom the shared x-axis
+        - emit exactly one plot.update() via the combined widget's batching helper.
+        """
+        if self._combined is None or self._line_plot_widget is None:
+            # Fallback: rebuild events the usual way.
+            self.refresh_events_for_current_roi()
+            return
+
+        kf = self._current_file
+        roi_id = self._current_roi_id
+        channel = self._current_channel
+        if kf is None or roi_id is None or channel is None:
+            return
+
+        kym_analysis = kf.get_kym_analysis()
+        if self._event_filter:
+            events_raw = kym_analysis.get_velocity_events_filtered(
+                roi_id, channel, self._event_filter
             )
+        else:
+            events_raw = kym_analysis.get_velocity_events(roi_id, channel)
+        acq_events = velocity_events_to_acq_image_events(events_raw)
+
+        # Remember selection for subsequent generic refreshes, but drive the UX here.
+        self._selected_event_id = e.event_id
+        if not e.event_id:
+            # No concrete event to select; just rebuild events.
+            self._line_plot_widget.set_events(acq_events or [])
+            return
+
+        for ev in events_raw:
+            if str(getattr(ev, "event_id", None)) == str(e.event_id):
+                pad = 0.1
+                self._combined.add_event_and_zoom(
+                    events=acq_events or [],
+                    selected_event_id=e.event_id,
+                    t_start=ev.t_start,
+                    pad=pad,
+                )
+                return
+
+        # If event not found in analysis list (unexpected), fall back to a generic refresh.
+        self._line_plot_widget.set_events(acq_events or [])
 
     def _apply_zoom_to_event(self, e: EventSelection) -> None:
         """Select and zoom to an event without recomputing data."""
@@ -574,18 +660,26 @@ class ImageLineViewerV2View:
             or not e.event
             or not e.options
             or not e.options.zoom
-            or self._line_plot_widget is None
         ):
             return
         pad = float(e.options.zoom_pad_sec)
-        self._line_plot_widget.acq_image_events.select_event(
-            e.event_id,
-            event_window_t=pad * 2,
-        )
-        if self._image_roi_widget:
-            self._image_roi_widget.set_x_axis_range(
-                [e.event.t_start - pad, e.event.t_start + pad]
+        # Prefer the combined widget's atomic API to keep this to a single
+        # Plotly update for highlight + zoom.
+        if self._combined is not None:
+            self._combined.select_event_and_zoom(
+                e.event_id,
+                e.event.t_start,
+                pad,
             )
+        elif self._line_plot_widget is not None:
+            self._line_plot_widget.acq_image_events.select_event(
+                e.event_id,
+                event_window_t=pad * 2,
+            )
+            if self._image_roi_widget:
+                self._image_roi_widget.set_x_axis_range(
+                    [e.event.t_start - pad, e.event.t_start + pad]
+                )
 
     def set_selected_file(
         self,
