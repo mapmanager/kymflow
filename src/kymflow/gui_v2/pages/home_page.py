@@ -971,7 +971,8 @@ class HomePage(BasePage):
         """
         # Splitter parameters (percentages, horizontal layout). Tweak these as needed.
         file_plot_splitter = {"value": 15.0, "limits": (0, 60)}
-        plot_event_splitter = {"value": 50.0, "limits": (30, 90)}
+        # Allow the viewer pane (which contains Plotly) to shrink fully.
+        plot_event_splitter = {"value": 50.0, "limits": (0, 90)}
         from kymflow.core.user_config import HOME_EVENTS_PLOT_SPLITTER_RANGE
 
         events_plot_splitter = {"value": 55.0, "limits": HOME_EVENTS_PLOT_SPLITTER_RANGE}
@@ -1049,7 +1050,7 @@ class HomePage(BasePage):
                         value=plot_event_splitter["value"],
                         limits=plot_event_splitter["limits"],
                         horizontal=True,
-                    ).classes("w-full flex-1 min-h-0") as plot_splitter:
+                    ).classes("w-full flex-1 min-h-0 mt-[6px]") as plot_splitter:
                         plot_splitter_ref["value"] = plot_splitter
                         def _toggle_plot_event_splitter() -> None:
                             """Double-click: snap plot/event splitter to min/max with memory."""

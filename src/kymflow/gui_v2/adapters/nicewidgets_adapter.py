@@ -44,7 +44,8 @@ def kymimage_to_channel_manager(
     Raises:
         ValueError: If channel data cannot be loaded.
     """
-    logger.info('=== check for speed')
+    
+    # logger.info('=== check for speed')
     
     # Lazy import to avoid pulling nicewidgets at module load when not needed
     from nicewidgets.image_line_widget.models import Channel, ChannelManager, RegionOfInterest

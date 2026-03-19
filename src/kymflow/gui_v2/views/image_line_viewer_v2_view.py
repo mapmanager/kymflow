@@ -164,7 +164,8 @@ class ImageLineViewerV2View:
             ROIEventType,
         )
 
-        self._container = ui.column().classes("w-full h-full")
+        # Important for nested splitters: allow children to fully shrink.
+        self._container = ui.column().classes("w-full h-full min-h-0")
         with self._container:
             theme_str = _to_nicewidgets_theme(self._theme)
 
@@ -172,7 +173,7 @@ class ImageLineViewerV2View:
                 """Apply contrast and colorscale changes from contrast widget locally."""
                 if self._image_roi_widget is None:
                     return
-                self._image_roi_widget.set_contrast(zmin=ev.zmin, zmax=ev.zmax)
+                self._image_roi_widget.set_contrast_fast(zmin=ev.zmin, zmax=ev.zmax)
                 self._image_roi_widget.set_colorscale(ev.color_lut)
 
             def on_channel_event(ev: ChannelEvent) -> None:
@@ -234,6 +235,10 @@ class ImageLineViewerV2View:
                         )
 
             def on_axis_change(ev: AxisEvent) -> None:
+                # abb this is handled by image line combined widget
+                logger.warning('-->> xxx --> EARLY RETURN')
+                return
+
                 if self._syncing_axes:
                     return
                 img_w = self._image_roi_widget
@@ -835,8 +840,12 @@ class ImageLineViewerV2View:
                 new_min = t_min
                 new_max = min(t_max, new_min + width)
         x_range = [new_min, new_max]
-        self._line_plot_widget.set_x_axis_range(x_range)
-        self._image_roi_widget.set_x_axis_range(x_range)
+
+        # 20260318 fast
+        # self._image_roi_widget.set_x_axis_range(x_range)
+        self._combined.set_x_axis_range_fast(x_range[0], x_range[1])
+        # line is linked to image
+        # self._line_plot_widget.set_x_axis_range(x_range)
 
     def set_kym_event_range_enabled(
         self,
