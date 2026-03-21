@@ -586,7 +586,9 @@ class KymEventView:
 
     def handle_set_kym_event_x_range(self, e: SetKymEventXRange) -> None:
         """Handle proposed x-range selection for a velocity event."""
-        # logger.debug("handle_set_kym_event_x_range event_id=%s adding_new_event=%s", e.event_id, self._adding_new_event)
+        
+        logger.error(f'fix this runtime flow e:{e}')
+
         self._setting_kym_event_range_state = False
         self._emit_range_state(False)
         self._update_range_button_state()
@@ -663,7 +665,7 @@ class KymEventView:
 
     def _on_notification_dismissed(self, e) -> None:
         """Handle notification dismiss event (either programmatic or user-initiated)."""
-        # logger.debug("_on_notification_dismissed called, _dismissing_programmatically=%s", self._dismissing_programmatically)
+        logger.error(f'user clicked cancel -> fix runtime flow _dismissing_programmatically:{self._dismissing_programmatically}')
         if self._dismissing_programmatically:
             # Programmatic dismiss - just clear the flag and reference
             self._dismissing_programmatically = False
@@ -711,23 +713,14 @@ class KymEventView:
             return
         if self._selected_event_id is None:
             self._set_range_button.disable()
-            # self._set_range_button.text = "Set Event Start/Stop"
-            # self._set_range_button.props(remove="color")
             self._cancel_range_button.disable()
-            # self._cancel_range_button.props(remove="color")
             self._set_range_notification_visible(False)
             return
         self._set_range_button.enable()
         if self._setting_kym_event_range_state:
-            # self._set_range_button.text = "Set Event Start/Stop"
-            # self._set_range_button.props("color=orange")
             self._cancel_range_button.enable()
-            # self._cancel_range_button.props("color=orange")
         else:
-            # self._set_range_button.text = "Set Event Start/Stop"
-            # self._set_range_button.props(remove="color")
             self._cancel_range_button.disable()
-            #  self._cancel_range_button.props(remove="color")
             self._set_range_notification_visible(False)
 
     def _set_range_notification_visible(self, visible: bool) -> None:
@@ -762,10 +755,13 @@ class KymEventView:
         if self._current_file_path is None:
             logger.warning("Add Event: current_file_path is None, cannot add event")
             return
-        # logger.debug("add_event_clicked -> enable range state for new event")
+        
+        logger.error('fix this runtime flow')
+
         self._adding_new_event = True
         self._setting_kym_event_range_state = True
-        self._emit_range_state(True)
+
+        self._emit_range_state(True)  # this should shutdown enough so we do not lose focus (e.g. file table view)
         self._update_range_button_state()
         self._update_add_delete_button_state()
         self._set_range_notification_visible(True)
