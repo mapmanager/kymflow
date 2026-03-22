@@ -24,6 +24,7 @@ from kymflow.gui_v2.events import (
     SetKymEventXRange,
     VelocityEventUpdate,
 )
+from kymflow.gui_v2.events_state import InteractionBlocked
 
 if TYPE_CHECKING:
     from kymflow.gui_v2.app_context import AppContext
@@ -140,8 +141,8 @@ class KymEventView:
         self._roi_filter: int | None = None
         self._zoom_enabled: bool = True
         self._zoom_pad_sec: float = 1.0
-        self._setting_kym_event_range_state: bool = False
-        self._adding_new_event: bool = False  # Track if we're adding a new event vs updating
+        self._setting_kym_event_range_state: bool = False  # True when "Set Start/Stop" is active (editing an existing event’s x-range).
+        self._adding_new_event: bool = False  # True when "Add Event" is active (creating a new event via rect selection).
         self._set_range_button: ui.button | None = None
         self._cancel_range_button: ui.button | None = None
         self._add_event_button: ui.button | None = None
@@ -707,6 +708,19 @@ class KymEventView:
                 phase="intent",
             )
         )
+
+    def _on_interaction_blocked(self, e: InteractionBlocked) -> None:
+        """Handle :class:`~kymflow.gui_v2.events_state.InteractionBlocked` state (placeholder).
+
+        When :attr:`~kymflow.gui_v2.events_state.BlockingMode.KYM_EVENT_RANGE` is active,
+        this view often originated the flow; subclasses or future edits may block
+        only the event grid while keeping Cancel / toolbar enabled.
+
+        Args:
+            e: State event with ``blocked`` and ``mode`` (always set, including
+                :attr:`~kymflow.gui_v2.events_state.BlockingMode.NONE` when unblocked).
+        """
+        logger.error(f'TODO IMPLEMENT: {e}')
 
     def _update_range_button_state(self) -> None:
         if self._set_range_button is None or self._cancel_range_button is None:

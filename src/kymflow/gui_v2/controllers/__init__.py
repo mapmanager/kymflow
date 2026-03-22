@@ -15,16 +15,10 @@ from kymflow.gui_v2.controllers.kym_event_cache_sync_controller import (
     KymEventCacheSyncController,
 )
 from kymflow.gui_v2.controllers.kym_event_controller import KymEventController
-from kymflow.gui_v2.controllers.kym_event_range_controller import (
-    KymEventRangeStateController,
-)
 from kymflow.gui_v2.controllers.metadata_controller import MetadataController
 from kymflow.gui_v2.controllers.next_prev_file_controller import NextPrevFileController
 from kymflow.gui_v2.controllers.save_controller import SaveController
 from kymflow.gui_v2.controllers.task_state_bridge import TaskStateBridgeController
-from kymflow.gui_v2.controllers.velocity_event_update_controller import (
-    VelocityEventUpdateController,
-)
 from kymflow.gui_v2.controllers.roi_controller import RoiController
 
 __all__ = [
@@ -39,7 +33,6 @@ __all__ = [
     "ImageDisplayController",
     "KymEventCacheSyncController",
     "KymEventController",
-    "KymEventRangeStateController",
     "MetadataController",
     "NextPrevFileController",
     "ROISelectionController",
@@ -47,5 +40,4 @@ __all__ = [
     "FooterController",
     "SaveController",
     "TaskStateBridgeController",
-    "VelocityEventUpdateController",
 ]

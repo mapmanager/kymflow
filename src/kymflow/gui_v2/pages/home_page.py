@@ -21,13 +21,11 @@ from kymflow.gui_v2.controllers import (
     ImageDisplayController,
     KymEventCacheSyncController,
     KymEventController,
-    KymEventRangeStateController,
     MetadataController,
     NextPrevFileController,
     RoiController,
     SaveController,
     TaskStateBridgeController,
-    VelocityEventUpdateController,
 )
 from kymflow.gui_v2.events import (
     AddRoi,
@@ -121,10 +119,8 @@ class HomePage(BasePage):
         self._roi_controller: RoiController | None = None
         self._event_selection_controller: EventSelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
-        self._kym_event_range_state_controller: KymEventRangeStateController | None = None
         self._metadata_controller: MetadataController | None = None
         self._analysis_update_controller: AnalysisUpdateController | None = None
-        self._velocity_event_update_controller: VelocityEventUpdateController | None = None
         self._kym_event_controller: KymEventController | None = None
         self._kym_event_cache_sync_controller: KymEventCacheSyncController | None = None
         self._analysis_controller: AnalysisController | None = None
@@ -330,14 +326,10 @@ class HomePage(BasePage):
         self._image_display_controller = ImageDisplayController(
             self.context.app_state, self.bus
         )
-        self._kym_event_range_state_controller = KymEventRangeStateController(self.bus)
         self._metadata_controller = MetadataController(
             self.context.app_state, self.bus
         )
         self._analysis_update_controller = AnalysisUpdateController(
-            self.context.app_state, self.bus
-        )
-        self._velocity_event_update_controller = VelocityEventUpdateController(
             self.context.app_state, self.bus
         )
         self._kym_event_controller = KymEventController(
@@ -677,7 +669,7 @@ class HomePage(BasePage):
             )
         )
 
-    def _on_drawer_full_zoom(self) -> None:
+    def _old__on_drawer_full_zoom(self) -> None:
         """Callback when splitter pane full zoom button is clicked. Resets zoom on v2 view."""
         self._image_line_viewer.reset_zoom()
 
@@ -690,7 +682,7 @@ class HomePage(BasePage):
             return
         self._image_line_viewer.reset_zoom()
 
-    def _register_full_zoom_shortcut(self) -> None:
+    def _old__register_full_zoom_shortcut(self) -> None:
         """Register a global Enter/Return shortcut for full zoom (unless editing)."""
         if self._full_zoom_shortcut_registered:
             return

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events_state import FileListChanged, TaskStateChanged
+from kymflow.gui_v2.events_state import FileListChanged, InteractionBlocked, TaskStateChanged
 from kymflow.gui_v2.views.folder_selector_view import FolderSelectorView
 
 
@@ -18,6 +18,7 @@ class FolderSelectorBindings:
 
         bus.subscribe(FileListChanged, self._on_file_list_changed)
         bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
+        bus.subscribe_state(InteractionBlocked, self._on_interaction_blocked)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -26,6 +27,7 @@ class FolderSelectorBindings:
             return
         self._bus.unsubscribe(FileListChanged, self._on_file_list_changed)
         self._bus.unsubscribe_state(TaskStateChanged, self._on_task_state_changed)
+        self._bus.unsubscribe_state(InteractionBlocked, self._on_interaction_blocked)
         self._subscribed = False
 
     def _on_file_list_changed(self, e: FileListChanged) -> None:
@@ -36,3 +38,7 @@ class FolderSelectorBindings:
         """Handle task state changes by disabling/enabling controls."""
         if e.task_type == "home":
             safe_call(self._view.set_task_state, e)
+
+    def _on_interaction_blocked(self, e: InteractionBlocked) -> None:
+        """Handle global interaction blocking (e.g. kym event range mode)."""
+        safe_call(self._view.set_interaction_blocked, e.blocked)

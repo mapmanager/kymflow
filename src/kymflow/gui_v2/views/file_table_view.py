@@ -174,6 +174,7 @@ class FileTableView:
         self._grid_container: Optional[ui.element] = None  # pyinstaller table view
         self._suppress_emit: bool = False
         self._task_state: Optional[TaskStateChanged] = None
+        self._interaction_blocked: bool = False
 
         # Keep latest rows so if FileListChanged arrives before render(),
         # we can populate when render() happens.
@@ -374,12 +375,30 @@ class FileTableView:
         self._task_state = task_state
         self._update_interaction_state()
 
+    def set_interaction_blocked(self, blocked: bool) -> None:
+        """Update whether interaction is blocked by kym event range mode (state).
+
+        Called from :class:`~kymflow.gui_v2.views.file_table_bindings.FileTableBindings`
+        when :class:`~kymflow.gui_v2.events_state.InteractionBlocked` is received.
+        Combined with task state in :meth:`_update_interaction_state`.
+
+        Args:
+            blocked: ``True`` when global blocking is active (e.g. awaiting rect
+                on the plot for add/set event range).
+        """
+        safe_call(self._set_interaction_blocked_impl, blocked)
+
+    def _set_interaction_blocked_impl(self, blocked: bool) -> None:
+        """Apply interaction-blocked flag and refresh grid chrome."""
+        self._interaction_blocked = blocked
+        self._update_interaction_state()
+
     def _update_interaction_state(self) -> None:
-        """Enable/disable user interaction based on task running state."""
+        """Enable/disable user interaction based on task and interaction-blocked state."""
         if self._grid_container is None:
             return
         running = self._task_state.running if self._task_state else False
-        if running:
+        if running or self._interaction_blocked:
             self._grid_container.classes(add="pointer-events-none opacity-60")
         else:
             self._grid_container.classes(remove="pointer-events-none opacity-60")

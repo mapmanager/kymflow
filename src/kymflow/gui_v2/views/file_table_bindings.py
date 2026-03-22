@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import AnalysisUpdate, DetectEvents, EditPhysicalUnits, FileChanged, FileSelection, MetadataUpdate, SelectionOrigin
-from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged, TaskStateChanged
+from kymflow.gui_v2.events_state import AnalysisCompleted, FileListChanged, InteractionBlocked, TaskStateChanged
 from kymflow.gui_v2.views.file_table_view import FileTableView
 from kymflow.core.utils.logging import get_logger
 
@@ -66,6 +66,7 @@ class FileTableBindings:
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         bus.subscribe_state(DetectEvents, self._on_detect_events)
         bus.subscribe_state(TaskStateChanged, self._on_task_state_changed)
+        bus.subscribe_state(InteractionBlocked, self._on_interaction_blocked)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -87,6 +88,7 @@ class FileTableBindings:
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._bus.unsubscribe_state(DetectEvents, self._on_detect_events)
         self._bus.unsubscribe_state(TaskStateChanged, self._on_task_state_changed)
+        self._bus.unsubscribe_state(InteractionBlocked, self._on_interaction_blocked)
         self._subscribed = False
 
     def _on_file_list_changed(self, e: FileListChanged) -> None:
@@ -268,6 +270,10 @@ class FileTableBindings:
         """Handle task state changes by disabling/enabling table interactions."""
         if e.task_type == "home":
             safe_call(self._table.set_task_state, e)
+
+    def _on_interaction_blocked(self, e: InteractionBlocked) -> None:
+        """Handle global interaction blocking (e.g. kym event range mode)."""
+        safe_call(self._table.set_interaction_blocked, e.blocked)
 
     def _refresh_rows_preserve_selection(self) -> None:
         """Refresh table rows and restore selection."""

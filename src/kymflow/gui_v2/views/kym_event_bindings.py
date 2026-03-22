@@ -17,7 +17,7 @@ from kymflow.gui_v2.events import (
     SetKymEventXRange,
     VelocityEventUpdate,
 )
-from kymflow.gui_v2.events_state import FileListChanged
+from kymflow.gui_v2.events_state import FileListChanged, InteractionBlocked
 from kymflow.gui_v2.views.kym_event_view import KymEventView
 from kymflow.core.utils.logging import get_logger
 
@@ -48,6 +48,7 @@ class KymEventBindings:
         bus.subscribe_state(DeleteKymEvent, self._on_delete_kym_event)
         bus.subscribe_state(DetectEvents, self._on_detect_events_done)
         bus.subscribe(FileListChanged, self._on_file_list_changed)
+        bus.subscribe_state(InteractionBlocked, self._on_interaction_blocked)
         self._subscribed = True
 
     def teardown(self) -> None:
@@ -62,6 +63,7 @@ class KymEventBindings:
         self._bus.unsubscribe_state(DeleteKymEvent, self._on_delete_kym_event)
         self._bus.unsubscribe_state(DetectEvents, self._on_detect_events_done)
         self._bus.unsubscribe(FileListChanged, self._on_file_list_changed)
+        self._bus.unsubscribe_state(InteractionBlocked, self._on_interaction_blocked)
         self._subscribed = False
 
     def _on_file_selection_changed(self, e: FileSelection) -> None:
@@ -197,7 +199,11 @@ class KymEventBindings:
 
     def _on_file_list_changed(self, e: FileListChanged) -> None:
         """Handle file list change event.
-        
+
         Single-file mode handles its own updates, so no action needed here.
         """
         pass
+
+    def _on_interaction_blocked(self, e: InteractionBlocked) -> None:
+        """Forward interaction blocking state to the view for nuanced handling."""
+        safe_call(self._view._on_interaction_blocked, e)

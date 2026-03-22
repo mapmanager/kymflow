@@ -51,9 +51,9 @@ For code under `kymflow/src/kymflow/gui_v2` and closely related NiceGUI/nicewidg
   - `ImageLineViewerV2View` / `ImageRoiWidget` are the only places for user‑driven ROI CRUD; do not reintroduce ROI add/edit/delete widgets in the analysis toolbar.
 
 - **Kym events (velocity events)**:
-  - All Add/Delete Kym event intents are handled by `KymEventController`.
-  - `KymEventCacheSyncController` and `KymEventRangeStateController` remain as focused, separate responsibilities.
-  - Do not create new `AddKymEvent*` / `DeleteKymEvent*` controllers; extend `KymEventController` when adding related flows.
+  - `KymEventController` handles Add/Delete/velocity-update intents, mirrors `SetKymEventRangeState` intent to state, and emits `InteractionBlocked` (state) for global UI blocking during range mode.
+  - `KymEventCacheSyncController` remains the focused cache-sync listener.
+  - Do not create new `AddKymEvent*` / `DeleteKymEvent*` micro-controllers; extend `KymEventController` when adding related flows.
 
 ### UI changes
 

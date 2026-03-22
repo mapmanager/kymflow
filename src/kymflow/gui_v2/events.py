@@ -342,9 +342,11 @@ class VelocityEventUpdate:
         t_start/t_end).
     Triggered by:
         - Intent: KymEventView (cell edit or x-range proposal acceptance).
-        - State: VelocityEventUpdateController after applying the update(s).
+        - State: :class:`~kymflow.gui_v2.controllers.kym_event_controller.KymEventController`
+          after applying the update(s).
     Consumed by:
-        - VelocityEventUpdateController (intent -> KymAnalysis update).
+        - :class:`~kymflow.gui_v2.controllers.kym_event_controller.KymEventController`
+          (intent -> KymAnalysis update).
         - Any state listeners that need to refresh UI after update.
     Dependencies:
         - May be emitted as a result of SetKymEventXRange (intent).
@@ -451,8 +453,10 @@ class SetKymEventRangeState:
         Toggle a short-lived UI state where the next rectangle selection on the
         plot proposes a new t_start/t_end for a specific velocity event.
     Triggered by:
-        - Intent: KymEventView when the user clicks "Set Event Start/Stop".
-        - State: KymEventRangeStateController mirrors intent -> state for bindings.
+        - Intent: KymEventView when the user clicks "Set Event Start/Stop" or "Add Event".
+        - State: :class:`~kymflow.gui_v2.controllers.kym_event_controller.KymEventController`
+          mirrors intent -> state for bindings (and emits
+          :class:`~kymflow.gui_v2.events_state.InteractionBlocked` state).
     Consumed by:
         - ImageLineViewerBindings (state -> enable/disable Plotly dragmode).
     Dependencies:

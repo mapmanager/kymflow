@@ -8,6 +8,7 @@ used to update UI components when the underlying state changes.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -16,6 +17,41 @@ if TYPE_CHECKING:
 else:
     from kymflow.core.image_loaders.kym_image import KymImage
     from kymflow.core.plotting.theme import ThemeMode
+
+
+class BlockingMode(str, Enum):
+    """Reason for global GUI interaction blocking.
+
+    Used with :class:`InteractionBlocked`. When ``blocked`` is False,
+    :attr:`BlockingMode.NONE` is still carried for consistent handling.
+
+    Future controllers may emit :class:`InteractionBlocked` with additional
+    modes (e.g. ROI edit) without changing the event shape.
+    """
+
+    NONE = "none"
+    KYM_EVENT_RANGE = "kym_event_range"
+
+
+@dataclass(frozen=True, slots=True)
+class InteractionBlocked:
+    """Notify subscribers that application-wide interaction blocking changed.
+
+    State-only: emitted on the state channel. Controllers (e.g.
+    :class:`~kymflow.gui_v2.controllers.kym_event_controller.KymEventController`)
+    emit this when kym event range mode is toggled; other features may emit
+    it for other :class:`BlockingMode` values.
+
+    Attributes:
+        blocked: Whether subscribing views should block non-essential interaction.
+        mode: Active blocking mode; :attr:`BlockingMode.NONE` when ``blocked``
+            is False.
+        phase: Always ``\"state\"`` for binding consumption.
+    """
+
+    blocked: bool
+    mode: BlockingMode
+    phase: Literal["state"] = "state"
 
 
 @dataclass(frozen=True)

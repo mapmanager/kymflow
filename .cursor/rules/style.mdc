@@ -53,13 +53,12 @@ For code in `kymflow/src/kymflow/gui_v2` and tightly related NiceGUI/nicewidgets
   - Do not create new ROI micro-controllers; extend `RoiController` instead.
 
 - **KymEventController**
-  - Handles all `AddKymEvent` and `DeleteKymEvent` **intent** events.
-  - Emits `AddKymEvent(state)` / `DeleteKymEvent(state)` plus `FileChanged(state, change_type="analysis")`.
-  - New Kym event flows (add/delete variants) should be integrated into `KymEventController`, not new controllers.
+  - Handles `AddKymEvent`, `DeleteKymEvent`, and `VelocityEventUpdate` **intent** events; mirrors `SetKymEventRangeState` intent to state; emits `InteractionBlocked` (state) when range mode toggles.
+  - Emits `AddKymEvent(state)` / `DeleteKymEvent(state)` / `VelocityEventUpdate(state)` plus `FileChanged(state, change_type="analysis")` where applicable.
+  - New Kym event flows should be integrated into `KymEventController`, not new micro-controllers.
 
-- **Other Kym event controllers**
-  - `KymEventCacheSyncController` (cache sync) and `KymEventRangeStateController` (arming range selection) remain focused, separate responsibilities.
-  - Do not duplicate their behavior in other controllers without a clear reason.
+- **KymEventCacheSyncController**
+  - Listens for analysis-related state events to refresh the velocity-event cache; keep this responsibility separate from `KymEventController`.
 
 ## 5. ROI CRUD UI location
 

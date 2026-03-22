@@ -784,10 +784,12 @@ class ImageLineViewerV2View:
 
     def reset_zoom(self) -> None:
         """Reset zoom to full scale."""
-        if self._image_roi_widget:
-            self._image_roi_widget.set_x_axis_autorange()
-        if self._line_plot_widget:
-            self._line_plot_widget.set_x_axis_autorange()
+        self._combined.reset_view()
+
+        # if self._image_roi_widget:
+        #     self._image_roi_widget.set_x_axis_autorange()
+        # if self._line_plot_widget:
+        #     self._line_plot_widget.set_x_axis_autorange()
 
     def scroll_x(self, direction: Literal["prev", "next"]) -> None:
         """Scroll x-axis by one window width. Clamps to data time bounds."""

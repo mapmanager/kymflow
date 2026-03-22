@@ -123,6 +123,7 @@ class FolderSelectorView:
         self._open_file_button: Optional[ui.button] = None
         self._open_csv_button: Optional[ui.button] = None
         self._task_state: Optional[TaskStateChanged] = None
+        self._interaction_blocked: bool = False
         self._suppress_path_selection_emit: bool = False
         
         # Save button callbacks
@@ -439,19 +440,38 @@ class FolderSelectorView:
         """Update view for task state changes."""
         safe_call(self._set_task_state_impl, task_state)
 
+    def set_interaction_blocked(self, blocked: bool) -> None:
+        """Update whether interaction is blocked by kym event range mode (state).
+
+        Combined with task state in :meth:`_update_controls_state` and
+        :meth:`_update_save_button_states`.
+
+        Args:
+            blocked: ``True`` when global blocking is active (e.g. awaiting rect
+                on the plot for add/set event range).
+        """
+        safe_call(self._set_interaction_blocked_impl, blocked)
 
     def _set_task_state_impl(self, task_state: TaskStateChanged) -> None:
         """Internal implementation of set_task_state."""
         self._task_state = task_state
         self._update_controls_state()
+        self._update_save_button_states()
+
+    def _set_interaction_blocked_impl(self, blocked: bool) -> None:
+        """Apply interaction-blocked flag and refresh control enablement."""
+        self._interaction_blocked = blocked
+        self._update_controls_state()
+        self._update_save_button_states()
 
     def _update_controls_state(self) -> None:
-        """Enable/disable folder controls based on task running state and file system access."""
+        """Enable/disable folder controls based on task, interaction block, and FS access."""
         running = self._task_state.running if self._task_state else False
+        blocked = running or self._interaction_blocked
         has_file_access = self._runtime_env.has_file_system_access if self._runtime_env else True
-        
+
         if self._recent_menu_button is not None:
-            if running:
+            if blocked:
                 self._recent_menu_button.disable()
             else:
                 folder_paths, file_paths, csv_paths = self._build_recent_menu_data()
@@ -460,31 +480,32 @@ class FolderSelectorView:
                 else:
                     self._recent_menu_button.disable()
         if self._choose_button is not None:
-            if running or not has_file_access:
+            if blocked or not has_file_access:
                 self._choose_button.disable()
             else:
                 self._choose_button.enable()
         if self._open_file_button is not None:
-            if running or not has_file_access:
+            if blocked or not has_file_access:
                 self._open_file_button.disable()
             else:
                 self._open_file_button.enable()
         if self._open_csv_button is not None:
-            if running or not has_file_access:
+            if blocked or not has_file_access:
                 self._open_csv_button.disable()
             else:
                 self._open_csv_button.enable()
     
     def _update_save_button_states(self) -> None:
-        """Update save button states based on current file, task state, and file system access."""
+        """Update save button states based on current file, task, interaction block, and FS access."""
         if self._save_selected_button is None or self._save_all_button is None:
             return
-        
+
         running = self._task_state.running if self._task_state else False
+        blocked = running or self._interaction_blocked
         has_file_access = self._runtime_env.has_file_system_access if self._runtime_env else True
-        
-        # Disable buttons when task is running or no file system access
-        if running or not has_file_access:
+
+        # Disable when task running, interaction blocked (e.g. kym event range), or no FS access
+        if blocked or not has_file_access:
             self._save_selected_button.disable()
             self._save_all_button.disable()
             # self._save_all_button.props('loading')
