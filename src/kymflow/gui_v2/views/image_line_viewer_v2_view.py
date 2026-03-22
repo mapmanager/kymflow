@@ -23,16 +23,15 @@ from kymflow.gui_v2.adapters import (
 )
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.events import (
-    AddKymEvent,
     ChannelSelection,
-    DeleteKymEvent,
     DeleteRoi,
     EditRoi,
-    EventSelection,
+    KymEventSelection,
+    KymEvent,
+    KymEventAction,
     SelectionOrigin,
     SetKymEventXRange,
     SetRoiBounds,
-    VelocityEventUpdate,
 )
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.core.utils.logging import get_logger
@@ -589,11 +588,21 @@ class ImageLineViewerV2View:
                 return True
         return False
 
-    def on_add_kym_event(self, e: AddKymEvent) -> None:
-        """Append one event rect shape; plot.update()."""
-        if e.phase != "state" or not e.event_id or self._line_plot_widget is None:
+    def on_kym_event(self, e: KymEvent) -> None:
+        """Handle KymEvent state: ADD, EDIT, DELETE. No zoom on any action."""
+        if e.phase != "state" or self._line_plot_widget is None:
             return
         if e.path and self._current_file and str(self._current_file.path) != str(e.path):
+            return
+        if e.action == KymEventAction.ADD:
+            self._on_kym_event_add(e)
+        elif e.action == KymEventAction.EDIT:
+            self._on_kym_event_edit(e)
+        elif e.action == KymEventAction.DELETE:
+            self._on_kym_event_delete(e)
+
+    def _on_kym_event_add(self, e: KymEvent) -> None:
+        if not e.event_id or e.t_start is None:
             return
         plot, plot_dict = self._kym_event_plot()
         if plot is None:
@@ -614,11 +623,8 @@ class ImageLineViewerV2View:
         self._selected_event_id = str(e.event_id)
         plot.update()
 
-    def on_delete_kym_event(self, e: DeleteKymEvent) -> None:
-        """Remove one event rect shape; plot.update()."""
-        if e.phase != "state" or self._line_plot_widget is None:
-            return
-        if e.path and self._current_file and str(self._current_file.path) != str(e.path):
+    def _on_kym_event_delete(self, e: KymEvent) -> None:
+        if not e.event_id:
             return
         plot, plot_dict = self._kym_event_plot()
         if plot is None:
@@ -632,13 +638,8 @@ class ImageLineViewerV2View:
             self._selected_event_id = None
         plot.update()
 
-    def on_edit_kym_event(self, e: VelocityEventUpdate) -> None:
-        """Pop rect for event_id, rebuild from e.velocity_event; plot.update()."""
-        if e.phase != "state" or self._line_plot_widget is None:
-            return
-        if e.path and self._current_file and str(self._current_file.path) != str(e.path):
-            return
-        if e.velocity_event is None:
+    def _on_kym_event_edit(self, e: KymEvent) -> None:
+        if not e.event_id or e.velocity_event is None:
             return
         plot, plot_dict = self._kym_event_plot()
         if plot is None:
@@ -653,7 +654,7 @@ class ImageLineViewerV2View:
         shapes.append(mgr._make_rect(acq_list[0], is_selected=sel))
         plot.update()
 
-    def _apply_zoom_to_event(self, e: EventSelection) -> None:
+    def _apply_zoom_to_event(self, e: KymEventSelection) -> None:
         """Select and zoom to an event without recomputing data."""
         self._selected_event_id = e.event_id
         if (
@@ -770,11 +771,11 @@ class ImageLineViewerV2View:
         #     self._contrast_widget.set_colorscale(params.colorscale)
         #     self._contrast_widget.set_contrast(zmin=params.zmin, zmax=params.zmax)
 
-    def zoom_to_event(self, e: EventSelection) -> None:
+    def zoom_to_event(self, e: KymEventSelection) -> None:
         """Update selected event highlight and optionally zoom x-axis to event."""
         safe_call(self._zoom_to_event_impl, e)
 
-    def _zoom_to_event_impl(self, e: EventSelection) -> None:
+    def _zoom_to_event_impl(self, e: KymEventSelection) -> None:
         self._apply_zoom_to_event(e)
 
     def set_event_filter(self, event_filter: dict[str, bool] | None) -> None:

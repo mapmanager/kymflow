@@ -165,7 +165,7 @@ def _resolve_colorscale(name: str):
 - **Models**: `AppState` (selected_file, selected_roi_id, theme, image_display_params), `KymImage`, `KymAnalysis`, `VelocityEvent`, `RoiBounds`
 - **Views**: [folder_selector_view.py](kymflow/src/kymflow/gui_v2/views/folder_selector_view.py), [file_table_view.py](kymflow/src/kymflow/gui_v2/views/file_table_view.py), [image_line_viewer_view.py](kymflow/src/kymflow/gui_v2/views/image_line_viewer_view.py), [kym_event_view.py](kymflow/src/kymflow/gui_v2/views/kym_event_view.py), [line_plot_controls_view.py](kymflow/src/kymflow/gui_v2/views/line_plot_controls_view.py), [contrast_view.py](kymflow/src/kymflow/gui_v2/views/contrast_view.py), [drawer_view.py](kymflow/src/kymflow/gui_v2/views/drawer_view.py)
 - **Bindings**: Each view has a corresponding `*_bindings.py` that subscribes to EventBus and calls view methods
-- **Controllers**: FileSelectionController, ROISelectionController, EventSelectionController, KymEventRangeStateController, RoiEditStateController, EditRoiController, ImageDisplayController, etc.
+- **Controllers**: FileSelectionController, ROISelectionController, KymEventSelectionController, KymEventRangeStateController, RoiEditStateController, EditRoiController, ImageDisplayController, etc.
 - **Event flow**: Intent events → controllers → AppState → bridge → state events → bindings → view updates
 
 ### 1.2 Current ImageLineViewerView Architecture
@@ -173,7 +173,7 @@ def _resolve_colorscale(name: str):
 - **Implementation**: Single `ui.plotly` with `plot_image_line_plotly_v3()` producing a 2-row subplot (image + velocity line)
 - **State**: `_current_file`, `_current_roi_id`, `_theme`, `_display_params`, filter state, `_selected_event_id`, `_event_filter`, ROI edit state
 - **Events emitted**: `SetKymEventXRange`, `SetRoiBounds`
-- **Events consumed**: `FileSelection`, `ROISelection`, `EventSelection`, `ThemeChanged`, `ImageDisplayChange`, `SetKymEventRangeState`, `SetRoiEditState`, `VelocityEventUpdate`, `AddKymEvent`, `DeleteKymEvent`, `EditRoi`, `DeleteRoi`, `DetectEvents`, `AnalysisCompleted`, `EditPhysicalUnits`, `KymScrollXEvent`
+- **Events consumed**: `FileSelection`, `ROISelection`, `KymEventSelection`, `ThemeChanged`, `ImageDisplayChange`, `SetKymEventRangeState`, `SetRoiEditState`, `KymEvent`, `EditRoi`, `DeleteRoi`, `DetectEvents`, `AnalysisCompleted`, `EditPhysicalUnits`, `KymScrollXEvent`
 
 ### 1.3 Target Architecture After Migration
 
@@ -255,7 +255,7 @@ flowchart TB
 7. **ImageLineViewerV2Bindings**:
    - `FileSelection` → adapter → `ImageRoiWidget.set_file`, `LinePlotWidget` update.
    - `ROISelection` (state): Update view when AppState changes (e.g. from other sources). Primary ROI selection comes from ImageRoiWidget `on_roi_event` → emit `ROISelection(intent)`.
-   - `EventSelection` → `LinePlotWidget.acq_image_events.select_event`.
+   - `KymEventSelection` → `LinePlotWidget.acq_image_events.select_event`.
    - `ThemeChanged` → apply theme to both widgets (using pre-plan theme support).
    - `ImageDisplayChange` → `set_colorscale` / `set_contrast` on ImageRoiWidget.
    - `VelocityEventUpdate`, `AddKymEvent`, `DeleteKymEvent` → AcqImageEventManager CRUD.
@@ -265,7 +265,7 @@ flowchart TB
    - `EditRoi`, `DeleteRoi`, `EditPhysicalUnits`, `AnalysisCompleted`, `DetectEvents` → refresh/sync.
 8. **Axis linking**: `on_axis_change` on both widgets → sync x-axis via `set_x_axis_range`.
 
-**Unit tests**: Create `tests/gui_v2/test_image_line_viewer_v2_bindings.py` covering FileSelection, ROISelection, ThemeChanged, AddKymEvent, DeleteKymEvent, EventSelection, KymScrollXEvent, teardown. Add `_parse_roi_id_from_name` test in `test_nicewidgets_adapter.py`.
+**Unit tests**: Create `tests/gui_v2/test_image_line_viewer_v2_bindings.py` covering FileSelection, ROISelection, ThemeChanged, KymEvent(ADD/DELETE), KymEventSelection, KymScrollXEvent, teardown. Add `_parse_roi_id_from_name` test in `test_nicewidgets_adapter.py`.
 
 ### Phase 4: Swap and Remove (kymflow)
 
@@ -317,4 +317,4 @@ flowchart TB
 - **ROISelectionController**: Will receive ROI selection from ImageRoiWidget (via bindings emitting `ROISelection(intent)`). Analysis toolbar ROI dropdown left visible but ignored.
 - **RoiEditStateController**: Not used for ROI edit during transition; ImageRoiWidget's built-in edit flow only.
 - **EditRoiController**: Still used; ImageRoiWidget `ROIEvent(UPDATE)` → `EditRoi` intent (convert RegionOfInterest → RoiBounds).
-- **EventSelectionController**, **KymEventRangeStateController**: Unchanged; KymEventView and LinePlotWidget (when add-user-event exists) drive these flows.
+- **KymEventSelectionController**, **KymEventRangeStateController**: Unchanged; KymEventView and LinePlotWidget (when add-user-event exists) drive these flows.

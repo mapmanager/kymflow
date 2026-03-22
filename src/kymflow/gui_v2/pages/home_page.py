@@ -13,7 +13,7 @@ from kymflow.gui_v2.controllers import (
     AnalysisUpdateController,
     AppStateBridgeController,
     EventAnalysisController,
-    EventSelectionController,
+    KymEventSelectionController,
     FileSelectionController,
     FileTablePersistenceController,
     FolderController,
@@ -117,7 +117,7 @@ class HomePage(BasePage):
         self._folder_controller: FolderController | None = None
         self._file_selection_controller: FileSelectionController | None = None
         self._roi_controller: RoiController | None = None
-        self._event_selection_controller: EventSelectionController | None = None
+        self._event_selection_controller: KymEventSelectionController | None = None
         self._image_display_controller: ImageDisplayController | None = None
         self._metadata_controller: MetadataController | None = None
         self._analysis_update_controller: AnalysisUpdateController | None = None
@@ -209,10 +209,8 @@ class HomePage(BasePage):
             context,
             on_selected=bus.emit,
             on_file_selected=bus.emit,
-            on_event_update=bus.emit,
+            on_kym_event=bus.emit,
             on_range_state=bus.emit,
-            on_add_event=bus.emit,
-            on_delete_event=bus.emit,
             on_next_prev_file=bus.emit,
             on_kym_scroll_x=bus.emit,
             selection_mode="single",
@@ -320,7 +318,7 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._roi_controller = RoiController(self.context.app_state, self.bus)
-        self._event_selection_controller = EventSelectionController(
+        self._event_selection_controller = KymEventSelectionController(
             self.context.app_state, self.bus
         )
         self._image_display_controller = ImageDisplayController(

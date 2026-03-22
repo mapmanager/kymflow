@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from kymflow.gui_v2.events import (
-    AddKymEvent,
-    DeleteKymEvent,
-    EventSelection,
+    KymEventSelection,
+    KymEvent,
+    KymEventAction,
     FileSelection,
     KymScrollXEvent,
     FileChanged,
@@ -78,40 +78,42 @@ def test_theme_changed_calls_view(mock_v2_view: MagicMock, mock_bus: MagicMock) 
     mock_v2_view.set_theme.assert_called_once_with(ThemeMode.LIGHT)
 
 
-def test_add_kym_event_refreshes(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:
-    """AddKymEvent calls refresh_events_for_current_roi."""
+def test_kym_event_add_calls_on_kym_event(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:
+    """KymEvent(ADD) calls view.on_kym_event."""
     bindings = ImageLineViewerV2Bindings(mock_bus, mock_v2_view)
-    event = AddKymEvent(
+    event = KymEvent(
+        action=KymEventAction.ADD,
         event_id="ev-1",
         roi_id=1,
         path=None,
+        origin=SelectionOrigin.EVENT_TABLE,
+        phase="state",
         t_start=1.0,
         t_end=2.0,
-        origin=SelectionOrigin.EVENT_TABLE,
-        phase="state",
     )
-    bindings._on_add_kym_event(event)
-    mock_v2_view.refresh_events_for_current_roi.assert_called_once()
+    bindings._on_kym_event(event)
+    mock_v2_view.on_kym_event.assert_called_once_with(event)
 
 
-def test_delete_kym_event_refreshes(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:
-    """DeleteKymEvent calls refresh_events_for_current_roi."""
+def test_kym_event_delete_calls_on_kym_event(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:
+    """KymEvent(DELETE) calls view.on_kym_event."""
     bindings = ImageLineViewerV2Bindings(mock_bus, mock_v2_view)
-    event = DeleteKymEvent(
+    event = KymEvent(
+        action=KymEventAction.DELETE,
         event_id="ev-1",
         roi_id=1,
         path=None,
         origin=SelectionOrigin.EVENT_TABLE,
         phase="state",
     )
-    bindings._on_delete_kym_event(event)
-    mock_v2_view.refresh_events_for_current_roi.assert_called_once()
+    bindings._on_kym_event(event)
+    mock_v2_view.on_kym_event.assert_called_once_with(event)
 
 
 def test_event_selection_calls_zoom(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:
-    """EventSelection calls zoom_to_event."""
+    """KymEventSelection calls zoom_to_event."""
     bindings = ImageLineViewerV2Bindings(mock_bus, mock_v2_view)
-    event = EventSelection(
+    event = KymEventSelection(
         event_id="ev-1",
         roi_id=1,
         path=None,

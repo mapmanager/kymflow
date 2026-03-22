@@ -8,7 +8,7 @@ import pytest
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import VelocityEventUpdate, SelectionOrigin
+from kymflow.gui_v2.events import KymEvent, KymEventAction, SelectionOrigin
 from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
 from kymflow.gui_v2.views.kym_event_view import KymEventView
 
@@ -43,10 +43,10 @@ def sample_kym_file() -> KymImage:
         return kym_file
 
 
-def test_on_velocity_event_update_uses_row_level_update(
+def test_on_kym_event_edit_uses_row_level_update(
     sample_kym_file: KymImage, mock_app_context
 ) -> None:
-    """VelocityEventUpdate(state) for a single event should prefer row-level update over full refresh."""
+    """KymEvent(EDIT, state) for a single event should prefer row-level update over full refresh."""
     bus = EventBus("test-client")
     view = KymEventView(mock_app_context, on_selected=lambda e: None)
 
@@ -71,16 +71,18 @@ def test_on_velocity_event_update_uses_row_level_update(
     view.set_events = MagicMock()
     view.set_selected_event_ids = MagicMock()
 
-    event = VelocityEventUpdate(
+    event = KymEvent(
+        action=KymEventAction.EDIT,
         event_id=event_id,
+        roi_id=roi.id,
         path=str(sample_kym_file.path),
-        field="user_type",
-        value="REVIEWED",
         origin=SelectionOrigin.EXTERNAL,
         phase="state",
+        field="user_type",
+        value="REVIEWED",
     )
 
-    bindings._on_velocity_event_update(event)
+    bindings._on_kym_event(event)
 
     # Row-level helper should be used; full refresh must not be called
     view.update_row_for_event.assert_called_once()
@@ -98,7 +100,7 @@ def test_on_velocity_event_update_uses_row_level_update(
     )
 
 
-def test_on_velocity_event_update_falls_back_when_no_event_id(
+def test_on_kym_event_edit_falls_back_when_no_event_id(
     sample_kym_file: KymImage, mock_app_context
 ) -> None:
     """If event_id is None, bindings should fall back to full refresh."""
@@ -126,16 +128,18 @@ def test_on_velocity_event_update_falls_back_when_no_event_id(
     view.set_selected_event_ids = MagicMock()
 
     # Event with event_id=None
-    event = VelocityEventUpdate(
+    event = KymEvent(
+        action=KymEventAction.EDIT,
         event_id=None,
+        roi_id=roi.id,
         path=str(sample_kym_file.path),
-        field="user_type",
-        value="REVIEWED",
         origin=SelectionOrigin.EXTERNAL,
         phase="state",
+        field="user_type",
+        value="REVIEWED",
     )
 
-    bindings._on_velocity_event_update(event)
+    bindings._on_kym_event(event)
 
     # Should fall back to full refresh
     view.update_row_for_event.assert_not_called()
@@ -144,7 +148,7 @@ def test_on_velocity_event_update_falls_back_when_no_event_id(
     view.set_selected_event_ids.assert_not_called()
 
 
-def test_on_velocity_event_update_falls_back_when_grid_none(
+def test_on_kym_event_edit_falls_back_when_grid_none(
     sample_kym_file: KymImage, mock_app_context
 ) -> None:
     """If the grid is not yet rendered, bindings should fall back to full refresh."""
@@ -171,23 +175,25 @@ def test_on_velocity_event_update_falls_back_when_grid_none(
     view.set_events = MagicMock()
     view.set_selected_event_ids = MagicMock()
 
-    event = VelocityEventUpdate(
+    event = KymEvent(
+        action=KymEventAction.EDIT,
         event_id=event_id,
+        roi_id=roi.id,
         path=str(sample_kym_file.path),
-        field="user_type",
-        value="REVIEWED",
         origin=SelectionOrigin.EXTERNAL,
         phase="state",
+        field="user_type",
+        value="REVIEWED",
     )
 
-    bindings._on_velocity_event_update(event)
+    bindings._on_kym_event(event)
 
     # Should fall back to full refresh when grid is None
     view.update_row_for_event.assert_not_called()
     view.set_events.assert_called_once()
 
 
-def test_on_velocity_event_update_falls_back_when_event_not_found(
+def test_on_kym_event_edit_falls_back_when_event_not_found(
     sample_kym_file: KymImage, mock_app_context
 ) -> None:
     """If get_velocity_event_row returns None, bindings should fall back to full refresh."""
@@ -218,16 +224,18 @@ def test_on_velocity_event_update_falls_back_when_event_not_found(
     original_get_row = kym_analysis.get_velocity_event_row
     kym_analysis.get_velocity_event_row = MagicMock(return_value=None)
 
-    event = VelocityEventUpdate(
+    event = KymEvent(
+        action=KymEventAction.EDIT,
         event_id="non-existent-event-id",
+        roi_id=roi.id,
         path=str(sample_kym_file.path),
-        field="user_type",
-        value="REVIEWED",
         origin=SelectionOrigin.EXTERNAL,
         phase="state",
+        field="user_type",
+        value="REVIEWED",
     )
 
-    bindings._on_velocity_event_update(event)
+    bindings._on_kym_event(event)
 
     # Should fall back to full refresh when event not found
     view.update_row_for_event.assert_not_called()

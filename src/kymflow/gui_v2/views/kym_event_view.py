@@ -12,17 +12,17 @@ from nicewidgets.custom_ag_grid.custom_ag_grid_v2 import CustomAgGrid_v2
 from kymflow.core.analysis.velocity_events.velocity_events import UserType, VelocityEvent
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.events import (
-    AddKymEvent,
-    DeleteKymEvent,
-    EventSelection,
-    EventSelectionOptions,
+    KymEventSelection,
+    KymEventSelectionOptions,
     FileSelection,
+    KymEvent,
+    KymEventAction,
+    KymEventEditState,
     KymScrollXEvent,
     NextPrevFileEvent,
     SelectionOrigin,
     SetKymEventRangeState,
     SetKymEventXRange,
-    VelocityEventUpdate,
 )
 from kymflow.gui_v2.events_state import InteractionBlocked
 
@@ -30,12 +30,10 @@ if TYPE_CHECKING:
     from kymflow.gui_v2.app_context import AppContext
 
 Rows = List[dict[str, object]]
-OnSelected = Callable[[EventSelection], None]
+OnSelected = Callable[[KymEventSelection], None]
 OnFileSelected = Callable[[FileSelection], None]
-OnEventUpdate = Callable[[VelocityEventUpdate], None]
+OnKymEvent = Callable[[KymEvent], None]
 OnRangeState = Callable[[SetKymEventRangeState], None]
-OnAddEvent = Callable[[AddKymEvent], None]
-OnDeleteEvent = Callable[[DeleteKymEvent], None]
 OnNextPrevFile = Callable[[NextPrevFileEvent], None]
 OnKymScrollX = Callable[[KymScrollXEvent], None]
 
@@ -115,10 +113,8 @@ class KymEventView:
         *,
         on_selected: OnSelected,
         on_file_selected: OnFileSelected | None = None,
-        on_event_update: OnEventUpdate | None = None,
+        on_kym_event: OnKymEvent | None = None,
         on_range_state: OnRangeState | None = None,
-        on_add_event: OnAddEvent | None = None,
-        on_delete_event: OnDeleteEvent | None = None,
         on_next_prev_file: OnNextPrevFile | None = None,
         on_kym_scroll_x: OnKymScrollX | None = None,
         selection_mode: SelectionMode = "single",
@@ -126,10 +122,8 @@ class KymEventView:
         self._app_context = app_context
         self._on_selected = on_selected
         self._on_file_selected = on_file_selected
-        self._on_event_update = on_event_update
+        self._on_kym_event = on_kym_event
         self._on_range_state = on_range_state
-        self._on_add_event = on_add_event
-        self._on_delete_event = on_delete_event
         self._on_next_prev_file = on_next_prev_file
         self._on_kym_scroll_x = on_kym_scroll_x
         self._selection_mode = selection_mode
@@ -141,8 +135,7 @@ class KymEventView:
         self._roi_filter: int | None = None
         self._zoom_enabled: bool = True
         self._zoom_pad_sec: float = 1.0
-        self._setting_kym_event_range_state: bool = False  # True when "Set Start/Stop" is active (editing an existing event’s x-range).
-        self._adding_new_event: bool = False  # True when "Add Event" is active (creating a new event via rect selection).
+        self._edit_state: KymEventEditState = KymEventEditState.IDLE
         self._set_range_button: ui.button | None = None
         self._cancel_range_button: ui.button | None = None
         self._add_event_button: ui.button | None = None
@@ -175,10 +168,8 @@ class KymEventView:
         """Create the grid UI inside the current container."""
         # Cleanup: If we're in range-setting state when view is recreated (e.g., navigation away/back),
         # cancel the state to prevent stale state from persisting.
-        if self._setting_kym_event_range_state or self._adding_new_event:
-            # Cancel the state without showing notification (it may have been auto-dismissed)
-            self._setting_kym_event_range_state = False
-            self._adding_new_event = False
+        if self._edit_state != KymEventEditState.IDLE:
+            self._edit_state = KymEventEditState.IDLE
             self._emit_range_state(False)
             # Clear notification reference if it exists (it may have been auto-dismissed by NiceGUI)
             if self._range_notification is not None:
@@ -448,16 +439,16 @@ class KymEventView:
         if len(event_ids) == 1:
             self._selected_event_id = event_ids[0]
             
-            # For EXTERNAL origin, skip row data lookup since EventSelection is never emitted
+            # For EXTERNAL origin, skip row data lookup since KymEventSelection is never emitted
             # This simplifies the code and avoids unnecessary work for programmatic selections
             if origin == SelectionOrigin.EXTERNAL:
                 # Just set basic state - no need to find row data or create VelocityEvent
-                # since we're not emitting EventSelection for EXTERNAL origin
+                # since we're not emitting KymEventSelection for EXTERNAL origin
                 self._selected_event_roi_id = None
                 self._selected_event_path = None
             else:
-                # For EVENT_TABLE origin, do full lookup to emit EventSelection
-                # Find row data to emit EventSelection for plot highlighting
+                # For EVENT_TABLE origin, do full lookup to emit KymEventSelection
+                    # Find row data to emit KymEventSelection for plot highlighting
                 # Search _all_rows first (source of truth), then _pending_rows as fallback
                 row_data = None
                 for row in self._all_rows:
@@ -478,14 +469,14 @@ class KymEventView:
                     event = VelocityEvent.from_dict_with_uuid(row_data, str(event_id))
                     self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
                     self._selected_event_path = str(path) if path else None
-                    # Emit EventSelection for user-initiated selections (EVENT_TABLE origin)
+                    # Emit KymEventSelection for user-initiated selections (EVENT_TABLE origin)
                     self._on_selected(
-                        EventSelection(
+                        KymEventSelection(
                             event_id=str(event_id),
                             roi_id=int(roi_id) if roi_id is not None else None,
                             path=str(path) if path else None,
                             event=event,
-                            options=EventSelectionOptions(
+                            options=KymEventSelectionOptions(
                                 zoom=self._zoom_enabled,
                                 zoom_pad_sec=self._zoom_pad_sec,
                             ),
@@ -541,14 +532,14 @@ class KymEventView:
         self._update_range_button_state()
         self._update_add_delete_button_state()
         
-        # Emit EventSelection
+        # Emit KymEventSelection
         self._on_selected(
-            EventSelection(
+            KymEventSelection(
                 event_id=str(event_id),
                 roi_id=int(roi_id) if roi_id is not None else None,
                 path=str(path) if path else None,
                 event=event,
-                options=EventSelectionOptions(
+                options=KymEventSelectionOptions(
                     zoom=self._zoom_enabled,
                     zoom_pad_sec=self._zoom_pad_sec,
                 ),
@@ -566,7 +557,7 @@ class KymEventView:
         row_data: dict[str, object],
     ) -> None:
         """Handle user editing a cell."""
-        if self._on_event_update is None:
+        if self._on_kym_event is None:
             return
         if field != "user_type":
             return
@@ -574,32 +565,33 @@ class KymEventView:
         if not event_id:
             return
         path = row_data.get("path")
-        self._on_event_update(
-            VelocityEventUpdate(
+        roi_id = row_data.get("roi_id")
+        self._on_kym_event(
+            KymEvent(
+                action=KymEventAction.EDIT,
                 event_id=str(event_id),
+                roi_id=int(roi_id) if roi_id is not None else None,
                 path=str(path) if path else None,
-                field=field,
-                value=new_value,
                 origin=SelectionOrigin.EVENT_TABLE,
                 phase="intent",
+                field=field,
+                value=new_value,
             )
         )
 
     def handle_set_kym_event_x_range(self, e: SetKymEventXRange) -> None:
         """Handle proposed x-range selection for a velocity event."""
         
-        logger.error(f'fix this runtime flow e:{e}')
 
-        self._setting_kym_event_range_state = False
+        was_adding = self._edit_state == KymEventEditState.AWAIT_NEW_X_RANGE
+        self._edit_state = KymEventEditState.IDLE
         self._emit_range_state(False)
         self._update_range_button_state()
         self._set_range_notification_visible(False)
 
-        # If adding a new event, emit AddKymEvent instead of VelocityEventUpdate
-        if self._adding_new_event:
-            self._adding_new_event = False
-            if self._on_add_event is None:
-                logger.warning("handle_set_kym_event_x_range: on_add_event callback not set")
+        if was_adding:
+            if self._on_kym_event is None:
+                logger.warning("handle_set_kym_event_x_range: on_kym_event callback not set")
                 return
             if self._roi_filter is None:
                 logger.warning("handle_set_kym_event_x_range: roi_filter is None, cannot add event")
@@ -612,16 +604,17 @@ class KymEventView:
                 ]
                 if matching and matching[0].get("channel") is not None:
                     channel = int(matching[0]["channel"])
-            self._on_add_event(
-                AddKymEvent(
-                    event_id=None,  # Will be set by controller after creation
+            self._on_kym_event(
+                KymEvent(
+                    action=KymEventAction.ADD,
+                    event_id=None,
                     roi_id=self._roi_filter,
-                    channel=channel,
                     path=self._current_file_path,
-                    t_start=e.x0,
-                    t_end=e.x1,
                     origin=SelectionOrigin.EVENT_TABLE,
                     phase="intent",
+                    t_start=e.x0,
+                    t_end=e.x1,
+                    channel=channel,
                 )
             )
             self._update_add_delete_button_state()
@@ -638,31 +631,31 @@ class KymEventView:
             if self._selected_event_path != e.path:
                 # logger.debug("range proposal path mismatch (current=%s)", self._selected_event_path)
                 return
-        if self._on_event_update is None:
+        if self._on_kym_event is None:
             return
-        self._on_event_update(
-            VelocityEventUpdate(
+        self._on_kym_event(
+            KymEvent(
+                action=KymEventAction.EDIT,
                 event_id=self._selected_event_id,
+                roi_id=self._selected_event_roi_id,
                 path=self._selected_event_path,
-                updates={"t_start": e.x0, "t_end": e.x1},
                 origin=SelectionOrigin.EVENT_TABLE,
                 phase="intent",
+                updates={"t_start": e.x0, "t_end": e.x1},
             )
         )
 
     def _on_set_event_range_clicked(self) -> None:
         if self._selected_event_id is None:
             return
-        # logger.debug("set_event_range_clicked -> toggle state")
-        self._setting_kym_event_range_state = not self._setting_kym_event_range_state
-        self._adding_new_event = False  # Ensure we're not in add mode
-        self._emit_range_state(self._setting_kym_event_range_state)
+        if self._edit_state == KymEventEditState.AWAIT_EDIT_X_RANGE:
+            self._edit_state = KymEventEditState.IDLE
+        else:
+            self._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
+        self._emit_range_state(self._edit_state != KymEventEditState.IDLE)
         self._update_range_button_state()
         self._update_add_delete_button_state()
-        if self._setting_kym_event_range_state:
-            self._set_range_notification_visible(True)
-        else:
-            self._set_range_notification_visible(False)
+        self._set_range_notification_visible(self._edit_state != KymEventEditState.IDLE)
 
     def _on_notification_dismissed(self, e) -> None:
         """Handle notification dismiss event (either programmatic or user-initiated)."""
@@ -678,11 +671,9 @@ class KymEventView:
         self._on_cancel_event_range_clicked()
 
     def _on_cancel_event_range_clicked(self) -> None:
-        if not self._setting_kym_event_range_state and not self._adding_new_event:
+        if self._edit_state == KymEventEditState.IDLE:
             return
-        # logger.debug("cancel_event_range_clicked -> disable state")
-        self._setting_kym_event_range_state = False
-        self._adding_new_event = False
+        self._edit_state = KymEventEditState.IDLE
         self._emit_range_state(False)
         self._update_range_button_state()
         self._update_add_delete_button_state()
@@ -693,11 +684,19 @@ class KymEventView:
     def _emit_range_state(self, enabled: bool) -> None:
         if self._on_range_state is None:
             return
-        # logger.debug("emit SetKymEventRangeState enabled=%s adding_new_event=%s", enabled, self._adding_new_event)
-        # For new events, event_id is None
-        event_id = None if self._adding_new_event else self._selected_event_id
-        roi_id = self._roi_filter if self._adding_new_event else self._selected_event_roi_id
-        path = self._current_file_path if self._adding_new_event else self._selected_event_path
+        event_id = (
+            None if self._edit_state == KymEventEditState.AWAIT_NEW_X_RANGE else self._selected_event_id
+        )
+        roi_id = (
+            self._roi_filter
+            if self._edit_state == KymEventEditState.AWAIT_NEW_X_RANGE
+            else self._selected_event_roi_id
+        )
+        path = (
+            self._current_file_path
+            if self._edit_state == KymEventEditState.AWAIT_NEW_X_RANGE
+            else self._selected_event_path
+        )
         self._on_range_state(
             SetKymEventRangeState(
                 enabled=enabled,
@@ -727,11 +726,14 @@ class KymEventView:
             return
         if self._selected_event_id is None:
             self._set_range_button.disable()
-            self._cancel_range_button.disable()
-            self._set_range_notification_visible(False)
+            if self._edit_state != KymEventEditState.IDLE:
+                self._cancel_range_button.enable()
+            else:
+                self._cancel_range_button.disable()
+                self._set_range_notification_visible(False)
             return
         self._set_range_button.enable()
-        if self._setting_kym_event_range_state:
+        if self._edit_state != KymEventEditState.IDLE:
             self._cancel_range_button.enable()
         else:
             self._cancel_range_button.disable()
@@ -744,7 +746,7 @@ class KymEventView:
                 self._range_notification.dismiss()
             message = (
                 "Draw a rectangle on the plot to add new event start/stop."
-                if self._adding_new_event
+                if self._edit_state == KymEventEditState.AWAIT_NEW_X_RANGE
                 else "Draw a rectangle on the plot to set event start/stop."
             )
             self._range_notification = ui.notification(
@@ -770,12 +772,9 @@ class KymEventView:
             logger.warning("Add Event: current_file_path is None, cannot add event")
             return
         
-        logger.error('fix this runtime flow')
 
-        self._adding_new_event = True
-        self._setting_kym_event_range_state = True
-
-        self._emit_range_state(True)  # this should shutdown enough so we do not lose focus (e.g. file table view)
+        self._edit_state = KymEventEditState.AWAIT_NEW_X_RANGE
+        self._emit_range_state(True)
         self._update_range_button_state()
         self._update_add_delete_button_state()
         self._set_range_notification_visible(True)
@@ -784,8 +783,8 @@ class KymEventView:
         """Handle Delete Event button click."""
         if self._selected_event_id is None:
             return
-        if self._on_delete_event is None:
-            logger.warning("Delete Event: on_delete_event callback not set")
+        if self._on_kym_event is None:
+            logger.warning("Delete Event: on_kym_event callback not set")
             return
 
         # Show confirmation dialog
@@ -814,13 +813,13 @@ class KymEventView:
         dialog.open()
 
     def _confirm_delete(self, dialog: ui.dialog) -> None:
-        """Confirm deletion and emit DeleteKymEvent."""
+        """Confirm deletion and emit KymEvent(action=DELETE)."""
         dialog.close()
-        if self._on_delete_event is None:
+        if self._on_kym_event is None:
             return
-        # logger.debug("confirm_delete event_id=%s", self._selected_event_id)
-        self._on_delete_event(
-            DeleteKymEvent(
+        self._on_kym_event(
+            KymEvent(
+                action=KymEventAction.DELETE,
                 event_id=self._selected_event_id,
                 roi_id=self._selected_event_roi_id,
                 path=self._selected_event_path,
@@ -904,8 +903,7 @@ class KymEventView:
         add_enabled = (
             self._roi_filter is not None
             and self._current_file_path is not None
-            and not self._setting_kym_event_range_state
-            and not self._adding_new_event
+            and self._edit_state == KymEventEditState.IDLE
         )
         if add_enabled:
             self._add_event_button.enable()

@@ -42,7 +42,7 @@ ThemeChangedHandler = Callable[[ThemeMode], None]
 ImageDisplayChangedHandler = Callable[[ImageDisplayParams], None]
 if TYPE_CHECKING:
     from kymflow.core.analysis.velocity_events.velocity_events import VelocityEvent
-    from kymflow.gui_v2.events import EventSelectionOptions
+    from kymflow.gui_v2.events import KymEventSelectionOptions
 
 
 EventSelectionChangedHandler = Callable[
@@ -51,7 +51,7 @@ EventSelectionChangedHandler = Callable[
         Optional[int],
         Optional[str],
         Optional["VelocityEvent"],
-        Optional["EventSelectionOptions"],
+        Optional["KymEventSelectionOptions"],
         Optional[Any],
     ],
     None,
@@ -82,7 +82,7 @@ class AppState:
         self.selected_event_roi_id: Optional[int] = None
         self.selected_event_path: Optional[str] = None
         self.selected_event: Optional["VelocityEvent"] = None
-        self.selected_event_options: Optional["EventSelectionOptions"] = None
+        self.selected_event_options: Optional["KymEventSelectionOptions"] = None
         self.selected_event_origin: Optional[Any] = None
         self.theme_mode: ThemeMode = ThemeMode.DARK
         
@@ -366,7 +366,7 @@ class AppState:
         roi_id: Optional[int],
         path: Optional[str],
         event: Optional["VelocityEvent"],
-        options: Optional["EventSelectionOptions"] = None,
+        options: Optional["KymEventSelectionOptions"] = None,
         origin: Optional[Any] = None,
     ) -> None:
         """Select a velocity event and notify handlers."""

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kymflow.gui_v2.events import KymScrollXEvent, SetKymEventRangeState
+from kymflow.gui_v2.events import KymEventEditState, KymScrollXEvent, SetKymEventRangeState
 from kymflow.gui_v2.views.kym_event_view import KymEventView
 
 
@@ -27,10 +27,8 @@ def kym_event_view(mock_app_context) -> KymEventView:
         mock_app_context,
         on_selected=lambda e: None,
         on_file_selected=lambda e: None,
-        on_event_update=lambda e: None,
+        on_kym_event=lambda e: None,
         on_range_state=lambda e: None,
-        on_add_event=lambda e: None,
-        on_delete_event=lambda e: None,
         on_next_prev_file=lambda e: None,
         on_kym_scroll_x=lambda e: None,
     )
@@ -75,7 +73,7 @@ def test_notification_cancel_button_cancels_state(kym_event_view: KymEventView) 
     kym_event_view._selected_event_id = "test-event-1"
     kym_event_view._selected_event_roi_id = 1
     kym_event_view._selected_event_path = "/test/path.tif"
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
 
     # Mock notification
     mock_notification = MagicMock()
@@ -87,7 +85,7 @@ def test_notification_cancel_button_cancels_state(kym_event_view: KymEventView) 
     kym_event_view._on_notification_dismissed(MagicMock())
 
     # Verify state was cancelled
-    assert kym_event_view._setting_kym_event_range_state is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     assert kym_event_view._range_notification is None
     # Verify SetKymEventRangeState(enabled=False) was emitted
     assert len(received_range_states) == 1
@@ -108,7 +106,7 @@ def test_toolbar_cancel_button_cancels_state(kym_event_view: KymEventView) -> No
     kym_event_view._selected_event_id = "test-event-1"
     kym_event_view._selected_event_roi_id = 1
     kym_event_view._selected_event_path = "/test/path.tif"
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
 
     # Mock notification
     mock_notification = MagicMock()
@@ -118,7 +116,7 @@ def test_toolbar_cancel_button_cancels_state(kym_event_view: KymEventView) -> No
     kym_event_view._on_cancel_event_range_clicked()
 
     # Verify state was cancelled
-    assert kym_event_view._setting_kym_event_range_state is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     # Verify SetKymEventRangeState(enabled=False) was emitted
     assert len(received_range_states) == 1
     assert received_range_states[0].enabled is False
@@ -138,22 +136,22 @@ def test_both_cancel_buttons_do_same_thing(kym_event_view: KymEventView) -> None
     kym_event_view._selected_event_id = "test-event-1"
     kym_event_view._selected_event_roi_id = 1
     kym_event_view._selected_event_path = "/test/path.tif"
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
     kym_event_view._range_notification = MagicMock()
     kym_event_view._dismissing_programmatically = False
 
     # Simulate notification cancel (calls _on_notification_dismissed -> _on_cancel_event_range_clicked)
     kym_event_view._on_notification_dismissed(MagicMock())
-    assert kym_event_view._setting_kym_event_range_state is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     assert len(received_range_states) == 1
     assert received_range_states[0].enabled is False
 
     # Reset and simulate toolbar cancel (calls _on_cancel_event_range_clicked directly)
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
     kym_event_view._range_notification = MagicMock()
     received_range_states.clear()
     kym_event_view._on_cancel_event_range_clicked()
-    assert kym_event_view._setting_kym_event_range_state is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     assert len(received_range_states) == 1
     assert received_range_states[0].enabled is False
 
@@ -173,7 +171,7 @@ def test_render_cancels_state_on_recreation(kym_event_view: KymEventView) -> Non
     kym_event_view._selected_event_id = "test-event-1"
     kym_event_view._selected_event_roi_id = 1
     kym_event_view._selected_event_path = "/test/path.tif"
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
 
     # Mock notification
     mock_notification = MagicMock()
@@ -185,7 +183,7 @@ def test_render_cancels_state_on_recreation(kym_event_view: KymEventView) -> Non
         kym_event_view.render()
 
     # Verify state was cancelled
-    assert kym_event_view._setting_kym_event_range_state is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     assert kym_event_view._range_notification is None
     # Verify SetKymEventRangeState(enabled=False) was emitted
     assert len(received_range_states) == 1
@@ -204,8 +202,7 @@ def test_render_cancels_adding_new_event_state(kym_event_view: KymEventView) -> 
     # Set up: enter adding new event state
     kym_event_view._roi_filter = 1
     kym_event_view._current_file_path = "/test/path.tif"
-    kym_event_view._adding_new_event = True
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_NEW_X_RANGE
 
     # Mock notification
     mock_notification = MagicMock()
@@ -216,8 +213,7 @@ def test_render_cancels_adding_new_event_state(kym_event_view: KymEventView) -> 
         kym_event_view.render()
 
     # Verify state was cancelled
-    assert kym_event_view._adding_new_event is False
-    assert kym_event_view._setting_kym_event_range_state is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     assert kym_event_view._range_notification is None
     # Verify SetKymEventRangeState(enabled=False) was emitted
     assert len(received_range_states) == 1
@@ -234,8 +230,7 @@ def test_render_no_op_when_state_not_active(kym_event_view: KymEventView) -> Non
     kym_event_view._on_range_state = on_range_state
 
     # Set up: NOT in range-setting state
-    kym_event_view._setting_kym_event_range_state = False
-    kym_event_view._adding_new_event = False
+    kym_event_view._edit_state = KymEventEditState.IDLE
     kym_event_view._range_notification = None
 
     # Simulate view recreation
@@ -243,8 +238,7 @@ def test_render_no_op_when_state_not_active(kym_event_view: KymEventView) -> Non
         kym_event_view.render()
 
     # Verify no state change and no event emitted
-    assert kym_event_view._setting_kym_event_range_state is False
-    assert kym_event_view._adding_new_event is False
+    assert kym_event_view._edit_state == KymEventEditState.IDLE
     assert len(received_range_states) == 0
 
 
@@ -259,7 +253,7 @@ def test_notification_dismissed_programmatic_vs_user(kym_event_view: KymEventVie
     kym_event_view._on_cancel_event_range_clicked = mock_cancel
 
     # Set up: enter range-setting state
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
     mock_notification = MagicMock()
     kym_event_view._range_notification = mock_notification
 
@@ -271,7 +265,7 @@ def test_notification_dismissed_programmatic_vs_user(kym_event_view: KymEventVie
 
     # Reset
     kym_event_view._range_notification = MagicMock()
-    kym_event_view._setting_kym_event_range_state = True
+    kym_event_view._edit_state = KymEventEditState.AWAIT_EDIT_X_RANGE
 
     # Test user-initiated dismiss (should call cancel)
     kym_event_view._dismissing_programmatically = False

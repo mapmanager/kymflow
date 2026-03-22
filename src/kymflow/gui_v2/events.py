@@ -50,6 +50,22 @@ class SelectionOrigin(str, Enum):
     ANALYSIS_TOOLBAR = "analysis_toolbar"
 
 
+class KymEventEditState(str, Enum):
+    """Edit state for KymEventView when waiting for plot x-range selection."""
+
+    IDLE = "idle"
+    AWAIT_NEW_X_RANGE = "await_new_x_range"
+    AWAIT_EDIT_X_RANGE = "await_edit_x_range"
+
+
+class KymEventAction(str, Enum):
+    """Action type for KymEvent CRUD operations."""
+
+    ADD = "add"
+    EDIT = "edit"
+    DELETE = "delete"
+
+
 @dataclass(frozen=True, slots=True)
 class FileSelection:
     """File selection event (intent or state phase).
@@ -75,7 +91,7 @@ class FileSelection:
         path: File path as string, or None. Set in intent phase.
         file: KymImage instance, or None. Set in state phase.
         roi_id: ROI ID for the selected file, or None. Set in state phase from AppState.selected_roi_id.
-        kym_event_selection: EventSelection instance, or None. Always None on file change (signifies no active velocity event).
+        kym_event_selection: KymEventSelection instance, or None. Always None on file change (signifies no active velocity event).
         origin: SelectionOrigin indicating where the selection came from.
         phase: Event phase - "intent" or "state".
     """
@@ -86,7 +102,7 @@ class FileSelection:
     phase: EventPhase
     roi_id: int | None = None
     channel: int | None = None
-    kym_event_selection: "EventSelection | None" = None
+    kym_event_selection: "KymEventSelection | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +133,7 @@ class ROISelection:
 
 
 @dataclass(frozen=True, slots=True)
-class EventSelectionOptions:
+class KymEventSelectionOptions:
     """Options that accompany a velocity event selection."""
 
     zoom: bool
@@ -125,7 +141,7 @@ class EventSelectionOptions:
 
 
 @dataclass(frozen=True, slots=True)
-class EventSelection:
+class KymEventSelection:
     """Velocity event selection event (intent or state phase).
 
     Purpose:
@@ -135,7 +151,7 @@ class EventSelection:
         - Intent: KymEventView when user selects an event row.
         - State: AppStateBridge when AppState changes.
     Consumed by:
-        - EventSelectionController (intent -> AppState).
+        - KymEventSelectionController (intent -> AppState).
         - ImageLineViewerBindings (state -> zoom to event).
         - KymEventBindings (state -> sync grid selection).
     Dependencies:
@@ -146,7 +162,7 @@ class EventSelection:
         roi_id: ROI ID for the event, or None if selection cleared.
         path: File path for the event, or None if selection cleared.
         event: VelocityEvent instance, or None if selection cleared.
-        options: EventSelectionOptions for view-local behaviors.
+        options: KymEventSelectionOptions for view-local behaviors.
         origin: SelectionOrigin indicating where the selection came from.
         phase: Event phase - "intent" or "state".
     """
@@ -155,9 +171,14 @@ class EventSelection:
     roi_id: int | None
     path: str | None
     event: "VelocityEvent | None"
-    options: EventSelectionOptions | None
+    options: KymEventSelectionOptions | None
     origin: SelectionOrigin
     phase: EventPhase
+
+
+# Backward compatibility for image_line_viewer_view.py (left unchanged)
+EventSelection = KymEventSelection
+EventSelectionOptions = KymEventSelectionOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,47 +355,6 @@ class AnalysisUpdate:
 
 
 @dataclass(frozen=True, slots=True)
-class VelocityEventUpdate:
-    """Velocity event update event (intent or state phase).
-
-    Purpose:
-        Apply one or more field updates to a velocity event (e.g., user_type,
-        t_start/t_end).
-    Triggered by:
-        - Intent: KymEventView (cell edit or x-range proposal acceptance).
-        - State: :class:`~kymflow.gui_v2.controllers.kym_event_controller.KymEventController`
-          after applying the update(s).
-    Consumed by:
-        - :class:`~kymflow.gui_v2.controllers.kym_event_controller.KymEventController`
-          (intent -> KymAnalysis update).
-        - Any state listeners that need to refresh UI after update.
-    Dependencies:
-        - May be emitted as a result of SetKymEventXRange (intent).
-        - Prefer using `updates` for range edits (t_start/t_end) to avoid duplicate
-          state notifications.
-
-    Attributes:
-        event_id: Unique event id string.
-        path: File path for the event (optional).
-        field: Field name being updated (single-field update).
-        value: New value for the field (single-field update).
-        updates: Multi-field updates as a dict (e.g., {"t_start": x0, "t_end": x1}).
-        origin: SelectionOrigin indicating where the update came from.
-        phase: Event phase - "intent" or "state".
-    """
-
-    event_id: str
-    path: str | None
-    field: str | None = None
-    value: Any | None = None
-    updates: dict[str, Any] | None = None
-    origin: SelectionOrigin = SelectionOrigin.EXTERNAL
-    phase: EventPhase = "intent"
-    # Full VelocityEvent snapshot after update (state phase only).
-    velocity_event: "VelocityEvent" | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class AnalysisStart:
     """Analysis start intent event.
 
@@ -460,7 +440,7 @@ class SetKymEventRangeState:
     Consumed by:
         - ImageLineViewerBindings (state -> enable/disable Plotly dragmode).
     Dependencies:
-        - Requires an active EventSelection context (event_id/roi_id/path) to
+        - Requires an active KymEventSelection context (event_id/roi_id/path) to
           associate the selection with a specific event.
 
     Attributes:
@@ -490,7 +470,7 @@ class SetKymEventXRange:
     Triggered by:
         - Intent: ImageLineViewerView when armed and a valid rect selection occurs.
     Consumed by:
-        - KymEventView (validates against current selection, then emits VelocityEventUpdate).
+        - KymEventView (validates against current selection, then emits KymEvent).
     Dependencies:
         - Only emitted when SetKymEventRangeState(enabled=True) is active.
 
@@ -511,6 +491,47 @@ class SetKymEventXRange:
     x1: float
     origin: SelectionOrigin
     phase: EventPhase
+
+
+@dataclass(frozen=True, slots=True)
+class KymEvent:
+    """Unified kym velocity event CRUD event (intent or state phase).
+
+    Replaces AddKymEvent, VelocityEventUpdate, and DeleteKymEvent.
+    Action type determines payload and consumer behavior.
+    Consumers must not zoom when handling KymEvent (Add/Edit/Delete).
+
+    Attributes:
+        action: KymEventAction (ADD, EDIT, DELETE).
+        event_id: Event ID (None for ADD intent; set for EDIT/DELETE and ADD state).
+        roi_id: ROI ID for the event.
+        path: File path for validation.
+        origin: SelectionOrigin.
+        phase: Event phase - "intent" or "state".
+        t_start: Start time (ADD payload).
+        t_end: End time (ADD payload).
+        channel: 1-based channel (ADD payload, default 1).
+        field: Field name for single-field EDIT.
+        value: New value for single-field EDIT.
+        updates: Multi-field EDIT payload.
+        velocity_event: Full VelocityEvent snapshot (EDIT state phase only).
+    """
+
+    action: KymEventAction
+    event_id: str | None
+    roi_id: int | None
+    path: str | None
+    origin: SelectionOrigin
+    phase: EventPhase
+
+    t_start: float | None = None
+    t_end: float | None = None
+    channel: int = 1
+
+    field: str | None = None
+    value: Any | None = None
+    updates: dict[str, Any] | None = None
+    velocity_event: "VelocityEvent | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,90 +559,6 @@ class SaveAll:
         phase: Event phase - "intent" or "state".
     """
 
-    phase: EventPhase
-
-
-@dataclass(frozen=True, slots=True)
-class AddKymEvent:
-    """Add a new velocity event event (intent or state phase).
-
-    Purpose:
-        Create a new velocity event with specified t_start/t_end. KymAnalysis
-        will fill in defaults for other fields (event_type, user_type, etc.).
-
-    Triggered by:
-        - Intent: KymEventView when the user completes the range selection for a new
-          event (typically after SetKymEventRangeState + SetKymEventXRange have
-          captured the proposed time window).
-        - State: KymEventController after creating the event in the underlying
-          KymAnalysis model.
-
-    Consumed by:
-        - KymEventController (intent → KymAnalysis.add_velocity_event()).
-        - Any state listeners that need to refresh UI after creation, such as
-          KymEventCacheSyncController (which refreshes the velocity-event cache)
-          and bindings that respond to FileChanged(state, change_type="analysis").
-
-    Dependencies:
-        - Requires the SetKymEventRangeState + SetKymEventXRange flow to capture
-          t_start/t_end.
-        - roi_id comes from the current ROI filter in the KymEventView.
-        - path is typically resolved by KymEventController via AppState
-          (selected file or path passed on the event).
-
-    Attributes:
-        event_id: Event ID after creation (None in intent, set in state).
-        roi_id: ROI ID for the new event.
-        path: File path for the event (optional, for validation).
-        t_start: Event start time in seconds.
-        t_end: Event end time in seconds (optional).
-        origin: SelectionOrigin indicating where the add came from.
-        phase: Event phase - "intent" or "state".
-        channel: 1-based channel index. Defaults to 1.
-    """
-
-    event_id: str | None
-    roi_id: int
-    path: str | None
-    t_start: float
-    t_end: float | None
-    origin: SelectionOrigin
-    phase: EventPhase
-    channel: int = 1
-
-
-@dataclass(frozen=True, slots=True)
-class DeleteKymEvent:
-    """Delete a velocity event event (intent or state phase).
-
-    Purpose:
-        Remove a velocity event by event_id from the underlying KymAnalysis.
-
-    Triggered by:
-        - Intent: KymEventView when the user confirms deletion of a velocity event.
-        - State: KymEventController after deleting the event from KymAnalysis.
-
-    Consumed by:
-        - KymEventController (intent → KymAnalysis.delete_velocity_event()).
-        - Any state listeners that need to refresh UI after deletion, such as
-          KymEventCacheSyncController (which refreshes the velocity-event cache)
-          and bindings that respond to FileChanged(state, change_type="analysis").
-
-    Dependencies:
-        - Requires an active velocity event selection (event_id) in KymEventView.
-
-    Attributes:
-        event_id: Unique event id string to delete.
-        roi_id: ROI ID for the event (optional, for validation).
-        path: File path for the event (optional, for validation).
-        origin: SelectionOrigin indicating where the delete came from.
-        phase: Event phase - "intent" or "state".
-    """
-
-    event_id: str
-    roi_id: int | None
-    path: str | None
-    origin: SelectionOrigin
     phase: EventPhase
 
 

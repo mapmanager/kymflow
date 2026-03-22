@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.bus import EventBus
-from kymflow.gui_v2.events import AddKymEvent, DeleteKymEvent, DetectEvents, VelocityEventUpdate
+from kymflow.gui_v2.events import DetectEvents, KymEvent
 from kymflow.gui_v2.events_state import VelocityEventDbUpdated
 from kymflow.gui_v2.state import AppState
 
@@ -21,12 +21,12 @@ class KymEventCacheSyncController:
     def __init__(self, app_state: AppState, bus: EventBus) -> None:
         self._app_state = app_state
         self._bus = bus
-        for evt in (AddKymEvent, DeleteKymEvent, VelocityEventUpdate, DetectEvents):
+        for evt in (KymEvent, DetectEvents):
             bus.subscribe_state(evt, self._on_kym_event_mutated)
 
     def _on_kym_event_mutated(
         self,
-        e: AddKymEvent | DeleteKymEvent | VelocityEventUpdate | DetectEvents,
+        e: KymEvent | DetectEvents,
     ) -> None:
         path = getattr(e, "path", None)
         kym_file = self._app_state.get_file_by_path_or_selected(path)

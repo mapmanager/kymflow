@@ -11,23 +11,19 @@ from nicegui import run
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
-    AddKymEvent,
     ChannelSelection,
-    DeleteKymEvent,
-    # DeleteRoi,
     DetectEvents,
     EditPhysicalUnits,
-    # EditRoi,
-    EventSelection,
+    KymEventSelection,
     FileChanged,
     FileSelection,
+    KymEvent,
     KymScrollXEvent,
     ROISelection,
     ImageDisplayChange,
     SelectionOrigin,
     SetKymEventRangeState,
     SetRoiBounds,
-    VelocityEventUpdate,
 )
 from kymflow.gui_v2.events_state import AnalysisCompleted, ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_v2_view import (
@@ -57,7 +53,7 @@ class ImageLineViewerV2Bindings:
         bus.subscribe_state(FileSelection, self._on_file_selection_changed)
         bus.subscribe_state(FileChanged, self._on_file_changed)
         bus.subscribe_state(ROISelection, self._on_roi_changed)
-        bus.subscribe_state(EventSelection, self._on_event_selected)
+        bus.subscribe_state(KymEventSelection, self._on_event_selected)
         bus.subscribe(ThemeChanged, self._on_theme_changed)
         bus.subscribe_state(ImageDisplayChange, self._on_image_display_changed)
         bus.subscribe_state(ChannelSelection, self._on_channel_selection_changed)
@@ -65,9 +61,7 @@ class ImageLineViewerV2Bindings:
         bus.subscribe_state(AnalysisCompleted, self._on_analysis_completed)
         bus.subscribe_state(DetectEvents, self._on_detect_events_done)
         bus.subscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
-        bus.subscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
-        bus.subscribe_state(AddKymEvent, self._on_add_kym_event)
-        bus.subscribe_state(DeleteKymEvent, self._on_delete_kym_event)
+        bus.subscribe_state(KymEvent, self._on_kym_event)
         bus.subscribe_intent(SetRoiBounds, self._on_roi_bounds)
         bus.subscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = True
@@ -78,7 +72,7 @@ class ImageLineViewerV2Bindings:
         self._bus.unsubscribe_state(FileSelection, self._on_file_selection_changed)
         self._bus.unsubscribe_state(FileChanged, self._on_file_changed)
         self._bus.unsubscribe_state(ROISelection, self._on_roi_changed)
-        self._bus.unsubscribe_state(EventSelection, self._on_event_selected)
+        self._bus.unsubscribe_state(KymEventSelection, self._on_event_selected)
         self._bus.unsubscribe(ThemeChanged, self._on_theme_changed)
         self._bus.unsubscribe_state(ImageDisplayChange, self._on_image_display_changed)
         self._bus.unsubscribe_state(ChannelSelection, self._on_channel_selection_changed)
@@ -86,9 +80,7 @@ class ImageLineViewerV2Bindings:
         self._bus.unsubscribe_state(AnalysisCompleted, self._on_analysis_completed)
         self._bus.unsubscribe_state(DetectEvents, self._on_detect_events_done)
         self._bus.unsubscribe_state(SetKymEventRangeState, self._on_kym_event_range_state)
-        self._bus.unsubscribe_state(VelocityEventUpdate, self._on_velocity_event_update)
-        self._bus.unsubscribe_state(AddKymEvent, self._on_add_kym_event)
-        self._bus.unsubscribe_state(DeleteKymEvent, self._on_delete_kym_event)
+        self._bus.unsubscribe_state(KymEvent, self._on_kym_event)
         self._bus.unsubscribe_intent(SetRoiBounds, self._on_roi_bounds)
         self._bus.unsubscribe_intent(KymScrollXEvent, self._on_kym_scroll_x)
         self._subscribed = False
@@ -189,7 +181,7 @@ class ImageLineViewerV2Bindings:
         # DetectEvents only affects event rectangles.
         safe_call(self._view.refresh_events_for_current_roi)
 
-    def _on_event_selected(self, e: EventSelection) -> None:
+    def _on_event_selected(self, e: KymEventSelection) -> None:
         safe_call(self._view.zoom_to_event, e)
 
     def _on_kym_event_range_state(self, e: SetKymEventRangeState) -> None:
@@ -201,17 +193,8 @@ class ImageLineViewerV2Bindings:
             path=e.path,
         )
 
-    def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:
-        safe_call(self._view.on_edit_kym_event, e)
-
-    def _on_add_kym_event(self, e: AddKymEvent) -> None:
-        if e.event_id:
-            safe_call(self._view.on_add_kym_event, e)
-        else:
-            safe_call(self._view.refresh_events_for_current_roi)
-
-    def _on_delete_kym_event(self, e: DeleteKymEvent) -> None:
-        safe_call(self._view.on_delete_kym_event, e)
+    def _on_kym_event(self, e: KymEvent) -> None:
+        safe_call(self._view.on_kym_event, e)
 
     def _on_roi_bounds(self, e: SetRoiBounds) -> None:
         from kymflow.core.image_loaders.roi import RoiBounds

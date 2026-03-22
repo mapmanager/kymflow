@@ -69,7 +69,7 @@ when the architecture evolves.
   - `FolderController` – handles `SelectPathEvent(intent)` and loads folders,
     files, and CSVs into `AppState` using `ThreadJobRunner`.
   - `FileSelectionController`, `ROISelectionController`,
-    `EventSelectionController` – selection controllers.
+    `KymEventSelectionController` – selection controllers.
   - `AnalysisController` – handles `AnalysisStart(intent)` / `AnalysisCancel`
     and runs flow analysis (Radon) using `tasks.run_flow_analysis` with
     `home_task`.

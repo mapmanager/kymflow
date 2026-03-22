@@ -40,7 +40,7 @@ For code under `kymflow/src/kymflow/gui_v2` and closely related NiceGUI/nicewidg
   - `phase="state"`: confirmed model changes.
 - Reuse existing events unless the user asks for a new event type:
   - For "file's structure/metadata changed", prefer `FileChanged(state, change_type=...)`.
-  - For selections, use `FileSelection`, `ROISelection`, `EventSelection`, `ChannelSelection`.
+  - For selections, use `FileSelection`, `ROISelection`, `KymEventSelection`, `ChannelSelection`.
 - Avoid introducing new state‑phase ROI or Kym events when `FileChanged(state)` + selection events are sufficient.
 
 ### ROI and Kym controllers
@@ -51,9 +51,9 @@ For code under `kymflow/src/kymflow/gui_v2` and closely related NiceGUI/nicewidg
   - `ImageLineViewerV2View` / `ImageRoiWidget` are the only places for user‑driven ROI CRUD; do not reintroduce ROI add/edit/delete widgets in the analysis toolbar.
 
 - **Kym events (velocity events)**:
-  - `KymEventController` handles Add/Delete/velocity-update intents, mirrors `SetKymEventRangeState` intent to state, and emits `InteractionBlocked` (state) for global UI blocking during range mode.
+  - `KymEventController` handles `KymEvent` (ADD/EDIT/DELETE) intents, mirrors `SetKymEventRangeState` intent to state, and emits `InteractionBlocked` (state) for global UI blocking during range mode.
   - `KymEventCacheSyncController` remains the focused cache-sync listener.
-  - Do not create new `AddKymEvent*` / `DeleteKymEvent*` micro-controllers; extend `KymEventController` when adding related flows.
+  - Do not create new Kym-event micro-controllers; extend `KymEventController` when adding related flows.
 
 ### UI changes
 

@@ -4,9 +4,9 @@ This module consolidates intent-phase handling that was previously split across
 ``KymEventController``, ``VelocityEventUpdateController``, and
 ``KymEventRangeStateController``:
 
-* **CRUD:** ``AddKymEvent``, ``DeleteKymEvent``, ``VelocityEventUpdate`` — apply
-  mutations to the file's kym analysis layer and emit
-  state plus :class:`~kymflow.gui_v2.events.FileChanged` where applicable.
+* **CRUD:** ``KymEvent`` (action ADD/EDIT/DELETE) — apply mutations to the file's
+  kym analysis layer and emit state plus
+  :class:`~kymflow.gui_v2.events.FileChanged` where applicable.
 * **Range UI:** ``SetKymEventRangeState`` — mirror intent to state for plot
   bindings, then emit :class:`~kymflow.gui_v2.events_state.InteractionBlocked`
   so other views can disable chrome (file table, folder bar).
@@ -22,12 +22,11 @@ from typing import Optional
 from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import (
-    AddKymEvent,
-    DeleteKymEvent,
     FileChanged,
+    KymEvent,
+    KymEventAction,
     SelectionOrigin,
     SetKymEventRangeState,
-    VelocityEventUpdate,
 )
 from kymflow.gui_v2.events_state import BlockingMode, InteractionBlocked
 from kymflow.gui_v2.state import AppState
@@ -55,8 +54,7 @@ class KymEventController:
 
     Subscribes to:
 
-    * ``AddKymEvent``, ``DeleteKymEvent``, ``VelocityEventUpdate`` (intent) —
-      mutates analysis and emits state for cache sync and views.
+    * ``KymEvent`` (intent) — mutates analysis and emits state for cache sync and views.
     * ``SetKymEventRangeState`` (intent) — mirrors to state and emits
       :class:`~kymflow.gui_v2.events_state.InteractionBlocked` (state).
 
@@ -75,9 +73,7 @@ class KymEventController:
         self._app_state: AppState = app_state
         self._bus: EventBus = bus
 
-        bus.subscribe_intent(AddKymEvent, self._on_add_event)
-        bus.subscribe_intent(DeleteKymEvent, self._on_delete_event)
-        bus.subscribe_intent(VelocityEventUpdate, self._on_velocity_event_update)
+        bus.subscribe_intent(KymEvent, self._on_kym_event)
         bus.subscribe_intent(SetKymEventRangeState, self._on_set_kym_event_range_state)
 
     def _resolve_file(self, path: Optional[str]):
@@ -107,21 +103,26 @@ class KymEventController:
             )
         )
 
-    def _on_add_event(self, e: AddKymEvent) -> None:
-        """Handle ``AddKymEvent`` intent: create event and emit state.
-
-        Args:
-            e: Intent event with ``roi_id``, ``t_start``, ``t_end``, and
-                ``origin``.
-        """
+    def _on_kym_event(self, e: KymEvent) -> None:
+        """Handle ``KymEvent`` intent: ADD, EDIT, or DELETE."""
         if not _crud_origin_allowed(e.origin):
             return
+        if e.action == KymEventAction.ADD:
+            self._on_kym_event_add(e)
+        elif e.action == KymEventAction.EDIT:
+            self._on_kym_event_edit(e)
+        elif e.action == KymEventAction.DELETE:
+            self._on_kym_event_delete(e)
 
+    def _on_kym_event_add(self, e: KymEvent) -> None:
+        if e.roi_id is None:
+            return
         kym_file = self._resolve_file(e.path)
         if kym_file is None:
-            logger.warning("AddKymEvent: no file available (path=%s)", e.path)
+            logger.warning("KymEvent(ADD): no file available (path=%s)", e.path)
             return
-
+        if e.t_start is None:
+            return
         try:
             event_id = kym_file.get_kym_analysis().add_velocity_event(
                 roi_id=e.roi_id,
@@ -129,53 +130,41 @@ class KymEventController:
                 t_start=e.t_start,
                 t_end=e.t_end,
             )
-
             self._bus.emit(
-                AddKymEvent(
+                KymEvent(
+                    action=KymEventAction.ADD,
                     event_id=event_id,
                     roi_id=e.roi_id,
-                    channel=e.channel,
                     path=e.path,
-                    t_start=e.t_start,
-                    t_end=e.t_end,
                     origin=e.origin,
                     phase="state",
+                    t_start=e.t_start,
+                    t_end=e.t_end,
+                    channel=e.channel,
                 )
             )
-
             self._emit_file_changed(kym_file)
         except ValueError as exc:
-            logger.warning("AddKymEvent: failed to create event: %s", exc)
+            logger.warning("KymEvent(ADD): failed to create event: %s", exc)
 
-    def _on_delete_event(self, e: DeleteKymEvent) -> None:
-        """Handle ``DeleteKymEvent`` intent: delete event and emit state.
-
-        Args:
-            e: Intent event with ``event_id`` and optional ``roi_id`` / ``path``.
-        """
-        if not _crud_origin_allowed(e.origin):
+    def _on_kym_event_delete(self, e: KymEvent) -> None:
+        if e.event_id is None:
             return
-
-        logger.debug("DeleteKymEvent intent event_id=%s", e.event_id)
-
         kym_file = self._resolve_file(e.path)
         if kym_file is None:
-            logger.warning("DeleteKymEvent: no file available (path=%s)", e.path)
+            logger.warning("KymEvent(DELETE): no file available (path=%s)", e.path)
             return
-
         deleted = kym_file.get_kym_analysis().delete_velocity_event(e.event_id)
         if not deleted:
             logger.warning(
-                "DeleteKymEvent: event not found (event_id=%s, path=%s)",
+                "KymEvent(DELETE): event not found (event_id=%s, path=%s)",
                 e.event_id,
                 e.path,
             )
             return
-
-        logger.debug("DeleteKymEvent: deleted event_id=%s", e.event_id)
-
         self._bus.emit(
-            DeleteKymEvent(
+            KymEvent(
+                action=KymEventAction.DELETE,
                 event_id=e.event_id,
                 roi_id=e.roi_id,
                 path=e.path,
@@ -185,30 +174,18 @@ class KymEventController:
         )
         self._emit_file_changed(kym_file)
 
-    def _on_velocity_event_update(self, e: VelocityEventUpdate) -> None:
-        """Handle ``VelocityEventUpdate`` intent: apply field/range updates.
-
-        Args:
-            e: Intent event with ``event_id``, optional ``updates`` or
-                ``field``/``value``, and ``path``.
-        """
-        if not _crud_origin_allowed(e.origin):
+    def _on_kym_event_edit(self, e: KymEvent) -> None:
+        if e.event_id is None:
             return
-        logger.debug("VelocityEventUpdate intent event_id=%s", e.event_id)
-
         kym_file = self._app_state.get_file_by_path_or_selected(e.path)
         if kym_file is None:
             return
-
         updates = e.updates
         if updates is None:
             if e.field is None:
                 return
             updates = {e.field: e.value}
-
         new_event_id = e.event_id
-
-        # Atomic range update when both ends change (avoids event_id mismatch).
         if "t_start" in updates and "t_end" in updates:
             new_event_id = kym_file.get_kym_analysis().update_velocity_event_range(
                 event_id=e.event_id,
@@ -217,7 +194,7 @@ class KymEventController:
             )
             if new_event_id is None:
                 logger.warning(
-                    "VelocityEventUpdate: event not found (event_id=%s, path=%s)",
+                    "KymEvent(EDIT): event not found (event_id=%s, path=%s)",
                     e.event_id,
                     e.path,
                 )
@@ -231,23 +208,23 @@ class KymEventController:
                 )
                 if result is None:
                     logger.warning(
-                        "VelocityEventUpdate: event not found (event_id=%s, path=%s)",
+                        "KymEvent(EDIT): event not found (event_id=%s, path=%s)",
                         new_event_id,
                         e.path,
                     )
                     return
                 new_event_id = result
-
         updated = kym_file.get_kym_analysis().find_event_by_uuid(new_event_id)
         velocity_event = updated[3] if updated is not None else None
-
         self._bus.emit(
-            VelocityEventUpdate(
+            KymEvent(
+                action=KymEventAction.EDIT,
                 event_id=new_event_id,
+                roi_id=e.roi_id,
                 path=e.path,
-                updates=updates,
                 origin=e.origin,
                 phase="state",
+                updates=updates,
                 velocity_event=velocity_event,
             )
         )

@@ -15,7 +15,7 @@ from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.client_utils import is_client_alive
 from kymflow.gui_v2.events import (
     ChannelSelection,
-    EventSelection,
+    KymEventSelection,
     FileSelection,
     ROISelection,
     SelectionOrigin,
@@ -167,18 +167,18 @@ class AppStateBridgeController:
     ) -> None:
         """Handle AppState event selection change callback.
 
-        Emits EventSelection(phase="state") event with the current selection.
+        Emits KymEventSelection(phase="state") event with the current selection.
         Checks client validity before emitting.
         """
         if not is_client_alive():
             logger.debug(
-                f"[bridge] Skipping EventSelection emit - client deleted (bus={self._bus._client_id[:8]}...)"
+                f"[bridge] Skipping KymEventSelection emit - client deleted (bus={self._bus._client_id[:8]}...)"
             )
             return
 
         selection_origin = origin if origin is not None else SelectionOrigin.EXTERNAL
         self._bus.emit(
-            EventSelection(
+            KymEventSelection(
                 event_id=event_id,
                 roi_id=roi_id,
                 path=path,
