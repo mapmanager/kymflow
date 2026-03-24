@@ -82,12 +82,18 @@ def test_home_page_v2_view_has_on_edit_roi(bus) -> None:
     assert view._on_edit_roi is not None
 
 
-def test_home_page_drawer_full_zoom_calls_reset_zoom(bus) -> None:
-    """Phase 5: _on_drawer_full_zoom calls reset_zoom on v2 view."""
+def test_home_page_full_zoom_shortcut_calls_reset_zoom(bus) -> None:
+    """Phase 5: _on_full_zoom_shortcut calls reset_zoom on v2 view."""
     context = AppContext()
+    if context.app_state is None:
+        # AppContext is a singleton and may be initialized in worker-style mode
+        # by prior tests; ensure this test has a real AppState.
+        context.app_state = AppState()
     page = HomePage(context, bus)
+    page.context.app_state.selected_file = MagicMock()
+    page.context.app_state.selected_roi_id = 1
     with patch.object(page._image_line_viewer, "reset_zoom") as mock_reset:
-        page._on_drawer_full_zoom()
+        page._on_full_zoom_shortcut(None)
     mock_reset.assert_called_once()
 
 

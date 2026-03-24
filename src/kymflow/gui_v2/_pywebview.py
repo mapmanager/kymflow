@@ -447,12 +447,19 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
 
     logger.warning(f'setting initial pywebview native.window_args: x={x} y={y} w={w} h={h}')
 
-    native.window_args.update({
-        "x": x,
-        "y": y,
-        "width": w,
-        "height": h,
-    })
+    # abb 20260323 pywebview native save png (clipboard)
+
+    logger.error('TURNED OFF PLAYING WITH NATIVE PYWEBVIEW SIZE -->> DO NOT FORGET')
+    logger.error('    -->> NOW DONE IN MAIN APP OUTSIDE __main__')
+    
+    # native.window_args.update({
+    #     "x": x,
+    #     "y": y,
+    #     "width": w,
+    #     "height": h,
+    # })
+
+    # app.native.main_window.resize(w, h)
 
     # logger.warning(f'native.window_args now: {native.window_args}')
     

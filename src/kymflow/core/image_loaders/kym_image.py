@@ -329,6 +329,7 @@ class KymImage(AcqImage):
             "File Name": file_name,
             "Analyzed": "True" if (radon := self.get_kym_analysis().get_analysis_object("RadonAnalysis")) and radon.has_analysis() else "False",
             "Saved": "True" if not self.get_kym_analysis().is_dirty else "False",
+            "Num Channels": self.num_channels(),
             "Num ROIS": self.rois.numRois(),
             "Total Num Velocity Events": self.get_kym_analysis().total_num_velocity_events(),
             "User Event": self.get_kym_analysis().num_user_added_velocity_events(),

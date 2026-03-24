@@ -25,9 +25,6 @@ os.environ["NICEGUI_STORAGE_PATH"] = str(Path(user_config_dir("kymflow", None)) 
 
 from nicegui import ui, app
 
-
-from nicegui import ui, app
-
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2._pywebview import (
@@ -54,6 +51,76 @@ setup_logging(level="DEBUG")
 # AppContext.__init__ will check if we're in a worker process and skip initialization
 context = AppContext()
 
+
+# abb 20260323 pywebview native save png (clipboard)
+def _native_resize(e):# we also can do this:
+    """
+    NativeEventArguments(type='resized', args={'width': 1221.0, 'height': 1538.0})
+    """
+    args = e.args
+    
+    ctx = AppContext()
+    # logger.info(e)
+    cfg = ctx.app_config
+    x, y, w, h = cfg.get_window_rect()
+
+    w = args['width']
+    h = args['height']  
+
+    cfg.set_window_rect(x, y, w, h)
+
+def _native_moved(e):
+    """
+    NativeEventArguments(type='moved', args={'x': 2365.0, 'y': 545.0})
+    """
+    args = e.args
+    
+    ctx = AppContext()
+    # logger.info(e)
+    app_config = ctx.app_config
+
+    x, y, w, h = app_config.get_window_rect()
+
+    x = args['x']
+    y = args['y']  
+    
+    app_config.set_window_rect(x, y, w, h)
+
+# def _tmp_native_drop(e):
+#     ctx = AppContext()
+#     logger.info(e)
+
+# app.native.main_window.resize(1000, 700)
+
+# supported events: shown, loaded, minimized, maximized, restored, resized, moved, closed, drop
+app.native.on('resized', _native_resize)
+app.native.on('moved', _native_moved)
+# app.native.on('drop', _tmp_native_drop)
+app.native.on('drop', lambda e: print(f'Dropped files: {e.args["files"]}'))
+
+# app.native.start_args['debug'] = True
+
+def _native_init_window_position():
+    # ctx = AppContext()
+    # cfg = ctx.app_config
+
+    from kymflow.gui_v2.app_config import AppConfig
+    app_config = AppConfig.load()
+
+    x, y, w, h = app_config.get_window_rect()
+
+    if w > 1920:
+        logger.warning(f'aggrid width error: window width too large; setting {w}to 1920: {w}')
+        w = 1920
+
+    app.native.window_args.update({
+        "x": x,
+        "y": y,
+        "width": w,
+        "height": h,
+    })
+_native_init_window_position()
+
 # this is REQUIRED here for nicegui-pack (pyinstaller) to work
 try:
     app.native.window_args["confirm_close"] = True
@@ -78,18 +145,19 @@ def home() -> None:
     #     logger.error('4 FAILED: app.native.window_args["confirm_close"]')
     #     pass
 
-
     _storage_path = os.environ.get("NICEGUI_STORAGE_PATH", "(not set)")
     logger.info(f"NICEGUI_STORAGE_PATH={_storage_path}")
 
     # Install native rect polling only in native mode (delayed slightly so native window exists).
     # Skip entirely in browser mode - no reason to poll native window rects.
-    native = getattr(app, "native", None)
-    if native is not None:
-        from kymflow.gui_v2._pywebview import install_native_rect_polling
-        ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
-    else:
-        logger.error('native is None')
+    # native = getattr(app, "native", None)
+
+    # abb removed 2026 upgrade to nicegui xxx, use above
+    # if native is not None:
+    #     from kymflow.gui_v2._pywebview import install_native_rect_polling
+    #     ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
+    # else:
+    #     logger.error('native is None')
     #
     # global css styles
     # this has to be in a page function ???
@@ -119,6 +187,12 @@ def home() -> None:
         page = HomePage(context, bus)
         cache_page(session_id, "/", page)
         # logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
+
+    # logger.info('=== app.native ===')
+    # logger.info(f'app.native.start_args: {app.native.start_args}')
+    # logger.info(f'app.native.window_args: {app.native.window_args}')  # {'confirm_close': True, 'x': 451, 'y': 64, 'width': 1920, 'height': 1811}
+    # logger.info(f'app.native.settings: {app.native.settings}')
+    # logger.info(f'app.native.main_window: {app.native.main_window}')
 
     # Render the page (creates fresh UI elements each time and ensures setup)
     page.render(page_title="KymFlow")

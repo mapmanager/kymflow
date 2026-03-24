@@ -433,6 +433,10 @@ class AcqImage:
         """
         return self._imgData.get(channel)
     
+    def num_channels(self):
+        """Return the number of channels."""
+        return len(self.getChannelKeys())
+
     def getChannelKeys(self) -> list[int]:
         """Get a list of available channel keys.
         

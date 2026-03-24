@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.controllers.kym_event_controller import KymEventController
-from kymflow.gui_v2.events import SelectionOrigin, SetKymEventRangeState
+from kymflow.gui_v2.events import (
+    KymEvent,
+    KymEventAction,
+    KymEventSelectionOptions,
+    SelectionOrigin,
+    SetKymEventRangeState,
+)
 from kymflow.gui_v2.events_state import BlockingMode, InteractionBlocked
 from kymflow.gui_v2.state import AppState
 
@@ -72,3 +80,48 @@ def test_set_kym_event_range_disable_emits_none_mode(bus: EventBus, app_state: A
     assert len(captured_ib) == 1
     assert captured_ib[0].blocked is False
     assert captured_ib[0].mode == BlockingMode.NONE
+
+
+def test_kym_event_add_selects_velocity_event_in_app_state(bus: EventBus) -> None:
+    """After successful ADD, controller calls AppState.select_velocity_event (zoom off, EXTERNAL)."""
+    app_state = MagicMock(spec=AppState)
+    app_state.get_file_by_path_or_selected = MagicMock()
+
+    new_id = "new-event-uuid"
+    mock_velocity_event = MagicMock()
+    mock_analysis = MagicMock()
+    mock_analysis.add_velocity_event.return_value = new_id
+    mock_analysis.find_event_by_uuid.return_value = (1, 1, 0, mock_velocity_event)
+
+    mock_file = MagicMock()
+    mock_file.path = "/tmp/test.tif"
+    mock_file.get_kym_analysis.return_value = mock_analysis
+    app_state.get_file_by_path_or_selected.return_value = mock_file
+
+    KymEventController(app_state, bus)
+
+    bus.emit(
+        KymEvent(
+            action=KymEventAction.ADD,
+            event_id=None,
+            roi_id=1,
+            path="/tmp/test.tif",
+            origin=SelectionOrigin.EVENT_TABLE,
+            phase="intent",
+            t_start=1.0,
+            t_end=2.0,
+            channel=1,
+        )
+    )
+
+    app_state.select_velocity_event.assert_called_once()
+    call_kw = app_state.select_velocity_event.call_args.kwargs
+    assert call_kw["event_id"] == new_id
+    assert call_kw["roi_id"] == 1
+    assert call_kw["path"] == "/tmp/test.tif"
+    assert call_kw["event"] is mock_velocity_event
+    assert call_kw["origin"] is SelectionOrigin.EXTERNAL
+    opts = call_kw["options"]
+    assert isinstance(opts, KymEventSelectionOptions)
+    assert opts.zoom is False
+    assert opts.zoom_pad_sec is None

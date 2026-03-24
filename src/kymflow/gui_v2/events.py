@@ -134,10 +134,14 @@ class ROISelection:
 
 @dataclass(frozen=True, slots=True)
 class KymEventSelectionOptions:
-    """Options that accompany a velocity event selection."""
+    """Options that accompany a velocity event selection.
+
+    When ``zoom`` is False, ``zoom_pad_sec`` is unused; omit it or pass ``None``.
+    When ``zoom`` is True, set ``zoom_pad_sec`` to the half-window (seconds) used for zoom.
+    """
 
     zoom: bool
-    zoom_pad_sec: float
+    zoom_pad_sec: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

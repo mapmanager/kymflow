@@ -25,6 +25,7 @@ from kymflow.gui_v2.events import (
     FileChanged,
     KymEvent,
     KymEventAction,
+    KymEventSelectionOptions,
     SelectionOrigin,
     SetKymEventRangeState,
 )
@@ -103,6 +104,39 @@ class KymEventController:
             )
         )
 
+    def _select_new_velocity_event_after_add(
+        self, kym_file, event_id: str, path: Optional[str]
+    ) -> None:
+        """Update AppState so bridge emits KymEventSelection(state); grid and line stay unified.
+
+        Called after ``KymEvent(ADD)`` state and ``FileChanged`` so bindings refresh
+        table data before selection state. Uses ``KymEventSelectionOptions(zoom=False)``
+        (no zoom padding).
+
+        Args:
+            kym_file: File that owns the new event.
+            event_id: UUID returned from ``add_velocity_event``.
+            path: Path from the add intent (fallback if ``kym_file.path`` is unset).
+        """
+        found = kym_file.get_kym_analysis().find_event_by_uuid(event_id)
+        if found is None:
+            logger.warning(
+                "KymEvent(ADD): find_event_by_uuid missing after add (event_id=%s)",
+                event_id,
+            )
+            return
+        roi_id, _channel, _index, velocity_event = found
+        file_path = str(kym_file.path) if getattr(kym_file, "path", None) else path
+        options = KymEventSelectionOptions(zoom=False)
+        self._app_state.select_velocity_event(
+            event_id=event_id,
+            roi_id=roi_id,
+            path=file_path,
+            event=velocity_event,
+            options=options,
+            origin=SelectionOrigin.EXTERNAL,
+        )
+
     def _on_kym_event(self, e: KymEvent) -> None:
         """Handle ``KymEvent`` intent: ADD, EDIT, or DELETE."""
         if not _crud_origin_allowed(e.origin):
@@ -144,6 +178,7 @@ class KymEventController:
                 )
             )
             self._emit_file_changed(kym_file)
+            self._select_new_velocity_event_after_add(kym_file, event_id, e.path)
         except ValueError as exc:
             logger.warning("KymEvent(ADD): failed to create event: %s", exc)
 

@@ -21,23 +21,20 @@ def v2_view() -> ImageLineViewerV2View:
 
 
 def test_reset_zoom_calls_autorange_on_both_widgets(v2_view: ImageLineViewerV2View) -> None:
-    """reset_zoom calls set_x_axis_autorange on ImageRoiWidget and LinePlotWidget when present."""
-    mock_img = MagicMock()
-    mock_line = MagicMock()
-    v2_view._image_roi_widget = mock_img
-    v2_view._line_plot_widget = mock_line
+    """reset_zoom delegates to combined widget reset_view()."""
+    mock_combined = MagicMock()
+    v2_view._combined = mock_combined
 
     v2_view.reset_zoom()
 
-    mock_img.set_x_axis_autorange.assert_called_once()
-    mock_line.set_x_axis_autorange.assert_called_once()
+    mock_combined.reset_view.assert_called_once()
 
 
 def test_reset_zoom_no_op_when_widgets_none(v2_view: ImageLineViewerV2View) -> None:
-    """reset_zoom does not crash when widgets are None."""
-    v2_view._image_roi_widget = None
-    v2_view._line_plot_widget = None
-    v2_view.reset_zoom()  # no exception
+    """reset_zoom requires combined widget to be initialized."""
+    v2_view._combined = None
+    with pytest.raises(AttributeError):
+        v2_view.reset_zoom()
 
 
 def test_set_event_filter_stores_filter_and_refreshes(v2_view: ImageLineViewerV2View) -> None:
@@ -88,7 +85,7 @@ def test_scroll_x_no_op_when_no_range(v2_view: ImageLineViewerV2View) -> None:
 
 
 def test_scroll_x_prev_shifts_window_left(v2_view: ImageLineViewerV2View) -> None:
-    """scroll_x('prev') shifts the x-axis window left and updates both widgets."""
+    """scroll_x('prev') shifts window left via combined fast x-range API."""
     mock_line = MagicMock()
     mock_line.plot_dict = {
         "layout": {
@@ -96,8 +93,10 @@ def test_scroll_x_prev_shifts_window_left(v2_view: ImageLineViewerV2View) -> Non
         },
     }
     mock_img = MagicMock()
+    mock_combined = MagicMock()
     v2_view._line_plot_widget = mock_line
     v2_view._image_roi_widget = mock_img
+    v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1
     mock_analysis = MagicMock()
@@ -108,8 +107,7 @@ def test_scroll_x_prev_shifts_window_left(v2_view: ImageLineViewerV2View) -> Non
 
     # Window was [2, 5], width=3. Prev -> new_min=max(0, -1)=-1... no, new_min=max(0, 2-3)=max(0,-1)=0
     # new_max = 0+3=3, so range [0, 3]
-    mock_line.set_x_axis_range.assert_called_once_with([0.0, 3.0])
-    mock_img.set_x_axis_range.assert_called_once_with([0.0, 3.0])
+    mock_combined.set_x_axis_range_fast.assert_called_once_with(0.0, 3.0)
 
 
 def test_scroll_x_next_shifts_window_right(v2_view: ImageLineViewerV2View) -> None:
@@ -121,8 +119,10 @@ def test_scroll_x_next_shifts_window_right(v2_view: ImageLineViewerV2View) -> No
         },
     }
     mock_img = MagicMock()
+    mock_combined = MagicMock()
     v2_view._line_plot_widget = mock_line
     v2_view._image_roi_widget = mock_img
+    v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1
     mock_analysis = MagicMock()
@@ -132,8 +132,7 @@ def test_scroll_x_next_shifts_window_right(v2_view: ImageLineViewerV2View) -> No
     v2_view._scroll_x_impl("next")
 
     # Window [2, 5], width=3. Next -> [5, 8]
-    mock_line.set_x_axis_range.assert_called_once_with([5.0, 8.0])
-    mock_img.set_x_axis_range.assert_called_once_with([5.0, 8.0])
+    mock_combined.set_x_axis_range_fast.assert_called_once_with(5.0, 8.0)
 
 
 def test_scroll_x_next_clamps_at_right_edge(v2_view: ImageLineViewerV2View) -> None:
@@ -145,8 +144,10 @@ def test_scroll_x_next_clamps_at_right_edge(v2_view: ImageLineViewerV2View) -> N
         },
     }
     mock_img = MagicMock()
+    mock_combined = MagicMock()
     v2_view._line_plot_widget = mock_line
     v2_view._image_roi_widget = mock_img
+    v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1
     mock_analysis = MagicMock()
@@ -156,8 +157,7 @@ def test_scroll_x_next_clamps_at_right_edge(v2_view: ImageLineViewerV2View) -> N
     v2_view._scroll_x_impl("next")
 
     # Window [5, 10], width=5. Next would be [10, 15] but time_max=10 -> clamp to [5, 10]
-    mock_line.set_x_axis_range.assert_called_once_with([5.0, 10.0])
-    mock_img.set_x_axis_range.assert_called_once_with([5.0, 10.0])
+    mock_combined.set_x_axis_range_fast.assert_called_once_with(5.0, 10.0)
 
 
 # Phase 6: ROI edit

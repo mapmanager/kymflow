@@ -655,33 +655,28 @@ class ImageLineViewerV2View:
         plot.update()
 
     def _apply_zoom_to_event(self, e: KymEventSelection) -> None:
-        """Select and zoom to an event without recomputing data."""
+        """Update selected event highlight (yellow) and optionally zoom. Nicewidgets owns logic."""
         self._selected_event_id = e.event_id
-        if (
-            not e.event_id
-            or not e.event
-            or not e.options
-            or not e.options.zoom
-        ):
-            return
-        pad = float(e.options.zoom_pad_sec)
-        # Prefer the combined widget's atomic API to keep this to a single
-        # Plotly update for highlight + zoom.
+        event_id_str = str(e.event_id) if e.event_id else None
+
+        # Always apply highlight (yellow rect); nicewidgets owns this.
         if self._combined is not None:
-            self._combined.select_event_and_zoom(
-                e.event_id,
-                e.event.t_start,
-                pad,
-            )
+            if e.event_id and e.event and e.options and e.options.zoom:
+                pad = float(e.options.zoom_pad_sec)
+                self._combined.select_event_and_zoom(e.event_id, e.event.t_start, pad)
+            else:
+                self._combined.highlight_event(event_id_str)
         elif self._line_plot_widget is not None:
-            self._line_plot_widget.acq_image_events.select_event(
-                e.event_id,
-                event_window_t=pad * 2,
-            )
-            if self._image_roi_widget:
-                self._image_roi_widget.set_x_axis_range(
-                    [e.event.t_start - pad, e.event.t_start + pad]
-                )
+            mgr = self._line_plot_widget.acq_image_events
+            if e.event_id and e.event and e.options and e.options.zoom:
+                pad = float(e.options.zoom_pad_sec)
+                mgr.select_event(e.event_id, event_window_t=pad * 2)
+                if self._image_roi_widget:
+                    self._image_roi_widget.set_x_axis_range(
+                        [e.event.t_start - pad, e.event.t_start + pad]
+                    )
+            else:
+                mgr.highlight_event(event_id_str)
 
     def set_selected_file(
         self,

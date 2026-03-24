@@ -75,13 +75,14 @@ def _col(
 
 def _default_columns() -> list[ColumnConfig]:
     return [
-        _col("File Name", "File Name", filterable=True, flex=2, width=180, min_width=180, extra_grid_options={"maxWidth": 250}),
+        _col("File Name", "File Name", filterable=True, flex=2, width=200, min_width=200, extra_grid_options={"maxWidth": 250}),
         _col("Analyzed", "Analyzed", width=90, cell_class="ag-cell-center", extra_grid_options={
             ":cellRenderer": "(params) => params.value === 'True' ? '✓' : ''"
         }),
         _col("Saved", "Saved", width=80, cell_class="ag-cell-center", extra_grid_options={
             ":cellRenderer": "(params) => params.value === 'False' ? '❌' : ''"
         }),
+        _col("Num Channels", "Channels", width=100, cell_class="ag-cell-right"),
         _col("Num ROIS", "ROIS", width=100, cell_class="ag-cell-right"),
         _col("Total Num Velocity Events", "Events", width=100, cell_class="ag-cell-right"),  # abb 202601
         _col("User Event", "User Event", width=100, cell_class="ag-cell-right"),

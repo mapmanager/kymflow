@@ -119,11 +119,9 @@ class KymEventBindings:
         )
         if e.action == KymEventAction.ADD:
             report = self._current_file.get_kym_analysis().get_velocity_report(blinded=blinded)
-            safe_call(
-                self._view.set_events,
-                report,
-                select_event_id=e.event_id if e.event_id else None,
-            )
+            # Selection is driven by AppState → bridge → KymEventSelection(state);
+            # KymEventController calls select_velocity_event after ADD.
+            safe_call(self._view.set_events, report)
         elif e.action == KymEventAction.EDIT:
             if e.event_id is not None and self._view._grid is not None:
                 row = self._current_file.get_kym_analysis().get_velocity_event_row(
