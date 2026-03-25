@@ -310,14 +310,14 @@ class ImageLineViewerV2View:
 
     def _refresh_from_state(self) -> None:
         """Update widgets from _current_file and _current_roi_id."""
-        if self._combined is None or self._image_roi_widget is None or self._line_plot_widget is None:
+        if self._combined is None or self._image_roi_widget is None:
             return
 
         kf = self._current_file
 
         if kf is None:
             # No file: clear line + events and leave image placeholder.
-            self._line_plot_widget.clear_for_no_roi()
+            self._combined.clear_for_no_roi()
             return
 
         try:
@@ -525,38 +525,36 @@ class ImageLineViewerV2View:
 
     def _update_line_for_current_roi(self) -> None:
         """Recompute velocity line for current file & ROI (no image changes)."""
-        if self._line_plot_widget is None:
+        if self._combined is None:
             return
         kf = self._current_file
         roi_id = self._current_roi_id
         if kf is None or roi_id is None:
-            self._line_plot_widget.clear_for_no_roi()
+            self._combined.clear_for_no_roi()
             return
         kym_analysis = kf.get_kym_analysis()
         # Channel from metadata
         radon = kym_analysis.get_analysis_object("RadonAnalysis")
         channel = radon.get_channel_for_roi(roi_id) if radon else None
         if radon is None or channel is None or not radon.has_analysis(roi_id, channel):
-            self._line_plot_widget.clear_for_no_roi()
+            self._combined.clear_for_no_roi()
             return
         time_arr = radon.get_analysis_value(roi_id, channel, "time")
         vel_arr = radon.get_analysis_value(roi_id, channel, "velocity")
         if time_arr is None or vel_arr is None:
-            self._line_plot_widget.clear_for_no_roi()
+            self._combined.clear_for_no_roi()
             return
-        self._line_plot_widget.set_velocity_trace(time_arr, vel_arr, name="velocity")
-        self._line_plot_widget.set_x_axis_autorange()
-        self._line_plot_widget.set_y_axis_autorange()
+        self._combined.set_velocity_trace(time_arr, vel_arr, name="velocity")
 
     def _update_events_for_current_roi(self) -> None:
         """Recompute velocity-event rectangles for current file & ROI only."""
-        if self._line_plot_widget is None:
+        if self._combined is None:
             return
         kf = self._current_file
         roi_id = self._current_roi_id
         channel = self._current_channel
         if kf is None or roi_id is None or channel is None:
-            self._line_plot_widget.set_events([])
+            self._combined.set_events([])
             return
         kym_analysis = kf.get_kym_analysis()
         if self._event_filter:
@@ -569,15 +567,53 @@ class ImageLineViewerV2View:
         # Simple, state-driven behavior: just rebuild event rectangles on the line widget.
         # Do not try to select or zoom here; Add Event and row selection have their
         # own explicit flows that operate on the current event set.
-        self._line_plot_widget.set_events(acq_events or [])
+        self._combined.set_events(acq_events or [])
+
+    def _update_velocity_and_events_for_current_roi(self) -> None:
+        """Update velocity trace and events for current file/ROI in one UI update."""
+        if self._combined is None:
+            return
+
+        kf = self._current_file
+        roi_id = self._current_roi_id
+        if kf is None or roi_id is None:
+            self._combined.set_velocity_and_events_for_roi(None, None, events=[])
+            return
+
+        kym_analysis = kf.get_kym_analysis()
+
+        # Velocity
+        time_arr = None
+        vel_arr = None
+        radon = kym_analysis.get_analysis_object("RadonAnalysis")
+        channel = radon.get_channel_for_roi(roi_id) if radon else None
+        if radon is not None and channel is not None and radon.has_analysis(roi_id, channel):
+            time_arr = radon.get_analysis_value(roi_id, channel, "time")
+            vel_arr = radon.get_analysis_value(roi_id, channel, "velocity")
+
+        # Events
+        acq_events = []
+        if self._current_channel is not None:
+            if self._event_filter:
+                events_raw = kym_analysis.get_velocity_events_filtered(
+                    roi_id, self._current_channel, self._event_filter
+                )
+            else:
+                events_raw = kym_analysis.get_velocity_events(roi_id, self._current_channel)
+            acq_events = velocity_events_to_acq_image_events(events_raw) or []
+
+        self._combined.set_velocity_and_events_for_roi(
+            time_arr,
+            vel_arr,
+            velocity_name="velocity",
+            events=acq_events,
+        )
 
     def _kym_event_plot(self) -> tuple[ui.plotly, dict] | tuple[None, None]:
         """Return (plot element, plot_dict) for velocity-event rect edits."""
-        if self._combined is not None:
-            return self._combined.plot, self._combined.plot_dict
-        if self._line_plot_widget is not None:
-            return self._line_plot_widget.plot, self._line_plot_widget.plot_dict
-        return None, None
+        if self._combined is None:
+            return None, None
+        return self._combined.plot, self._combined.plot_dict
 
     @staticmethod
     def _pop_shape_for_event_id(shapes: list, event_id: str) -> bool:
@@ -590,7 +626,7 @@ class ImageLineViewerV2View:
 
     def on_kym_event(self, e: KymEvent) -> None:
         """Handle KymEvent state: ADD, EDIT, DELETE. No zoom on any action."""
-        if e.phase != "state" or self._line_plot_widget is None:
+        if e.phase != "state" or self._combined is None:
             return
         if e.path and self._current_file and str(self._current_file.path) != str(e.path):
             return
@@ -604,79 +640,60 @@ class ImageLineViewerV2View:
     def _on_kym_event_add(self, e: KymEvent) -> None:
         if not e.event_id or e.t_start is None:
             return
-        plot, plot_dict = self._kym_event_plot()
-        if plot is None:
-            return
-        from nicewidgets.image_line_widget.models import AcqImageEvent
-
-        mgr = self._line_plot_widget.acq_image_events
-        evt = AcqImageEvent(
-            start_t=float(e.t_start),
-            stop_t=float(e.t_end) if e.t_end is not None else None,
-            event_type="User Added",
-            user_type="unreviewed",
-            event_id=str(e.event_id),
-        )
-        shapes = plot_dict.setdefault("layout", {}).setdefault("shapes", [])
-        self._pop_shape_for_event_id(shapes, str(e.event_id))
-        shapes.append(mgr._make_rect(evt, is_selected=False))
         self._selected_event_id = str(e.event_id)
-        plot.update()
+        self._refresh_events_for_current_roi_preserving_selection()
 
     def _on_kym_event_delete(self, e: KymEvent) -> None:
         if not e.event_id:
             return
-        plot, plot_dict = self._kym_event_plot()
-        if plot is None:
-            return
-        shapes = plot_dict.setdefault("layout", {}).setdefault("shapes", [])
-        self._pop_shape_for_event_id(shapes, str(e.event_id))
-        mgr = self._line_plot_widget.acq_image_events
-        if mgr._selected_event_id == str(e.event_id):
-            mgr._selected_event_id = None
         if self._selected_event_id == str(e.event_id):
             self._selected_event_id = None
-        plot.update()
+        self._refresh_events_for_current_roi_preserving_selection()
 
     def _on_kym_event_edit(self, e: KymEvent) -> None:
         if not e.event_id or e.velocity_event is None:
             return
-        plot, plot_dict = self._kym_event_plot()
-        if plot is None:
+        self._refresh_events_for_current_roi_preserving_selection()
+
+    def _refresh_events_for_current_roi_preserving_selection(self) -> None:
+        """Rebuild events for current ROI and keep highlight if still present."""
+        if self._combined is None:
             return
-        acq_list = velocity_events_to_acq_image_events([e.velocity_event])
-        if not acq_list:
+        kf = self._current_file
+        roi_id = self._current_roi_id
+        channel = self._current_channel
+        if kf is None or roi_id is None or channel is None:
+            self._combined.set_events([])
             return
-        mgr = self._line_plot_widget.acq_image_events
-        shapes = plot_dict.setdefault("layout", {}).setdefault("shapes", [])
-        self._pop_shape_for_event_id(shapes, str(e.event_id))
-        sel = mgr._selected_event_id == str(e.event_id)
-        shapes.append(mgr._make_rect(acq_list[0], is_selected=sel))
-        plot.update()
+
+        kym_analysis = kf.get_kym_analysis()
+        if self._event_filter:
+            events_raw = kym_analysis.get_velocity_events_filtered(roi_id, channel, self._event_filter)
+        else:
+            events_raw = kym_analysis.get_velocity_events(roi_id, channel)
+        acq_events = velocity_events_to_acq_image_events(events_raw) or []
+
+        desired = self._selected_event_id
+        if desired is not None and not any(evt.event_id == desired for evt in acq_events):
+            desired = None
+            self._selected_event_id = None
+
+        mgr = self._combined.line_plot_widget.acq_image_events
+        mgr._selected_event_id = desired
+        self._combined.set_events(acq_events)
 
     def _apply_zoom_to_event(self, e: KymEventSelection) -> None:
         """Update selected event highlight (yellow) and optionally zoom. Nicewidgets owns logic."""
+        if self._combined is None:
+            return
         self._selected_event_id = e.event_id
         event_id_str = str(e.event_id) if e.event_id else None
 
-        # Always apply highlight (yellow rect); nicewidgets owns this.
-        if self._combined is not None:
-            if e.event_id and e.event and e.options and e.options.zoom:
-                pad = float(e.options.zoom_pad_sec)
-                self._combined.select_event_and_zoom(e.event_id, e.event.t_start, pad)
-            else:
-                self._combined.highlight_event(event_id_str)
-        elif self._line_plot_widget is not None:
-            mgr = self._line_plot_widget.acq_image_events
-            if e.event_id and e.event and e.options and e.options.zoom:
-                pad = float(e.options.zoom_pad_sec)
-                mgr.select_event(e.event_id, event_window_t=pad * 2)
-                if self._image_roi_widget:
-                    self._image_roi_widget.set_x_axis_range(
-                        [e.event.t_start - pad, e.event.t_start + pad]
-                    )
-            else:
-                mgr.highlight_event(event_id_str)
+        if e.event_id and e.event and e.options and e.options.zoom:
+            pad = float(e.options.zoom_pad_sec)
+            self._combined.select_event_and_zoom(e.event_id, e.event.t_start, pad)
+        else:
+            self._combined.highlight_event(event_id_str)
 
     def set_selected_file(
         self,
@@ -735,8 +752,7 @@ class ImageLineViewerV2View:
                 self._suppress_roi_select_emit = False
         # if self._contrast_widget is not None:
         #     self._contrast_widget.select_roi_by_index(roi_id)
-        self._update_line_for_current_roi()
-        self._update_events_for_current_roi()
+        self._update_velocity_and_events_for_current_roi()
 
     def set_theme(self, theme: KymflowThemeMode) -> None:
         """Update theme for both widgets."""
@@ -780,12 +796,8 @@ class ImageLineViewerV2View:
 
     def reset_zoom(self) -> None:
         """Reset zoom to full scale."""
-        self._combined.reset_view()
-
-        # if self._image_roi_widget:
-        #     self._image_roi_widget.set_x_axis_autorange()
-        # if self._line_plot_widget:
-        #     self._line_plot_widget.set_x_axis_autorange()
+        if self._combined is not None:
+            self._combined.reset_view()
 
     def scroll_x(self, direction: Literal["prev", "next"]) -> None:
         """Scroll x-axis by one window width. Clamps to data time bounds."""
@@ -807,10 +819,10 @@ class ImageLineViewerV2View:
         return None
 
     def _scroll_x_impl(self, direction: Literal["prev", "next"]) -> None:
-        if self._line_plot_widget is None or self._image_roi_widget is None:
+        if self._combined is None:
             return
         # Plotly layout is variable; .get() is intentional for optional structure.
-        layout = self._line_plot_widget.plot_dict.get("layout") or {}
+        layout = self._combined.plot_dict.get("layout") or {}
         xaxis = layout.get("xaxis") or {}
         rng = xaxis.get("range")
         if not isinstance(rng, (list, tuple)) or len(rng) != 2:
@@ -840,11 +852,7 @@ class ImageLineViewerV2View:
                 new_max = min(t_max, new_min + width)
         x_range = [new_min, new_max]
 
-        # 20260318 fast
-        # self._image_roi_widget.set_x_axis_range(x_range)
         self._combined.set_x_axis_range_fast(x_range[0], x_range[1])
-        # line is linked to image
-        # self._line_plot_widget.set_x_axis_range(x_range)
 
     def set_kym_event_range_enabled(
         self,
@@ -858,7 +866,7 @@ class ImageLineViewerV2View:
         
         logger.error('fix this consumer of kym event, on disable (cancel) need to re-enable zoom etc (no more user draw rect)')
         
-        if self._line_plot_widget is None:
+        if self._combined is None:
             return
         if enabled:
             self._kym_event_range_event_id = event_id
@@ -881,16 +889,15 @@ class ImageLineViewerV2View:
                     )
                 )
 
-            self._line_plot_widget.set_on_rect_selection(_on_rect_selection)
-            self._line_plot_widget.set_draw_rect_mode(True)
+            self._combined.set_on_rect_selection(_on_rect_selection)
+            self._combined.set_draw_rect_mode_fast(True)
         else:
-            self._line_plot_widget.set_on_rect_selection(None)
-            self._line_plot_widget.set_draw_rect_mode(False)
+            self._combined.set_on_rect_selection(None)
+            self._combined.set_draw_rect_mode_fast(False)
 
     def refresh_velocity_events(self) -> None:
         """Re-refresh to pick up event changes."""
-        self._update_line_for_current_roi()
-        self._update_events_for_current_roi()
+        self._update_velocity_and_events_for_current_roi()
 
     def refresh_events_for_current_roi(self) -> None:
         """Refresh only velocity events for current ROI (no image or line changes)."""

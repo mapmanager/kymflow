@@ -31,10 +31,9 @@ def test_reset_zoom_calls_autorange_on_both_widgets(v2_view: ImageLineViewerV2Vi
 
 
 def test_reset_zoom_no_op_when_widgets_none(v2_view: ImageLineViewerV2View) -> None:
-    """reset_zoom requires combined widget to be initialized."""
+    """reset_zoom is a no-op when the combined widget is not initialized."""
     v2_view._combined = None
-    with pytest.raises(AttributeError):
-        v2_view.reset_zoom()
+    v2_view.reset_zoom()
 
 
 def test_set_event_filter_stores_filter_and_refreshes(v2_view: ImageLineViewerV2View) -> None:
@@ -57,7 +56,8 @@ def test_set_event_filter_none(v2_view: ImageLineViewerV2View) -> None:
 
 
 def test_scroll_x_no_op_when_widgets_none(v2_view: ImageLineViewerV2View) -> None:
-    """scroll_x does not crash when widgets are None."""
+    """scroll_x does not crash when the combined widget is not initialized."""
+    v2_view._combined = None
     v2_view._line_plot_widget = None
     v2_view._image_roi_widget = None
     v2_view.scroll_x("prev")
@@ -65,12 +65,10 @@ def test_scroll_x_no_op_when_widgets_none(v2_view: ImageLineViewerV2View) -> Non
 
 
 def test_scroll_x_no_op_when_no_range(v2_view: ImageLineViewerV2View) -> None:
-    """scroll_x is no-op when line plot has no xaxis range."""
-    mock_line = MagicMock()
-    mock_line.plot_dict = {"layout": {}}
-    mock_img = MagicMock()
-    v2_view._line_plot_widget = mock_line
-    v2_view._image_roi_widget = mock_img
+    """scroll_x is no-op when the figure has no xaxis range."""
+    mock_combined = MagicMock()
+    mock_combined.plot_dict = {"layout": {}}
+    v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1
     v2_view._current_file.get_kym_analysis.return_value = MagicMock(
@@ -80,22 +78,17 @@ def test_scroll_x_no_op_when_no_range(v2_view: ImageLineViewerV2View) -> None:
     v2_view._scroll_x_impl("prev")
     v2_view._scroll_x_impl("next")
 
-    mock_line.set_x_axis_range.assert_not_called()
-    mock_img.set_x_axis_range.assert_not_called()
+    mock_combined.set_x_axis_range_fast.assert_not_called()
 
 
 def test_scroll_x_prev_shifts_window_left(v2_view: ImageLineViewerV2View) -> None:
     """scroll_x('prev') shifts window left via combined fast x-range API."""
-    mock_line = MagicMock()
-    mock_line.plot_dict = {
+    mock_combined = MagicMock()
+    mock_combined.plot_dict = {
         "layout": {
             "xaxis": {"range": [2.0, 5.0]},
         },
     }
-    mock_img = MagicMock()
-    mock_combined = MagicMock()
-    v2_view._line_plot_widget = mock_line
-    v2_view._image_roi_widget = mock_img
     v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1
@@ -112,16 +105,12 @@ def test_scroll_x_prev_shifts_window_left(v2_view: ImageLineViewerV2View) -> Non
 
 def test_scroll_x_next_shifts_window_right(v2_view: ImageLineViewerV2View) -> None:
     """scroll_x('next') shifts the x-axis window right."""
-    mock_line = MagicMock()
-    mock_line.plot_dict = {
+    mock_combined = MagicMock()
+    mock_combined.plot_dict = {
         "layout": {
             "xaxis": {"range": [2.0, 5.0]},
         },
     }
-    mock_img = MagicMock()
-    mock_combined = MagicMock()
-    v2_view._line_plot_widget = mock_line
-    v2_view._image_roi_widget = mock_img
     v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1
@@ -137,16 +126,12 @@ def test_scroll_x_next_shifts_window_right(v2_view: ImageLineViewerV2View) -> No
 
 def test_scroll_x_next_clamps_at_right_edge(v2_view: ImageLineViewerV2View) -> None:
     """scroll_x('next') clamps when window would exceed time_max."""
-    mock_line = MagicMock()
-    mock_line.plot_dict = {
+    mock_combined = MagicMock()
+    mock_combined.plot_dict = {
         "layout": {
             "xaxis": {"range": [5.0, 10.0]},
         },
     }
-    mock_img = MagicMock()
-    mock_combined = MagicMock()
-    v2_view._line_plot_widget = mock_line
-    v2_view._image_roi_widget = mock_img
     v2_view._combined = mock_combined
     v2_view._current_file = MagicMock()
     v2_view._current_roi_id = 1

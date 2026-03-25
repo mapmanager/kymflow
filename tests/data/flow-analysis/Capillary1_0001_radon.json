@@ -6,8 +6,8 @@
       "channel": 1,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-03-23T11:47:04.894577+00:00",
-      "analyzed_on": "2026-03-23T11:47:04.894577+00:00",
+      "analyzed_at": "2026-03-24T19:38:18.558952+00:00",
+      "analyzed_on": "2026-03-24T19:38:18.558952+00:00",
       "roi_revision_at_analysis": 0
     },
     "2:1": {
@@ -15,8 +15,8 @@
       "channel": 1,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-03-23T11:47:06.844723+00:00",
-      "analyzed_on": "2026-03-23T11:47:06.844723+00:00",
+      "analyzed_at": "2026-03-24T19:38:20.571171+00:00",
+      "analyzed_on": "2026-03-24T19:38:20.571171+00:00",
       "roi_revision_at_analysis": 0
     },
     "3:1": {
@@ -24,8 +24,8 @@
       "channel": 1,
       "algorithm": "mpRadon",
       "window_size": 16,
-      "analyzed_at": "2026-03-23T11:47:09.056401+00:00",
-      "analyzed_on": "2026-03-23T11:47:09.056401+00:00",
+      "analyzed_at": "2026-03-24T19:38:22.792842+00:00",
+      "analyzed_on": "2026-03-24T19:38:22.792842+00:00",
       "roi_revision_at_analysis": 0
     }
   }
