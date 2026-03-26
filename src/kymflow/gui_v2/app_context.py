@@ -24,6 +24,7 @@ from kymflow.core.utils.logging import get_logger
 from kymflow.core.user_config import UserConfig
 from kymflow.gui_v2.app_config import AppConfig
 from kymflow.gui_v2.native_ui_gate import NativeUiGate
+from kymflow.gui_v2.runtime_mode import is_native_mode
 
 logger = get_logger(__name__)
 
@@ -201,9 +202,11 @@ class AppContext:
         """
         dark_mode = ui.dark_mode()
         
-        # Restore from user storage (default: True = dark mode)
-        # Using app.storage.user (not browser) because it can be written during callbacks
-        stored_value = app.storage.user.get(THEME_STORAGE_KEY, True)
+        if is_native_mode():
+            stored_value = bool(self.user_config.get(THEME_STORAGE_KEY, True))
+        else:
+            # Using app.storage.user (not browser) because it can be written during callbacks
+            stored_value = bool(app.storage.user.get(THEME_STORAGE_KEY, True))
         dark_mode.value = stored_value
         
         # Sync with AppState (single source of truth)
@@ -227,8 +230,12 @@ class AppContext:
         # Toggle UI
         dark_mode.value = not dark_mode.value
         
-        # Persist to user storage (can be written during callbacks, unlike browser storage)
-        app.storage.user[THEME_STORAGE_KEY] = dark_mode.value
+        if is_native_mode():
+            self.user_config.set(THEME_STORAGE_KEY, dark_mode.value)
+            self.user_config.save()
+        else:
+            # Persist to user storage (can be written during callbacks, unlike browser storage)
+            app.storage.user[THEME_STORAGE_KEY] = dark_mode.value
         
         # Update AppState (triggers callbacks to plotting components)
         mode = ThemeMode.DARK if dark_mode.value else ThemeMode.LIGHT

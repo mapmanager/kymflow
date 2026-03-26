@@ -14,6 +14,7 @@ from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
+from kymflow.gui_v2.runtime_mode import is_native_mode
 
 if TYPE_CHECKING:
     pass
@@ -63,6 +64,9 @@ class FileTablePersistenceController:
         Returns:
             List of file paths that were previously selected, or empty list.
         """
+        if is_native_mode():
+            return []
+
         stored = app.storage.user.get(self._storage_key)
         if stored is None:
             return []
@@ -88,6 +92,12 @@ class FileTablePersistenceController:
         if path is None and e.file is not None and hasattr(e.file, "path"):
             path = str(e.file.path)
 
-        if path:
-            app.storage.user[self._storage_key] = path
-            logger.info(f"stored selection {path!r} -> {self._storage_key}")
+        if not path:
+            return
+
+        if is_native_mode():
+            logger.info(f"native mode: skipping app.storage.user persistence for {path!r}")
+            return
+
+        app.storage.user[self._storage_key] = path
+        logger.info(f"stored selection {path!r} -> {self._storage_key}")

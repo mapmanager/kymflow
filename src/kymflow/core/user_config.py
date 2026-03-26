@@ -175,6 +175,7 @@ class UserConfigData:
     home_file_plot_splitter: float = DEFAULT_HOME_FILE_PLOT_SPLITTER
     home_plot_event_splitter: float = DEFAULT_HOME_PLOT_EVENT_SPLITTER
     home_events_plot_splitter: float = DEFAULT_HOME_EVENTS_PLOT_SPLITTER
+    kymflow_dark_mode: bool = True
 
     def to_json_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -263,6 +264,11 @@ class UserConfigData:
             home_events_plot_splitter = float(heps)
         except Exception:
             home_events_plot_splitter = DEFAULT_HOME_EVENTS_PLOT_SPLITTER
+        dark_mode_raw = d.get("kymflow_dark_mode", True)
+        try:
+            kymflow_dark_mode = bool(dark_mode_raw)
+        except Exception:
+            kymflow_dark_mode = True
 
         return cls(
             schema_version=schema_version,
@@ -274,6 +280,7 @@ class UserConfigData:
             home_file_plot_splitter=home_file_plot_splitter,
             home_plot_event_splitter=home_plot_event_splitter,
             home_events_plot_splitter=home_events_plot_splitter,
+            kymflow_dark_mode=kymflow_dark_mode,
         )
 
 
@@ -500,6 +507,18 @@ class UserConfig:
         """Create the config file on disk if it doesn't exist (writes current data)."""
         if not self.path.exists():
             self.save()
+
+    def get(self, key: str, default=None):
+        """Generic getter for top-level config fields."""
+        if hasattr(self.data, key):
+            return getattr(self.data, key)
+        return default
+
+    def set(self, key: str, value) -> None:
+        """Generic setter for top-level config fields."""
+        if not hasattr(self.data, key):
+            raise AttributeError(f"Unknown UserConfig key: {key}")
+        setattr(self.data, key, value)
 
     # -----------------------------
     # Public API: folders/recents

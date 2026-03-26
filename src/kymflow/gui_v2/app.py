@@ -25,9 +25,6 @@ os.environ["NICEGUI_STORAGE_PATH"] = str(Path(user_config_dir("kymflow", None)) 
 
 from nicegui import ui, app
 
-
-from nicegui import ui, app
-
 from kymflow.core.utils.logging import get_logger, setup_logging
 from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2._pywebview import (
@@ -38,9 +35,10 @@ from kymflow.gui_v2._pywebview import (
 from kymflow.gui_v2.config import STORAGE_SECRET
 from kymflow.gui_v2.navigation import inject_global_styles
 
-from kymflow.gui_v2.bus import BusConfig, get_event_bus
+from kymflow.gui_v2.bus import get_event_bus
 from kymflow.gui_v2.events_folder import SelectPathEvent
 from kymflow.gui_v2.page_cache import cache_page, get_cached_page, get_stable_session_id
+from kymflow.gui_v2.runtime_mode import is_native_mode
 # from kymflow.gui_v2.pages.batch_page import BatchPage
 from kymflow.gui_v2.pages.home_page import HomePage
 # from kymflow.gui_v2.pages.pool_page import PoolPage
@@ -79,16 +77,15 @@ def home() -> None:
     #     pass
 
 
-    logger.info("20260225 NICEGUI_STORAGE_PATH=%s", os.environ.get("NICEGUI_STORAGE_PATH", "(not set)"))
+    logger.info(f"20260225 NICEGUI_STORAGE_PATH={os.environ.get('NICEGUI_STORAGE_PATH', '(not set)')}")
 
     # Install native rect polling only in native mode (delayed slightly so native window exists).
     # Skip entirely in browser mode - no reason to poll native window rects.
-    native = getattr(app, "native", None)
-    if native is not None:
+    if is_native_mode():
         from kymflow.gui_v2._pywebview import install_native_rect_polling
         ui.timer(0.2, lambda: install_native_rect_polling(poll_sec=0.5, debounce_sec=1.0), once=True)
     else:
-        logger.error('native is None')
+        logger.info("web mode: skipping native rect polling")
     #
     # global css styles
     # this has to be in a page function ???
@@ -100,24 +97,23 @@ def home() -> None:
     # set style of all nicegui ui widgets
     inject_global_styles()
 
-    # Get stable session ID (persists across navigations)
-    session_id = get_stable_session_id()
-
-    # Get or create cached page instance
-    cached_page = get_cached_page(session_id, "/")
-    logger.warning(f'cached_page:{cached_page}')
-
-    if cached_page is not None:
-        # Reuse cached page
-        # logger.debug(f"Reusing cached HomePage for session {session_id[:8]}...")
-        page = cached_page
-    else:
-        # Create new page instance and cache it
-        # bus = get_event_bus(BusConfig(trace=True))
+    if is_native_mode():
+        # Native desktop mode: do not depend on browser session/page cache state.
+        cached_page = None
         bus = get_event_bus()
         page = HomePage(context, bus)
-        cache_page(session_id, "/", page)
-        # logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
+        logger.info("native mode: skipping stable session id and page cache")
+    else:
+        # Web mode: preserve stable session/page cache behavior.
+        session_id = get_stable_session_id()
+        cached_page = get_cached_page(session_id, "/")
+        logger.info(f"web mode cached_page={cached_page}")
+        if cached_page is not None:
+            page = cached_page
+        else:
+            bus = get_event_bus()
+            page = HomePage(context, bus)
+            cache_page(session_id, "/", page)
 
     # Render the page (creates fresh UI elements each time and ensures setup)
     page.render(page_title="KymFlow")
@@ -130,8 +126,8 @@ def home() -> None:
         # Decide "web vs native" robustly
         # - In Render/Docker we set KYMFLOW_GUI_NATIVE=0
         # - Locally (no env var) your default is native=True
-        raw_native = os.getenv("KYMFLOW_GUI_NATIVE", "").strip().lower()
-        is_web = raw_native in {"0", "false", "no", "off"}
+        native_mode = is_native_mode()
+        is_web = not native_mode
 
         default_path = os.getenv("KYMFLOW_DEFAULT_PATH") if is_web else None
 
@@ -154,7 +150,7 @@ def home() -> None:
         # ---- Debug logging (so you can see exactly what branch you hit) ----
         logger.info(f"[bootstrap] cached_page is None: {cached_page is None}")
         logger.info(f"[bootstrap] context.app_state.folder is None: {context.app_state.folder is None}")
-        logger.info(f"[bootstrap] KYMFLOW_GUI_NATIVE raw: {raw_native!r} -> is_web={is_web}")
+        logger.info(f"[bootstrap] native_mode={native_mode} is_web={is_web}")
         logger.info(f"[bootstrap] last_path={last_path!r} last_depth={last_depth!r}")
         logger.info(f"[bootstrap] KYMFLOW_DEFAULT_PATH={default_path!r}")
         logger.info(f"[bootstrap] KYMFLOW_DEFAULT_DEPTH raw={raw_default_depth!r} parsed={default_depth!r}")
@@ -233,26 +229,22 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     default_host = "127.0.0.1" if native_bool else "0.0.0.0"
     host = os.getenv("HOST", default_host)
 
-    logger.info(
-        "Starting KymFlow GUI v2: port=%s reload=%s native=%s",
-        port,
-        reload,
-        native_bool,
-    )
+    logger.info(f"Starting KymFlow GUI v2: port={port} reload={reload} native={native_bool}")
 
     # Register minimal shutdown handlers to persist configs (native mode only)
     if native_bool:
         install_shutdown_handlers(context)
     
-    ui.run(
+    run_kwargs = dict(
         host=host,
         port=port,
         reload=reload,
         native=native_bool,
-        storage_secret=STORAGE_SECRET,
         title="KymFlow",
-        # on_air=True,
     )
+    if not native_bool:
+        run_kwargs["storage_secret"] = STORAGE_SECRET
+    ui.run(**run_kwargs)
 
 
 if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
