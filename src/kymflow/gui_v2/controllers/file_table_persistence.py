@@ -1,16 +1,15 @@
-"""Controller for persisting file selection to browser storage.
+"""Controller for persisting file selection across reconnects.
 
-This module provides a controller that saves file selections to NiceGUI's
-per-client storage, allowing selections to be restored across page reloads.
+Persists the selected file path to :class:`~kymflow.gui_v2.app_config.AppConfig`
+on disk (single source for native and web). Restores via ``restore_selection()``.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nicegui import app
-
 from kymflow.core.utils.logging import get_logger
+from kymflow.gui_v2.app_config import AppConfig
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import FileSelection, SelectionOrigin
@@ -22,22 +21,20 @@ logger = get_logger(__name__)
 
 
 class FileTablePersistenceController:
-    """Persist file selection to browser storage.
+    """Persist file selection to AppConfig on disk.
 
     This controller subscribes to file selection events and saves the selected
-    file path(s) to NiceGUI's per-client storage. Selections can be restored
-    on page reload using restore_selection().
+    file path. Selections can be restored on page reload using restore_selection().
 
     Storage:
-        - Uses app.storage.user (per-client, persists across page reloads)
-        - Stores single path string for selected file
+        - Uses ``AppConfig.last_selected_file_path`` (persisted JSON)
 
     Attributes:
-        _app_state: AppState instance (not directly used, but kept for consistency).
-        _storage_key: Storage key for persisting selection.
+        _app_state: AppState instance (kept for consistency with other controllers).
+        _app_config: AppConfig instance for read/write.
     """
 
-    def __init__(self, app_state: AppState, bus: EventBus, *, storage_key: str) -> None:
+    def __init__(self, app_state: AppState, bus: EventBus, *, app_config: AppConfig) -> None:
         """Initialize persistence controller.
 
         Subscribes to FileSelection (phase="state") events to save selections.
@@ -45,49 +42,41 @@ class FileTablePersistenceController:
         Args:
             app_state: AppState instance (kept for consistency with other controllers).
             bus: EventBus instance to subscribe to.
-            storage_key: Key to use in app.storage.user for persisting selection.
+            app_config: AppConfig instance for disk-backed selection path.
         """
         self._app_state: AppState = app_state
-        self._storage_key: str = storage_key
+        self._app_config: AppConfig = app_config
 
-        # Subscribe to state events, but filter by origin=FILE_TABLE (only persist user actions)
         bus.subscribe_state(FileSelection, self._on_file_selected)
 
     def restore_selection(self) -> list[str]:
-        """Restore selected file path(s) from browser storage.
-
-        Reads the stored selection from NiceGUI's per-client storage and
-        returns it as a list of paths. Returns empty list if no selection
-        was stored.
+        """Restore selected file path(s) from AppConfig.
 
         Returns:
             List of file paths that were previously selected, or empty list.
         """
-        stored = app.storage.user.get(self._storage_key)
-        if stored is None:
+        p = self._app_config.get_last_selected_file_path()
+        if not p:
             return []
-        if isinstance(stored, list):
-            return [str(p) for p in stored]
-        return [str(stored)]
+        return [p]
 
     def _on_file_selected(self, e: FileSelection) -> None:
         """Handle FileSelection state event and persist selection.
 
-        Saves the selected file path to storage, but only if the origin is
+        Saves the selected file path to AppConfig, but only if the origin is
         FILE_TABLE (user selection), not RESTORE or EXTERNAL (programmatic).
 
         Args:
             e: FileSelection event (phase="state") containing the selected file/path and origin.
         """
-        # Don't persist programmatic selections (restore, external updates)
         if e.origin in {SelectionOrigin.RESTORE, SelectionOrigin.EXTERNAL}:
             return
 
-        # Use path from event, or derive from file
         path = e.path
         if path is None and e.file is not None and hasattr(e.file, "path"):
             path = str(e.file.path)
 
         if path:
-            app.storage.user[self._storage_key] = path
-            logger.info(f"stored selection {path!r} -> {self._storage_key}")
+            self._app_config.set_last_selected_file_path(path)
+            self._app_config.save()
+            logger.info(f"stored selection {path!r} -> app_config.last_selected_file_path")

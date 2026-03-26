@@ -441,9 +441,9 @@ def configure_native_window_args(context: Optional[AppContext] = None) -> None:
         logger.error(f'window rect has off-screen position (x={x}, y={y}); omitting rect, OS will place window')
         return
 
-    if w > 1920:
-        logger.warning(f'last ditch effort: window width too large; setting to 1920: {w}')
-        w = 1920
+    # if w > 1920:
+    #     logger.warning(f'last ditch effort: window width too large; setting to 1920: {w}')
+    #     w = 1920
 
     logger.warning(f'setting initial pywebview native.window_args: x={x} y={y} w={w} h={h}')
 

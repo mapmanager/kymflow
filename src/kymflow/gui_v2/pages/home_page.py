@@ -355,7 +355,7 @@ class HomePage(BasePage):
         self._persistence = FileTablePersistenceController(
             self.context.app_state,
             self.bus,
-            storage_key="kymflow_selected_file_path_v2",
+            app_config=self.context.app_config,
         )
 
         # Footer controller (subscribes to selection + task events)

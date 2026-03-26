@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from nicegui import ui, app
+from nicegui import ui
 
 from nicewidgets.utils import setUpGuiDefaults
 
+from kymflow.gui_v2.runtime_mode import is_native_mode
 from kymflow.gui_v2.state import AppState
 from kymflow.core.state import TaskState
 from kymflow.core.plotting.theme import ThemeMode
@@ -26,10 +27,6 @@ from kymflow.gui_v2.app_config import AppConfig
 from kymflow.gui_v2.native_ui_gate import NativeUiGate
 
 logger = get_logger(__name__)
-
-# Storage key for theme persistence across page navigation
-# Using app.storage.user (not browser) because it can be written during callbacks
-THEME_STORAGE_KEY = "kymflow_dark_mode"
 
 
 @dataclass
@@ -50,7 +47,7 @@ class RuntimeEnvironment:
         """Detect runtime environment from env vars.
         
         Logic:
-        - native_mode: from KYMFLOW_GUI_NATIVE (default: True)
+        - native_mode: from :func:`~kymflow.gui_v2.runtime_mode.is_native_mode`
         - is_remote: from KYMFLOW_REMOTE (default: False)
         - has_file_system_access: True if native_mode OR not is_remote
         """
@@ -63,10 +60,9 @@ class RuntimeEnvironment:
                 return True
             if v in {"0", "false", "no", "off"}:
                 return False
-            # Invalid value - fall back to default
             return default
-        
-        native_mode = _env_bool("KYMFLOW_GUI_NATIVE", True)
+
+        native_mode = is_native_mode()
         is_remote = _env_bool("KYMFLOW_REMOTE", False)
         has_file_system_access = native_mode or not is_remote
         
@@ -200,17 +196,20 @@ class AppContext:
             Dark mode controller for this page
         """
         dark_mode = ui.dark_mode()
-        
-        # Restore from user storage (default: True = dark mode)
-        # Using app.storage.user (not browser) because it can be written during callbacks
-        stored_value = app.storage.user.get(THEME_STORAGE_KEY, True)
+
+        if self.app_config is None:
+            dark_mode.value = True
+            if self.app_state is not None:
+                self.app_state.set_theme(ThemeMode.DARK)
+            return dark_mode
+
+        stored_value = self.app_config.get_kymflow_dark_mode()
         dark_mode.value = stored_value
-        
+
         # Sync with AppState (single source of truth)
         mode = ThemeMode.DARK if stored_value else ThemeMode.LIGHT
         self.app_state.set_theme(mode)
-        
-        # logger.debug(f"Dark mode initialized: {stored_value}")
+
         return dark_mode
     
     def set_default_folder(self, folder: Path) -> None:
@@ -224,17 +223,15 @@ class AppContext:
         Args:
             dark_mode: Dark mode controller for current page
         """
-        # Toggle UI
         dark_mode.value = not dark_mode.value
-        
-        # Persist to user storage (can be written during callbacks, unlike browser storage)
-        app.storage.user[THEME_STORAGE_KEY] = dark_mode.value
-        
+
+        if self.app_config is not None:
+            self.app_config.set_kymflow_dark_mode(dark_mode.value)
+            self.app_config.save()
+
         # Update AppState (triggers callbacks to plotting components)
         mode = ThemeMode.DARK if dark_mode.value else ThemeMode.LIGHT
         self.app_state.set_theme(mode)
-        
-        # logger.debug(f"Theme toggled: {mode}")
     
     def reset(self) -> None:
         """Reset the context (useful for testing or logout)."""

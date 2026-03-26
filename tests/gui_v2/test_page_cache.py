@@ -16,6 +16,7 @@ class DummyStorage:
 
 def test_get_stable_session_id_persists(monkeypatch) -> None:
     """Stable session ID should persist in storage across calls."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     storage = DummyStorage()
     monkeypatch.setattr(page_cache, "app", SimpleNamespace(storage=storage))
 

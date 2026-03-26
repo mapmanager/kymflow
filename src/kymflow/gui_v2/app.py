@@ -35,9 +35,10 @@ from kymflow.gui_v2._pywebview import (
 from kymflow.gui_v2.config import STORAGE_SECRET
 from kymflow.gui_v2.navigation import inject_global_styles
 
-from kymflow.gui_v2.bus import BusConfig, get_event_bus
+from kymflow.gui_v2.bus import get_event_bus
 from kymflow.gui_v2.events_folder import SelectPathEvent
 from kymflow.gui_v2.page_cache import cache_page, get_cached_page, get_stable_session_id
+from kymflow.gui_v2.runtime_mode import is_native_mode
 # from kymflow.gui_v2.pages.batch_page import BatchPage
 from kymflow.gui_v2.pages.home_page import HomePage
 # from kymflow.gui_v2.pages.pool_page import PoolPage
@@ -109,9 +110,9 @@ def _native_init_window_position():
 
     x, y, w, h = app_config.get_window_rect()
 
-    if w > 1920:
-        logger.warning(f'aggrid width error: window width too large; setting {w}to 1920: {w}')
-        w = 1920
+    # if w > 1920:
+    #     logger.warning(f'aggrid width error: window width too large; setting {w}to 1920: {w}')
+    #     w = 1920
 
     app.native.window_args.update({
         "x": x,
@@ -169,24 +170,23 @@ def home() -> None:
     # set style of all nicegui ui widgets
     inject_global_styles()
 
-    # Get stable session ID (persists across navigations)
-    session_id = get_stable_session_id()
-
-    # Get or create cached page instance
-    cached_page = get_cached_page(session_id, "/")
-    logger.info(f'cached_page:{cached_page}')
-
-    if cached_page is not None:
-        # Reuse cached page
-        # logger.debug(f"Reusing cached HomePage for session {session_id[:8]}...")
-        page = cached_page
-    else:
-        # Create new page instance and cache it
-        # bus = get_event_bus(BusConfig(trace=True))
+    if is_native_mode():
+        # Native desktop: no stable session id or page cache (disk-backed AppConfig instead).
+        cached_page = None
         bus = get_event_bus()
         page = HomePage(context, bus)
-        cache_page(session_id, "/", page)
-        # logger.debug(f"Created and cached new HomePage for session {session_id[:8]}...")
+        logger.info("native mode: skipping stable session id and page cache")
+    else:
+        session_id = get_stable_session_id()
+        cached_page = get_cached_page(session_id, "/")
+        logger.info(f"cached_page:{cached_page}")
+
+        if cached_page is not None:
+            page = cached_page
+        else:
+            bus = get_event_bus()
+            page = HomePage(context, bus)
+            cache_page(session_id, "/", page)
 
     # logger.info('=== app.native ===')
     # logger.info(f'app.native.start_args: {app.native.start_args}')
@@ -202,11 +202,8 @@ def home() -> None:
     if cached_page is None and context.app_state.folder is None:
         last_path, last_depth = context.user_config.get_last_path()
 
-        # Decide "web vs native" robustly
-        # - In Render/Docker we set KYMFLOW_GUI_NATIVE=0
-        # - Locally (no env var) your default is native=True
-        raw_native = os.getenv("KYMFLOW_GUI_NATIVE", "").strip().lower()
-        is_web = raw_native in {"0", "false", "no", "off"}
+        # Web vs native: same rule as is_native_mode() / main().
+        is_web = not is_native_mode()
 
         default_path = os.getenv("KYMFLOW_DEFAULT_PATH") if is_web else None
 
@@ -232,7 +229,7 @@ def home() -> None:
             # logger.info(f"chosen_path exists={exists} resolved={str(chosen_path_obj)!r}")
 
             if exists:
-                logger.info(f"-->> emitting SelectPathEvent")
+                logger.info("-->> emitting SelectPathEvent")
                 logger.info(f'  new_path={str(chosen_path_obj)}')
                 logger.info(f'  depth={chosen_depth}')
                 page.bus.emit(
@@ -282,8 +279,13 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
       - KYMFLOW_GUI_RELOAD: 1/0
       - HOST: bind host (Render commonly uses 0.0.0.0)
       - PORT: bind port (Render sets this)
+
+    If ``native_bool`` is passed explicitly, ``KYMFLOW_GUI_NATIVE`` is set so
+    :func:`~kymflow.gui_v2.runtime_mode.is_native_mode` matches ``ui.run(native=...)``.
     """
-    native_bool = _env_bool("KYMFLOW_GUI_NATIVE", True) if native_bool is None else native_bool
+    if native_bool is not None:
+        os.environ["KYMFLOW_GUI_NATIVE"] = "1" if native_bool else "0"
+    native_bool = is_native_mode()
     reload = _env_bool("KYMFLOW_GUI_RELOAD", False) if reload is None else reload
 
     from nicegui import native as native_module    
@@ -305,15 +307,16 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     logger.info(f'  reload={reload}')
     logger.info(f'  native={native_bool}')
 
-    ui.run(
-        host=host,
-        port=port,
-        reload=reload,
-        native=native_bool,
-        storage_secret=STORAGE_SECRET,
-        title="KymFlow",
-        # on_air=True,
-    )
+    run_kwargs: dict = {
+        "host": host,
+        "port": port,
+        "reload": reload,
+        "native": native_bool,
+        "title": "KymFlow",
+    }
+    if not native_bool:
+        run_kwargs["storage_secret"] = STORAGE_SECRET
+    ui.run(**run_kwargs)
 
 
 if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
@@ -326,7 +329,7 @@ if __name__ in {"__main__", "__mp_main__", "kymflow.gui_v2.app"}:
     logger.info(f"__name__: {__name__}, process: {current_process.name}, is_main: {is_main_process}")
     
 
-    native_bool = _env_bool("KYMFLOW_GUI_NATIVE", True)
+    native_bool = is_native_mode()
     # configure_save_on_quit()
 
     # try:

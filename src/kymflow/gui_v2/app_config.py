@@ -2,10 +2,13 @@
 """
 App-wide config persistence for kymflow (platformdirs + JSON).
 
-Persisted items (schema v2):
+Persisted items (schema v3):
 - text_size: str                    (font size for UI controls)
 - blinded: bool                     (blinded analysis mode)
 - window_rect: List[int]            (native window geometry: [x, y, w, h])
+- folder_depth: int
+- kymflow_dark_mode: bool           (light/dark theme; single source for gui_v2)
+- last_selected_file_path: str|None (optional; last file selected in file table)
 
 Behavior:
 - If config file missing or unreadable -> defaults are used
@@ -41,6 +44,7 @@ DEFAULT_TEXT_SIZE: str = "text-sm"
 DEFAULT_BLINDED: bool = False
 DEFAULT_WINDOW_RECT: List[int] = [100, 100, 1200, 800]  # x, y, w, h
 DEFAULT_FOLDER_DEPTH: int = 4
+DEFAULT_KYMFLOW_DARK_MODE: bool = True
 
 
 @dataclass
@@ -89,6 +93,22 @@ class AppConfigData:
             "label": "Folder Depth",
             "min": 1,
             "requires_restart": False,
+        },
+    )
+
+    kymflow_dark_mode: bool = field(
+        default=DEFAULT_KYMFLOW_DARK_MODE,
+        metadata={
+            "exclude_from_options_ui": True,
+            "label": "Dark mode",
+        },
+    )
+
+    last_selected_file_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "exclude_from_options_ui": True,
+            "label": "Last selected file",
         },
     )
 
@@ -160,12 +180,30 @@ class AppConfigData:
             except Exception:
                 folder_depth = DEFAULT_FOLDER_DEPTH
 
+        # kymflow_dark_mode (tolerant; missing key -> default)
+        kymflow_dark_mode = DEFAULT_KYMFLOW_DARK_MODE
+        kdm_raw = d.get("kymflow_dark_mode", DEFAULT_KYMFLOW_DARK_MODE)
+        if isinstance(kdm_raw, bool):
+            kymflow_dark_mode = kdm_raw
+        elif isinstance(kdm_raw, str):
+            kymflow_dark_mode = kdm_raw.lower() in ("true", "1", "yes", "on")
+        elif isinstance(kdm_raw, (int, float)):
+            kymflow_dark_mode = bool(kdm_raw)
+
+        # last_selected_file_path (optional)
+        last_selected_file_path: Optional[str] = None
+        lsp = d.get("last_selected_file_path")
+        if isinstance(lsp, str) and lsp.strip():
+            last_selected_file_path = lsp.strip()
+
         return cls(
             schema_version=schema_version,
             text_size=text_size,
             blinded=blinded,
             window_rect=window_rect,
             folder_depth=folder_depth,
+            kymflow_dark_mode=kymflow_dark_mode,
+            last_selected_file_path=last_selected_file_path,
         )
 
 
@@ -282,6 +320,14 @@ class AppConfig:
         if not isinstance(data.folder_depth, int) or data.folder_depth < 1:
             logger.warning(f"Invalid folder_depth '{data.folder_depth}', using default '{DEFAULT_FOLDER_DEPTH}'")
             data.folder_depth = DEFAULT_FOLDER_DEPTH
+
+        # kymflow_dark_mode
+        if not isinstance(data.kymflow_dark_mode, bool):
+            data.kymflow_dark_mode = DEFAULT_KYMFLOW_DARK_MODE
+
+        # last_selected_file_path
+        if data.last_selected_file_path is not None and not isinstance(data.last_selected_file_path, str):
+            data.last_selected_file_path = None
 
     def save(self) -> None:
         """Write config to disk."""
@@ -430,6 +476,25 @@ class AppConfig:
         """Set blinded analysis mode."""
         self.data.blinded = bool(blinded)
         logger.debug(f"Set app_config.blinded = {blinded}")
+
+    def get_kymflow_dark_mode(self) -> bool:
+        """Return persisted light/dark theme preference for gui_v2."""
+        return bool(self.data.kymflow_dark_mode)
+
+    def set_kymflow_dark_mode(self, value: bool) -> None:
+        """Set light/dark theme preference."""
+        self.data.kymflow_dark_mode = bool(value)
+
+    def get_last_selected_file_path(self) -> Optional[str]:
+        """Return last selected file path from disk, or None if unset or empty."""
+        p = self.data.last_selected_file_path
+        if p is None or not str(p).strip():
+            return None
+        return str(p).strip()
+
+    def set_last_selected_file_path(self, path: Optional[str]) -> None:
+        """Set last selected file path (None clears)."""
+        self.data.last_selected_file_path = path if path and str(path).strip() else None
 
     # -----------------------------
     # Public API: window geometry

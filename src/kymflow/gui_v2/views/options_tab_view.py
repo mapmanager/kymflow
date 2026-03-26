@@ -50,6 +50,8 @@ class OptionsTabView:
 
         for field_name, field_info in fields_info.items():
             metadata = field_info["metadata"]
+            if metadata.get("exclude_from_options_ui"):
+                continue
             current_value = field_info["value"]
             # widget_type = metadata.get("widget_type", "input")
             label = metadata.get("label", field_name.replace("_", " ").title())

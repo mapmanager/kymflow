@@ -261,6 +261,7 @@ class FileTableView:
             parent=self._grid_container,
             runtimeWidgetName="FileTableView",
             on_build_context_menu=self._on_build_context_menu,
+            auto_size_columns=False,
         )
         self._grid.on_row_selected(self._on_row_selected)
         self._grid.on_cell_edited(self._on_cell_edited)

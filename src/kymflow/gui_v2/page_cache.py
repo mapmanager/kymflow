@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 from nicegui import app
 
+from kymflow.gui_v2.runtime_mode import is_native_mode
+
 if TYPE_CHECKING:
     from kymflow.gui_v2.pages.base_page import BasePage
 
@@ -33,9 +35,15 @@ def get_stable_session_id() -> str:
     This ID remains stable even when NiceGUI creates new client IDs on
     page navigation.
 
+    Web/browser mode only: requires ``storage_secret`` and ``app.storage.user``.
+    Native mode should not call this; returns a placeholder if invoked defensively.
+
     Returns:
         Stable session ID string.
     """
+    if is_native_mode():
+        return "native-process-session"
+
     session_key = "_kymflow_v2_session_id"
     session_id = app.storage.user.get(session_key)
     if session_id is None:

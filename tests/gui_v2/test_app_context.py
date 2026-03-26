@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2 import app_context
-from kymflow.gui_v2.app_context import AppContext, THEME_STORAGE_KEY
+from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.app_config import AppConfig, DEFAULT_FOLDER_DEPTH, DEFAULT_TEXT_SIZE
 
 
@@ -21,13 +21,6 @@ class DummyAppState:
         self.theme_calls.append(mode)
 
 
-class DummyStorage:
-    """Simple storage stub mimicking nicegui.app.storage."""
-
-    def __init__(self) -> None:
-        self.user: dict[str, bool] = {}
-
-
 class DummyDarkMode:
     """Simple dark mode controller stub."""
 
@@ -35,14 +28,17 @@ class DummyDarkMode:
         self.value = False
 
 
-def test_init_dark_mode_reads_storage(monkeypatch) -> None:
-    """init_dark_mode_for_page syncs storage value and AppState theme."""
-    storage = DummyStorage()
-    storage.user[THEME_STORAGE_KEY] = True
-    monkeypatch.setattr(app_context, "app", SimpleNamespace(storage=storage))
+def test_init_dark_mode_reads_app_config(monkeypatch, tmp_path: Path) -> None:
+    """init_dark_mode_for_page syncs AppConfig and AppState theme."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    cfg.set_kymflow_dark_mode(True)
+    cfg.save()
+
     monkeypatch.setattr(app_context.ui, "dark_mode", lambda: DummyDarkMode())
 
     context = AppContext()
+    context.app_config = cfg
     dummy_state = DummyAppState()
     context.app_state = dummy_state
 
@@ -52,12 +48,15 @@ def test_init_dark_mode_reads_storage(monkeypatch) -> None:
     assert dummy_state.theme_calls[-1] == ThemeMode.DARK
 
 
-def test_toggle_theme_persists_and_updates_state(monkeypatch) -> None:
-    """toggle_theme should persist to storage and update AppState."""
-    storage = DummyStorage()
-    monkeypatch.setattr(app_context, "app", SimpleNamespace(storage=storage))
+def test_toggle_theme_persists_and_updates_state(monkeypatch, tmp_path: Path) -> None:
+    """toggle_theme should persist to AppConfig and update AppState."""
+    cfg_path = tmp_path / "app_config.json"
+    cfg = AppConfig.load(config_path=cfg_path)
+    cfg.set_kymflow_dark_mode(True)
+    cfg.save()
 
     context = AppContext()
+    context.app_config = cfg
     dummy_state = DummyAppState()
     context.app_state = dummy_state
 
@@ -67,7 +66,7 @@ def test_toggle_theme_persists_and_updates_state(monkeypatch) -> None:
     context.toggle_theme(dark_mode)
 
     assert dark_mode.value is False
-    assert storage.user[THEME_STORAGE_KEY] is False
+    assert cfg.get_kymflow_dark_mode() is False
     assert dummy_state.theme_calls[-1] == ThemeMode.LIGHT
 
 

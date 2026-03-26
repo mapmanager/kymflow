@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import importlib.util
+import multiprocessing
 import sys
 
 import pytest
@@ -36,10 +37,21 @@ def _load_app_module(monkeypatch):
     # unwritable in sandboxed environments such as Cursor).
     os.environ["KYMFLOW_DISABLE_FILE_LOG"] = "1"
 
+    # AppContext() runs at import; ensure we are "main" so app_state is initialized.
+    class _MainProcess:
+        name = "MainProcess"
+
+    monkeypatch.setattr(multiprocessing, "current_process", lambda: _MainProcess())
+
+    from kymflow.gui_v2.app_context import AppContext
+
+    AppContext._instance = None
+
     import kymflow.gui_v2 as gui_v2_pkg
 
     app_path = Path(gui_v2_pkg.__file__).with_name("app.py")
     module_name = "kymflow.gui_v2._app_test"
+    sys.modules.pop(module_name, None)
     spec = importlib.util.spec_from_file_location(module_name, app_path)
     app_module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = app_module
@@ -52,6 +64,7 @@ def _load_app_module(monkeypatch):
 
 def test_home_reuses_cached_page(monkeypatch) -> None:
     """Home route should reuse cached page when available."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -73,6 +86,7 @@ def test_home_reuses_cached_page(monkeypatch) -> None:
 
 def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None:
     """Home route should emit SelectPathEvent when last folder exists in config."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -104,6 +118,7 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
 
 def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> None:
     """Home route should not emit SelectPathEvent if folder already loaded."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -128,6 +143,7 @@ def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> N
 
 def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Path) -> None:
     """Home route should load last folder from config."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -174,6 +190,7 @@ def test_main_registers_shutdown_handlers(monkeypatch) -> None:
 
 def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
     """Home route should not emit SelectPathEvent when user config has no last folder."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
@@ -207,6 +224,7 @@ def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
 
 def test_home_bootstrap_loads_csv_from_last_path(monkeypatch, tmp_path: Path) -> None:
     """Home route should load CSV from last_path when it's a CSV file."""
+    monkeypatch.setenv("KYMFLOW_GUI_NATIVE", "0")
     app_module = _load_app_module(monkeypatch)
     monkeypatch.setattr(app_module, "inject_global_styles", lambda: None)
     monkeypatch.setattr(app_module, "get_stable_session_id", lambda: "session-1")
