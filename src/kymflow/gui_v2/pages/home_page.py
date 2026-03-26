@@ -1086,6 +1086,11 @@ class HomePage(BasePage):
                                     self._main_contrast_widget_view.set_selected_roi(current_roi)
                                 self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
                                 self._main_contrast_widget_view.set_theme(self.context.app_state.theme_mode)
+                                # Replay current display params on initial hydration/re-render.
+                                current_display = self.context.app_state.image_display_params
+                                if current_display is not None:
+                                    self._image_line_viewer.set_image_display(current_display)
+                                    self._main_contrast_widget_view.set_image_display(current_display)
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:

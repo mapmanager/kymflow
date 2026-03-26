@@ -11,12 +11,9 @@ from typing import TYPE_CHECKING
 from kymflow.gui_v2.state import AppState
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import ImageDisplayChange
-from kymflow.core.utils.logging import get_logger
 
 if TYPE_CHECKING:
     pass
-
-logger = get_logger(__name__)
 
 
 class ImageDisplayController:
@@ -55,10 +52,4 @@ class ImageDisplayController:
         Args:
             e: ImageDisplayChange event (phase="intent") containing the display parameters.
         """
-        logger.info(
-            "ImageDisplayController intent params colorscale=%s zmin=%s zmax=%s",
-            e.params.colorscale,
-            e.params.zmin,
-            e.params.zmax,
-        )
         self._app_state.set_image_display(e.params)

@@ -84,6 +84,7 @@ class AppState:
         self.selected_event_options: Optional["EventSelectionOptions"] = None
         self.selected_event_origin: Optional[Any] = None
         self.theme_mode: ThemeMode = ThemeMode.DARK
+        self.image_display_params: ImageDisplayParams = ImageDisplayParams(colorscale="gray")
         
         # folder_depth will be initialized from app_config in AppContext.__init__
         # Default to 4 if app_config is not available yet
@@ -304,6 +305,7 @@ class AppState:
     
     def set_image_display(self, params: ImageDisplayParams) -> None:
         """Set image display parameters and notify handlers."""
+        self.image_display_params = params
         for handler in list(self._image_display_changed_handlers):
             try:
                 handler(params)

@@ -470,26 +470,29 @@ class ImageLineViewerView:
 
     def _set_image_display_impl(self, params: ImageDisplayParams) -> None:
         """Internal implementation of set_image_display."""
+        previous_colorscale = self._display_params.colorscale if self._display_params else None
         self._display_params = params
-        logger.info(
-            "ImageLineViewerView apply display colorscale=%s zmin=%s zmax=%s",
-            params.colorscale,
-            params.zmin,
-            params.zmax,
-        )
         if params.zmin is None or params.zmax is None:
             return
-        self.set_display_fast(
-            self._to_plotly_colorscale(params.colorscale),
-            int(params.zmin),
-            int(params.zmax),
-        )
+        lut_resolved = self._to_plotly_colorscale(params.colorscale)
+        lut_changed = previous_colorscale != params.colorscale
+        if lut_changed and self._current_figure_dict is not None:
+            for trace in self._current_figure_dict.get("data", []):
+                if trace.get("type") == "heatmap":
+                    trace["colorscale"] = lut_resolved
+                    trace["autocolorscale"] = False
+            try:
+                self.ui_plotly_update_figure()
+            except RuntimeError as e:
+                if "deleted" not in str(e).lower():
+                    raise
+        self.set_contrast_fast(int(params.zmin), int(params.zmax))
 
     @staticmethod
-    def _to_plotly_colorscale(colorscale: str) -> str:
+    def _to_plotly_colorscale(colorscale: str) -> str | list[list[float | str]]:
         """Normalize app/widget LUT names to Plotly-accepted names."""
         resolved = get_colorscale(colorscale)
-        return resolved if isinstance(resolved, str) else "gray"
+        return resolved
 
     def set_contrast_fast(self, zmin: int, zmax: int) -> None:
         """Fast client-side zmin/zmax update via Plotly.restyle."""
@@ -521,7 +524,6 @@ class ImageLineViewerView:
                 if trace.get("type") == "heatmap":
                     trace["colorscale"] = lut_resolved
                     trace["autocolorscale"] = False
-        logger.info("ImageLineViewerView set_colorscale_fast lut=%s", lut_resolved)
         js = f"""
         (() => {{
           const gd = document.getElementById({self._plot_div_id!r});
@@ -548,12 +550,6 @@ class ImageLineViewerView:
                     trace["autocolorscale"] = False
                     trace["zmin"] = zmin
                     trace["zmax"] = zmax
-        logger.info(
-            "ImageLineViewerView set_display_fast lut=%s zmin=%s zmax=%s",
-            lut_resolved,
-            zmin,
-            zmax,
-        )
         js = f"""
         (() => {{
           const gd = document.getElementById({self._plot_div_id!r});
@@ -565,10 +561,7 @@ class ImageLineViewerView:
             autocolorscale: [false],
             zmin: [{zmin}],
             zmax: [{zmax}],
-          }}, [heatmapIdx]).then(() => {{
-            const t = gd.data[heatmapIdx] || {{}};
-            console.debug('kymflow set_display_fast readback', heatmapIdx, t.colorscale, t.autocolorscale, t.zmin, t.zmax);
-          }});
+          }}, [heatmapIdx]);
         }})()
         """
         ui.run_javascript(js)

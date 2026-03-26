@@ -217,12 +217,6 @@ class AppStateBridgeController:
                 f"[bridge] Skipping ImageDisplayChange emit - client deleted (bus={self._bus._client_id[:8]}...)"
             )
             return
-        logger.info(
-            "AppStateBridge state emit params colorscale=%s zmin=%s zmax=%s",
-            params.colorscale,
-            params.zmin,
-            params.zmax,
-        )
         # State events always use EXTERNAL origin (they come from AppState, not UI)
         self._bus.emit(
             ImageDisplayChange(
