@@ -65,6 +65,8 @@ from kymflow.gui_v2.views import (
     MetadataHeaderBindings,
     MetadataHeaderView,
     MetadataTabView,
+    MainContrastWidgetBindings,
+    MainContrastWidgetView,
     OptionsTabView,
     PlotPoolBindings,  # 20260213ppc
     TaskProgressBindings,
@@ -167,6 +169,7 @@ class HomePage(BasePage):
             on_kym_event_x_range=bus.emit,
             on_set_roi_bounds=bus.emit,
         )
+        self._main_contrast_widget_view = MainContrastWidgetView(on_image_display_change=bus.emit)
         self._event_view = KymEventView(
             context,
             on_selected=bus.emit,
@@ -182,6 +185,7 @@ class HomePage(BasePage):
         self._table_bindings: FileTableBindings | None = None
         self._folder_bindings: FolderSelectorBindings | None = None
         self._image_line_viewer_bindings: ImageLineViewerBindings | None = None
+        self._main_contrast_widget_bindings: MainContrastWidgetBindings | None = None
         self._event_bindings: KymEventBindings | None = None
         # 20260213ppc: Plot pool controller refs (set when LazySection render runs)
         self._plot_pool_controller_ref: dict = {"value": None}
@@ -369,6 +373,9 @@ class HomePage(BasePage):
         self._image_line_viewer_bindings = ImageLineViewerBindings(
             self.bus, self._image_line_viewer
         )
+        self._main_contrast_widget_bindings = MainContrastWidgetBindings(
+            self.bus, self._main_contrast_widget_view
+        )
         self._event_bindings = KymEventBindings(self.bus, self._event_view, app_state=self.context.app_state)
 
         # Splitter pane toolbar bindings
@@ -378,9 +385,11 @@ class HomePage(BasePage):
         self._drawer_task_progress_bindings = TaskProgressBindings(
             self.bus, self._drawer_task_progress_view
         )
-        self._drawer_contrast_bindings = ContrastBindings(
-            self.bus, self._drawer_contrast_view
-        )
+        # NOTE 20260326: old drawer contrast is intentionally inactive.
+        # Keeping UI visible, but bindings are disabled.
+        # self._drawer_contrast_bindings = ContrastBindings(
+        #     self.bus, self._drawer_contrast_view
+        # )
         self._drawer_line_plot_controls_bindings = LinePlotControlsBindings(
             self.bus, self._drawer_line_plot_controls_view
         )
@@ -1059,17 +1068,24 @@ class HomePage(BasePage):
                             _update_splitter_positions()
                         # TOP: Image/line viewer
                         with plot_splitter.before:
-                            self._image_line_viewer.render()
+                            with ui.column().classes("w-full h-full min-h-0 flex flex-col gap-1"):
+                                with ui.column().classes("w-full flex-none"):
+                                    self._main_contrast_widget_view.render()
+                                with ui.column().classes("w-full flex-1 min-h-0"):
+                                    self._image_line_viewer.render()
 
-                            # Initialize viewer with current AppState (if already set)
-                            # This ensures viewer shows current selection/theme on first render
-                            current_file = self.context.app_state.selected_file
-                            if current_file is not None:
-                                self._image_line_viewer.set_selected_file(current_file)
-                            current_roi = self.context.app_state.selected_roi_id
-                            if current_roi is not None:
-                                self._image_line_viewer.set_selected_roi(current_roi)
-                            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+                                # Initialize viewer with current AppState (if already set)
+                                # This ensures viewer shows current selection/theme on first render
+                                current_file = self.context.app_state.selected_file
+                                if current_file is not None:
+                                    self._image_line_viewer.set_selected_file(current_file)
+                                    self._main_contrast_widget_view.set_selected_file(current_file)
+                                current_roi = self.context.app_state.selected_roi_id
+                                if current_roi is not None:
+                                    self._image_line_viewer.set_selected_roi(current_roi)
+                                    self._main_contrast_widget_view.set_selected_roi(current_roi)
+                                self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+                                self._main_contrast_widget_view.set_theme(self.context.app_state.theme_mode)
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:

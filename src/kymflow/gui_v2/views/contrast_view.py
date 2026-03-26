@@ -21,7 +21,7 @@ from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.events_legacy import ImageDisplayOrigin
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
-from kymflow.gui_v2.events import ImageDisplayChange, SelectionOrigin
+from kymflow.gui_v2.events import ImageDisplayChange
 from kymflow.core.utils.logging import get_logger
 from nicewidgets.utils.lazy_section import LazySection, LazySectionConfig
 
@@ -377,10 +377,12 @@ class ContrastView:
 
     def _emit_intent(self, params: ImageDisplayParams) -> None:
         """Emit ImageDisplayChange(phase="intent") event."""
-        self._on_image_display_change(
-            ImageDisplayChange(
-                params=params,
-                origin=SelectionOrigin.IMAGE_VIEWER,
-                phase="intent",
-            )
-        )
+        # NOTE 20260326: old drawer contrast is intentionally disabled.
+        # Keep UI visible, but do not emit app-level intents from this legacy panel.
+        # self._on_image_display_change(
+        #     ImageDisplayChange(
+        #         params=params,
+        #         origin=SelectionOrigin.IMAGE_VIEWER,
+        #         phase="intent",
+        #     )
+        # )

@@ -180,6 +180,12 @@ class ImageLineViewerBindings:
         Args:
             e: ImageDisplayChange event (phase="state") containing the new display parameters.
         """
+        self._logger.info(
+            "ImageLineViewerBindings state consume colorscale=%s zmin=%s zmax=%s",
+            e.params.colorscale,
+            e.params.zmin,
+            e.params.zmax,
+        )
         safe_call(self._view.set_image_display, e.params)
 
     def _on_edit_physical_units(self, e: EditPhysicalUnits) -> None:

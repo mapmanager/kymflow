@@ -14,6 +14,7 @@ from kymflow.gui_v2.views.line_plot_controls_view import LinePlotControlsView
 from kymflow.gui_v2.views.metadata_experimental_view import MetadataExperimentalView
 from kymflow.gui_v2.views.metadata_header_view import MetadataHeaderView
 from kymflow.gui_v2.views.metadata_tab_view import MetadataTabView
+from kymflow.gui_v2.views.main_contrast_widget_view import MainContrastWidgetView
 from kymflow.gui_v2.views.options_tab_view import OptionsTabView
 from kymflow.gui_v2.views.task_progress_view import TaskProgressView
 from kymflow.gui_v2.views.footer_view import FooterView
@@ -28,6 +29,7 @@ from kymflow.gui_v2.views.kym_event_bindings import KymEventBindings
 from kymflow.gui_v2.views.line_plot_controls_bindings import LinePlotControlsBindings
 from kymflow.gui_v2.views.metadata_experimental_bindings import MetadataExperimentalBindings
 from kymflow.gui_v2.views.metadata_header_bindings import MetadataHeaderBindings
+from kymflow.gui_v2.views.main_contrast_widget_bindings import MainContrastWidgetBindings
 from kymflow.gui_v2.views.plot_pool_bindings import PlotPoolBindings  # 20260213ppc
 from kymflow.gui_v2.views.task_progress_bindings import TaskProgressBindings
 
@@ -45,6 +47,7 @@ __all__ = [
     "MetadataExperimentalView",
     "MetadataHeaderView",
     "MetadataTabView",
+    "MainContrastWidgetView",
     "OptionsTabView",
     "TaskProgressView",
     "FooterView",
@@ -58,6 +61,7 @@ __all__ = [
     "LinePlotControlsBindings",
     "MetadataExperimentalBindings",
     "MetadataHeaderBindings",
+    "MainContrastWidgetBindings",
     "PlotPoolBindings",  # 20260213ppc
     "TaskProgressBindings",
 ]

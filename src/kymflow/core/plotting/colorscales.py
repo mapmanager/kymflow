@@ -8,6 +8,9 @@ from typing import Dict, List
 COLORSCALE_OPTIONS: List[Dict[str, str]] = [
     {"label": "Grayscale", "value": "Gray"},
     {"label": "Grayscale (Inverted)", "value": "inverted_grays"},
+    {"label": "Red", "value": "Red"},
+    {"label": "Green", "value": "Green"},
+    {"label": "Blue", "value": "Blue"},
     {"label": "Viridis", "value": "Viridis"},
     {"label": "Plasma", "value": "Plasma"},
     {"label": "Hot", "value": "Hot"},
@@ -26,9 +29,26 @@ def get_colorscale(name: str) -> str | List[List[float | str]]:
     Returns:
         Colorscale string for built-in scales, or list for custom scales
     """
+    raw_name = (name or "").strip()
+    lowered = raw_name.lower()
+
     # Handle custom inverted grayscale
-    if name == "inverted_grays":
+    if lowered == "inverted_grays":
         return [[0, "rgb(255,255,255)"], [1, "rgb(0,0,0)"]]
 
-    # Return name as-is for built-in Plotly colorscales
-    return name
+    # UI aliases -> Plotly built-ins (lowercase canonical)
+    alias_map = {
+        "gray": "gray",
+        "grays": "gray",
+        "greys": "gray",
+        "red": "reds",
+        "green": "greens",
+        "blue": "blues",
+        "viridis": "viridis",
+        "plasma": "plasma",
+        "hot": "hot",
+        "jet": "jet",
+        "cool": "cool",
+        "rainbow": "rainbow",
+    }
+    return alias_map.get(lowered, lowered)

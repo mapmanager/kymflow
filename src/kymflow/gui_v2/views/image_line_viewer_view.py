@@ -18,7 +18,6 @@ from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.plotting import (
     # plot_image_line_plotly,
     plot_image_line_plotly_v3,
-    update_colorscale,
     update_contrast,
     # reset_image_zoom,  # DEPRECATED: Use dict-based updates instead (update_xaxis_range_v2, update_yaxis_range_v2)
     # update_xaxis_range,  # OLD: kept for reference during transition (replaced by update_xaxis_range_v2)
@@ -27,6 +26,7 @@ from kymflow.core.plotting import (
     select_kym_event_rect,
 )
 from kymflow.core.plotting.line_plots import refresh_kym_event_rects
+from kymflow.core.plotting.colorscales import get_colorscale
 from kymflow.core.plotting.theme import ThemeMode
 from kymflow.gui_v2.state import ImageDisplayParams
 from kymflow.gui_v2.client_utils import safe_call
@@ -471,7 +471,107 @@ class ImageLineViewerView:
     def _set_image_display_impl(self, params: ImageDisplayParams) -> None:
         """Internal implementation of set_image_display."""
         self._display_params = params
-        self._update_contrast_partial()
+        logger.info(
+            "ImageLineViewerView apply display colorscale=%s zmin=%s zmax=%s",
+            params.colorscale,
+            params.zmin,
+            params.zmax,
+        )
+        if params.zmin is None or params.zmax is None:
+            return
+        self.set_display_fast(
+            self._to_plotly_colorscale(params.colorscale),
+            int(params.zmin),
+            int(params.zmax),
+        )
+
+    @staticmethod
+    def _to_plotly_colorscale(colorscale: str) -> str:
+        """Normalize app/widget LUT names to Plotly-accepted names."""
+        resolved = get_colorscale(colorscale)
+        return resolved if isinstance(resolved, str) else "gray"
+
+    def set_contrast_fast(self, zmin: int, zmax: int) -> None:
+        """Fast client-side zmin/zmax update via Plotly.restyle."""
+        if self._plot is None:
+            return
+        if self._current_figure_dict is not None:
+            for trace in self._current_figure_dict.get("data", []):
+                if trace.get("type") == "heatmap":
+                    trace["zmin"] = zmin
+                    trace["zmax"] = zmax
+        js = f"""
+        (() => {{
+          const gd = document.getElementById({self._plot_div_id!r});
+          if (!gd) return;
+          const heatmapIdx = (gd.data || []).findIndex(t => t && t.type === 'heatmap');
+          if (heatmapIdx < 0) return;
+          Plotly.restyle(gd, {{ zmin: [{zmin}], zmax: [{zmax}] }}, [heatmapIdx]);
+        }})()
+        """
+        ui.run_javascript(js)
+
+    def set_colorscale_fast(self, lut_name: str) -> None:
+        """Fast client-side LUT update via Plotly.restyle."""
+        if self._plot is None:
+            return
+        lut_resolved = self._to_plotly_colorscale(lut_name)
+        if self._current_figure_dict is not None:
+            for trace in self._current_figure_dict.get("data", []):
+                if trace.get("type") == "heatmap":
+                    trace["colorscale"] = lut_resolved
+                    trace["autocolorscale"] = False
+        logger.info("ImageLineViewerView set_colorscale_fast lut=%s", lut_resolved)
+        js = f"""
+        (() => {{
+          const gd = document.getElementById({self._plot_div_id!r});
+          if (!gd || !gd.data) return;
+          const heatmapIdx = (gd.data || []).findIndex(t => t && t.type === 'heatmap');
+          if (heatmapIdx < 0) return;
+          Plotly.restyle(gd, {{
+            autocolorscale: [false],
+            colorscale: [{lut_resolved!r}],
+          }}, [heatmapIdx]);
+        }})()
+        """
+        ui.run_javascript(js)
+
+    def set_display_fast(self, lut_name: str, zmin: int, zmax: int) -> None:
+        """Reliable LUT update + fast z-range update."""
+        if self._plot is None:
+            return
+        lut_resolved = self._to_plotly_colorscale(lut_name)
+        if self._current_figure_dict is not None:
+            for trace in self._current_figure_dict.get("data", []):
+                if trace.get("type") == "heatmap":
+                    trace["colorscale"] = lut_resolved
+                    trace["autocolorscale"] = False
+                    trace["zmin"] = zmin
+                    trace["zmax"] = zmax
+        logger.info(
+            "ImageLineViewerView set_display_fast lut=%s zmin=%s zmax=%s",
+            lut_resolved,
+            zmin,
+            zmax,
+        )
+        js = f"""
+        (() => {{
+          const gd = document.getElementById({self._plot_div_id!r});
+          if (!gd || !gd.data) return;
+          const heatmapIdx = gd.data.findIndex(t => t && t.type === 'heatmap');
+          if (heatmapIdx < 0) return;
+          Plotly.restyle(gd, {{
+            colorscale: [{lut_resolved!r}],
+            autocolorscale: [false],
+            zmin: [{zmin}],
+            zmax: [{zmax}],
+          }}, [heatmapIdx]).then(() => {{
+            const t = gd.data[heatmapIdx] || {{}};
+            console.debug('kymflow set_display_fast readback', heatmapIdx, t.colorscale, t.autocolorscale, t.zmin, t.zmax);
+          }});
+        }})()
+        """
+        ui.run_javascript(js)
 
     def zoom_to_event(self, e: EventSelection) -> None:
         """Zoom the x-axis to an event if options request it."""
@@ -778,12 +878,12 @@ class ImageLineViewerView:
         # Find the Scatter trace and update its y-values
         for trace in fig.data:
             if isinstance(trace, go.Scatter):
-                logger.warning(f'successfully Updating Scatter trace y-values')
+                logger.warning("successfully Updating Scatter trace y-values")
                 trace.y = filtered_y
                 break
         else:
             # No Scatter trace found, do full render
-            logger.warning(f'No Scatter trace found, do full render -> _render_combined()')
+            logger.warning("No Scatter trace found, do full render -> _render_combined()")
             self._render_combined()
             return
 
@@ -986,7 +1086,7 @@ class ImageLineViewerView:
             return
 
         # Update colorscale
-        update_colorscale(fig, display_params.colorscale)
+        self.set_colorscale_fast(self._to_plotly_colorscale(display_params.colorscale))
 
         # Update contrast (zmin/zmax)
         update_contrast(fig, zmin=display_params.zmin, zmax=display_params.zmax)
