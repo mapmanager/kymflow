@@ -1184,10 +1184,6 @@ docs = [
     { name = "pymdown-extensions" },
     { name = "tabulate" },
 ]
-gui = [
-    { name = "nicegui" },
-    { name = "pywebview" },
-]
 marimo = [
     { name = "marimo" },
 ]
@@ -1199,9 +1195,6 @@ test = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "selenium" },
-]
-web = [
-    { name = "nicegui" },
 ]
 
 [package.dev-dependencies]
@@ -1236,8 +1229,6 @@ requires-dist = [
     { name = "mkdocs-jupyter", marker = "extra == 'docs'", specifier = ">=0.24.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.23.0" },
-    { name = "nicegui", marker = "extra == 'gui'", specifier = "==3.7.1" },
-    { name = "nicegui", marker = "extra == 'web'", specifier = "==3.7.1" },
     { name = "numpy", specifier = ">=2.0.2" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "platformdirs", specifier = ">=4.2.0" },
@@ -1249,7 +1240,6 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
-    { name = "pywebview", marker = "extra == 'gui'", specifier = ">=6.1" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "scikit-image", specifier = ">=0.24.0" },
     { name = "selenium", marker = "extra == 'test'", specifier = ">=4.0.0" },
@@ -1257,7 +1247,7 @@ requires-dist = [
     { name = "tifffile", specifier = ">=2024.5.24" },
     { name = "tomlkit", specifier = ">=0.12.0" },
 ]
-provides-extras = ["gui", "web", "test", "marimo", "pyinstaller", "docs", "dev"]
+provides-extras = ["test", "marimo", "pyinstaller", "docs", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
