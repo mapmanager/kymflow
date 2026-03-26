@@ -48,17 +48,17 @@ python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('m
   || { echo "ERROR: matplotlib is still present (pre-install)." >&2; exit 1; }
 
 # ---- Install toolchain (pin nicegui; nicegui-pack comes with nicegui) ----
-echo "[build] Pinning nicegui==3.7.1..."
-uv pip install 'nicegui==3.7.1'
+# echo "[build] Pinning nicegui==3.7.1..."
+# uv pip install 'nicegui==3.7.1'
 
 echo "[build] Installing pyinstaller..."
 uv pip install pyinstaller
 
-echo "[build] Installing kymflow (editable) with [gui]..."
-uv pip install -e "$REPO_ROOT/.[gui]"
-
 echo "[build] Installing nicewidgets (editable) with [no_mpl]..."
 uv pip install -e "$NICEWIDGETS_ROOT/.[no_mpl]"
+
+echo "[build] Installing kymflow (editable) with [gui]..."
+uv pip install -e "$REPO_ROOT/."
 
 # ---- Post-install: matplotlib must still be absent ----
 echo "[build] Sanity check: matplotlib should NOT be importable (post-install)"
