@@ -78,5 +78,5 @@ class FileTablePersistenceController:
 
         if path:
             self._app_config.set_last_selected_file_path(path)
-            self._app_config.save()
+            # self._app_config.save()
             logger.info(f"stored selection {path!r} -> app_config.last_selected_file_path")

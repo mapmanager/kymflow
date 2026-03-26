@@ -168,12 +168,12 @@ class ImageLineViewerV2View:
         with self._container:
             theme_str = _to_nicewidgets_theme(self._theme)
 
-            def on_contrast_changed(ev: ContrastEvent) -> None:
-                """Apply contrast and colorscale changes from contrast widget locally."""
-                if self._image_roi_widget is None:
-                    return
-                self._image_roi_widget.set_contrast_fast(zmin=ev.zmin, zmax=ev.zmax)
-                self._image_roi_widget.set_colorscale(ev.color_lut)
+            # def on_contrast_changed(ev: ContrastEvent) -> None:
+            #     """Apply contrast and colorscale changes from contrast widget locally."""
+            #     if self._image_roi_widget is None:
+            #         return
+            #     self._image_roi_widget.set_contrast_fast(zmin=ev.zmin, zmax=ev.zmax)
+            #     self._image_roi_widget.set_colorscale(ev.color_lut)
 
             def on_channel_event(ev: ChannelEvent) -> None:
                 """Update contrast widget image when user changes the active channel."""

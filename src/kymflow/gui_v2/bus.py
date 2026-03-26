@@ -7,7 +7,8 @@ across client sessions.
 
 from __future__ import annotations
 
-import asyncio
+# import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, DefaultDict, Dict, List, Literal, Tuple, Type, TypeVar
 import inspect
@@ -244,10 +245,11 @@ class EventBus:
                 )
                 continue
 
-            if self._config.trace:
+            if 1 or self._config.trace:
                 name = getattr(handler, "__qualname__", repr(handler))
-                logger.info(f"[bus] emit -> {etype.__name__} handling by {name}")
-                logger.info(f"  phase={event_phase}, client={self._client_id}")
+                logger.info(f"[bus] emit event -> '{etype.__name__}' is handled by ->> {name}")
+                # logger.info(f"  phase='{event_phase}', client={self._client_id}")
+                logger.info(f"  phase='{event_phase}'")
 
             try:
                 # Async handler path: capture current handler, event, and client in default
@@ -267,9 +269,11 @@ class EventBus:
                     background_tasks.create(task_with_context())
 
                 else:
+                    _startTime = time.time()
                     # Synchronous handlers are invoked inline.
                     handler(event)
-
+                    _endTime = time.time()
+                    logger.info(f"[bus] handler {name} took {_endTime - _startTime} seconds")
             except Exception:
                 handler_name = getattr(handler, "__qualname__", repr(handler))
                 logger.exception(
