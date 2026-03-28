@@ -680,34 +680,6 @@ class HomePage(BasePage):
             return
         self._image_line_viewer.reset_zoom()
 
-    def _old__register_full_zoom_shortcut(self) -> None:
-        """Register a global Enter/Return shortcut for full zoom (unless editing)."""
-        if self._full_zoom_shortcut_registered:
-            return
-        self._full_zoom_shortcut_registered = True
-        ui.on(self._full_zoom_shortcut_event, self._on_full_zoom_shortcut)
-        ui.run_javascript(
-            """
-(function() {
-  if (window._kymflow_full_zoom_listener) return;
-  window._kymflow_full_zoom_listener = true;
-  window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    const active = document.activeElement;
-    const tag = active ? active.tagName : '';
-    const isEditable = !!active && (
-      active.isContentEditable ||
-      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
-      (active.classList && active.classList.contains('ag-cell-edit-input')) ||
-      (active.closest && (active.closest('.ag-cell-inline-editing') || active.closest('.ag-cell-editor')))
-    );
-    if (isEditable) return;
-    emitEvent('kymflow_full_zoom_enter', {});
-  });
-})();
-            """
-        )
-
     def _on_prev_next_file_shortcut(self, prev_next:str) -> None:
         """Handle Shift+Up previous file shortcut when not editing."""
         self.bus.emit(
@@ -1058,17 +1030,22 @@ class HomePage(BasePage):
                             # Initialize viewer with current AppState (if already set)
                             # This ensures viewer shows current selection/theme on first render
                             app_state = self.context.app_state
-                            self._image_line_viewer.set_selected_file(
-                                app_state.selected_file,
-                                app_state.selected_channel,
-                                app_state.selected_roi_id,
-                            )
-                            self._image_line_viewer.set_theme(self.context.app_state.theme_mode)
+                            # Avoid forcing an initial "no file" selection into the viewer.
+                            # The viewer already renders a lightweight placeholder in its own
+                            # render() path; programmatically selecting None here causes
+                            # redundant placeholder plot.update() calls during app startup.
+                            if app_state.selected_file is not None:
+                                self._image_line_viewer.set_selected_file(
+                                    app_state.selected_file,
+                                    app_state.selected_channel,
+                                    app_state.selected_roi_id,
+                                )
+
                             # Bus subscribers (e.g. plot pool) may have missed early AppState theme;
                             # re-broadcast so all Plotly UIs match app dark/light.
-                            self.bus.emit(
-                                ThemeChanged(theme=self.context.app_state.theme_mode)
-                            )
+                            # Theme application is handled by bindings; we don't call set_theme()
+                            # directly here to avoid duplicate ImageLineCombinedWidget updates.
+                            self.bus.emit(ThemeChanged(theme=self.context.app_state.theme_mode))
 
                         # BOTTOM: Event table + Plot pool in nested splitter (20260213ppc layout fix)
                         with plot_splitter.after:

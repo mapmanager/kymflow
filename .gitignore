@@ -1,3 +1,13 @@
+# macOS pkg build outputs and staging
+/packaging/macos-pkg/build/*
+/packaging/macos-pkg/dist/*
+/packaging/macos-pkg/payload/*
+
+# keep placeholder files so directories exist in git
+!/packaging/macos-pkg/build/.gitkeep
+!/packaging/macos-pkg/dist/.gitkeep
+!/packaging/macos-pkg/payload/.gitkeep
+
 .kymflow_hidden
 
 __hide__

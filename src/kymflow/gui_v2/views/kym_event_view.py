@@ -120,7 +120,7 @@ class KymEventView:
         selection_mode: SelectionMode = "single",
     ) -> None:
         self._app_context = app_context
-        self._on_selected = on_selected
+        self._on_selected = on_selected  # usually EventBus.emit(...)
         self._on_file_selected = on_file_selected
         self._on_kym_event = on_kym_event
         self._on_range_state = on_range_state
@@ -430,12 +430,17 @@ class KymEventView:
         """Programmatically select rows by event_id."""
         if self._grid is None:
             return
+        
+        logger.debug(f'-->> event_ids:{event_ids} origin:{origin}')
+
         self._suppress_emit = True
         try:
             if hasattr(self._grid, "set_selected_row_ids"):
+                logger.debug('    -->> programatic selection of aggrid row')
                 self._grid.set_selected_row_ids(event_ids, origin=origin.value)
         finally:
             self._suppress_emit = False
+
         if len(event_ids) == 1:
             self._selected_event_id = event_ids[0]
             
@@ -470,8 +475,9 @@ class KymEventView:
                     self._selected_event_roi_id = int(roi_id) if roi_id is not None else None
                     self._selected_event_path = str(path) if path else None
                     # Emit KymEventSelection for user-initiated selections (EVENT_TABLE origin)
-                    self._on_selected(
-                        KymEventSelection(
+                    
+
+                    kymEventSelection = KymEventSelection(
                             event_id=str(event_id),
                             roi_id=int(roi_id) if roi_id is not None else None,
                             path=str(path) if path else None,
@@ -483,11 +489,15 @@ class KymEventView:
                             origin=origin,
                             phase="intent",
                         )
-                    )
+
+                    logger.warning(f'user select row -> emitting new KymEventSelection() via _on_selected: {self._on_selected}')
+
+                    self._on_selected(kymEventSelection)
         else:
             self._selected_event_id = None
             self._selected_event_roi_id = None
             self._selected_event_path = None
+            
         self._update_range_button_state()
         self._update_add_delete_button_state()
 
@@ -533,6 +543,9 @@ class KymEventView:
         self._update_add_delete_button_state()
         
         # Emit KymEventSelection
+
+        logger.warning(f'user selected row -> create KymEventSelection event -> call _on_selected:{self._on_selected}')
+
         self._on_selected(
             KymEventSelection(
                 event_id=str(event_id),

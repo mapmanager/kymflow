@@ -93,8 +93,12 @@ class KymEventBindings:
         safe_call(self._view.set_selected_roi, e.roi_id)
 
     def _on_event_selection_changed(self, e: KymEventSelection) -> None:
+        # Selections that originated in the event table already drive the grid; do not
+        # call set_selected_event_ids (would re-enter table selection / feedback loops).
         if e.origin == SelectionOrigin.EVENT_TABLE:
             return
+
+        logger.warning('HERE HERE HEREH HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE HERE')
         if e.event_id is None:
             safe_call(self._view.set_selected_event_ids, [], origin=SelectionOrigin.EXTERNAL)
         else:
@@ -105,11 +109,14 @@ class KymEventBindings:
             )
 
     def _on_kym_event_x_range(self, e: SetKymEventXRange) -> None:
-        # self._logger.debug("received SetKymEventXRange event_id=%s", e.event_id)
+        self._logger.debug("xxx --- xxx --- received SetKymEventXRange event_id=%s", e.event_id)
         safe_call(self._view.handle_set_kym_event_x_range, e)
 
     def _on_kym_event(self, e: KymEvent) -> None:
         """Update event table after KymEvent state (ADD/EDIT/DELETE)."""
+        
+        logger.warning(f'xxx --- xxx --- on_kym_event e.action is:{e.action}')
+
         if self._current_file is None:
             return
         blinded = (

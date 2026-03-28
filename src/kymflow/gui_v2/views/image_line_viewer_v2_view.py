@@ -158,7 +158,6 @@ class ImageLineViewerV2View:
         from nicewidgets.image_line_widget.models import (
             AxisEvent,
             ChannelEvent,
-            ContrastEvent,
             ROIEvent,
             ROIEventType,
         )
@@ -168,30 +167,8 @@ class ImageLineViewerV2View:
         with self._container:
             theme_str = _to_nicewidgets_theme(self._theme)
 
-            # def on_contrast_changed(ev: ContrastEvent) -> None:
-            #     """Apply contrast and colorscale changes from contrast widget locally."""
-            #     if self._image_roi_widget is None:
-            #         return
-            #     self._image_roi_widget.set_contrast_fast(zmin=ev.zmin, zmax=ev.zmax)
-            #     self._image_roi_widget.set_colorscale(ev.color_lut)
-
             def on_channel_event(ev: ChannelEvent) -> None:
                 """Update contrast widget image when user changes the active channel."""
-                # if self._image_roi_widget is None or self._contrast_widget is None:
-                #     return
-                # manager = self._image_roi_widget.manager
-                # names = list(manager.channels.keys())
-                # if ev.channel_name not in names:
-                #     return
-                # idx = names.index(ev.channel_name)
-                # ch = manager.channels[ev.channel_name]
-                # # Treat channel as opaque int defined by caller; prefer parsing from name.
-                # try:
-                #     channel_int = int(ev.channel_name)
-                # except ValueError:
-                #     channel_int = idx
-                # self._contrast_widget.set_channel(channel_int, ch.data)
-
                 # Emit ChannelSelection intent event upstream if callback is provided.
                 if self._on_channel_select is not None:
                     from kymflow.gui_v2.events import ChannelSelection, SelectionOrigin
@@ -361,7 +338,7 @@ class ImageLineViewerV2View:
                 vel_arr = radon.get_analysis_value(self._current_roi_id, channel, "velocity")
 
         # Derive events for the current ROI/channel using existing logic.
-        acq_events = []
+        acq_events = None
         if self._current_roi_id is not None and self._current_channel is not None:
             kym_analysis = kf.get_kym_analysis()
             if self._event_filter:
@@ -370,7 +347,11 @@ class ImageLineViewerV2View:
                 )
             else:
                 events_raw = kym_analysis.get_velocity_events(self._current_roi_id, self._current_channel)
-            acq_events = velocity_events_to_acq_image_events(events_raw) or []
+            # Avoid forcing Plotly set_events([]) when ROI/channel aren't ready.
+            # `switch_file(..., events=None)` keeps the initial "clear" behavior
+            # without triggering an extra update.
+            events_list = velocity_events_to_acq_image_events(events_raw) or []
+            acq_events = events_list if events_list else None
 
         # Single combined update for image + line + events (including ROI selection).
         selected_roi_name = str(self._current_roi_id) if self._current_roi_id is not None else None
@@ -691,8 +672,11 @@ class ImageLineViewerV2View:
 
         if e.event_id and e.event and e.options and e.options.zoom:
             pad = float(e.options.zoom_pad_sec)
+            # logger.warning(f'case 1: calling self._combined.select_event_and_zoom(e.event_id, e.event.t_start, pad) with e:{e}')
+
             self._combined.select_event_and_zoom(e.event_id, e.event.t_start, pad)
         else:
+            # logger.warning(f'case 2: calling self._combined.highlight_event(event_id_str) with event_id_str:{event_id_str}')
             self._combined.highlight_event(event_id_str)
 
     def set_selected_file(

@@ -89,13 +89,13 @@ class ImageLineViewerV2Bindings:
         """Update view with full selection state (file, channel, roi_id) from the event.
         ROI is set as part of set_selected_file; ROISelection is handled in _on_roi_changed.
         Heavy Plotly updates run off main loop via run.io_bound."""
-        def _do_update() -> None:
+        def _do_on_file_selection_changed() -> None:
             safe_call(self._view.set_selected_file, e.file, e.channel, e.roi_id)
             # Remember ROI applied as part of FileSelection so we can ignore the
             # redundant ROISelection(state) that follows from AppState.
             self._last_file_selection_roi_id = e.roi_id
 
-        await run.io_bound(_do_update)
+        await run.io_bound(_do_on_file_selection_changed)
 
     def _on_file_changed(self, e: FileChanged) -> None:
         """Handle FileChanged state events and refresh ROIs when needed.
@@ -182,6 +182,7 @@ class ImageLineViewerV2Bindings:
         safe_call(self._view.refresh_events_for_current_roi)
 
     def _on_event_selected(self, e: KymEventSelection) -> None:
+        # logger.warning(f'calling self._view.zoom_to_event(e) with e:{e}')
         safe_call(self._view.zoom_to_event, e)
 
     def _on_kym_event_range_state(self, e: SetKymEventRangeState) -> None:

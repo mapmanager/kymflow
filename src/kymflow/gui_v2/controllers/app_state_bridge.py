@@ -177,6 +177,9 @@ class AppStateBridgeController:
             return
 
         selection_origin = origin if origin is not None else SelectionOrigin.EXTERNAL
+        
+        logger.warning(f'emitting KymEventSelection phase `state` with roi_id:{roi_id} event_id:{event_id}')
+        
         self._bus.emit(
             KymEventSelection(
                 event_id=event_id,

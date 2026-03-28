@@ -67,6 +67,8 @@ class EventBus:
             Type[Any], List[Tuple[Callable[[Any], None], EventPhase | None]]
         ] = DefaultDict(list)
         self._client_id: str = client_id
+        self._emit_seq: int = 0
+        self._emit_stack: List[int] = []
         logger.debug(f"[bus] Created EventBus for client {client_id}")
 
     def subscribe(
@@ -213,6 +215,7 @@ class EventBus:
 
         # Filter handlers by phase if event has phase attribute
         event_phase: EventPhase | None = getattr(event, "phase", None)
+        phase_text = event_phase or "none"
         filtered_handlers: List[Tuple[Callable[[Any], None], EventPhase | None]] = []
 
         for handler, handler_phase in all_handlers:
@@ -227,58 +230,94 @@ class EventBus:
                 # Phase matches - deliver event
                 filtered_handlers.append((handler, handler_phase))
 
-        if self._config.trace:
-            logger.debug(f"[bus] received {etype.__name__} phase={event_phase}")
-            logger.debug(f'  event:{event}')
-            # logger.info(f"  phase={event_phase}")
-            logger.debug(f'  client={self._client_id}')
-            logger.debug(f'  num handlers={len(filtered_handlers)}')
+        # from kymflow.gui_v2.events import KymEventSelection
+        # _do_debug = isinstance(event, KymEventSelection)
+        from kymflow.gui_v2.events import FileSelection
+        _do_debug = isinstance(event, FileSelection)
+        # _do_debug = False
 
+        self._emit_seq += 1
+        emit_id = self._emit_seq
+        parent_emit_id = self._emit_stack[-1] if self._emit_stack else None
+        depth = len(self._emit_stack)
+        parent_text = parent_emit_id if parent_emit_id is not None else "-"
+        emit_start = time.perf_counter()
+        self._emit_stack.append(emit_id)
 
-        for handler, phase in filtered_handlers:
-            # Defensive guard: skip any non-callable handlers so a bad subscription
-            # entry cannot crash the entire bus.
-            if handler is None or not callable(handler):
-                logger.warning(
-                    f"[bus] Skipping non-callable handler {handler!r} for {etype.__name__} "
-                    f"(phase={phase}, client={self._client_id})"
+        try:
+            if _do_debug or self._config.trace:
+                print('')
+                logger.debug(
+                    f"evbus recieved phase={phase_text} event={etype.__name__} "
+                    f"eid={emit_id} depth={depth} pid={parent_text} n_handlers={len(filtered_handlers)}"
                 )
-                continue
 
-            if 1 or self._config.trace:
+            for handler, phase in filtered_handlers:
+                # Defensive guard: skip any non-callable handlers so a bad subscription
+                # entry cannot crash the entire bus.
+                if handler is None or not callable(handler):
+                    logger.error(
+                        f"[bus] Skipping non-callable handler {handler!r} for {etype.__name__} "
+                        f"(phase={phase}, client={self._client_id})"
+                    )
+                    continue
+
                 name = getattr(handler, "__qualname__", repr(handler))
-                logger.info(f"[bus] emit event -> '{etype.__name__}' is handled by ->> {name}")
-                # logger.info(f"  phase='{event_phase}', client={self._client_id}")
-                logger.info(f"  phase='{event_phase}'")
+                if _do_debug or self._config.trace:
+                    logger.warning(
+                        f"evbus call phase={phase_text} event={etype.__name__} "
+                        f"eid={emit_id} depth={depth} pid={parent_text} handler={name}"
+                    )
 
-            try:
-                # Async handler path: capture current handler, event, and client in default
-                # arguments to avoid late-binding closure bugs when scheduling the task.
-                if inspect.iscoroutinefunction(handler):
-                    current_client = context.client
+                try:
+                    # Async handler path: capture current handler, event, and client in default
+                    # arguments to avoid late-binding closure bugs when scheduling the task.
+                    if inspect.iscoroutinefunction(handler):
+                        if _do_debug or self._config.trace:
+                            logger.warning(
+                                f"evbus call phase={phase_text} event={etype.__name__} "
+                                f"eid={emit_id} depth={depth} pid={parent_text} handler={name} async=true"
+                            )
 
-                    async def task_with_context(
-                        h=handler,
-                        ev=event,
-                        client=current_client,
-                    ):
-                        # Re-enter the NiceGUI client context and invoke the handler.
-                        with client:
-                            await h(ev)
+                        current_client = context.client
 
-                    background_tasks.create(task_with_context())
+                        async def task_with_context(
+                            h=handler,
+                            ev=event,
+                            client=current_client,
+                        ):
+                            # Re-enter the NiceGUI client context and invoke the handler.
+                            with client:
+                                await h(ev)
 
-                else:
-                    _startTime = time.time()
-                    # Synchronous handlers are invoked inline.
-                    handler(event)
-                    _endTime = time.time()
-                    logger.info(f"[bus] handler {name} took {_endTime - _startTime} seconds")
-            except Exception:
-                handler_name = getattr(handler, "__qualname__", repr(handler))
-                logger.exception(
-                    f"[bus] Exception in handler {handler_name} for {etype.__name__} "
-                    f"(client={self._client_id})"
+                        background_tasks.create(task_with_context())
+
+                    else:
+                        _start = time.perf_counter()
+
+                        # Synchronous handlers are invoked inline.
+                        handler(event)
+
+                        _elapsed_s = time.perf_counter() - _start
+                        if (_do_debug or self._config.trace) and _elapsed_s > 0.001:
+                            logger.warning(
+                                f"evbus took phase={phase_text} event={etype.__name__} "
+                                f"eid={emit_id} depth={depth} pid={parent_text} "
+                                f"handler={name} ms={_elapsed_s * 1000:.3f}"
+                            )
+
+                except Exception:
+                    logger.exception(
+                        f"evbus err phase={phase_text} event={etype.__name__} "
+                        f"eid={emit_id} depth={depth} pid={parent_text} handler={name}"
+                    )
+        finally:
+            _ = self._emit_stack.pop()
+            if _do_debug or self._config.trace:
+                emit_elapsed_ms = (time.perf_counter() - emit_start) * 1000
+                logger.debug(
+                    f"    -->> evbus done phase={phase_text} event={etype.__name__} "
+                    f"eid={emit_id} depth={depth} pid={parent_text} -->> took ms={emit_elapsed_ms:.3f}"
                 )
 
     def clear(self) -> None:

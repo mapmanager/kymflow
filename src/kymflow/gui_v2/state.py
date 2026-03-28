@@ -379,7 +379,7 @@ class AppState:
         
         # n = len(self._event_selection_changed_handlers)
         # logger.info(
-        #     f"select_velocity_event: calling n:{n} event_selection_changed handlers for event_id={event_id}"
+        #     f"appstate has its own handlers, calling n:{n} self._event_selection_changed handlers for event_id={event_id}"
         # )
 
         for handler in list(self._event_selection_changed_handlers):
