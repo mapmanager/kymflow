@@ -1,0 +1,104 @@
+#!/bin/bash
+set -euo pipefail
+
+log() {
+  echo "[KymFlow postinstall] $*"
+}
+
+fail() {
+  echo "[KymFlow postinstall] ERROR: $*" >&2
+  exit 1
+}
+
+USER_HOME="${HOME:-}"
+if [ -z "${USER_HOME}" ] || [ ! -d "${USER_HOME}" ]; then
+  CURRENT_USER="$(stat -f%Su /dev/console)"
+  USER_HOME="$(dscl . -read "/Users/${CURRENT_USER}" NFSHomeDirectory | awk '{print $2}')"
+fi
+
+[ -n "${USER_HOME}" ] || fail "Could not determine user home"
+[ -d "${USER_HOME}" ] || fail "Resolved user home does not exist: ${USER_HOME}"
+
+APP_ROOT="${USER_HOME}/Library/Application Support/KymFlow"
+UV_ROOT="${APP_ROOT}/uv"
+UV_BIN="${UV_ROOT}/uv"
+VENV_DIR="${APP_ROOT}/venv"
+PAYLOAD_ROOT="${APP_ROOT}/payload"
+PYTHON_BIN="${VENV_DIR}/bin/python"
+JUPYTER_BIN="${VENV_DIR}/bin/jupyter"
+
+WORKSPACE_ROOT="${USER_HOME}/Documents/KymFlow"
+NOTEBOOKS_DIR="${WORKSPACE_ROOT}/Notebooks"
+DATA_DIR="${WORKSPACE_ROOT}/Data"
+LAUNCHER_PATH="${WORKSPACE_ROOT}/Open KymFlow.command"
+
+PKG_PAYLOAD_ROOT="/Library/Application Support/KymFlowPayload"
+PKG_KYMFLOW_SRC="${PKG_PAYLOAD_ROOT}/kymflow"
+
+log "USER_HOME=${USER_HOME}"
+log "APP_ROOT=${APP_ROOT}"
+log "PKG_KYMFLOW_SRC=${PKG_KYMFLOW_SRC}"
+
+[ -d "${PKG_KYMFLOW_SRC}" ] || fail "Package payload missing at ${PKG_KYMFLOW_SRC}"
+[ -f "${PKG_KYMFLOW_SRC}/pyproject.toml" ] || fail "pyproject.toml missing in payload"
+[ -f "${PKG_KYMFLOW_SRC}/README.md" ] || fail "README.md missing in payload"
+[ -f "${PKG_KYMFLOW_SRC}/LICENSE" ] || fail "LICENSE missing in payload"
+[ -d "${PKG_KYMFLOW_SRC}/src" ] || fail "src/ missing in payload"
+[ -d "${PKG_KYMFLOW_SRC}/notebooks" ] || fail "notebooks/ missing in payload"
+
+mkdir -p "${APP_ROOT}" "${WORKSPACE_ROOT}" "${NOTEBOOKS_DIR}" "${DATA_DIR}"
+
+rm -rf "${PAYLOAD_ROOT}"
+mkdir -p "${PAYLOAD_ROOT}"
+cp -R "${PKG_KYMFLOW_SRC}" "${PAYLOAD_ROOT}/kymflow"
+
+if [ ! -x "${UV_BIN}" ]; then
+  log "Installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="${UV_ROOT}" UV_NO_MODIFY_PATH=1 sh
+fi
+
+[ -x "${UV_BIN}" ] || fail "uv not found after install: ${UV_BIN}"
+
+log "Installing Python 3.12 and creating venv"
+"${UV_BIN}" python install 3.12
+"${UV_BIN}" venv --python 3.12 --clear "${VENV_DIR}"
+
+[ -x "${PYTHON_BIN}" ] || fail "python not found in venv: ${PYTHON_BIN}"
+
+log "Installing JupyterLab and ipykernel"
+"${UV_BIN}" pip install --python "${PYTHON_BIN}" jupyterlab ipykernel
+
+log "Installing local kymflow project"
+"${UV_BIN}" pip install --python "${PYTHON_BIN}" "${PAYLOAD_ROOT}/kymflow"
+
+[ -x "${JUPYTER_BIN}" ] || fail "jupyter not found in venv: ${JUPYTER_BIN}"
+
+log "Registering Jupyter kernel"
+"${PYTHON_BIN}" -m ipykernel install --user --name kymflow --display-name "Python (kymflow)" || true
+
+if [ -z "$(find "${NOTEBOOKS_DIR}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+  log "Copying starter notebooks into ${NOTEBOOKS_DIR}"
+  cp -R "${PAYLOAD_ROOT}/kymflow/notebooks/." "${NOTEBOOKS_DIR}/"
+else
+  log "Notebook directory not empty; leaving user notebooks untouched"
+fi
+
+cat > "${LAUNCHER_PATH}" <<EOF
+#!/bin/bash
+set -euo pipefail
+
+APP_ROOT="\$HOME/Library/Application Support/KymFlow"
+VENV_DIR="\${APP_ROOT}/venv"
+NOTEBOOKS_DIR="\$HOME/Documents/KymFlow/Notebooks"
+
+mkdir -p "\${NOTEBOOKS_DIR}"
+cd "\${NOTEBOOKS_DIR}"
+
+exec "\${VENV_DIR}/bin/jupyter" lab --notebook-dir="\${NOTEBOOKS_DIR}"
+EOF
+
+chmod +x "${LAUNCHER_PATH}"
+
+log "Created launcher: ${LAUNCHER_PATH}"
+log "Postinstall complete"
+exit 0
