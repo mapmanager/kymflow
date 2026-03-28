@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <title>KymFlow Installer</title>
+
+    <welcome file="welcome.html"/>
+    <license file="license.txt"/>
+    <conclusion file="conclusion.html"/>
+
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+
+    <choices-outline>
+        <line choice="default">
+            <line choice="org.cudmore.kymflow"/>
+        </line>
+    </choices-outline>
+
+    <choice id="default"/>
+    <choice id="org.cudmore.kymflow" visible="false">
+        <pkg-ref id="org.cudmore.kymflow"/>
+    </choice>
+
+    <pkg-ref id="org.cudmore.kymflow" version="0">KymFlowComponent.pkg</pkg-ref>
+</installer-gui-script>

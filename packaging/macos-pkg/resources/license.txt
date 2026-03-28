@@ -1,0 +1,6 @@
+KymFlow Installer
+
+This installer packages the local KymFlow runtime and workspace setup.
+
+Before distributing outside your own environment, replace this placeholder
+with the real license or distribution terms you want users to accept.
