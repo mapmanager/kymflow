@@ -8,21 +8,41 @@ REPO_ROOT="$(cd "${ROOT_DIR}/../.." && pwd)"
 # Source of truth: the current kymflow repo root
 KYMFLOW_SRC="${KYMFLOW_SRC:-${REPO_ROOT}}"
 
+# Explicit installer runtime target.
+# Keep this separate from pyproject's requires-python, which is only a compatibility floor/range.
+INSTALL_PYTHON_VERSION="${INSTALL_PYTHON_VERSION:-3.12}"
+
 PAYLOAD_DIR="${ROOT_DIR}/payload"
 PAYLOAD_KYMFLOW_DIR="${PAYLOAD_DIR}/kymflow"
 
 SCRIPTS_DIR="${ROOT_DIR}/scripts"
+PKGBUILD_SCRIPTS_DIR="${BUILD_DIR:-${ROOT_DIR}/build}/pkgbuild-scripts"
 BUILD_DIR="${ROOT_DIR}/build"
 DIST_DIR="${ROOT_DIR}/dist"
 
 PKG_ID="org.cudmore.kymflow"
-PKG_VERSION="${PKG_VERSION:-0.1.0}"
+
+PYPROJECT_FILE="${KYMFLOW_SRC}/pyproject.toml"
+PKG_VERSION="${PKG_VERSION:-$(python3 - <<'PY' "${PYPROJECT_FILE}"
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"\s*$', text)
+if not match:
+    raise SystemExit("Could not find project version in pyproject.toml")
+print(match.group(1))
+PY
+)}"
 
 COMPONENT_PKG="${BUILD_DIR}/KymFlowComponent.pkg"
 FINAL_PKG="${DIST_DIR}/KymFlow-${PKG_VERSION}.pkg"
 
 echo "=== KymFlow pkg build ==="
 echo "KYMFLOW_SRC=${KYMFLOW_SRC}"
+echo "INSTALL_PYTHON_VERSION=${INSTALL_PYTHON_VERSION}"
+echo "PKG_VERSION=${PKG_VERSION}"
 
 [ -d "${KYMFLOW_SRC}" ] || { echo "ERROR: missing kymflow repo"; exit 1; }
 [ -f "${KYMFLOW_SRC}/pyproject.toml" ] || { echo "ERROR: missing pyproject.toml"; exit 1; }
@@ -30,9 +50,12 @@ echo "KYMFLOW_SRC=${KYMFLOW_SRC}"
 [ -f "${KYMFLOW_SRC}/LICENSE" ] || { echo "ERROR: missing LICENSE"; exit 1; }
 [ -d "${KYMFLOW_SRC}/src" ] || { echo "ERROR: missing src/"; exit 1; }
 [ -d "${KYMFLOW_SRC}/notebooks" ] || { echo "ERROR: missing notebooks/"; exit 1; }
+[ -f "${SCRIPTS_DIR}/postinstall.sh" ] || { echo "ERROR: missing scripts/postinstall.sh"; exit 1; }
 
 command -v pkgbuild >/dev/null || { echo "ERROR: pkgbuild not found"; exit 1; }
 command -v productbuild >/dev/null || { echo "ERROR: productbuild not found"; exit 1; }
+command -v python3 >/dev/null || { echo "ERROR: python3 not found"; exit 1; }
+command -v rsync >/dev/null || { echo "ERROR: rsync not found"; exit 1; }
 
 echo "=== Staging payload ==="
 
@@ -43,18 +66,29 @@ mkdir -p "${BUILD_DIR}" "${DIST_DIR}"
 cp "${KYMFLOW_SRC}/pyproject.toml" "${PAYLOAD_KYMFLOW_DIR}/"
 cp "${KYMFLOW_SRC}/README.md" "${PAYLOAD_KYMFLOW_DIR}/"
 cp "${KYMFLOW_SRC}/LICENSE" "${PAYLOAD_KYMFLOW_DIR}/"
+
 cp -R "${KYMFLOW_SRC}/src" "${PAYLOAD_KYMFLOW_DIR}/"
-cp -R "${KYMFLOW_SRC}/notebooks" "${PAYLOAD_KYMFLOW_DIR}/"
+
+mkdir -p "${PAYLOAD_KYMFLOW_DIR}/notebooks"
+rsync -av \
+  --exclude '.DS_Store' \
+  --exclude '.ipynb_checkpoints' \
+  "${KYMFLOW_SRC}/notebooks/" \
+  "${PAYLOAD_KYMFLOW_DIR}/notebooks/"
 
 echo "Payload contents:"
 find "${PAYLOAD_KYMFLOW_DIR}" -maxdepth 2
 
-chmod +x "${SCRIPTS_DIR}/postinstall"
+echo "=== Preparing pkgbuild scripts directory ==="
+rm -rf "${PKGBUILD_SCRIPTS_DIR}"
+mkdir -p "${PKGBUILD_SCRIPTS_DIR}"
+cp "${SCRIPTS_DIR}/postinstall.sh" "${PKGBUILD_SCRIPTS_DIR}/postinstall"
+chmod +x "${PKGBUILD_SCRIPTS_DIR}/postinstall"
 
 echo "=== Building component pkg ==="
 pkgbuild \
   --root "${PAYLOAD_DIR}" \
-  --scripts "${SCRIPTS_DIR}" \
+  --scripts "${PKGBUILD_SCRIPTS_DIR}" \
   --identifier "${PKG_ID}" \
   --version "${PKG_VERSION}" \
   --install-location "/Library/Application Support/KymFlowPayload" \

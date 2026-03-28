@@ -90,3 +90,11 @@ Suggested packaging order:
 5. `stapler`
 
 This scaffold does not sign the package yet.
+
+
+## viewing logs from .pkg install
+
+```bash
+grep -nE 'KymFlow|postinstall|ERROR|fail|uv|jupyter' /var/log/install.log | tail -n 200
+```
+

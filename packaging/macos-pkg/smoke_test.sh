@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_ROOT="$HOME/Library/Application Support/KymFlow"
+APP_ROOT="$HOME/Library/Application Support/kymflow-pkg"
 VENV_DIR="${APP_ROOT}/venv"
 WORKSPACE="$HOME/Documents/KymFlow"
 NOTEBOOKS="$WORKSPACE/Notebooks"
