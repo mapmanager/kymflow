@@ -1,100 +1,172 @@
-# KymFlow macOS Installer (uv-based)
+# KymFlow macOS PKG Installer — Developer README
 
-This project builds a native macOS `.pkg` without Constructor or Conda.
+_Last updated: 2026-03-28T21:58:52.447951_
 
-## Expected sibling layout
+(Full detailed README based strictly on provided build_pkg.sh, postinstall.sh, smoke_test.sh)
 
-```text
-parent/
-├── kymflow/
-│   ├── pyproject.toml
-│   ├── src/
-│   └── notebooks/
-└── kymflow-pkg/
-```
+## Overview
+This document describes the current implementation of the KymFlow macOS pkg installer.
 
-`build_pkg.sh` copies the installable project files from `../kymflow/` into `payload/` at build time.
+## Source of Truth
+This README is based ONLY on:
+- build_pkg.sh
+- postinstall.sh
+- smoke_test.sh
 
-## Runtime locations after install
+## Architecture
 
-Runtime and venv:
-
-```text
-~/Library/Application Support/KymFlow/
-```
-
-User workspace:
-
-```text
-~/Documents/KymFlow/
-```
-
-## Requirements
-
-- macOS
-- Xcode Command Line Tools
-- `pkgbuild`
-- `productbuild`
-- internet access during install for `uv` bootstrap and package installation
-
-## Build
-
-From `kymflow-pkg/`:
-
-```bash
-./build_pkg.sh
-```
-
-Optional version override:
-
-```bash
-PKG_VERSION=0.1.1 ./build_pkg.sh
-```
+### Build Flow
+build_pkg.sh:
+- extracts version from pyproject.toml
+- stages payload into payload/kymflow
+- removes unwanted files (.DS_Store, __pycache__, *.pyc, .ipynb_checkpoints)
+- copies postinstall.sh into pkgbuild scripts as postinstall
+- runs pkgbuild → component pkg
+- runs productbuild → final pkg
 
 Output:
-
-```text
 dist/KymFlow-<version>.pkg
-```
 
-## Install
+### Install Flow (postinstall.sh)
+Executed by macOS installer.
 
-Double-click the generated `.pkg`.
+Steps:
+1. Determine CURRENT_USER and USER_HOME
+2. Define APP_ROOT:
+   ~/Library/Application Support/kymflow-pkg
+3. Create logs:
+   logs/install-<timestamp>.log
+4. Read packaged version from pyproject.toml
+5. Compare with installed version (install_version.txt)
+6. Determine install mode:
+   - first_install
+   - reinstall_same
+   - upgrade
+   - downgrade → blocked
 
-The installer will:
+7. Copy payload using rsync with exclusions:
+   - __pycache__/
+   - *.pyc
+   - .DS_Store
+   - .ipynb_checkpoints
 
-1. copy the packaged `kymflow/` project into the user's Application Support
-2. install `uv`
-3. create a venv
-4. install `jupyterlab`, `ipykernel`, and local `kymflow`
-5. register a Jupyter kernel
-6. create `~/Documents/KymFlow/{Notebooks,Data}`
-7. create `~/Documents/KymFlow/Open KymFlow.command`
+8. Install uv (if missing)
+9. Install Python (INSTALL_PYTHON_VERSION)
+10. Create or reuse venv
+11. Install:
+    - jupyterlab
+    - ipykernel
+    - kymflow (from payload)
 
-## Smoke test
+12. Register Jupyter kernel
 
-After install:
+13. Workspace setup:
+   ~/Documents/KymFlow/
+     Examples/       (always overwritten)
+     Example-Data/   (always overwritten, currently empty)
+     User/           (never touched)
 
-```bash
-./smoke_test.sh
-```
+14. Create launcher:
+   Open KymFlow.command
+   → launches Jupyter rooted at ~/Documents/KymFlow
 
-## Signing / notarization
+15. Fix ownership:
+   chown user:staff workspace
 
-Suggested packaging order:
+16. Write:
+   install_version.txt
+   install_state.json
 
-1. `pkgbuild`
-2. `productbuild`
-3. `productsign`
-4. `notarytool`
-5. `stapler`
+### Runtime
 
-This scaffold does not sign the package yet.
+User runs:
+Open KymFlow.command
 
+This launches:
+jupyter lab --notebook-dir=~/Documents/KymFlow
 
-## viewing logs from .pkg install
+## Runtime Directories
 
-```bash
-grep -nE 'KymFlow|postinstall|ERROR|fail|uv|jupyter' /var/log/install.log | tail -n 200
-```
+### Application Support
 
+~/Library/Application Support/kymflow-pkg/
+  uv/
+  venv/
+  payload/
+  logs/
+  install_version.txt
+  install_state.json
+
+### Workspace
+
+~/Documents/KymFlow/
+  Examples/
+  Example-Data/
+  User/
+  Open KymFlow.command
+
+## Smoke Test (smoke_test.sh)
+
+Verifies:
+- python exists in venv
+- jupyter exists
+- install_state.json exists
+- logs exist
+- workspace folders exist
+- launcher exists
+- kymflow import works
+
+## Install Behavior
+
+First install:
+- full environment setup
+
+Reinstall same version:
+- reuse venv
+- skip reinstall if healthy
+
+Upgrade:
+- reinstall packages
+
+Downgrade:
+- blocked by compare_versions()
+
+## Logging
+
+Logs stored in:
+~/Library/Application Support/kymflow-pkg/logs/
+
+Each run creates:
+install-YYYYMMDD-HHMMSS.log
+
+## Install State
+
+install_state.json includes:
+- version
+- python_version
+- install_mode
+- log_file
+- updated_at_utc
+
+## Design Principles
+
+- separation of installer-managed vs user-managed
+- idempotent installs
+- explicit logging
+- no user data overwrite
+
+## Future Improvements
+
+- macOS installer UI (Distribution.xml)
+- code signing (productsign)
+- notarization (notarytool)
+- packaged example datasets
+- improved installer UX
+
+## Summary
+
+System is:
+- stable
+- reproducible
+- upgrade-aware
+- cleanly structured

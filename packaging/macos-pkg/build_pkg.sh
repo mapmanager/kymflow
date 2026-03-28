@@ -16,9 +16,11 @@ PAYLOAD_DIR="${ROOT_DIR}/payload"
 PAYLOAD_KYMFLOW_DIR="${PAYLOAD_DIR}/kymflow"
 
 SCRIPTS_DIR="${ROOT_DIR}/scripts"
-PKGBUILD_SCRIPTS_DIR="${BUILD_DIR:-${ROOT_DIR}/build}/pkgbuild-scripts"
 BUILD_DIR="${ROOT_DIR}/build"
+PKGBUILD_SCRIPTS_DIR="${BUILD_DIR}/pkgbuild-scripts"
 DIST_DIR="${ROOT_DIR}/dist"
+RESOURCES_DIR="${ROOT_DIR}/resources"
+DIST_XML="${ROOT_DIR}/Distribution.xml"
 
 PKG_ID="org.cudmore.kymflow"
 
@@ -52,6 +54,12 @@ echo "PKG_VERSION=${PKG_VERSION}"
 [ -d "${KYMFLOW_SRC}/notebooks" ] || { echo "ERROR: missing notebooks/"; exit 1; }
 [ -f "${SCRIPTS_DIR}/postinstall.sh" ] || { echo "ERROR: missing scripts/postinstall.sh"; exit 1; }
 
+[ -f "${DIST_XML}" ] || { echo "ERROR: missing Distribution.xml"; exit 1; }
+[ -d "${RESOURCES_DIR}" ] || { echo "ERROR: missing resources/"; exit 1; }
+[ -f "${RESOURCES_DIR}/welcome.html" ] || { echo "ERROR: missing resources/welcome.html"; exit 1; }
+[ -f "${RESOURCES_DIR}/conclusion.html" ] || { echo "ERROR: missing resources/conclusion.html"; exit 1; }
+[ -f "${RESOURCES_DIR}/license.txt" ] || { echo "ERROR: missing resources/license.txt"; exit 1; }
+
 command -v pkgbuild >/dev/null || { echo "ERROR: pkgbuild not found"; exit 1; }
 command -v productbuild >/dev/null || { echo "ERROR: productbuild not found"; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 not found"; exit 1; }
@@ -67,12 +75,21 @@ cp "${KYMFLOW_SRC}/pyproject.toml" "${PAYLOAD_KYMFLOW_DIR}/"
 cp "${KYMFLOW_SRC}/README.md" "${PAYLOAD_KYMFLOW_DIR}/"
 cp "${KYMFLOW_SRC}/LICENSE" "${PAYLOAD_KYMFLOW_DIR}/"
 
-cp -R "${KYMFLOW_SRC}/src" "${PAYLOAD_KYMFLOW_DIR}/"
+mkdir -p "${PAYLOAD_KYMFLOW_DIR}/src"
+rsync -av \
+  --exclude '.DS_Store' \
+  --exclude '.ipynb_checkpoints' \
+  --exclude '__pycache__/' \
+  --exclude '*.pyc' \
+  "${KYMFLOW_SRC}/src/" \
+  "${PAYLOAD_KYMFLOW_DIR}/src/"
 
 mkdir -p "${PAYLOAD_KYMFLOW_DIR}/notebooks"
 rsync -av \
   --exclude '.DS_Store' \
   --exclude '.ipynb_checkpoints' \
+  --exclude '__pycache__/' \
+  --exclude '*.pyc' \
   "${KYMFLOW_SRC}/notebooks/" \
   "${PAYLOAD_KYMFLOW_DIR}/notebooks/"
 
@@ -94,9 +111,11 @@ pkgbuild \
   --install-location "/Library/Application Support/KymFlowPayload" \
   "${COMPONENT_PKG}"
 
-echo "=== Building final pkg ==="
+echo "=== Building final pkg with Distribution.xml and resources ==="
 productbuild \
-  --package "${COMPONENT_PKG}" \
+  --distribution "${DIST_XML}" \
+  --resources "${RESOURCES_DIR}" \
+  --package-path "${BUILD_DIR}" \
   "${FINAL_PKG}"
 
 echo "=== DONE ==="

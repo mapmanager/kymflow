@@ -74,6 +74,13 @@ INSTALL_PYTHON_VERSION="${INSTALL_PYTHON_VERSION:-3.12}"
 
 APP_ROOT="${USER_HOME}/Library/Application Support/kymflow-pkg"
 INSTALL_VERSION_FILE="${APP_ROOT}/install_version.txt"
+INSTALL_STATE_FILE="${APP_ROOT}/install_state.json"
+LOG_DIR="${APP_ROOT}/logs"
+
+mkdir -p "${APP_ROOT}" "${LOG_DIR}"
+
+LOG_FILE="${LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "${LOG_FILE}") 2>&1
 
 UV_ROOT="${APP_ROOT}/uv"
 UV_BIN="${UV_ROOT}/uv"
@@ -83,14 +90,16 @@ PYTHON_BIN="${VENV_DIR}/bin/python"
 JUPYTER_BIN="${VENV_DIR}/bin/jupyter"
 
 WORKSPACE_ROOT="${USER_HOME}/Documents/KymFlow"
-NOTEBOOKS_DIR="${WORKSPACE_ROOT}/Notebooks"
-DATA_DIR="${WORKSPACE_ROOT}/Data"
+EXAMPLES_DIR="${WORKSPACE_ROOT}/Examples"
+EXAMPLE_DATA_DIR="${WORKSPACE_ROOT}/Example-Data"
+USER_DIR="${WORKSPACE_ROOT}/User"
 LAUNCHER_PATH="${WORKSPACE_ROOT}/Open KymFlow.command"
 
 PKG_PAYLOAD_ROOT="/Library/Application Support/KymFlowPayload"
 PKG_KYMFLOW_SRC="${PKG_PAYLOAD_ROOT}/kymflow"
 PACKAGED_PYPROJECT="${PKG_KYMFLOW_SRC}/pyproject.toml"
 
+log "LOG_FILE=${LOG_FILE}"
 log "CURRENT_USER=${CURRENT_USER}"
 log "USER_HOME=${USER_HOME}"
 log "APP_ROOT=${APP_ROOT}"
@@ -136,7 +145,7 @@ else
       log "Upgrading from ${INSTALLED_VERSION} to ${PACKAGED_VERSION}"
       ;;
     2)
-      fail "Downgrade not allowed: installed version is ${INSTALLED_VERSION}, packaged version is ${PACKAGED_VERSION}"
+      fail "Downgrade not allowed by script: installed version is ${INSTALLED_VERSION}, packaged version is ${PACKAGED_VERSION}"
       ;;
     *)
       fail "Unexpected version comparison result: ${cmp_result}"
@@ -144,7 +153,7 @@ else
   esac
 fi
 
-mkdir -p "${APP_ROOT}" "${WORKSPACE_ROOT}" "${NOTEBOOKS_DIR}" "${DATA_DIR}"
+mkdir -p "${WORKSPACE_ROOT}" "${USER_DIR}"
 
 rm -rf "${PAYLOAD_ROOT}"
 mkdir -p "${PAYLOAD_ROOT}/kymflow"
@@ -152,6 +161,8 @@ mkdir -p "${PAYLOAD_ROOT}/kymflow"
 rsync -av \
   --exclude '.DS_Store' \
   --exclude '.ipynb_checkpoints' \
+  --exclude '__pycache__/' \
+  --exclude '*.pyc' \
   "${PKG_KYMFLOW_SRC}/" \
   "${PAYLOAD_ROOT}/kymflow/"
 
@@ -211,40 +222,49 @@ else
   log "Skipping JupyterLab/ipykernel/kymflow reinstall for same-version reinstall"
 fi
 
-if [ -z "$(find "${NOTEBOOKS_DIR}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
-  log "Copying starter notebooks into ${NOTEBOOKS_DIR}"
-  rsync -av \
-    --exclude '.DS_Store' \
-    --exclude '.ipynb_checkpoints' \
-    "${PAYLOAD_ROOT}/kymflow/notebooks/" \
-    "${NOTEBOOKS_DIR}/"
-else
-  log "Notebook directory not empty; leaving user notebooks untouched"
-fi
+# Installer-managed Examples: always refresh from packaged notebooks.
+rm -rf "${EXAMPLES_DIR}"
+mkdir -p "${EXAMPLES_DIR}"
+log "Refreshing installer-managed examples into ${EXAMPLES_DIR}"
+rsync -av \
+  --exclude '.DS_Store' \
+  --exclude '.ipynb_checkpoints' \
+  --exclude '__pycache__/' \
+  --exclude '*.pyc' \
+  "${PAYLOAD_ROOT}/kymflow/notebooks/" \
+  "${EXAMPLES_DIR}/"
+
+# Installer-managed Example-Data: always refresh to the current managed state.
+# No packaged example-data source path has been defined yet, so this currently refreshes
+# the managed folder to empty.
+rm -rf "${EXAMPLE_DATA_DIR}"
+mkdir -p "${EXAMPLE_DATA_DIR}"
+log "Refreshing installer-managed example data into ${EXAMPLE_DATA_DIR}"
+
+# User workspace is created and then left untouched by reinstall.
+mkdir -p "${USER_DIR}"
 
 cat > "${LAUNCHER_PATH}" <<EOF
 #!/bin/bash
 set -euo pipefail
 
 APP_ROOT="\$HOME/Library/Application Support/kymflow-pkg"
-VENV_DIR="\${APP_ROOT}/venv"
-NOTEBOOKS_DIR="\$HOME/Documents/KymFlow/Notebooks"
-JUPYTER_BIN="\${VENV_DIR}/bin/jupyter"
+WORKSPACE_ROOT="\$HOME/Documents/KymFlow"
+JUPYTER_BIN="\${APP_ROOT}/venv/bin/jupyter"
 
 echo "KymFlow launcher"
 echo "  App root: \${APP_ROOT}"
-echo "  Venv: \${VENV_DIR}"
-echo "  Notebooks: \${NOTEBOOKS_DIR}"
+echo "  Workspace: \${WORKSPACE_ROOT}"
 
 if [ ! -x "\${JUPYTER_BIN}" ]; then
   echo "ERROR: jupyter not found at \${JUPYTER_BIN}" >&2
   exit 1
 fi
 
-mkdir -p "\${NOTEBOOKS_DIR}"
-cd "\${NOTEBOOKS_DIR}"
+mkdir -p "\${WORKSPACE_ROOT}"
+cd "\${WORKSPACE_ROOT}"
 
-exec "\${JUPYTER_BIN}" lab --notebook-dir="\${NOTEBOOKS_DIR}"
+exec "\${JUPYTER_BIN}" lab --notebook-dir="\${WORKSPACE_ROOT}"
 EOF
 
 chmod +x "${LAUNCHER_PATH}"
@@ -257,8 +277,29 @@ printf '%s\n' "${PACKAGED_VERSION}" > "${INSTALL_VERSION_FILE}"
 chown "${CURRENT_USER}":staff "${INSTALL_VERSION_FILE}"
 chmod 644 "${INSTALL_VERSION_FILE}"
 
+python3 - <<'PY' "${INSTALL_STATE_FILE}" "${PACKAGED_VERSION}" "${INSTALL_PYTHON_VERSION}" "${INSTALL_MODE}" "${LOG_FILE}"
+import json
+import sys
+from pathlib import Path
+from datetime import datetime, timezone
+
+state_file = Path(sys.argv[1])
+data = {
+    "version": sys.argv[2],
+    "python_version": sys.argv[3],
+    "install_mode": sys.argv[4],
+    "log_file": sys.argv[5],
+    "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+}
+state_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
+
+chown "${CURRENT_USER}":staff "${INSTALL_STATE_FILE}"
+chmod 644 "${INSTALL_STATE_FILE}"
+
 log "Created launcher: ${LAUNCHER_PATH}"
 log "Workspace ownership set to ${CURRENT_USER}:staff"
 log "Recorded installed version: ${PACKAGED_VERSION}"
+log "Recorded install state: ${INSTALL_STATE_FILE}"
 log "Postinstall complete"
 exit 0
