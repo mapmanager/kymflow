@@ -22,6 +22,8 @@ DIST_DIR="${ROOT_DIR}/dist"
 RESOURCES_DIR="${ROOT_DIR}/resources"
 DIST_XML="${ROOT_DIR}/Distribution.xml"
 
+SECRETS_FILE="${ROOT_DIR}/_secrets.sh"
+
 PKG_ID="org.cudmore.kymflow"
 
 PYPROJECT_FILE="${KYMFLOW_SRC}/pyproject.toml"
@@ -60,8 +62,16 @@ echo "PKG_VERSION=${PKG_VERSION}"
 [ -f "${RESOURCES_DIR}/conclusion.html" ] || { echo "ERROR: missing resources/conclusion.html"; exit 1; }
 [ -f "${RESOURCES_DIR}/license.txt" ] || { echo "ERROR: missing resources/license.txt"; exit 1; }
 
+[ -f "${SECRETS_FILE}" ] || { echo "ERROR: missing ${SECRETS_FILE}"; exit 1; }
+
+# shellcheck disable=SC1090
+source "${SECRETS_FILE}"
+
+[ -n "${SIGN_INSTALLER_ID:-}" ] || { echo "ERROR: SIGN_INSTALLER_ID is not set in ${SECRETS_FILE}"; exit 1; }
+
 command -v pkgbuild >/dev/null || { echo "ERROR: pkgbuild not found"; exit 1; }
 command -v productbuild >/dev/null || { echo "ERROR: productbuild not found"; exit 1; }
+command -v pkgutil >/dev/null || { echo "ERROR: pkgutil not found"; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 not found"; exit 1; }
 command -v rsync >/dev/null || { echo "ERROR: rsync not found"; exit 1; }
 
@@ -111,12 +121,16 @@ pkgbuild \
   --install-location "/Library/Application Support/KymFlowPayload" \
   "${COMPONENT_PKG}"
 
-echo "=== Building final pkg with Distribution.xml and resources ==="
+echo "=== Building signed final pkg with Distribution.xml and resources ==="
 productbuild \
   --distribution "${DIST_XML}" \
   --resources "${RESOURCES_DIR}" \
   --package-path "${BUILD_DIR}" \
+  --sign "${SIGN_INSTALLER_ID}" \
   "${FINAL_PKG}"
+
+echo "=== Verifying signature ==="
+pkgutil --check-signature "${FINAL_PKG}"
 
 echo "=== DONE ==="
 ls -lh "${FINAL_PKG}"
