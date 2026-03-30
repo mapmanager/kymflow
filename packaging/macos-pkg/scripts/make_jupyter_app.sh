@@ -110,7 +110,10 @@ mkdir -p "$APP_LOG_DIR"
   mkdir -p "$WORKSPACE_ROOT"
   cd "$WORKSPACE_ROOT"
 
-  exec "$JUPYTER_BIN" lab --notebook-dir="$WORKSPACE_ROOT"
+  # Do not use exec: replacing this process with venv python drops Launch Services / Dock
+  # association with the .app bundle (icon vanishes while Jupyter still runs).
+  # Run Jupyter as a child; this script remains the bundle's main PID until the server exits.
+  "$JUPYTER_BIN" lab --notebook-dir="$WORKSPACE_ROOT"
 } >> "$APP_LOG_FILE" 2>&1
 EOF
 

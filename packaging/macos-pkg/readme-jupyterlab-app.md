@@ -270,6 +270,8 @@ make_jupyter_app.sh <user_home> <app_root> <workspace_root> <bundle_version>
 - **`bundle_version`:** installed KymFlow version (e.g. from **`pyproject.toml`**), written to **`CFBundleShortVersionString`** and **`CFBundleVersion`** (XML-escaped).
 - **`CFBundleIdentifier`:** **`org.cudmore.kymflow.jupyter`** (stable).
 
+**Launcher process:** The **`MacOS/launch_jupyter`** script runs **`jupyter lab` without `exec`** so the bundle executable remains the main process Launch Services tracks (Dock/menu bar). Replacing the process with **`venv` Python** via **`exec`** caused the app icon to disappear while Jupyter still listened on port 8888.
+
 ---
 
 ## Wiring (`build_pkg.sh`, `postinstall.sh`, curl)
