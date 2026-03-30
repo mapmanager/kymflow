@@ -2,6 +2,9 @@
 <installer-gui-script minSpecVersion="1">
     <title>KymFlow Installer</title>
 
+    <!-- User home only: avoids writing to /Library and avoids an admin password. -->
+    <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+
     <welcome file="welcome.html"/>
     <license file="license.txt"/>
     <conclusion file="conclusion.html"/>

@@ -20,11 +20,15 @@
 # -----------------------------------------------------------------------------
 #
 # Overview:
-# - Builds and publishes Python sdist/wheel to PyPI on version tags
-# - Builds a macOS Apple Silicon (arm64) NiceGUI native app via nicegui-pack
-# - Installs nicewidgets from GitHub (not PyPI) for deterministic builds
+# - Builds Python sdist/wheel, creates/updates the GitHub Release for the tag
+#   (auto-generated notes + dist/* artifacts), then publishes to PyPI.
+# - GitHub Release runs before twine so sdist/wheel are attached even if PyPI
+#   upload fails.
+# - macOS app build is DISABLED: unsigned CI artifacts are not suitable for
+#   distribution; use pyinstaller/macos/build_feb_2026 locally (codesign,
+#   notary, staple) and attach the final zip to the GitHub Release by hand
+#   until signing secrets are added to GitHub Actions.
 # - Uses pip caching to speed CI
-# - Intel macOS build is deprecated (job retained but commented out)
 
 name: Release kymflow
 
@@ -34,11 +38,11 @@ on:
       - "v*.*.*" # e.g. v0.1.0
 
 permissions:
-  contents: write # needed for creating/updating GitHub Releases
+  contents: write # GitHub Release (sdist + wheel); PyPI uses separate token
 
 jobs:
   build-and-publish:
-    name: Build & publish to PyPI
+    name: Build, GitHub Release & publish to PyPI
     runs-on: ubuntu-latest
 
     steps:
@@ -86,6 +90,14 @@ jobs:
         run: |
           python -m build
 
+      - name: Create GitHub Release (sdist + wheel)
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
@@ -93,11 +105,16 @@ jobs:
         run: |
           python -m twine upload dist/*
 
+  # ---------------------------------------------------------------------------
+  # macOS app job — DISABLED (no Apple signing/notary secrets in GitHub yet).
+  # The previous CI zip was unsigned / non-notarized (poor UX for end users).
+  # Re-enable when ready: set if below to startsWith(github.ref, 'refs/tags/v')
+  # Local pipeline: pyinstaller/macos/build_feb_2026/ (see release-recipe-cursor.md)
+  # ---------------------------------------------------------------------------
   macos-arm-app:
-    name: Build macOS Apple Silicon app and attach to release
+    name: Build macOS Apple Silicon app and attach to release (disabled)
     runs-on: macos-15 # Apple Silicon runner (ARM64)
-    needs: build-and-publish
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: false
 
     steps:
       - name: Checkout

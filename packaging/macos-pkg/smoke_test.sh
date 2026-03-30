@@ -11,6 +11,7 @@ EXAMPLES_DIR="$WORKSPACE_ROOT/Examples"
 EXAMPLE_DATA_DIR="$WORKSPACE_ROOT/Example-Data"
 USER_DIR="$WORKSPACE_ROOT/User"
 LAUNCHER="$WORKSPACE_ROOT/Open KymFlow.command"
+JUPYTER_APP="$WORKSPACE_ROOT/KymFlow Jupyter.app"
 
 echo "=== KymFlow smoke test ==="
 
@@ -26,6 +27,7 @@ echo "=== KymFlow smoke test ==="
 find "$LOG_DIR" -type f -name 'install-*.log' -print -quit | grep -q . || { echo "FAIL: no install log found"; exit 1; }
 
 [ -x "$LAUNCHER" ] || { echo "FAIL: launcher missing"; exit 1; }
+[ -d "$JUPYTER_APP" ] || { echo "FAIL: KymFlow Jupyter.app missing"; exit 1; }
 
 echo "Testing Python import..."
 "$VENV_DIR/bin/python" -c "import kymflow"

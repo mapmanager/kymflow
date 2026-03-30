@@ -10,6 +10,23 @@ fail() {
   exit 1
 }
 
+# Installer.app does not show postinstall error text in its failure UI. Show a native alert
+# on the console user's session (postinstall runs as root).
+installer_gui_alert() {
+  local title="$1"
+  local body="$2"
+  if [ -z "${CURRENT_USER:-}" ] || [ "${CURRENT_USER}" = "root" ]; then
+    return 0
+  fi
+  if ! command -v sudo >/dev/null 2>&1 || ! command -v osascript >/dev/null 2>&1; then
+    return 0
+  fi
+  # Body must not contain double quotes (semver messages are safe).
+  sudo -u "${CURRENT_USER}" /usr/bin/osascript \
+    -e "display alert \"${title}\" message \"${body}\" as critical buttons {\"OK\"} default button \"OK\"" \
+    2>/dev/null || true
+}
+
 read_project_version() {
   local pyproject_file="$1"
   python3 - <<'PY' "$pyproject_file"
@@ -76,8 +93,11 @@ APP_ROOT="${USER_HOME}/Library/Application Support/kymflow-pkg"
 INSTALL_VERSION_FILE="${APP_ROOT}/install_version.txt"
 INSTALL_STATE_FILE="${APP_ROOT}/install_state.json"
 LOG_DIR="${APP_ROOT}/logs"
+# postinstall runs as root; uv must not use ~/.cache/uv (user-owned) or writes fail with EACCES.
+UV_CACHE_DIR="${APP_ROOT}/.cache/uv"
+export UV_CACHE_DIR
 
-mkdir -p "${APP_ROOT}" "${LOG_DIR}"
+mkdir -p "${APP_ROOT}" "${LOG_DIR}" "${UV_CACHE_DIR}"
 
 LOG_FILE="${LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -95,9 +115,14 @@ EXAMPLE_DATA_DIR="${WORKSPACE_ROOT}/Example-Data"
 USER_DIR="${WORKSPACE_ROOT}/User"
 LAUNCHER_PATH="${WORKSPACE_ROOT}/Open KymFlow.command"
 
-PKG_PAYLOAD_ROOT="/Library/Application Support/KymFlowPayload"
+# Matches packaging/macos-pkg/build_pkg.sh: pkg install-location is user-home-relative
+# (Library/Application Support/kymflow-pkg/KymFlowPayload) so the payload lands under
+# ~/Library/Application Support/... without requiring /Library or sudo for the payload.
+PKG_PAYLOAD_ROOT="${USER_HOME}/Library/Application Support/kymflow-pkg/KymFlowPayload"
+PKG_PAYLOAD_RESOURCES="${PKG_PAYLOAD_ROOT}/resources"
 PKG_KYMFLOW_SRC="${PKG_PAYLOAD_ROOT}/kymflow"
 PACKAGED_PYPROJECT="${PKG_KYMFLOW_SRC}/pyproject.toml"
+WHEELS_IN_PAYLOAD="${PKG_PAYLOAD_ROOT}/wheels"
 
 log "LOG_FILE=${LOG_FILE}"
 log "CURRENT_USER=${CURRENT_USER}"
@@ -145,6 +170,7 @@ else
       log "Upgrading from ${INSTALLED_VERSION} to ${PACKAGED_VERSION}"
       ;;
     2)
+      installer_gui_alert "KymFlow installation stopped" "This installer is older than the version already on your Mac (installed ${INSTALLED_VERSION}, this package is ${PACKAGED_VERSION}). Downgrades are not supported. Uninstall the existing KymFlow first, or use a newer package. For details, open the log in ~/Library/Application Support/kymflow-pkg/logs/"
       fail "Downgrade not allowed by script: installed version is ${INSTALLED_VERSION}, packaged version is ${PACKAGED_VERSION}"
       ;;
     *)
@@ -166,9 +192,17 @@ rsync -av \
   "${PKG_KYMFLOW_SRC}/" \
   "${PAYLOAD_ROOT}/kymflow/"
 
+mkdir -p "${PAYLOAD_ROOT}/resources"
+if [ -f "${PKG_PAYLOAD_RESOURCES}/AppIcon.icns" ]; then
+  cp "${PKG_PAYLOAD_RESOURCES}/AppIcon.icns" "${PAYLOAD_ROOT}/resources/AppIcon.icns"
+  log "Staged AppIcon.icns into installed payload"
+else
+  log "No AppIcon.icns in package payload (legacy installer); Jupyter app may have no custom icon"
+fi
+
 if [ ! -x "${UV_BIN}" ]; then
   log "Installing uv"
-  curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="${UV_ROOT}" UV_NO_MODIFY_PATH=1 sh
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="${UV_ROOT}" UV_NO_MODIFY_PATH=1 UV_CACHE_DIR="${UV_CACHE_DIR}" sh
 fi
 
 [ -x "${UV_BIN}" ] || fail "uv not found after install: ${UV_BIN}"
@@ -208,16 +242,61 @@ PY
 fi
 
 if [ "${SKIP_RUNTIME_REINSTALL}" != "1" ]; then
-  log "Installing JupyterLab and ipykernel into venv"
-  "${UV_BIN}" pip install --python "${PYTHON_BIN}" jupyterlab ipykernel
+  # Prefer bundled wheelhouse (built by build_pkg.sh from uv.lock + jupyter extra) for speed and reproducibility.
+  # Fallback: PyPI when no wheels, empty wheelhouse, or install failure (e.g. old tags without jupyter in lock).
+  pyproject_has_jupyter_extra() {
+    [ -f "${PAYLOAD_ROOT}/kymflow/pyproject.toml" ] || return 1
+    grep -qE '^jupyter[[:space:]]*=' "${PAYLOAD_ROOT}/kymflow/pyproject.toml"
+  }
 
-  log "Installing local kymflow project into venv"
-  "${UV_BIN}" pip install --python "${PYTHON_BIN}" "${PAYLOAD_ROOT}/kymflow"
+  wheelhouse_has_wheels() {
+    [ -d "${WHEELS_IN_PAYLOAD}" ] || return 1
+    find "${WHEELS_IN_PAYLOAD}" -maxdepth 1 -name '*.whl' -print -quit | grep -q .
+  }
+
+  install_runtime_pypi_jupyter_then_kymflow() {
+    log "Installing from PyPI (jupyterlab + ipykernel, then kymflow)"
+    "${UV_BIN}" pip install --python "${PYTHON_BIN}" jupyterlab ipykernel
+    "${UV_BIN}" pip install --python "${PYTHON_BIN}" "${PAYLOAD_ROOT}/kymflow"
+  }
+
+  install_runtime_pypi_kymflow_jupyter_extra() {
+    log "Installing from PyPI (kymflow[jupyter])"
+    "${UV_BIN}" pip install --python "${PYTHON_BIN}" "${PAYLOAD_ROOT}/kymflow[jupyter]"
+  }
+
+  if wheelhouse_has_wheels && pyproject_has_jupyter_extra; then
+    log "Wheelhouse found at ${WHEELS_IN_PAYLOAD}; attempting offline-capable install"
+    if "${UV_BIN}" pip install --python "${PYTHON_BIN}" \
+      --no-index --find-links "${WHEELS_IN_PAYLOAD}" \
+      "${PAYLOAD_ROOT}/kymflow[jupyter]"; then
+      log "Installed kymflow[jupyter] from wheelhouse (no PyPI)"
+    else
+      log "Wheelhouse install failed; falling back to PyPI"
+      install_runtime_pypi_kymflow_jupyter_extra
+    fi
+  else
+    if wheelhouse_has_wheels && ! pyproject_has_jupyter_extra; then
+      log "Wheelhouse present but pyproject has no jupyter extra (legacy tag); installing from PyPI (wheelhouse ignored)"
+    elif ! wheelhouse_has_wheels; then
+      log "No wheelhouse in payload; installing from PyPI"
+    fi
+    if pyproject_has_jupyter_extra; then
+      install_runtime_pypi_kymflow_jupyter_extra
+    else
+      install_runtime_pypi_jupyter_then_kymflow
+    fi
+  fi
 
   [ -x "${JUPYTER_BIN}" ] || fail "jupyter not found in venv: ${JUPYTER_BIN}"
 
-  log "Registering Jupyter kernel"
-  "${PYTHON_BIN}" -m ipykernel install --user --name kymflow --display-name "Python (kymflow)" || true
+  log "Registering Jupyter kernel (as ${CURRENT_USER}, not root)"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -u "${CURRENT_USER}" env HOME="${USER_HOME}" "${PYTHON_BIN}" -m ipykernel install \
+      --user --name kymflow --display-name "Python (kymflow)"
+  else
+    fail "sudo is required to register the Jupyter kernel as the console user"
+  fi
 else
   log "Skipping JupyterLab/ipykernel/kymflow reinstall for same-version reinstall"
 fi
@@ -269,6 +348,14 @@ EOF
 
 chmod +x "${LAUNCHER_PATH}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAKE_JUPYTER_APP="${SCRIPT_DIR}/make_jupyter_app.sh"
+if [ -x "${MAKE_JUPYTER_APP}" ]; then
+  "${MAKE_JUPYTER_APP}" "${USER_HOME}" "${APP_ROOT}" "${WORKSPACE_ROOT}" "${PACKAGED_VERSION}"
+else
+  log "make_jupyter_app.sh not found or not executable: ${MAKE_JUPYTER_APP}"
+fi
+
 # Ensure the user owns the editable workspace so notebooks are not read-only.
 chown -R "${CURRENT_USER}":staff "${WORKSPACE_ROOT}"
 chmod -R u+rwX "${WORKSPACE_ROOT}"
@@ -297,9 +384,20 @@ PY
 chown "${CURRENT_USER}":staff "${INSTALL_STATE_FILE}"
 chmod 644 "${INSTALL_STATE_FILE}"
 
+# Installer runs as root; ensure the app tree under ~/Library/Application Support/kymflow-pkg
+# (payload copy, uv, venv, logs, metadata) is owned by the console user for normal cleanup.
+chown -R "${CURRENT_USER}":staff "${APP_ROOT}"
+
 log "Created launcher: ${LAUNCHER_PATH}"
 log "Workspace ownership set to ${CURRENT_USER}:staff"
 log "Recorded installed version: ${PACKAGED_VERSION}"
 log "Recorded install state: ${INSTALL_STATE_FILE}"
 log "Postinstall complete"
+log ""
+log "Next steps:"
+log "  1. Open your KymFlow folder in Finder (Documents → KymFlow), or run: open \"${WORKSPACE_ROOT}\""
+log "  2. Double-click \"KymFlow Jupyter.app\" (recommended) or \"Open KymFlow.command\" to start JupyterLab in your browser."
+log "  If macOS blocks the app the first time, right-click the app → Open."
+log "  Notebook files and examples live under: ${WORKSPACE_ROOT}"
+log "  This install was logged to: ${LOG_FILE}"
 exit 0

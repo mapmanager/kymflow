@@ -3,14 +3,28 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${SCRIPT_DIR}"
-REPO_ROOT="$(cd "${ROOT_DIR}/../.." && pwd)"
 
-# Source of truth: the current kymflow repo root
-KYMFLOW_SRC="${KYMFLOW_SRC:-${REPO_ROOT}}"
+# Release tag for GitHub archive (e.g. v0.2.1). Optional first CLI arg overrides RELEASE_TAG.
+if [ "${1:-}" != "" ]; then
+  RELEASE_TAG="$1"
+fi
+RELEASE_TAG="${RELEASE_TAG:-}"
+[ -n "${RELEASE_TAG}" ] || {
+  echo "ERROR: Set RELEASE_TAG (e.g. v0.2.1) or pass as the first argument"
+  exit 1
+}
+
+# Upstream repo for release source tarballs (fixed; not user-configurable).
+KYMFLOW_GITHUB_REPO_SLUG="mapmanager/kymflow"
+TARBALL_URL="https://github.com/${KYMFLOW_GITHUB_REPO_SLUG}/archive/refs/tags/${RELEASE_TAG}.tar.gz"
 
 # Explicit installer runtime target.
 # Keep this separate from pyproject's requires-python, which is only a compatibility floor/range.
 INSTALL_PYTHON_VERSION="${INSTALL_PYTHON_VERSION:-3.12}"
+
+# User-home-relative install location (no leading slash) so the installer can use
+# "Install for me only" without requiring an admin password.
+PKG_INSTALL_LOCATION_REL="Library/Application Support/kymflow-pkg/KymFlowPayload"
 
 PAYLOAD_DIR="${ROOT_DIR}/payload"
 PAYLOAD_KYMFLOW_DIR="${PAYLOAD_DIR}/kymflow"
@@ -26,35 +40,19 @@ SECRETS_FILE="${ROOT_DIR}/_secrets.sh"
 
 PKG_ID="org.cudmore.kymflow"
 
-PYPROJECT_FILE="${KYMFLOW_SRC}/pyproject.toml"
-PKG_VERSION="${PKG_VERSION:-$(python3 - <<'PY' "${PYPROJECT_FILE}"
-import re
-import sys
-from pathlib import Path
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-match = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"\s*$', text)
-if not match:
-    raise SystemExit("Could not find project version in pyproject.toml")
-print(match.group(1))
-PY
-)}"
+PYPROJECT_FILE="${PAYLOAD_KYMFLOW_DIR}/pyproject.toml"
+PKG_VERSION="${PKG_VERSION:-}"
 
 COMPONENT_PKG="${BUILD_DIR}/KymFlowComponent.pkg"
-FINAL_PKG="${DIST_DIR}/KymFlow-${PKG_VERSION}.pkg"
 
 echo "=== KymFlow pkg build ==="
-echo "KYMFLOW_SRC=${KYMFLOW_SRC}"
+echo "RELEASE_TAG=${RELEASE_TAG}"
+echo "TARBALL_URL=${TARBALL_URL}"
 echo "INSTALL_PYTHON_VERSION=${INSTALL_PYTHON_VERSION}"
-echo "PKG_VERSION=${PKG_VERSION}"
+echo "PKG_INSTALL_LOCATION_REL=${PKG_INSTALL_LOCATION_REL}"
 
-[ -d "${KYMFLOW_SRC}" ] || { echo "ERROR: missing kymflow repo"; exit 1; }
-[ -f "${KYMFLOW_SRC}/pyproject.toml" ] || { echo "ERROR: missing pyproject.toml"; exit 1; }
-[ -f "${KYMFLOW_SRC}/README.md" ] || { echo "ERROR: missing README.md"; exit 1; }
-[ -f "${KYMFLOW_SRC}/LICENSE" ] || { echo "ERROR: missing LICENSE"; exit 1; }
-[ -d "${KYMFLOW_SRC}/src" ] || { echo "ERROR: missing src/"; exit 1; }
-[ -d "${KYMFLOW_SRC}/notebooks" ] || { echo "ERROR: missing notebooks/"; exit 1; }
 [ -f "${SCRIPTS_DIR}/postinstall.sh" ] || { echo "ERROR: missing scripts/postinstall.sh"; exit 1; }
+[ -f "${SCRIPTS_DIR}/make_jupyter_app.sh" ] || { echo "ERROR: missing scripts/make_jupyter_app.sh"; exit 1; }
 
 [ -f "${DIST_XML}" ] || { echo "ERROR: missing Distribution.xml"; exit 1; }
 [ -d "${RESOURCES_DIR}" ] || { echo "ERROR: missing resources/"; exit 1; }
@@ -73,44 +71,118 @@ command -v pkgbuild >/dev/null || { echo "ERROR: pkgbuild not found"; exit 1; }
 command -v productbuild >/dev/null || { echo "ERROR: productbuild not found"; exit 1; }
 command -v pkgutil >/dev/null || { echo "ERROR: pkgutil not found"; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 not found"; exit 1; }
-command -v rsync >/dev/null || { echo "ERROR: rsync not found"; exit 1; }
+command -v curl >/dev/null || { echo "ERROR: curl not found"; exit 1; }
+command -v tar >/dev/null || { echo "ERROR: tar not found"; exit 1; }
+python3 -m pip --version >/dev/null 2>&1 || {
+  echo "ERROR: python3 with pip is required for wheelhouse downloads (python3 -m pip --version failed)"
+  exit 1
+}
 
-echo "=== Staging payload ==="
-
-rm -rf "${PAYLOAD_KYMFLOW_DIR}"
-mkdir -p "${PAYLOAD_KYMFLOW_DIR}"
 mkdir -p "${BUILD_DIR}" "${DIST_DIR}"
 
-cp "${KYMFLOW_SRC}/pyproject.toml" "${PAYLOAD_KYMFLOW_DIR}/"
-cp "${KYMFLOW_SRC}/README.md" "${PAYLOAD_KYMFLOW_DIR}/"
-cp "${KYMFLOW_SRC}/LICENSE" "${PAYLOAD_KYMFLOW_DIR}/"
+ARCHIVE_PATH="${BUILD_DIR}/kymflow-${RELEASE_TAG}.tar.gz"
 
-mkdir -p "${PAYLOAD_KYMFLOW_DIR}/src"
-rsync -av \
-  --exclude '.DS_Store' \
-  --exclude '.ipynb_checkpoints' \
-  --exclude '__pycache__/' \
-  --exclude '*.pyc' \
-  "${KYMFLOW_SRC}/src/" \
-  "${PAYLOAD_KYMFLOW_DIR}/src/"
+echo "=== Verifying tarball URL ==="
+curl -fsSL -I -L "${TARBALL_URL}" >/dev/null
 
-mkdir -p "${PAYLOAD_KYMFLOW_DIR}/notebooks"
-rsync -av \
-  --exclude '.DS_Store' \
-  --exclude '.ipynb_checkpoints' \
-  --exclude '__pycache__/' \
-  --exclude '*.pyc' \
-  "${KYMFLOW_SRC}/notebooks/" \
-  "${PAYLOAD_KYMFLOW_DIR}/notebooks/"
+echo "=== Downloading release archive ==="
+curl -fsSL -L "${TARBALL_URL}" -o "${ARCHIVE_PATH}"
+
+echo "=== Staging payload from tarball (no local kymflow tree) ==="
+rm -rf "${PAYLOAD_DIR}"
+mkdir -p "${PAYLOAD_DIR}"
+
+tar -xzf "${ARCHIVE_PATH}" -C "${PAYLOAD_DIR}"
+TOP_LEVEL="$(tar -tzf "${ARCHIVE_PATH}" | head -1 | sed 's|/.*||')"
+[ -n "${TOP_LEVEL}" ] || { echo "ERROR: could not determine top-level directory in archive"; exit 1; }
+[ -d "${PAYLOAD_DIR}/${TOP_LEVEL}" ] || {
+  echo "ERROR: expected extracted directory missing: ${PAYLOAD_DIR}/${TOP_LEVEL}"
+  exit 1
+}
+
+mv "${PAYLOAD_DIR}/${TOP_LEVEL}" "${PAYLOAD_KYMFLOW_DIR}"
+
+# Jupyter .app icon: local packaging asset (not in the GitHub release tarball). Staged into the pkg payload.
+JUPYTER_APP_ICON_SRC="${ROOT_DIR}/icons/icon-green.icns"
+mkdir -p "${PAYLOAD_DIR}/resources"
+if [ ! -f "${JUPYTER_APP_ICON_SRC}" ]; then
+  echo "ERROR: Jupyter launcher icon missing: ${JUPYTER_APP_ICON_SRC}"
+  echo "Add packaging/macos-pkg/icons/icon-green.icns before building the installer (local-only; not from the release archive)."
+  exit 1
+fi
+cp "${JUPYTER_APP_ICON_SRC}" "${PAYLOAD_DIR}/resources/AppIcon.icns"
+
+[ -f "${PAYLOAD_KYMFLOW_DIR}/pyproject.toml" ] || { echo "ERROR: pyproject.toml missing in staged payload"; exit 1; }
+[ -f "${PAYLOAD_KYMFLOW_DIR}/README.md" ] || { echo "ERROR: README.md missing in staged payload"; exit 1; }
+[ -f "${PAYLOAD_KYMFLOW_DIR}/LICENSE" ] || { echo "ERROR: LICENSE missing in staged payload"; exit 1; }
+[ -d "${PAYLOAD_KYMFLOW_DIR}/src" ] || { echo "ERROR: src/ missing in staged payload"; exit 1; }
+[ -d "${PAYLOAD_KYMFLOW_DIR}/notebooks" ] || { echo "ERROR: notebooks/ missing in staged payload"; exit 1; }
+
+if [ -z "${PKG_VERSION}" ]; then
+  PKG_VERSION="$(python3 - <<'PY' "${PYPROJECT_FILE}"
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"\s*$', text)
+if not match:
+    raise SystemExit("Could not find project version in pyproject.toml")
+print(match.group(1))
+PY
+)"
+fi
+
+FINAL_PKG="${DIST_DIR}/KymFlow-${PKG_VERSION}.pkg"
+
+echo "PKG_VERSION=${PKG_VERSION}"
+echo "FINAL_PKG=${FINAL_PKG}"
 
 echo "Payload contents:"
 find "${PAYLOAD_KYMFLOW_DIR}" -maxdepth 2
+
+# Offline-capable install: bundle wheels for locked deps (jupyter extra) when the tag includes them.
+WHEELS_DIR="${PAYLOAD_DIR}/wheels"
+REQ_EXPORT="${BUILD_DIR}/kymflow-wheelhouse-requirements.txt"
+rm -rf "${WHEELS_DIR}"
+if [ -f "${PAYLOAD_KYMFLOW_DIR}/uv.lock" ] && grep -q '^name = "jupyterlab"' "${PAYLOAD_KYMFLOW_DIR}/uv.lock" 2>/dev/null; then
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "ERROR: uv is required to export requirements for the wheelhouse (jupyter stack is in uv.lock)."
+    echo "Install: https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
+  fi
+  echo "=== Exporting locked requirements (jupyter extra, no dev) ==="
+  (
+    cd "${PAYLOAD_KYMFLOW_DIR}"
+    uv export --frozen --extra jupyter --format requirements.txt \
+      --no-emit-project --no-dev -o "${REQ_EXPORT}"
+  )
+  echo "=== Downloading wheelhouse to ${WHEELS_DIR} ==="
+  mkdir -p "${WHEELS_DIR}"
+  if python3 -m pip download -r "${REQ_EXPORT}" -d "${WHEELS_DIR}" \
+    --only-binary :all: --python-version "${INSTALL_PYTHON_VERSION}"; then
+    echo "Wheelhouse: all binary wheels (preferred)."
+  else
+    echo "WARNING: pip download --only-binary :all: failed; retrying allowing sdists (may need compilers on end-user machine if used)."
+    python3 -m pip download -r "${REQ_EXPORT}" -d "${WHEELS_DIR}" \
+      --python-version "${INSTALL_PYTHON_VERSION}" || {
+      echo "ERROR: pip download failed; fix the export or network and retry."
+      exit 1
+    }
+  fi
+  echo "Wheel files:"
+  find "${WHEELS_DIR}" -name '*.whl' | wc -l | awk '{print $1 " wheels"}'
+else
+  echo "=== Skipping wheelhouse (no uv.lock or jupyterlab not in lock; postinstall will use PyPI) ==="
+fi
 
 echo "=== Preparing pkgbuild scripts directory ==="
 rm -rf "${PKGBUILD_SCRIPTS_DIR}"
 mkdir -p "${PKGBUILD_SCRIPTS_DIR}"
 cp "${SCRIPTS_DIR}/postinstall.sh" "${PKGBUILD_SCRIPTS_DIR}/postinstall"
 chmod +x "${PKGBUILD_SCRIPTS_DIR}/postinstall"
+cp "${SCRIPTS_DIR}/make_jupyter_app.sh" "${PKGBUILD_SCRIPTS_DIR}/make_jupyter_app.sh"
+chmod +x "${PKGBUILD_SCRIPTS_DIR}/make_jupyter_app.sh"
 
 echo "=== Building component pkg ==="
 pkgbuild \
@@ -118,7 +190,7 @@ pkgbuild \
   --scripts "${PKGBUILD_SCRIPTS_DIR}" \
   --identifier "${PKG_ID}" \
   --version "${PKG_VERSION}" \
-  --install-location "/Library/Application Support/KymFlowPayload" \
+  --install-location "${PKG_INSTALL_LOCATION_REL}" \
   "${COMPONENT_PKG}"
 
 echo "=== Building signed final pkg with Distribution.xml and resources ==="

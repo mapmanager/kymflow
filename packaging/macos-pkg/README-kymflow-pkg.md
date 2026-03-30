@@ -16,6 +16,7 @@ It is based only on the current source-of-truth files provided for this build sy
 - `resources/welcome.html`
 - `resources/conclusion.html`
 - `resources/license.txt`
+- `install-kymflow-curl.sh` (optional curl-based install path; not part of `pkgbuild`)
 
 This README is for developer maintenance of the installer pipeline, not for end users.
 
@@ -25,8 +26,8 @@ This README is for developer maintenance of the installer pipeline, not for end 
 
 The current installer system supports:
 
-- building a staged payload from the current repo
-- filtering common junk files from packaged content
+- building a staged payload from a **GitHub release tag tarball** (not the local tree), with `RELEASE_TAG` / `build_pkg.sh`
+- optional **wheelhouse** under `payload/wheels/` (locked deps for the `jupyter` extra from `uv.lock`) for faster, reproducible, mostly-offline installs
 - creating a component package with `pkgbuild`
 - creating a final installer package with `productbuild`
 - signing the final installer package with a **Developer ID Installer** certificate
@@ -37,8 +38,88 @@ The current installer system supports:
   - `~/Documents/KymFlow`
 - creating a launcher that opens Jupyter rooted at:
   - `~/Documents/KymFlow`
+- generating **`KymFlow Jupyter.app`** in `~/Documents/KymFlow` (no Terminal window; **`Open KymFlow.command`** remains as fallback)
 - tracking install state and writing persistent install logs
 - verifying installation with `smoke_test.sh`
+- an optional **curl script** (`install-kymflow-curl.sh`) that installs the same layout without building a `.pkg` (see below)
+
+---
+
+## Curl installer (`install-kymflow-curl.sh`)
+
+This script is an alternative to the `.pkg` flow: it downloads a **GitHub release source tarball** and installs under the same default **`APP_ROOT`** as `postinstall.sh` (`~/Library/Application Support/kymflow-pkg`), with a workspace under **`~/Documents/KymFlow`**.
+
+### What “latest” means
+
+**Latest** is **not** “newest arbitrary git tag.” It is the **`tag_name`** field from GitHub’s **latest published Release**:
+
+`GET https://api.github.com/repos/mapmanager/kymflow/releases/latest`
+
+If that API cannot be reached, set an explicit tag with **`--tag vX.Y.Z`** or **`RELEASE_TAG=vX.Y.Z`**.
+
+### Flags and precedence
+
+| Input | Effect |
+| --- | --- |
+| `--tag vX.Y.Z` | Install that tag (overrides env). |
+| `--latest` | Resolve latest Release tag via the API (overrides **`RELEASE_TAG`** env). |
+| *(no flag)* | If **`RELEASE_TAG`** is set, use it; otherwise resolve latest Release via the API (same tag as **`--latest`**). |
+
+Run **`./install-kymflow-curl.sh --help`** for the full usage text and pipe-from-curl examples.
+
+### Cache parity with the pkg install
+
+Like **`postinstall.sh`**, the curl installer sets **`UV_CACHE_DIR`** to **`${APP_ROOT}/.cache/uv`** (and creates that directory) so `uv` uses a predictable cache under the app support root.
+
+### JupyterLab app bundle (`KymFlow Jupyter.app`)
+
+Both **`postinstall.sh`** and **`install-kymflow-curl.sh`** run **`scripts/make_jupyter_app.sh`** to create **`~/Documents/KymFlow/KymFlow Jupyter.app`**: a minimal bundle whose executable runs the same **`jupyter lab`** command as **`Open KymFlow.command`**, with stdout/stderr appended to **`${APP_ROOT}/logs/jupyter-app-launch.log`**.
+
+- **Pkg builds:** **`build_pkg.sh`** requires **`packaging/macos-pkg/icons/icon-green.icns`** (local-only; not part of the GitHub release tarball) and copies it to **`payload/resources/AppIcon.icns`** so **`postinstall`** can copy it into **`~/Library/.../payload/resources/`** for the helper.
+- **Curl installs:** the custom icon is used only if **`icons/icon-green.icns`** exists next to **`install-kymflow-curl.sh`** when you run the script; otherwise the app is created with a generic icon.
+- **Gatekeeper:** the generated app is not separately code-signed; users may need **right-click → Open** the first time. See **`readme-jupyterlab-app.md`** for the full design.
+
+---
+
+## Wheelhouse and locked dependencies (reproducibility)
+
+### Goal
+
+- **One lock:** `uv.lock` at the repo root (included in release tarballs). The **`jupyter`** optional extra in `pyproject.toml` pins the Jupyter stack together with KymFlow’s runtime deps.
+- **Wheelhouse:** `build_pkg.sh` exports `uv export --frozen --extra jupyter --no-emit-project --no-dev` and runs `python3 -m pip download` into `payload/wheels/`.
+- **Install:** `postinstall.sh` uses `uv pip install --no-index --find-links …/wheels "${PAYLOAD_ROOT}/kymflow[jupyter]"` when the payload contains wheels **and** `pyproject.toml` defines the `jupyter` extra. Otherwise it falls back to **PyPI** (legacy tags without the extra, or missing wheelhouse).
+
+### Prerequisites
+
+- **`uv`:** required on the machine that runs `build_pkg.sh` when `uv.lock` contains `jupyterlab` (wheelhouse path). Install: [Astral uv](https://docs.astral.sh/uv/getting-started/installation/).
+- **`python3` with `pip`:** `python3 -m pip --version` must work (used for `pip download` into the wheelhouse).
+
+### Checklist (release / CI)
+
+1. **Lock includes Jupyter:** After changing `pyproject.toml` optional deps, run **`uv lock`** at the kymflow repo root and commit **`uv.lock`**.
+2. **Tag the commit** you want to ship (e.g. `v0.2.4`) so the GitHub tarball contains that `uv.lock` and `pyproject.toml`.
+3. **Build the pkg:** `./build_pkg.sh v0.2.4` — confirm `payload/wheels/` contains many `.whl` files and the build log says “Wheelhouse: all binary wheels” if possible.
+4. **Optional — verify wheels-only closure on your Mac (arm64):** from the kymflow repo root, with the same lock:
+
+   ```bash
+   cd /path/to/kymflow
+   uv export --frozen --extra jupyter --format requirements.txt \
+     --no-emit-project --no-dev -o /tmp/kymflow-jupyter-export.txt
+   mkdir -p /tmp/kymflow-wheeltest
+   python3 -m pip download -r /tmp/kymflow-jupyter-export.txt \
+     -d /tmp/kymflow-wheeltest --only-binary :all: --python-version 3.12
+   ```
+
+   - **If this succeeds:** every dependency resolved to a **wheel** for that Python version (good for offline installs without a compiler).
+   - **If it fails:** the error names a package with no compatible wheel; fix by pinning, changing a dependency, or allowing sdists in `build_pkg.sh` (second `pip download` attempt) and document that users may need build tools.
+
+5. **Smoke test** the installed app (`smoke_test.sh`) after installing the `.pkg`.
+
+### Policy (agreed defaults)
+
+- **Python version:** `3.12` (`INSTALL_PYTHON_VERSION`), **arm64** only for the wheelhouse.
+- **Reproducibility:** compatible ranges in `pyproject.toml`, **exact resolved versions** in `uv.lock` at the tag.
+- **Fallback:** PyPI is used when the wheelhouse is absent, empty, or `uv pip install --no-index` fails, or when the staged `pyproject.toml` has no `jupyter` extra (legacy tarball).
 
 ---
 
@@ -60,9 +141,12 @@ kymflow/
         welcome.html
         conclusion.html
         license.txt
+      icons/
+        icon-green.icns          # local-only; required for pkg build (not in release tarball)
       scripts/
         postinstall.sh
-      payload/                   # generated by build_pkg.sh
+        make_jupyter_app.sh      # generates KymFlow Jupyter.app at install time
+      payload/                   # generated by build_pkg.sh (kymflow/ + wheels/ + resources/)
       build/                     # generated by build_pkg.sh
       dist/                      # generated by build_pkg.sh
 ```
@@ -72,6 +156,7 @@ Notes:
 - `payload/`, `build/`, and `dist/` are generated directories.
 - `_secrets.sh` is local-only and should not be committed.
 - `Distribution.xml` and `resources/` define the installer GUI flow used by `productbuild`.
+- `icons/icon-green.icns` is not part of the GitHub tag archive; keep it on the machine that runs **`build_pkg.sh`**.
 
 ---
 
@@ -81,14 +166,13 @@ Notes:
 
 `build_pkg.sh` does the following:
 
-1. resolves the repo root and source paths
-2. reads version from `pyproject.toml`
-3. stages packaging payload under `payload/kymflow`
-4. filters unwanted files during staging
-5. prepares `pkgbuild` scripts by copying `postinstall.sh` to a file named `postinstall`
-6. builds a component package with `pkgbuild`
-7. builds a final signed distribution package with `productbuild`
-8. verifies the final package signature with `pkgutil --check-signature`
+1. downloads the GitHub tag tarball for `RELEASE_TAG` and stages it as `payload/kymflow`
+2. reads package version from staged `pyproject.toml`
+3. if `uv.lock` contains `jupyterlab`, exports locked requirements (`uv export --frozen --extra jupyter --no-emit-project --no-dev`) and runs `python3 -m pip download` into `payload/wheels/` (wheelhouse); otherwise skips that step
+4. prepares `pkgbuild` scripts by copying `postinstall.sh` to a file named `postinstall`
+5. builds a component package with `pkgbuild` (payload root includes `kymflow/` and optionally `wheels/`)
+6. builds a final signed distribution package with `productbuild`
+7. verifies the final package signature with `pkgutil --check-signature`
 
 ### Install-time flow
 
@@ -107,7 +191,7 @@ Notes:
 8. bootstraps `uv` if needed
 9. installs Python if needed
 10. creates or reuses a virtual environment
-11. installs JupyterLab, ipykernel, and local `kymflow` when required
+11. installs the runtime (prefer `kymflow[jupyter]` from bundled `wheels/` with `--no-index` when available; else from PyPI) when required
 12. refreshes installer-managed workspace directories
 13. creates the launcher script
 14. fixes workspace ownership and permissions
@@ -297,7 +381,7 @@ This is currently the deliberate payload cleanup boundary.
 
 #### 7. Prepare `pkgbuild` scripts
 
-`pkgbuild` expects installer scripts to be named exactly `postinstall` or `preinstall`.
+`pkgbuild` expects installer scripts to be named exactly `postinstall` or `preinstall` if present.
 
 The current source file is:
 
@@ -323,7 +407,7 @@ The script runs `pkgbuild` with:
 - `--scripts build/pkgbuild-scripts`
 - `--identifier org.cudmore.kymflow`
 - `--version <pkg version>`
-- `--install-location /Library/Application Support/KymFlowPayload`
+- `--install-location` a **user-home-relative** path such as `Library/Application Support/kymflow-pkg/KymFlowPayload` (no leading `/`; see `build_pkg.sh`)
 
 Output:
 
@@ -357,6 +441,22 @@ pkgutil --check-signature dist/KymFlow-<version>.pkg
 ```
 
 to verify the installer signature.
+
+### Debugging a failed install (CLI)
+
+Apple’s GUI Installer logs to the system log. To reproduce and print verbose output from the terminal (from `kymflow/packaging/macos-pkg/`):
+
+```bash
+sudo installer -pkg ./dist/KymFlow-<version>.pkg -target "$HOME" -verboseR
+```
+
+Notes:
+
+- **`installer` must usually run as root** (`sudo`), even for a user-home payload. That is separate from an admin password for writing to `/Library`; `sudo` here is what the `installer` CLI expects when driving `installd`.
+- **`-target`**: Use your home directory path, e.g. `"$HOME"` or `/Users/you`. The special name `CurrentUserHome` is not reliable across macOS versions (you may see “Error trying to locate volume at CurrentUserHome”).
+- **System log** (optional): `log show --last 30m --predicate 'process == "Installer" OR subsystem CONTAINS "com.apple.installer"'` or read `/var/log/install.log` if present.
+
+**KymFlow postinstall logs** (only if `postinstall` started): `~/Library/Application Support/kymflow-pkg/logs/install-*.log`.
 
 ### Expected generated tree after running `build_pkg.sh`
 
@@ -513,6 +613,8 @@ Possible modes in current script:
 
 There is also explicit downgrade-blocking logic in the script.
 This README describes that as script behavior; whether a downgrade has been manually tested is a separate question.
+
+**Installer GUI vs. errors:** macOS **Installer.app does not show** `postinstall` stderr or custom messages in its failure panel—you only get a generic “installation failed.” For **downgrade**, `postinstall` runs **`osascript`** as the **console user** so a **native alert** explains the situation and points to **`~/Library/Application Support/kymflow-pkg/logs/`**. Other failures still rely on those logs (or **Console** / **`installer -verbose`**).
 
 #### 6. Prepare workspace base directories
 
