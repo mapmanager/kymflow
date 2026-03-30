@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Local-only secrets for installer signing + notarization.
+#
+# Copy to _secrets.sh and edit:
+#   cp _secrets.example.sh _secrets.sh
+#   chmod 600 _secrets.sh
+#
+# This file should NOT be committed with real values.
+
+export SIGN_INSTALLER_ID='Developer ID Installer: Robert Cudmore (794C773KDS)'
+# export NOTARY_PROFILE='<YOUR_NOTARYTOOL_PROFILE_NAME>'
+export NOTARY_PROFILE='my-notarytool-profile-feb2025'
+
+
+# Package "KymFlow-0.2.3.pkg":
+#    Status: signed by a developer certificate issued by Apple for distribution
+#    Signed with a trusted timestamp on: 2026-03-28 23:47:06 +0000
+#    Certificate Chain:
+#     1. Developer ID Installer: Robert Cudmore (794C773KDS)
+#        Expires: 2031-03-29 22:26:34 +0000
+#        SHA256 Fingerprint:
+#            53 EB 56 59 70 58 97 9F 65 64 4A F0 B3 B3 1A 6B AA 12 03 60 8D 31 
+#            3A AA 84 6C AE 59 6C 67 84 2A
+#        ------------------------------------------------------------------------
+#     2. Developer ID Certification Authority
+#        Expires: 2031-09-17 00:00:00 +0000
+#        SHA256 Fingerprint:
+#            F1 6C D3 C5 4C 7F 83 CE A4 BF 1A 3E 6A 08 19 C8 AA A8 E4 A1 52 8F 
+#            D1 44 71 5F 35 06 43 D2 DF 3A
+#        ------------------------------------------------------------------------
+#     3. Apple Root CA
+#        Expires: 2035-02-09 21:40:36 +0000
+#        SHA256 Fingerprint:
+#            B0 B1 73 0E CB C7 FF 45 05 14 2C 49 F1 29 5E 6E DA 6B CA ED 7E 2C 
+#            68 C5 BE 91 B5 A1 10 01 F0 24
