@@ -9,17 +9,24 @@ by AnalysisToolbarBindings).
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
-from nicegui import ui
+from nicegui import app, ui
+from nicewidgets.utils.clipboard import copy_to_clipboard
 
 from kymflow.core.image_loaders.kym_image import KymImage
 
 if TYPE_CHECKING:
     from kymflow.gui_v2.app_context import AppContext
-from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
+from kymflow.core.analysis.velocity_events.velocity_events import (
+    BaselineDropParams,
+    NanGapParams,
+    ZeroGapParams,
+)
+from kymflow.gui_v2._pywebview import _prompt_for_save_path
 from kymflow.gui_v2.client_utils import safe_call
 from kymflow.gui_v2.events import (
     AddRoi,
@@ -37,6 +44,8 @@ OnAnalysisStart = Callable[[AnalysisStart], None]
 OnAnalysisCancel = Callable[[AnalysisCancel], None]
 OnAddRoi = Callable[[AddRoi], None]
 OnDetectEvents = Callable[[DetectEvents], None]
+OnBatchKymEvent = Callable[[], None]
+OnBatchRadon = Callable[[], None]
 
 
 class AnalysisToolbarView:
@@ -71,6 +80,8 @@ class AnalysisToolbarView:
         on_analysis_cancel: OnAnalysisCancel,
         on_add_roi: OnAddRoi | None = None,
         on_detect_events: OnDetectEvents,
+        on_batch_kym_event: OnBatchKymEvent | None = None,
+        on_batch_radon: OnBatchRadon | None = None,
     ) -> None:
         """Initialize analysis toolbar view.
 
@@ -80,12 +91,16 @@ class AnalysisToolbarView:
             on_analysis_cancel: Callback function that receives AnalysisCancel events.
             on_add_roi: Callback function that receives AddRoi events.
             on_detect_events: Callback function that receives DetectEvents events.
+            on_batch_kym_event: Optional callback to open batch kym-event analysis.
+            on_batch_radon: Optional callback to open batch Radon analysis.
         """
         self._app_context = app_context
         self._on_analysis_start = on_analysis_start
         self._on_analysis_cancel = on_analysis_cancel
         self._on_add_roi = on_add_roi
         self._on_detect_events = on_detect_events
+        self._on_batch_kym_event = on_batch_kym_event
+        self._on_batch_radon = on_batch_radon
 
         # UI components (created in render())
         self._window_select: Optional[ui.select] = None
@@ -95,17 +110,22 @@ class AnalysisToolbarView:
         # self._progress_label: Optional[ui.label] = None
         self._detect_events_button: Optional[ui.button] = None
         self._reset_event_params_button: Optional[ui.button] = None
+        self._copy_event_results_button: Optional[ui.button] = None
+        self._save_event_results_button: Optional[ui.button] = None
         # self._detect_all_events_button: Optional[ui.button] = None  # Commented out: Detect Events (all files) disabled
         self._win_cmp_sec_input: Optional[ui.number] = None
         self._smooth_sec_input: Optional[ui.number] = None
         self._mad_k_input: Optional[ui.number] = None
         self._abs_score_floor_input: Optional[ui.number] = None
+        self._batch_kym_event_button: Optional[ui.button] = None
+        self._batch_radon_button: Optional[ui.button] = None
 
         # State
         self._current_file: Optional[KymImage] = None
         self._current_channel: Optional[int] = None
         self._current_roi_id: Optional[int] = None
         self._task_state: Optional[TaskStateChanged] = None
+        self._batch_task_state: Optional[TaskStateChanged] = None
 
     def render(self) -> None:
         """Create the analysis toolbar UI inside the current container.
@@ -125,20 +145,42 @@ class AnalysisToolbarView:
         # self._progress_label = None
         self._detect_events_button = None
         self._reset_event_params_button = None
+        self._copy_event_results_button = None
+        self._save_event_results_button = None
         # self._detect_all_events_button = None  # Commented out: Detect Events (all files) disabled
         self._win_cmp_sec_input = None
         self._smooth_sec_input = None
         self._mad_k_input = None
         self._abs_score_floor_input = None
+        self._batch_kym_event_button = None
+        self._batch_radon_button = None
 
-        # Flow Analysis section
-        # with ui.expansion("Flow Analysis", value=True).classes("w-full"):
+        self._render_flow_analysis_widget()
+        
+        # Event Analysis widget (modular, self-contained)
+        self._render_event_analysis_widget()
+        
+        # Initialize button states
+        self._update_button_states()
+
+    def _render_flow_analysis_widget(self) -> None:
+        """Render the Flow Analysis widget (modular, self-contained).
+
+        Creates UI elements for flow analysis: action buttons, progress bar, and
+        window-size selector. This method intentionally preserves the existing
+        layout and behavior.
+        """
         with kym_expansion("Flow Analysis", value=True).classes("w-full"):
             with ui.column().classes("w-full gap-2"):
                 # Analyze Flow and Cancel buttons (moved to top)
                 with ui.row().classes("items-end gap-2"):
                     self._start_button = ui.button("Analyze Flow", on_click=self._on_start_click).props("dense").classes("text-sm")
                     self._cancel_button = ui.button("Cancel", on_click=self._on_cancel_click).props("dense").classes("text-sm")
+                    if self._on_batch_radon is not None:
+                        self._batch_radon_button = ui.button(
+                            "Batch Analyze",
+                            on_click=self._on_batch_radon_click,
+                        ).props("dense").classes("text-sm")
 
                 # Progress bar and label (hidden by default, shown when task is running)
                 with ui.column().classes("w-full gap-1"):
@@ -147,7 +189,7 @@ class AnalysisToolbarView:
                     # Start hidden, will be shown when task starts
                     self._progress_bar.visible = False
                     # self._progress_label.visible = False
-                
+
                 # Analysis controls - Window Points select (moved below buttons and progress bar)
                 with ui.row().classes("items-end gap-2"):
                     self._window_select = ui.select(
@@ -155,12 +197,6 @@ class AnalysisToolbarView:
                         value=16,
                         label="Window Points",
                     ).classes("w-32")
-        
-        # Event Analysis widget (modular, self-contained)
-        self._render_event_analysis_widget()
-        
-        # Initialize button states
-        self._update_button_states()
 
     def set_selected_file(
         self,
@@ -209,7 +245,7 @@ class AnalysisToolbarView:
         self._update_button_states()
 
     def set_task_state(self, task_state: TaskStateChanged) -> None:
-        """Update view for task state changes.
+        """Update view for home task state changes.
 
         Called by bindings when TaskStateChanged event is received.
         Updates button states based on task running/cancellable state.
@@ -228,13 +264,33 @@ class AnalysisToolbarView:
         self._task_state = task_state
         self._update_button_states()
 
+    def set_batch_task_state(self, task_state: TaskStateChanged) -> None:
+        """Update view for batch or batch-overall task state (disables controls while batch runs).
+
+        Args:
+            task_state: Task state for ``task_type`` ``batch`` or ``batch_overall``.
+        """
+        safe_call(self._set_batch_task_state_impl, task_state)
+
+    def _set_batch_task_state_impl(self, task_state: TaskStateChanged) -> None:
+        """Apply batch task state for toolbar chrome."""
+        self._batch_task_state = task_state
+        self._update_button_states()
+
     def _update_button_states(self) -> None:
         """Update button states based on current file, ROI selection, and task state."""
         if self._start_button is None or self._cancel_button is None:
             return
 
-        running = self._task_state.running if self._task_state else False
-        cancellable = self._task_state.cancellable if self._task_state else False
+        home_running = self._task_state.running if self._task_state else False
+        batch_running = self._batch_task_state.running if self._batch_task_state else False
+        running = home_running or batch_running
+        if home_running and self._task_state is not None:
+            cancellable = self._task_state.cancellable
+        elif batch_running and self._batch_task_state is not None:
+            cancellable = self._batch_task_state.cancellable
+        else:
+            cancellable = False
         has_file = self._current_file is not None
         has_roi = self._current_roi_id is not None
         
@@ -269,6 +325,30 @@ class AnalysisToolbarView:
                 self._detect_events_button.enable()
             else:
                 self._detect_events_button.disable()
+
+        has_files_loaded = len(self._app_context.app_state.files) > 0
+        can_save_to_file = self._app_context.runtime_env.has_file_system_access
+        if self._copy_event_results_button is not None:
+            if running or not has_files_loaded:
+                self._copy_event_results_button.disable()
+            else:
+                self._copy_event_results_button.enable()
+        if self._save_event_results_button is not None:
+            if running or not has_files_loaded or not can_save_to_file:
+                self._save_event_results_button.disable()
+            else:
+                self._save_event_results_button.enable()
+
+        if self._batch_kym_event_button is not None:
+            if running or not has_files_loaded:
+                self._batch_kym_event_button.disable()
+            else:
+                self._batch_kym_event_button.enable()
+        if self._batch_radon_button is not None:
+            if running or not has_files_loaded:
+                self._batch_radon_button.disable()
+            else:
+                self._batch_radon_button.enable()
         
         # Detect Events (all files) button: enabled when not running a task
         # (Controller will validate that files exist)
@@ -430,28 +510,34 @@ class AnalysisToolbarView:
         Creates UI elements for event detection: label, parameter inputs, and button.
         This method is self-contained and creates all UI elements in a single block.
         """
-        # Event Analysis section
-
-        # with ui.expansion("event analysis", value=True).classes("w-full"):
-        with kym_expansion("Event Analysis", value=True).classes("w-full"):
+        ui.label("Event Analysis").classes("text-sm font-semibold")
+        with ui.card().classes("w-full"):
             with ui.column().classes("w-full gap-2"):
-                # Detect Events and Reset buttons (same row)
                 with ui.row().classes("items-end gap-2"):
                     self._detect_events_button = ui.button(
                         "Detect Events",
-                        on_click=self._on_detect_events_click
+                        on_click=self._on_detect_events_click,
                     )
                     self._reset_event_params_button = ui.button(
                         "Reset",
                         on_click=self._on_reset_event_params_click,
                     )
-                    # Commented out: Detect Events (all files) disabled
-                    # self._detect_all_events_button = ui.button(
-                    #     "Detect Events (all files)",
-                    #     on_click=self._on_detect_all_events_click
-                    # )
-                
-                # Parameter inputs (each on its own row)
+                    if self._on_batch_kym_event is not None:
+                        self._batch_kym_event_button = ui.button(
+                            "Batch Analyze",
+                            on_click=self._on_batch_kym_event_click,
+                        ).props("dense").classes("text-sm")
+
+                with ui.row().classes("items-end gap-2"):
+                    self._copy_event_results_button = ui.button(
+                        "Copy Results",
+                        on_click=self._on_copy_event_results_click,
+                    ).props("dense").classes("text-sm")
+                    self._save_event_results_button = ui.button(
+                        "Save Results",
+                        on_click=lambda: asyncio.create_task(self._on_save_event_results_click()),
+                    ).props("dense").classes("text-sm")
+
                 self._win_cmp_sec_input = ui.number(
                     label="win_cmp_sec",
                     value=BaselineDropParams().win_cmp_sec,
@@ -459,7 +545,7 @@ class AnalysisToolbarView:
                     min=0.01,
                     step=0.01
                 ).classes("w-full").props("dense")
-                
+
                 self._smooth_sec_input = ui.number(
                     label="smooth_sec",
                     value=BaselineDropParams().smooth_sec,
@@ -467,7 +553,7 @@ class AnalysisToolbarView:
                     min=0.01,
                     step=0.01
                 ).classes("w-full").props("dense")
-                
+
                 self._mad_k_input = ui.number(
                     label="mad_k",
                     value=BaselineDropParams().mad_k,
@@ -475,7 +561,7 @@ class AnalysisToolbarView:
                     min=0.1,
                     step=0.1
                 ).classes("w-full").props("dense")
-                
+
                 self._abs_score_floor_input = ui.number(
                     label="abs_score_floor",
                     value=BaselineDropParams().abs_score_floor,
@@ -483,6 +569,60 @@ class AnalysisToolbarView:
                     min=0.0,
                     step=0.01
                 ).classes("w-full").props("dense")
+
+    def _get_velocity_event_csv_text(self) -> str:
+        """Return velocity event cache as TSV text for copy/save operations.
+
+        Returns:
+            Tab-separated text with header row, or empty string if unavailable.
+        """
+        files = self._app_context.app_state.files
+        if len(files) == 0:
+            return ""
+        df = files.get_velocity_event_df()
+        if df is None or df.empty:
+            return ""
+        return df.to_csv(index=False, sep="\t")
+
+    def _on_copy_event_results_click(self) -> None:
+        """Copy velocity-event cache results to clipboard."""
+        text = self._get_velocity_event_csv_text()
+        if not text:
+            ui.notify("No kym event results to copy", type="warning")
+            return
+        copy_to_clipboard(text)
+        ui.notify("Kym event report copied to clipboard", type="positive")
+
+    async def _on_save_event_results_click(self) -> None:
+        """Save velocity-event cache to a user-selected CSV path."""
+        if not self._app_context.runtime_env.has_file_system_access:
+            ui.notify("Saving requires native mode file access", type="warning")
+            return
+        if getattr(app, "native", None) is None:
+            ui.notify("Native save dialog not available", type="warning")
+            return
+        files = self._app_context.app_state.files
+        if len(files) == 0:
+            ui.notify("No files loaded", type="warning")
+            return
+        df = files.get_velocity_event_df()
+        if df is None or df.empty:
+            ui.notify("No kym event results to save", type="warning")
+            return
+
+        selected_path = await _prompt_for_save_path(
+            initial=Path.home(),
+            suggested_filename="kym_event_db.csv",
+            file_extension=".csv",
+        )
+        if not selected_path:
+            return
+        try:
+            df.to_csv(selected_path, index=False)
+            ui.notify(f"Saved kym event results to {Path(selected_path).name}", type="positive")
+        except Exception as exc:
+            logger.exception(f"Failed to save kym event results to {selected_path}: {exc}")
+            ui.notify(f"Failed to save results: {exc}", type="negative")
 
     def _on_reset_event_params_click(self) -> None:
         """Reset event analysis parameter inputs to BaselineDropParams class defaults."""
@@ -501,6 +641,61 @@ class AnalysisToolbarView:
         if self._abs_score_floor_input is not None and "abs_score_floor" in defaults:
             self._abs_score_floor_input.value = defaults["abs_score_floor"]
 
+    def _collect_baseline_drop_params(self) -> BaselineDropParams:
+        """Read baseline-drop parameters from the Event Analysis inputs."""
+        default_params = BaselineDropParams()
+        win_cmp_sec = default_params.win_cmp_sec
+        smooth_sec = default_params.smooth_sec
+        mad_k = default_params.mad_k
+        abs_score_floor = default_params.abs_score_floor
+
+        if self._win_cmp_sec_input is not None:
+            try:
+                win_cmp_sec = float(self._win_cmp_sec_input.value) if self._win_cmp_sec_input.value is not None else default_params.win_cmp_sec
+            except (ValueError, TypeError):
+                win_cmp_sec = default_params.win_cmp_sec
+
+        if self._smooth_sec_input is not None:
+            try:
+                smooth_sec = float(self._smooth_sec_input.value) if self._smooth_sec_input.value is not None else default_params.smooth_sec
+            except (ValueError, TypeError):
+                smooth_sec = default_params.smooth_sec
+
+        if self._mad_k_input is not None:
+            try:
+                mad_k = float(self._mad_k_input.value) if self._mad_k_input.value is not None else default_params.mad_k
+            except (ValueError, TypeError):
+                mad_k = default_params.mad_k
+
+        if self._abs_score_floor_input is not None:
+            try:
+                abs_score_floor = float(self._abs_score_floor_input.value) if self._abs_score_floor_input.value is not None else default_params.abs_score_floor
+            except (ValueError, TypeError):
+                abs_score_floor = default_params.abs_score_floor
+
+        return BaselineDropParams(
+            win_cmp_sec=win_cmp_sec,
+            smooth_sec=smooth_sec,
+            mad_k=mad_k,
+            abs_score_floor=abs_score_floor,
+        )
+
+    def get_baseline_params_for_batch(
+        self,
+    ) -> tuple[BaselineDropParams, NanGapParams | None, ZeroGapParams | None]:
+        """Return baseline and gap params for batch analysis (matches single-file detect defaults).
+
+        Returns:
+            Tuple of ``(baseline_drop_params, nan_gap_params, zero_gap_params)``.
+            Gap params are ``None`` to match :class:`DetectEvents` single-file emission.
+        """
+        return (self._collect_baseline_drop_params(), None, None)
+
+    def _on_batch_kym_event_click(self) -> None:
+        """Open batch kym-event dialog (callback provided by HomePage)."""
+        if self._on_batch_kym_event is not None:
+            self._on_batch_kym_event()
+
     def _on_detect_events_click(self) -> None:
         """Handle Detect Events button click."""
         # Verify file is still valid (safety check)
@@ -513,44 +708,7 @@ class AnalysisToolbarView:
             ui.notify("Select an ROI first", color="warning")
             return
 
-        # Collect parameter values from inputs (with error handling)
-        default_params = BaselineDropParams()
-        win_cmp_sec = default_params.win_cmp_sec
-        smooth_sec = default_params.smooth_sec
-        mad_k = default_params.mad_k
-        abs_score_floor = default_params.abs_score_floor
-        
-        if self._win_cmp_sec_input is not None:
-            try:
-                win_cmp_sec = float(self._win_cmp_sec_input.value) if self._win_cmp_sec_input.value is not None else default_params.win_cmp_sec
-            except (ValueError, TypeError):
-                win_cmp_sec = default_params.win_cmp_sec
-        
-        if self._smooth_sec_input is not None:
-            try:
-                smooth_sec = float(self._smooth_sec_input.value) if self._smooth_sec_input.value is not None else default_params.smooth_sec
-            except (ValueError, TypeError):
-                smooth_sec = default_params.smooth_sec
-        
-        if self._mad_k_input is not None:
-            try:
-                mad_k = float(self._mad_k_input.value) if self._mad_k_input.value is not None else default_params.mad_k
-            except (ValueError, TypeError):
-                mad_k = default_params.mad_k
-        
-        if self._abs_score_floor_input is not None:
-            try:
-                abs_score_floor = float(self._abs_score_floor_input.value) if self._abs_score_floor_input.value is not None else default_params.abs_score_floor
-            except (ValueError, TypeError):
-                abs_score_floor = default_params.abs_score_floor
-
-        # Create BaselineDropParams with collected values (other params use defaults)
-        baseline_drop_params = BaselineDropParams(
-            win_cmp_sec=win_cmp_sec,
-            smooth_sec=smooth_sec,
-            mad_k=mad_k,
-            abs_score_floor=abs_score_floor,
-        )
+        baseline_drop_params = self._collect_baseline_drop_params()
 
         # Emit DetectEvents intent event
         path_str = str(self._current_file.path) if self._current_file.path else None
@@ -563,6 +721,11 @@ class AnalysisToolbarView:
                 phase="intent",
             )
         )
+
+    def _on_batch_radon_click(self) -> None:
+        """Open batch Radon analysis dialog."""
+        if self._on_batch_radon is not None:
+            self._on_batch_radon()
 
     # Commented out: Detect Events (all files) disabled
     # def _on_detect_all_events_click(self) -> None:

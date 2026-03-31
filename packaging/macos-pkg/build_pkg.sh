@@ -30,6 +30,7 @@ PAYLOAD_DIR="${ROOT_DIR}/payload"
 PAYLOAD_KYMFLOW_DIR="${PAYLOAD_DIR}/kymflow"
 
 SCRIPTS_DIR="${ROOT_DIR}/scripts"
+APP_LAUNCHER_DIR="${ROOT_DIR}/app_launcher"
 BUILD_DIR="${ROOT_DIR}/build"
 PKGBUILD_SCRIPTS_DIR="${BUILD_DIR}/pkgbuild-scripts"
 DIST_DIR="${ROOT_DIR}/dist"
@@ -53,6 +54,8 @@ echo "PKG_INSTALL_LOCATION_REL=${PKG_INSTALL_LOCATION_REL}"
 
 [ -f "${SCRIPTS_DIR}/postinstall.sh" ] || { echo "ERROR: missing scripts/postinstall.sh"; exit 1; }
 [ -f "${SCRIPTS_DIR}/make_jupyter_app.sh" ] || { echo "ERROR: missing scripts/make_jupyter_app.sh"; exit 1; }
+[ -f "${APP_LAUNCHER_DIR}/launch_jupyter.swift" ] || { echo "ERROR: missing app_launcher/launch_jupyter.swift"; exit 1; }
+[ -x "${APP_LAUNCHER_DIR}/build_launcher.sh" ] || { echo "ERROR: missing executable app_launcher/build_launcher.sh"; exit 1; }
 
 [ -f "${DIST_XML}" ] || { echo "ERROR: missing Distribution.xml"; exit 1; }
 [ -d "${RESOURCES_DIR}" ] || { echo "ERROR: missing resources/"; exit 1; }
@@ -70,6 +73,7 @@ source "${SECRETS_FILE}"
 command -v pkgbuild >/dev/null || { echo "ERROR: pkgbuild not found"; exit 1; }
 command -v productbuild >/dev/null || { echo "ERROR: productbuild not found"; exit 1; }
 command -v pkgutil >/dev/null || { echo "ERROR: pkgutil not found"; exit 1; }
+command -v swiftc >/dev/null || { echo "ERROR: swiftc not found (required for native Jupyter launcher build)"; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 not found"; exit 1; }
 command -v curl >/dev/null || { echo "ERROR: curl not found"; exit 1; }
 command -v tar >/dev/null || { echo "ERROR: tar not found"; exit 1; }
@@ -104,6 +108,8 @@ mv "${PAYLOAD_DIR}/${TOP_LEVEL}" "${PAYLOAD_KYMFLOW_DIR}"
 
 # Jupyter .app icon: local packaging asset (not in the GitHub release tarball). Staged into the pkg payload.
 JUPYTER_APP_ICON_SRC="${ROOT_DIR}/icons/icon-green.icns"
+# Installer GUI logo (welcome/conclusion HTML): local packaging asset.
+INSTALLER_BRAND_PNG_SRC="${ROOT_DIR}/icons/icon-green.png"
 mkdir -p "${PAYLOAD_DIR}/resources"
 if [ ! -f "${JUPYTER_APP_ICON_SRC}" ]; then
   echo "ERROR: Jupyter launcher icon missing: ${JUPYTER_APP_ICON_SRC}"
@@ -111,6 +117,12 @@ if [ ! -f "${JUPYTER_APP_ICON_SRC}" ]; then
   exit 1
 fi
 cp "${JUPYTER_APP_ICON_SRC}" "${PAYLOAD_DIR}/resources/AppIcon.icns"
+if [ ! -f "${INSTALLER_BRAND_PNG_SRC}" ]; then
+  echo "ERROR: Installer branding image missing: ${INSTALLER_BRAND_PNG_SRC}"
+  echo "Add packaging/macos-pkg/icons/icon-green.png before building the installer."
+  exit 1
+fi
+cp "${INSTALLER_BRAND_PNG_SRC}" "${RESOURCES_DIR}/icon-green.png"
 
 [ -f "${PAYLOAD_KYMFLOW_DIR}/pyproject.toml" ] || { echo "ERROR: pyproject.toml missing in staged payload"; exit 1; }
 [ -f "${PAYLOAD_KYMFLOW_DIR}/README.md" ] || { echo "ERROR: README.md missing in staged payload"; exit 1; }
@@ -183,6 +195,7 @@ cp "${SCRIPTS_DIR}/postinstall.sh" "${PKGBUILD_SCRIPTS_DIR}/postinstall"
 chmod +x "${PKGBUILD_SCRIPTS_DIR}/postinstall"
 cp "${SCRIPTS_DIR}/make_jupyter_app.sh" "${PKGBUILD_SCRIPTS_DIR}/make_jupyter_app.sh"
 chmod +x "${PKGBUILD_SCRIPTS_DIR}/make_jupyter_app.sh"
+"${APP_LAUNCHER_DIR}/build_launcher.sh" "${PKGBUILD_SCRIPTS_DIR}/launch_jupyter"
 
 echo "=== Building component pkg ==="
 pkgbuild \

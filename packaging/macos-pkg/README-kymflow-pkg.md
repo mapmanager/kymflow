@@ -73,7 +73,7 @@ Like **`postinstall.sh`**, the curl installer sets **`UV_CACHE_DIR`** to **`${AP
 
 ### JupyterLab app bundle (`KymFlow Jupyter.app`)
 
-Both **`postinstall.sh`** and **`install-kymflow-curl.sh`** run **`scripts/make_jupyter_app.sh`** to create **`~/Documents/KymFlow/KymFlow Jupyter.app`**: a minimal bundle whose executable runs the same **`jupyter lab`** command as **`Open KymFlow.command`**, with stdout/stderr appended to **`${APP_ROOT}/logs/jupyter-app-launch.log`**.
+Both **`postinstall.sh`** and **`install-kymflow-curl.sh`** run **`scripts/make_jupyter_app.sh`** to create **`~/Documents/KymFlow/KymFlow Jupyter.app`**. The bundle executable is a native launcher built from **`app_launcher/launch_jupyter.swift`** and staged as **`scripts/launch_jupyter`**. It starts Jupyter from the installed venv, keeps normal app lifecycle in Dock/AppKit, and writes runtime logs to **`${APP_ROOT}/logs/jupyter-app-runtime.log`**.
 
 - **Pkg builds:** **`build_pkg.sh`** requires **`packaging/macos-pkg/icons/icon-green.icns`** (local-only; not part of the GitHub release tarball) and copies it to **`payload/resources/AppIcon.icns`** so **`postinstall`** can copy it into **`~/Library/.../payload/resources/`** for the helper.
 - **Curl installs:** the custom icon is used only if **`icons/icon-green.icns`** exists next to **`install-kymflow-curl.sh`** when you run the script; otherwise the app is created with a generic icon.
@@ -143,6 +143,10 @@ kymflow/
         license.txt
       icons/
         icon-green.icns          # local-only; required for pkg build (not in release tarball)
+        icon-green.png           # local-only; copied into resources/ for installer branding pages
+      app_launcher/
+        launch_jupyter.swift     # native launcher source
+        build_launcher.sh        # compiles launch_jupyter for pkg staging
       scripts/
         postinstall.sh
         make_jupyter_app.sh      # generates KymFlow Jupyter.app at install time
@@ -157,6 +161,7 @@ Notes:
 - `_secrets.sh` is local-only and should not be committed.
 - `Distribution.xml` and `resources/` define the installer GUI flow used by `productbuild`.
 - `icons/icon-green.icns` is not part of the GitHub tag archive; keep it on the machine that runs **`build_pkg.sh`**.
+- `icons/icon-green.png` is also local-only and is copied by **`build_pkg.sh`** to `resources/icon-green.png` for `welcome.html` / `conclusion.html`.
 
 ---
 

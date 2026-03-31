@@ -13,6 +13,7 @@ from nicegui import ui
 
 from kymflow.core.state import TaskState
 from kymflow.gui_v2.state import AppState
+from kymflow.gui_v2.app_context import AppContext
 from kymflow.gui_v2.tasks import run_flow_analysis
 from kymflow.gui_v2.bus import EventBus
 from kymflow.gui_v2.events import AnalysisCancel, AnalysisStart
@@ -148,6 +149,17 @@ class AnalysisController:
         Args:
             e: AnalysisCancel event (phase="intent").
         """
+        ctx = AppContext.get_instance()
+        batch_running = (
+            ctx.batch_overall_task is not None and ctx.batch_overall_task.running
+        ) or (ctx.batch_task is not None and ctx.batch_task.running)
+        if batch_running:
+            if ctx.batch_overall_task is not None:
+                ctx.batch_overall_task.request_cancel()
+            if ctx.batch_task is not None:
+                ctx.batch_task.request_cancel()
+            ui.notify("Batch analysis cancelled", color="info")
+            return
         if self._task_state.running:
             kf = self._app_state.selected_file
             if kf and kf.path:

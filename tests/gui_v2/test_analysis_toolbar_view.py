@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -27,6 +28,10 @@ def mock_app_context():
     mock_app_config = MagicMock()
     mock_app_config.get_blinded.return_value = False
     mock_context.app_config = mock_app_config
+    mock_context.runtime_env = MagicMock()
+    mock_context.runtime_env.has_file_system_access = True
+    mock_context.app_state = MagicMock()
+    mock_context.app_state.files = []
     return mock_context
 
 
@@ -381,4 +386,60 @@ def test_detect_events_click_handles_none_inputs(
     assert event.baseline_drop_params.smooth_sec == default_params.smooth_sec
     assert event.baseline_drop_params.mad_k == default_params.mad_k
     assert event.baseline_drop_params.abs_score_floor == default_params.abs_score_floor
+
+
+def test_copy_event_results_notifies_on_success(mock_app_context) -> None:
+    """Test that copy event results copies TSV text and notifies success."""
+    view = AnalysisToolbarView(
+        app_context=mock_app_context,
+        on_analysis_start=lambda e: None,
+        on_analysis_cancel=lambda e: None,
+        on_add_roi=lambda e: None,
+        on_detect_events=lambda e: None,
+    )
+    view.render()
+
+    df = MagicMock()
+    df.empty = False
+    df.to_csv.return_value = "a\tb\n1\t2\n"
+    mock_files = MagicMock()
+    mock_files.__len__.return_value = 1
+    mock_files.get_velocity_event_df.return_value = df
+    view._app_context.app_state.files = mock_files
+
+    with patch("kymflow.gui_v2.views.analysis_toolbar_view.copy_to_clipboard") as mock_copy:
+        with patch("kymflow.gui_v2.views.analysis_toolbar_view.ui.notify") as mock_notify:
+            view._on_copy_event_results_click()
+
+    mock_copy.assert_called_once_with("a\tb\n1\t2\n")
+    mock_notify.assert_called_once_with("Kym event report copied to clipboard", type="positive")
+
+
+def test_save_event_results_notifies_on_success(mock_app_context) -> None:
+    """Test that save event results writes CSV and notifies success."""
+    view = AnalysisToolbarView(
+        app_context=mock_app_context,
+        on_analysis_start=lambda e: None,
+        on_analysis_cancel=lambda e: None,
+        on_add_roi=lambda e: None,
+        on_detect_events=lambda e: None,
+    )
+    view.render()
+
+    df = MagicMock()
+    df.empty = False
+    mock_files = MagicMock()
+    mock_files.__len__.return_value = 1
+    mock_files.get_velocity_event_df.return_value = df
+    view._app_context.app_state.files = mock_files
+
+    with patch("kymflow.gui_v2.views.analysis_toolbar_view.app") as mock_app:
+        mock_app.native = object()
+        with patch("kymflow.gui_v2.views.analysis_toolbar_view._prompt_for_save_path") as mock_prompt:
+            mock_prompt.return_value = "/tmp/kym_event_db.csv"
+            with patch("kymflow.gui_v2.views.analysis_toolbar_view.ui.notify") as mock_notify:
+                asyncio.run(view._on_save_event_results_click())
+
+    df.to_csv.assert_called_once_with("/tmp/kym_event_db.csv", index=False)
+    mock_notify.assert_called_once_with("Saved kym event results to kym_event_db.csv", type="positive")
 

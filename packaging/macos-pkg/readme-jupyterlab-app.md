@@ -153,8 +153,8 @@ The implementation should create this app bundle:
   - sets bundle name, identifier, icon name, executable name
 
 - `Contents/MacOS/launch_jupyter`
-  - executable shell script
-  - launches JupyterLab using the existing installed venv
+  - executable native launcher (`Swift`/`AppKit`)
+  - supervises Jupyter as a child process using the installed venv
 
 - `Contents/Resources/AppIcon.icns`
   - app icon copied from installer resources
@@ -270,7 +270,7 @@ make_jupyter_app.sh <user_home> <app_root> <workspace_root> <bundle_version>
 - **`bundle_version`:** installed KymFlow version (e.g. from **`pyproject.toml`**), written to **`CFBundleShortVersionString`** and **`CFBundleVersion`** (XML-escaped).
 - **`CFBundleIdentifier`:** **`org.cudmore.kymflow.jupyter`** (stable).
 
-**Launcher process:** The **`MacOS/launch_jupyter`** script runs **`jupyter lab` without `exec`** so the bundle executable remains the main process Launch Services tracks (Dock/menu bar). Replacing the process with **`venv` Python** via **`exec`** caused the app icon to disappear while Jupyter still listened on port 8888.
+**Launcher process:** **`MacOS/launch_jupyter`** is now a native executable built from **`app_launcher/launch_jupyter.swift`**. It keeps app lifecycle in a real AppKit process, launches Jupyter as a child, logs runtime events to **`${APP_ROOT}/logs/jupyter-app-runtime.log`**, and terminates the child process on app quit.
 
 ---
 

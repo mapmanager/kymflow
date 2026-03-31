@@ -7,7 +7,7 @@ users select rows, but does not subscribe to events (that's handled by FileTable
 
 from __future__ import annotations
 
-from typing import Callable, Iterable, List, Optional, TYPE_CHECKING
+from typing import Callable, Iterable, List, Optional, TYPE_CHECKING, cast
 
 from kymflow.core.image_loaders.kym_image import KymImage
 from nicegui import ui
@@ -345,6 +345,31 @@ class FileTableView:
         # Forward to CustomAgGrid_v2 for in-place row update
         if hasattr(self._grid, "update_row"):
             self._grid.update_row(path, row)  # type: ignore[arg-type]
+
+    async def get_displayed_kym_images_async(self) -> list[KymImage]:
+        """Return ``KymImage`` instances for rows visible after the grid filter.
+
+        Uses the AG Grid client row model after filters (same idea as
+        ``forEachNodeAfterFilter``). If the grid is not rendered yet, returns
+        all cached files (equivalent to no active filter on an unrendered table).
+
+        Returns:
+            Ordered list of files for displayed rows, skipping rows without a
+            matching path in the current file cache.
+        """
+        if self._grid is None:
+            return list(self._files)
+        row_dicts = await self._grid.grid.get_client_data(method="filtered_unsorted")
+        rows = cast(list[dict[str, object]], row_dicts)
+        out: list[KymImage] = []
+        for row in rows:
+            p = row.get("path")
+            if p is None:
+                continue
+            kf = self._files_by_path.get(str(p))
+            if kf is not None:
+                out.append(kf)
+        return out
 
     def refresh_rows(self) -> None:
         """Refresh table rows from cached files (used after metadata updates).

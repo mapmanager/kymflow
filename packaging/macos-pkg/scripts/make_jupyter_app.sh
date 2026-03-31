@@ -36,11 +36,12 @@ APP_EXECUTABLE="launch_jupyter"
 APP_ICON_NAME="AppIcon"
 APP_ICON_SOURCE="${APP_ROOT}/payload/resources/AppIcon.icns"
 APP_ICON_DEST="${RESOURCES_DIR}/${APP_ICON_NAME}.icns"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NATIVE_LAUNCHER_SOURCE="${SCRIPT_DIR}/launch_jupyter"
+SWIFT_SOURCE_FALLBACK="${SCRIPT_DIR}/../app_launcher/launch_jupyter.swift"
+NATIVE_LAUNCHER_DEST="${MACOS_DIR}/${APP_EXECUTABLE}"
 
-APP_LOG_DIR="${APP_ROOT}/logs"
-APP_LOG_FILE="${APP_LOG_DIR}/jupyter-app-launch.log"
-
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${APP_LOG_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 # CFBundle* strings: escape & < > for XML text nodes.
 xml_escape() {
@@ -83,41 +84,24 @@ cat > "${CONTENTS_DIR}/Info.plist" <<EOF
 </plist>
 EOF
 
-cat > "${MACOS_DIR}/${APP_EXECUTABLE}" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-
-APP_ROOT="$HOME/Library/Application Support/kymflow-pkg"
-WORKSPACE_ROOT="$HOME/Documents/KymFlow"
-JUPYTER_BIN="$APP_ROOT/venv/bin/jupyter"
-APP_LOG_DIR="$APP_ROOT/logs"
-APP_LOG_FILE="$APP_LOG_DIR/jupyter-app-launch.log"
-
-mkdir -p "$APP_LOG_DIR"
-
-{
-  echo "=== KymFlow Jupyter app launch ==="
-  date
-  echo "APP_ROOT=$APP_ROOT"
-  echo "WORKSPACE_ROOT=$WORKSPACE_ROOT"
-  echo "JUPYTER_BIN=$JUPYTER_BIN"
-
-  if [ ! -x "$JUPYTER_BIN" ]; then
-    echo "ERROR: jupyter not found at $JUPYTER_BIN" >&2
-    exit 1
-  fi
-
-  mkdir -p "$WORKSPACE_ROOT"
-  cd "$WORKSPACE_ROOT"
-
-  # Do not use exec: replacing this process with venv python drops Launch Services / Dock
-  # association with the .app bundle (icon vanishes while Jupyter still runs).
-  # Run Jupyter as a child; this script remains the bundle's main PID until the server exits.
-  "$JUPYTER_BIN" lab --notebook-dir="$WORKSPACE_ROOT"
-} >> "$APP_LOG_FILE" 2>&1
-EOF
-
-chmod +x "${MACOS_DIR}/${APP_EXECUTABLE}"
+if [ -x "${NATIVE_LAUNCHER_SOURCE}" ]; then
+  cp "${NATIVE_LAUNCHER_SOURCE}" "${NATIVE_LAUNCHER_DEST}"
+  chmod +x "${NATIVE_LAUNCHER_DEST}"
+  log "Installed native launcher binary from scripts payload"
+elif [ -f "${SWIFT_SOURCE_FALLBACK}" ] && command -v swiftc >/dev/null 2>&1; then
+  # Fallback for developer curl/source-tree runs: build native launcher from source.
+  swiftc \
+    -O \
+    -target arm64-apple-macos13.0 \
+    -framework AppKit \
+    -framework Foundation \
+    "${SWIFT_SOURCE_FALLBACK}" \
+    -o "${NATIVE_LAUNCHER_DEST}"
+  chmod +x "${NATIVE_LAUNCHER_DEST}"
+  log "Built native launcher from Swift source fallback"
+else
+  fail "Native launcher missing: expected executable ${NATIVE_LAUNCHER_SOURCE}, or Swift source ${SWIFT_SOURCE_FALLBACK} with swiftc available."
+fi
 
 if [ -f "${APP_ICON_SOURCE}" ]; then
   cp "${APP_ICON_SOURCE}" "${APP_ICON_DEST}"

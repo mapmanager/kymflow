@@ -154,6 +154,22 @@ task widget and the global footer.
      - `SaveSelected` / `SaveAll` *intent* events at start.
      - `TaskStateChanged` messages on completion/error.
 
+#### Velocity-event DB (in-memory vs CSV)
+
+- **In-memory cache**: `KymImageList.update_velocity_event_cache_only` and GUI-driven
+  refreshes keep the velocity-event DataFrame aligned with `KymAnalysis` on each
+  `KymImage`. Batch kym-event analysis defers cache updates until the batch worker
+  finishes, then updates the cache once for successful files and emits a single
+  `VelocityEventDbUpdated` (no CSV write).
+- **CSV persistence**: The on-disk `kym_event_db.csv` (and related save helpers such as
+  `update_velocity_event_for_image`, `save_velocity_event_db`, `rebuild_velocity_event_db_and_save`)
+  are used **only** on explicit user save flows (e.g. `SaveController` handling
+  `SaveSelected` / `SaveAll`). Routine detection and batch analysis do **not** persist
+  the velocity-event DB to CSV.
+- **Batch suppression**: While a batch kym-event run is active, `AppContext.suppress_velocity_event_cache_sync_on_detect_events`
+  is set so `KymEventCacheSyncController` ignores per-file `DetectEvents` (state) and
+  avoids per-file `VelocityEventDbUpdated` emissions; see `tasks.run_batch_kym_event_analysis`.
+
 #### 3. Open Folder / Open CSV (threaded loads)
 
 1. **User action**

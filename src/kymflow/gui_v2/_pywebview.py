@@ -354,6 +354,84 @@ async def _prompt_for_path(
         logger.exception(f"[picker] pywebview {log_prefix} dialog failed: {exc}")
         return None
 
+
+async def _prompt_for_save_path(
+    initial: Path,
+    *,
+    suggested_filename: str = "kym_event_db.csv",
+    file_extension: str = ".csv",
+) -> Optional[str]:
+    """Open native save-file dialog using pywebview and return selected path.
+
+    Args:
+        initial: Initial directory for the dialog.
+        suggested_filename: Default filename shown in the save dialog.
+        file_extension: Extension filter for the save dialog.
+
+    Returns:
+        Selected save path as string, or None if cancelled or error.
+    """
+    native = getattr(app, "native", None)
+    if not native:
+        logger.warning("[save_picker] app.native not available (not native mode?)")
+        return None
+
+    main_window = getattr(native, "main_window", None)
+    if not main_window:
+        logger.warning("[save_picker] app.native.main_window not available")
+        return None
+
+    ctx = AppContext()
+    gate = getattr(ctx, "native_ui_gate", None)
+    if gate is None:
+        logger.warning("[save_picker] no native_ui_gate on AppContext; continuing without gating")
+
+    ext = file_extension.strip()
+    if not ext.startswith("."):
+        ext = f".{ext}"
+    ext_display = ext[1:].upper()
+
+    try:
+        import webview  # type: ignore
+
+        try:
+            dialog_type_enum = webview.FileDialog.SAVE  # type: ignore[attr-defined]
+        except Exception:
+            dialog_type_enum = webview.SAVE_DIALOG  # type: ignore[attr-defined]
+        dialog_params = {
+            "directory": str(initial),
+            "allow_multiple": False,
+            "save_filename": suggested_filename,
+            "file_types": (f"{ext_display} files (*{ext})",),
+        }
+
+        logger.info(f"[save_picker] opening save dialog (initial={initial}, name={suggested_filename})")
+        if gate is not None:
+            with gate.busy("save_file_dialog"):
+                selection = await main_window.create_file_dialog(  # type: ignore[attr-defined]
+                    dialog_type_enum,
+                    **dialog_params,
+                )
+        else:
+            selection = await main_window.create_file_dialog(  # type: ignore[attr-defined]
+                dialog_type_enum,
+                **dialog_params,
+            )
+
+        if not selection:
+            logger.info("[save_picker] user cancelled (no selection)")
+            return None
+
+        if isinstance(selection, (list, tuple)):
+            first = selection[0] if selection else None
+            if first is None:
+                return None
+            return str(first)
+        return str(selection)
+    except Exception as exc:
+        logger.exception(f"[save_picker] pywebview save dialog failed: {exc}")
+        return None
+
 def configure_save_on_quit() -> None:
     """Configure save on quit.
     

@@ -18,7 +18,12 @@ from kymflow.core.image_loaders.roi import RoiBounds
 def _radon(ka):
     return ka.get_analysis_object("RadonAnalysis")
 from kymflow.core.state import TaskState
-from kymflow.gui_v2.tasks import run_batch_flow_analysis, run_flow_analysis
+from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
+from kymflow.gui_v2.tasks import (
+    run_batch_flow_analysis,
+    run_batch_kym_event_analysis,
+    run_flow_analysis,
+)
 
 
 @pytest.fixture
@@ -305,4 +310,46 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
     # Check that analysis was cancelled (message is "Flow analysis cancelled" or contains "Cancelled")
     assert not task_state.running
     assert "Cancelled" in task_state.message or task_state.message == "Flow analysis cancelled"
+
+
+def test_run_batch_kym_event_analysis_skips_without_radon(sample_kym_file: KymImage) -> None:
+    """Batch kym-event skips files when Radon velocity/time are missing."""
+    bounds = RoiBounds(dim0_start=0, dim0_stop=100, dim1_start=0, dim1_stop=200)
+    roi = sample_kym_file.rois.create_roi(bounds=bounds)
+
+    image_list = MagicMock()
+    per_file_task = TaskState()
+    overall_task = TaskState()
+
+    timer_callback = None
+    mock_timer = MagicMock()
+
+    def mock_timer_func(interval: float, callback) -> MagicMock:
+        nonlocal timer_callback
+        timer_callback = callback
+        return mock_timer
+
+    with patch("kymflow.gui_v2.tasks.ui.timer", side_effect=mock_timer_func):
+        run_batch_kym_event_analysis(
+            [sample_kym_file],
+            image_list,
+            per_file_task,
+            overall_task,
+            roi_mode="existing",
+            roi_id=roi.id,
+            channel=roi.channel,
+            baseline_drop_params=BaselineDropParams(),
+        )
+
+        timeout = 5.0
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            if timer_callback is not None:
+                timer_callback()
+            if not overall_task.running:
+                break
+            time.sleep(0.05)
+
+    assert not overall_task.running
+    image_list.update_velocity_event_cache_only.assert_not_called()
 

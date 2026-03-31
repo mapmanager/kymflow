@@ -268,7 +268,7 @@ class FileTableBindings:
 
     def _on_task_state_changed(self, e: TaskStateChanged) -> None:
         """Handle task state changes by disabling/enabling table interactions."""
-        if e.task_type == "home":
+        if e.task_type in ("home", "batch", "batch_overall"):
             safe_call(self._table.set_task_state, e)
 
     def _on_interaction_blocked(self, e: InteractionBlocked) -> None:

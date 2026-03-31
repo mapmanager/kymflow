@@ -308,8 +308,10 @@ class KymImageList(AcqImageList[KymImage]):
 
     def update_velocity_event_cache_only(self, kym_image: KymImage) -> None:
         """Update velocity event cache in memory only (e.g. after detect_all_events).
-        
-        Does NOT persist to CSV. Use update_velocity_event_for_image when user saves.
+
+        Does NOT persist to CSV. GUI policy: CSV is written only on explicit save;
+        see ``gui_v2/ARCHITECTURE.md`` (Velocity-event DB). Use
+        :meth:`update_velocity_event_for_image` when persisting after a user save.
         """
         self._velocity_event_db.update_from_image(kym_image)
 
@@ -326,6 +328,16 @@ class KymImageList(AcqImageList[KymImage]):
         if self._velocity_event_db.get_db_path() is None:
             return False
         self._velocity_event_db.rebuild_from_images(images_provider=lambda: self.images)
+        return self._velocity_event_db.save()
+
+    def save_velocity_event_db(self) -> bool:
+        """Persist current in-memory velocity event cache to CSV.
+
+        Returns:
+            True if saved, False if no DB path or save failed.
+        """
+        if self._velocity_event_db.get_db_path() is None:
+            return False
         return self._velocity_event_db.save()
 
     def _get_radon_db_path(self) -> Optional[Path]:

@@ -489,3 +489,29 @@ def test_kym_image_list_detect_all_events_updates_velocity_cache() -> None:
         image_list.detect_all_events()
         df = image_list.get_velocity_event_df()
         assert "_unique_row_id" in df.columns or df.empty
+
+
+def test_kym_image_list_save_velocity_event_db_persists_current_cache() -> None:
+    """Test save_velocity_event_db persists current in-memory cache without rebuild."""
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        test_file = tmp_path / "test.tif"
+        test_file.touch()
+
+        kym_image = KymImage(img_data=np.zeros((50, 50), dtype=np.uint16), load_image=False)
+        kym_image.update_header(shape=(50, 50), ndim=2, voxels=[0.001, 0.284])
+        bounds = RoiBounds(dim0_start=0, dim0_stop=50, dim1_start=0, dim1_stop=50)
+        roi = kym_image.rois.create_roi(bounds=bounds)
+        kym_image.get_kym_analysis().add_velocity_event(roi.id, 1, t_start=0.5, t_end=1.0)
+        kym_image._file_path_dict[1] = test_file
+
+        image_list = KymImageList(path=tmp_path, file_extension=".tif", depth=1)
+        image_list.images = [kym_image]
+        image_list.update_velocity_event_cache_only(kym_image)
+
+        assert image_list.save_velocity_event_db() is True
+        db_path = tmp_path / "kym_event_db.csv"
+        assert db_path.exists()
+        df = pd.read_csv(db_path)
+        assert len(df) == 1
+        assert "_unique_row_id" in df.columns

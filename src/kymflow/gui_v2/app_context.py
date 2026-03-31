@@ -78,7 +78,7 @@ class AppContext:
     In a sub_pages SPA architecture, this context persists for the entire
     session. Pages access shared AppState, TaskState, and theme through
     this singleton.
-    
+
     Attributes:
         app_state: Shared AppState instance for file management and selection
         user_config: UserConfig instance for persistent user preferences
@@ -87,6 +87,10 @@ class AppContext:
         home_task: TaskState for home page analysis tasks
         batch_task: TaskState for batch analysis tasks
         batch_overall_task: TaskState for overall batch progress
+        suppress_velocity_event_cache_sync_on_detect_events: When True,
+            :class:`~kymflow.gui_v2.controllers.kym_event_cache_sync_controller.KymEventCacheSyncController`
+            ignores :class:`~kymflow.gui_v2.events.DetectEvents` (state) so batch runs do not
+            update the in-memory velocity-event DB or emit ``VelocityEventDbUpdated`` per file.
         dark_mode: NiceGUI dark mode controller
     """
     
@@ -120,6 +124,7 @@ class AppContext:
             self.home_task = None
             self.batch_task = None
             self.batch_overall_task = None
+            self.suppress_velocity_event_cache_sync_on_detect_events = False
             self.default_folder = Path.home()
 
             # abb 20260207: always present
@@ -176,7 +181,8 @@ class AppContext:
         self.load_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
-        
+        self.suppress_velocity_event_cache_sync_on_detect_events = False
+
         # Default folder (used as fallback for file dialogs)
         self.default_folder: Path = Path.home()
         
@@ -243,7 +249,8 @@ class AppContext:
         self.load_task = TaskState()
         self.batch_task = TaskState()
         self.batch_overall_task = TaskState()
-        
+        self.suppress_velocity_event_cache_sync_on_detect_events = False
+
     @classmethod
     def get_instance(cls) -> AppContext:
         """Get the singleton instance (alternative to using __new__)."""

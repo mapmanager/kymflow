@@ -12,6 +12,7 @@ from kymflow.gui_v2.controllers import (
     AnalysisController,
     AnalysisUpdateController,
     AppStateBridgeController,
+    BatchAnalysisController,
     EventAnalysisController,
     KymEventSelectionController,
     FileSelectionController,
@@ -27,6 +28,8 @@ from kymflow.gui_v2.controllers import (
     SaveController,
     TaskStateBridgeController,
 )
+from kymflow.core.batch_analysis.types import AnalysisBatchKind
+from kymflow.gui_v2.dialogs import KymAnalysisBatchDialog
 from kymflow.gui_v2.events import (
     AddRoi,
     FileChanged,
@@ -224,12 +227,24 @@ class HomePage(BasePage):
         self._plot_pool_velocity_controller_ref: dict = {"value": None}
         self._plot_pool_bindings: PlotPoolBindings | None = None
 
+        def _open_batch_kym_event_dialog() -> None:
+            dlg = getattr(self, "_batch_kym_event_dialog", None)
+            if dlg is not None:
+                dlg.schedule_open(AnalysisBatchKind.KYM_EVENT)
+
+        def _open_batch_radon_dialog() -> None:
+            dlg = getattr(self, "_batch_kym_event_dialog", None)
+            if dlg is not None:
+                dlg.schedule_open(AnalysisBatchKind.RADON)
+
         # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
             app_context=context,
             on_analysis_start=bus.emit,
             on_analysis_cancel=bus.emit,
             on_detect_events=bus.emit,
+            on_batch_kym_event=_open_batch_kym_event_dialog,
+            on_batch_radon=_open_batch_radon_dialog,
         )
         self._drawer_task_progress_view = TaskProgressView()
         # Splitter pane metadata views
@@ -334,7 +349,7 @@ class HomePage(BasePage):
             self.context.app_state, self.bus
         )
         self._kym_event_cache_sync_controller = KymEventCacheSyncController(
-            self.context.app_state, self.bus
+            self.context.app_state, self.bus, self.context
         )
         self._analysis_controller = AnalysisController(
             self.context.app_state, self.context.home_task, self.bus
@@ -348,8 +363,24 @@ class HomePage(BasePage):
         self._load_task_bridge = TaskStateBridgeController(
             self.context.load_task, self.bus, task_type="load"
         )
+        self._batch_task_bridge = TaskStateBridgeController(
+            self.context.batch_task, self.bus, task_type="batch"
+        )
+        self._batch_overall_task_bridge = TaskStateBridgeController(
+            self.context.batch_overall_task, self.bus, task_type="batch_overall"
+        )
         self._event_analysis_controller = EventAnalysisController(
             self.context.app_state, self.bus
+        )
+        self._batch_analysis_controller = BatchAnalysisController(
+            self.context.app_state, self.bus, self.context
+        )
+        self._batch_kym_event_dialog = KymAnalysisBatchDialog(
+            self.context.app_state,
+            self._file_table_view,
+            self._batch_analysis_controller,
+            self.context,
+            get_baseline_params=self._drawer_analysis_toolbar_view.get_baseline_params_for_batch,
         )
 
         self._persistence = FileTablePersistenceController(
@@ -931,6 +962,7 @@ class HomePage(BasePage):
         Selection restoration happens after the UI is created, but only once
         per client session to avoid overwriting user selections.
         """
+        self._batch_kym_event_dialog.render()
         # Splitter parameters (percentages, horizontal layout). Tweak these as needed.
         file_plot_splitter = {"value": 15.0, "limits": (0, 60)}
         # Allow the viewer pane (which contains Plotly) to shrink fully.

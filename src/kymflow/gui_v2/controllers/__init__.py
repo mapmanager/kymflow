@@ -4,6 +4,7 @@
 from kymflow.gui_v2.controllers.analysis_controller import AnalysisController
 from kymflow.gui_v2.controllers.analysis_update_controller import AnalysisUpdateController
 from kymflow.gui_v2.controllers.app_state_bridge import AppStateBridgeController
+from kymflow.gui_v2.controllers.batch_analysis_controller import BatchAnalysisController
 from kymflow.gui_v2.controllers.event_analysis_controller import EventAnalysisController
 from kymflow.gui_v2.controllers.kym_event_selection_controller import (
     KymEventSelectionController,
@@ -27,19 +28,19 @@ __all__ = [
     "AnalysisController",
     "AnalysisUpdateController",
     "AppStateBridgeController",
+    "BatchAnalysisController",
     "EventAnalysisController",
     "KymEventSelectionController",
     "FileSelectionController",
     "FileTablePersistenceController",
     "FolderController",
+    "FooterController",
     "ImageDisplayController",
     "KymEventCacheSyncController",
     "KymEventController",
     "MetadataController",
     "NextPrevFileController",
-    "ROISelectionController",
-    "RoiEditStateController",
-    "FooterController",
+    "RoiController",
     "SaveController",
     "TaskStateBridgeController",
 ]

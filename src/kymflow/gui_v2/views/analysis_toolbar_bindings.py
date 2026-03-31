@@ -117,13 +117,10 @@ class AnalysisToolbarBindings:
         #     f"cancellable={e.cancellable}, progress={e.progress}"
         # )
         
-        # Only process "home" task type events for this toolbar
         if e.task_type == "home":
-            # logger.debug(f"Processing TaskStateChanged for home task, calling set_task_state")
             safe_call(self._view.set_task_state, e)
-        else:
-            # logger.debug(f"Ignoring TaskStateChanged for task_type={e.task_type} (not 'home')")
-            pass
+        elif e.task_type == "batch_overall":
+            safe_call(self._view.set_batch_task_state, e)
 
     # def _on_roi_state_changed(self, e: AddRoi | DeleteRoi | EditRoi) -> None:
     #     """Handle ROI state change events (AddRoi, DeleteRoi, EditRoi).

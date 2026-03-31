@@ -71,6 +71,5 @@ class TaskProgressBindings:
         Args:
             e: TaskStateChanged event containing task state information.
         """
-        # Only process "home" task type events for this progress view
-        if e.task_type == "home":
+        if e.task_type in ("home", "batch_overall"):
             safe_call(self._view.set_task_state, e)
