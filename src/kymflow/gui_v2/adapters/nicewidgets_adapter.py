@@ -31,73 +31,65 @@ def kymimage_to_channel_manager(
     Handles transpose and physical units. KymImage uses (rows=time, cols=space).
     ChannelManager row_scale = seconds_per_line, col_scale = micrometers_per_pixel.
 
+    All loadable channels (see ``channels_available()``) are placed in the manager
+    so nicewidgets can enable the contrast channel ``ui.select`` when there is
+    more than one. The active channel is ``channel`` if that channel loaded,
+    otherwise the first loadable channel.
+
     ROI names use str(roi_id) (e.g. "1", "2") so the view can select by name
     and map back to kymflow roi_id. kymflow uses int as the canonical ROI key.
 
     Args:
-        kym: KymImage instance. Must have loaded channel data (call load_channel first).
-        channel: 1-based channel index (default 1).
+        kym: KymImage instance.
+        channel: 1-based channel index to mark active in the manager (default 1).
 
     Returns:
         (ChannelManager, List[RegionOfInterest]) for use with ImageRoiWidget.
 
     Raises:
-        ValueError: If channel data cannot be loaded.
+        ValueError: If no channel data could be loaded or geometry is invalid.
     """
-    
-    # logger.info('=== check for speed')
-    
     # Lazy import to avoid pulling nicewidgets at module load when not needed
     from nicewidgets.image_line_widget.models import Channel, ChannelManager, RegionOfInterest
 
-    # logger.warning(f'loading kym:{kym.path}')
-    # logger.warning(f'  channel:{channel}')
-    ok = kym.load_channel(channel)
-    if not ok:
-        raise ValueError(f"Failed to load channel {channel} for image {kym.path}")
-    data = kym.getChannelData(channel)
-    if data is None:
-        raise ValueError(f"No data for channel {channel} after load")
+    channel_keys = kym.channels_available()
+    if not channel_keys:
+        raise ValueError(f"No channels available for image {kym.path}")
+
+    channels_list: List[Channel] = []
+    for ch_num in sorted(channel_keys):
+        ok = kym.load_channel(ch_num)
+        if not ok:
+            logger.warning(f"Skipping channel {ch_num}: load failed for {kym.path}")
+            continue
+        data = kym.getChannelData(ch_num)
+        if data is None:
+            logger.warning(f"Skipping channel {ch_num}: no data after load for {kym.path}")
+            continue
+        channels_list.append(Channel(name=str(ch_num), data=np.asarray(data)))
+
+    if not channels_list:
+        raise ValueError(f"No channel data could be loaded for image {kym.path}")
 
     # Get geometry; fallback defaults if header incomplete
     try:
-        (num_lines, pixels_per_line), dt, dx = get_kym_geometry(kym)
+        (_num_lines, _pixels_per_line), dt, dx = get_kym_geometry(kym)
     except ValueError:
-        raise ValueError(f"Failed to get_kym_geometry {channel} for image {kym.path}")
-        # logger.error(f'error getting geometry for channel:{channel}')
-        # num_lines, pixels_per_line = data.shape[0], data.shape[1]
-        # dt = 0.001  # 1 ms/line default
-        # dx = 1.0  # 1 um/pixel default
+        raise ValueError(f"Failed to get_kym_geometry for image {kym.path}")
 
     x_label = kym.header.labels[0]
     y_label = kym.header.labels[1]
-    # x_label = (
-    #     kym.header.labels[0]
-    #     # if kym.header.labels and len(kym.header.labels) >= 1
-    #     # else "Time (s)"
-    # )
-    # y_label = (
-    #     kym.header.labels[1]
-    #     # if kym.header.labels and len(kym.header.labels) >= 2
-    #     # else "Space (um)"
-    # )
 
-    _chanel_str = str(channel)
-
-    # logger.warning(f'  num_lines:{num_lines}, pixels_per_line:{pixels_per_line}')
-    # logger.warning(f'  dt:{dt}, dx:{dx}')
-    # logger.warning(f'  x_label:{x_label}, y_label:{y_label}')
-    # logger.warning(f'  _chanel_str:{_chanel_str}')
-
-    # ch = Channel(name="Channel1", data=np.asarray(data))
-    ch = Channel(name=_chanel_str, data=data)
     manager = ChannelManager(
-        channels=[ch],
+        channels=channels_list,
         row_scale=float(dt),
         col_scale=float(dx),
         x_label=x_label,
         y_label=y_label,
     )
+    loaded_names = {c.name for c in channels_list}
+    active_name = str(channel) if str(channel) in loaded_names else channels_list[0].name
+    manager.active_channel_name = active_name
 
     rois: List[RegionOfInterest] = []
     for roi_id in get_roi_ids(kym):

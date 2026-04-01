@@ -93,6 +93,19 @@ class TestKymimageToChannelManager:
         ch = manager.get_active_channel()
         assert ch.data.shape == (5, 5)
 
+    def test_multi_channel_manager_enables_contrast_channel_select(self) -> None:
+        """All loadable channels are in the manager so contrast UI can enable channel select."""
+        data1 = np.zeros((4, 6), dtype=np.float32)
+        data2 = np.ones((4, 6), dtype=np.float32)
+        kym = KymImage(img_data=data1, load_image=False)
+        kym.addColorChannel(2, data2)
+        m1, _ = kymimage_to_channel_manager(kym, channel=1)
+        assert m1.num_channels() == 2
+        assert m1.active_channel_name == "1"
+        m2, _ = kymimage_to_channel_manager(kym, channel=2)
+        assert m2.active_channel_name == "2"
+        assert set(m2.channels.keys()) == {"1", "2"}
+
 
 class TestVelocityEventsToAcqImageEvents:
     """Tests for velocity_events_to_acq_image_events."""

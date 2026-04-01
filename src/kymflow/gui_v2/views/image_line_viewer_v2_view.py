@@ -330,8 +330,8 @@ class ImageLineViewerV2View:
 
         kf = self._current_file
 
-        # Rebuild ChannelManager and ROI list exactly as before.
-        manager, rois = kymimage_to_channel_manager(kf)
+        active_ch = self._current_channel if self._current_channel is not None else 1
+        manager, rois = kymimage_to_channel_manager(kf, channel=active_ch)
 
         # Derive velocity trace for the current ROI using existing logic.
         time_arr = None
@@ -430,9 +430,8 @@ class ImageLineViewerV2View:
         kf = self._current_file
         if kf is None or self._image_roi_widget is None:
             return
-        # Rebuild the ChannelManager and ROI list from the current KymImage so the
-        # widget reflects the latest model state.
-        manager, rois = kymimage_to_channel_manager(kf)
+        active_ch = self._current_channel if self._current_channel is not None else 1
+        manager, rois = kymimage_to_channel_manager(kf, channel=active_ch)
         # set_file remains the high-level API for updating both manager and ROIs.
         self._image_roi_widget.set_file(manager, rois)
         if self._display_params:

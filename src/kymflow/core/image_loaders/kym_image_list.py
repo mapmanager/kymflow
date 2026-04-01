@@ -69,8 +69,9 @@ class KymImageList(AcqImageList[KymImage]):
     1. Construct the list (no pixel data loaded):
        klist = KymImageList.load_from_path("/path/to/kymographs")
 
-    2. At runtime, find a specific kymograph by path using AcqImageList.find_by_path:
-       kimg = klist.find_by_path("/path/to/kymographs/foo.tif")
+    2. At runtime, find a specific kymograph by path with :meth:`find_by_path` (any Olympus
+       channel TIF path for the same acquisition resolves to the same instance).
+       kimg = klist.find_by_path("/path/to/kymographs/foo_C001T001.tif")
 
     3. Use the generic AcqImage/AcqImgHeader API for geometry and voxels, or use the
        helpers in kymflow.core.api.kym_external (get_kym_geometry, get_kym_physical_size).
@@ -81,6 +82,14 @@ class KymImageList(AcqImageList[KymImage]):
     External modules should avoid depending on KymImage-specific convenience properties
     (num_lines, pixels_per_line, seconds_per_line, um_per_pixel) and instead rely on
     header.shape / header.voxels or the helpers from kymflow.core.api.kym_external.
+
+    Olympus multi-channel: when the companion header applies, folder and file-list loads
+    dedupe sibling ``_C001T`` / ``_C002T`` / … paths to one row per acquisition. The
+    retained path is the lowest channel id whose file exists on disk and was in the scan.
+    Non-Olympus data (no header) still produces one row per scanned file.
+
+    :meth:`num_channels` on each image remains the count of channels that can be loaded
+    (paths registered on the image), not the raw ``numChannels`` field from the txt alone.
     """
 
     def __init__(
@@ -97,6 +106,7 @@ class KymImageList(AcqImageList[KymImage]):
         follow_symlinks: bool = False,
         cancel_event: threading.Event | None = None,
         progress_cb: ProgressCallback | None = None,
+        dedupe_olympus_multichannel: bool = True,
     ):
         """Initialize KymImageList and automatically load files.
 
@@ -122,6 +132,8 @@ class KymImageList(AcqImageList[KymImage]):
                 Defaults to False.
             cancel_event: Optional threading.Event for cancellation support.
             progress_cb: Optional progress callback for reporting progress.
+            dedupe_olympus_multichannel: If True (default), collapse Olympus multi-channel
+                TIF paths to one list entry per acquisition before loading.
         """
         # Hardcode image_cls=KymImage - this is a list of KymImage instances only
         super().__init__(
@@ -137,6 +149,7 @@ class KymImageList(AcqImageList[KymImage]):
             follow_symlinks=follow_symlinks,
             cancel_event=cancel_event,
             progress_cb=progress_cb,
+            dedupe_olympus_multichannel=dedupe_olympus_multichannel,
         )
         self._radon_report_cache: Dict[str, List[RadonReport]] = {}
         self._load_radon_report_db(progress_cb=progress_cb, cancel_event=cancel_event)
@@ -149,6 +162,31 @@ class KymImageList(AcqImageList[KymImage]):
             progress_cb=progress_cb,
             cancel_event=cancel_event,
         )
+
+    def find_by_path(self, path: str | Path) -> Optional[KymImage]:
+        """Find a KymImage by filesystem path.
+
+        Matches the primary ``path`` and any channel paths registered in
+        ``_file_path_dict`` (Olympus siblings), so lookups stay stable after
+        multi-channel deduplication.
+
+        Args:
+            path: File path to search for (normalized with expanduser/resolve).
+
+        Returns:
+            The matching image, or None if not found.
+        """
+        search_path = Path(path).expanduser().resolve()
+        for image in self.images:
+            candidates: List[Path] = []
+            if image.path is not None:
+                candidates.append(Path(image.path).expanduser().resolve())
+            for ch_path in image._file_path_dict.values():
+                candidates.append(Path(ch_path).expanduser().resolve())
+            for candidate in candidates:
+                if candidate == search_path:
+                    return image
+        return None
 
     @classmethod
     def load_from_path(

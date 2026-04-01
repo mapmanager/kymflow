@@ -23,16 +23,101 @@ import threading
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 import pandas as pd
 
 from kymflow.core.image_loaders.acq_image import AcqImage
+from kymflow.core.image_loaders.olympus_header.read_olympus_header import _readOlympusHeader
 from kymflow.core.utils.logging import get_logger
 from kymflow.core.utils.progress import CancelledError, ProgressCallback, ProgressMessage
 
 
 logger = get_logger(__name__)
+
+
+def dedupe_olympus_multichannel_scan_paths(paths: List[Path]) -> List[Path]:
+    """Drop extra Olympus sibling TIF paths so each acquisition appears once in a scan list.
+
+    When the Olympus companion header applies, ``tifChannelPaths`` lists all channel
+    files for one acquisition. If multiple of those paths are present in ``paths`` and
+    exist on disk, only the **canonical** path is kept: the lowest channel id whose
+    path is in the scan set and on disk. Order of retained paths follows ``paths``.
+
+    Paths without a readable Olympus header are unchanged. Non-Olympus multi-file
+    acquisitions are not merged (no header group).
+
+    Args:
+        paths: Candidate image paths from a folder scan or explicit file list.
+
+    Returns:
+        Filtered paths in original order.
+    """
+    if len(paths) <= 1:
+        return list(paths)
+
+    resolved_in_scan: set[Path] = set()
+    for p in paths:
+        try:
+            resolved_in_scan.add(Path(p).expanduser().resolve())
+        except (OSError, RuntimeError):
+            resolved_in_scan.add(Path(p))
+
+    removal: set[Path] = set()
+
+    for p in paths:
+        try:
+            olympus_dict = _readOlympusHeader(p)
+        except Exception as exc:
+            logger.warning(f"Olympus header read failed while deduping scan paths ({p}): {exc}")
+            continue
+        if olympus_dict is None:
+            continue
+        tif_map = olympus_dict.get("tifChannelPaths")
+        if not tif_map or not isinstance(tif_map, dict):
+            continue
+
+        members: set[Path] = set()
+        for _ch, ch_path in tif_map.items():
+            if ch_path is None:
+                continue
+            try:
+                cr = Path(ch_path).expanduser().resolve()
+            except (OSError, RuntimeError):
+                continue
+            if cr.is_file() and cr in resolved_in_scan:
+                members.add(cr)
+
+        if len(members) <= 1:
+            continue
+
+        canonical: Path | None = None
+        for ch_num in sorted(tif_map.keys()):
+            ch_path = tif_map[ch_num]
+            if ch_path is None:
+                continue
+            try:
+                cr = Path(ch_path).expanduser().resolve()
+            except (OSError, RuntimeError):
+                continue
+            if cr.is_file() and cr in resolved_in_scan:
+                canonical = cr
+                break
+        if canonical is None:
+            continue
+        for m in members:
+            if m != canonical:
+                removal.add(m)
+
+    out: List[Path] = []
+    for p in paths:
+        try:
+            r = Path(p).expanduser().resolve()
+        except (OSError, RuntimeError):
+            r = Path(p)
+        if r not in removal:
+            out.append(p)
+    return out
 
 T = TypeVar("T", bound=AcqImage)
 
@@ -100,6 +185,7 @@ class AcqImageList(Generic[T]):
         follow_symlinks: bool = False,
         cancel_event: threading.Event | None = None,
         progress_cb: ProgressCallback | None = None,
+        dedupe_olympus_multichannel: bool = False,
     ):
         """Initialize AcqImageList and automatically load files.
 
@@ -127,6 +213,13 @@ class AcqImageList(Generic[T]):
                 (Only relevant when `path` is a directory.)
             follow_symlinks: If True, follow symbolic links when searching.
                 Defaults to False.
+            cancel_event: Optional threading.Event for cancellation support.
+            progress_cb: Optional progress callback for reporting progress.
+            dedupe_olympus_multichannel: If True, before wrapping paths, collapse Olympus
+                multi-channel TIFs that share one header to a single list entry (canonical
+                path = lowest channel present on disk and in the scan set). Subclasses such
+                as :class:`~kymflow.core.image_loaders.kym_image_list.KymImageList` enable this;
+                generic lists default to False.
         """
         # Validate mutual exclusivity
         if path is not None and file_path_list is not None:
@@ -137,6 +230,7 @@ class AcqImageList(Generic[T]):
         self.ignore_file_stub = ignore_file_stub
         self.image_cls = image_cls
         self.images: List[T] = []
+        self._dedupe_olympus_multichannel = dedupe_olympus_multichannel
 
         # Internal mode: directory scan vs single-file vs file_list
         self._single_file: Optional[Path] = None
@@ -405,6 +499,8 @@ class AcqImageList(Generic[T]):
         # --- File list mode ---
         if self._file_path_list is not None:
             paths_to_wrap = self._file_path_list
+            if self._dedupe_olympus_multichannel:
+                paths_to_wrap = dedupe_olympus_multichannel_scan_paths(list(paths_to_wrap))
             images = self._wrap_paths(
                 paths_to_wrap,
                 cancel_event=cancel_event,
@@ -426,8 +522,11 @@ class AcqImageList(Generic[T]):
                 )
                 return
 
+            paths_to_wrap = [self._single_file]
+            if self._dedupe_olympus_multichannel:
+                paths_to_wrap = dedupe_olympus_multichannel_scan_paths(paths_to_wrap)
             images = self._wrap_paths(
-                [self._single_file],
+                paths_to_wrap,
                 cancel_event=cancel_event,
                 progress_cb=progress_cb,
             )
@@ -453,6 +552,8 @@ class AcqImageList(Generic[T]):
             cancel_event=cancel_event,
             progress_cb=progress_cb,
         )
+        if self._dedupe_olympus_multichannel:
+            paths_to_wrap = dedupe_olympus_multichannel_scan_paths(paths_to_wrap)
         images = self._wrap_paths(
             paths_to_wrap,
             cancel_event=cancel_event,

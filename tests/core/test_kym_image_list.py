@@ -692,3 +692,87 @@ def test_radon_db_stale_rebuild_and_save() -> None:
         df = pd.read_csv(old_db)
         assert "vel_cv" in df.columns
         assert len(df) >= 1
+
+
+_MIN_OLYMPUS_TXT = "\n".join(
+    [
+        '"Channel Dimension"\t"2 [Ch]"',
+        '"X Dimension"\t"38, 0.0 - 10.796 [um], 0.284 [um/pixel]"',
+        '"T Dimension"\t"1, 0.000 - 35.099 [s], Interval FreeRun"',
+        '"Image Size"\t"38 * 30000 [pixel]"',
+        '"Date"\t"11/02/2022 12:54:17.359 PM"',
+        '"Bits/Pixel"\t"12 [bits]"',
+    ]
+)
+
+
+def test_kym_image_list_olympus_dedupe_two_channels_one_row() -> None:
+    """Olympus header + two sibling TIFs in scan -> one KymImage; canonical is lowest channel."""
+    with TemporaryDirectory() as tmpdir:
+        d = Path(tmpdir).resolve()
+        (d / "acq.txt").write_text(_MIN_OLYMPUS_TXT, encoding="utf-8")
+        c1 = d / "acq_C001T001.tif"
+        c2 = d / "acq_C002T001.tif"
+        c1.touch()
+        c2.touch()
+        klist = KymImageList(file_path_list=[c1, c2], file_extension=".tif")
+        assert len(klist) == 1
+        assert klist[0].path is not None
+        assert Path(klist[0].path).resolve() == c1.resolve()
+        assert klist.find_by_path(c1) is klist[0]
+        assert klist.find_by_path(c2) is klist[0]
+
+
+def test_kym_image_list_olympus_dedupe_preserves_canonical_order_when_c002_first() -> None:
+    """Same as dedupe test but scan order lists C002 before C001; row path stays C001."""
+    with TemporaryDirectory() as tmpdir:
+        d = Path(tmpdir).resolve()
+        (d / "acq.txt").write_text(_MIN_OLYMPUS_TXT, encoding="utf-8")
+        c1 = d / "acq_C001T001.tif"
+        c2 = d / "acq_C002T001.tif"
+        c1.touch()
+        c2.touch()
+        klist = KymImageList(file_path_list=[c2, c1], file_extension=".tif")
+        assert len(klist) == 1
+        assert Path(klist[0].path).resolve() == c1.resolve()
+
+
+def test_kym_image_list_olympus_only_second_channel_on_disk() -> None:
+    """If only C002 exists on disk, canonical path is C002 (not blindly channel 1)."""
+    with TemporaryDirectory() as tmpdir:
+        d = Path(tmpdir).resolve()
+        (d / "solo.txt").write_text(_MIN_OLYMPUS_TXT, encoding="utf-8")
+        c2 = d / "solo_C002T001.tif"
+        c2.touch()
+        klist = KymImageList(file_path_list=[c2], file_extension=".tif")
+        assert len(klist) == 1
+        assert Path(klist[0].path).resolve() == c2.resolve()
+
+
+def test_kym_image_list_non_olympus_two_files_stay_two_rows() -> None:
+    """Filenames without Olympus _CnnnT pattern: no shared header group -> two rows."""
+    with TemporaryDirectory() as tmpdir:
+        d = Path(tmpdir).resolve()
+        a = d / "one.tif"
+        b = d / "two.tif"
+        a.touch()
+        b.touch()
+        klist = KymImageList(file_path_list=[a, b], file_extension=".tif")
+        assert len(klist) == 2
+
+
+def test_kym_image_list_olympus_dedupe_disabled_two_rows() -> None:
+    """With dedupe off, Olympus siblings produce two list entries."""
+    with TemporaryDirectory() as tmpdir:
+        d = Path(tmpdir).resolve()
+        (d / "acq.txt").write_text(_MIN_OLYMPUS_TXT, encoding="utf-8")
+        c1 = d / "acq_C001T001.tif"
+        c2 = d / "acq_C002T001.tif"
+        c1.touch()
+        c2.touch()
+        klist = KymImageList(
+            file_path_list=[c1, c2],
+            file_extension=".tif",
+            dedupe_olympus_multichannel=False,
+        )
+        assert len(klist) == 2
