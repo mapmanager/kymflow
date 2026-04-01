@@ -168,17 +168,24 @@ class ImageLineViewerV2View:
             theme_str = _to_nicewidgets_theme(self._theme)
 
             def on_channel_event(ev: ChannelEvent) -> None:
-                """Update contrast widget image when user changes the active channel."""
-                # Emit ChannelSelection intent event upstream if callback is provided.
-                if self._on_channel_select is not None:
-                    from kymflow.gui_v2.events import ChannelSelection, SelectionOrigin
-                    self._on_channel_select(
-                        ChannelSelection(
-                            channel=ev.channel_name,
-                            origin=SelectionOrigin.IMAGE_VIEWER,
-                            phase="intent",
-                        )
+                """Emit channel selection intent when the combined viewer changes channel."""
+                if self._on_channel_select is None:
+                    return
+                try:
+                    channel_int = int(ev.channel_name)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"ImageLineViewerV2View: cannot parse channel_name {ev.channel_name!r} as int; "
+                        "skipping ChannelSelection emit"
                     )
+                    return
+                self._on_channel_select(
+                    ChannelSelection(
+                        channel=channel_int,
+                        origin=SelectionOrigin.IMAGE_VIEWER,
+                        phase="intent",
+                    )
+                )
 
             def on_roi_event(e: ROIEvent) -> None:
                 if e.type is ROIEventType.SELECT and self._on_roi_select and not self._suppress_roi_select_emit:
