@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from serialization import dataclass_from_dict, dataclass_to_dict
+from .serialization import dataclass_from_dict, dataclass_to_dict
 
 
 OutputDType = Literal["float32", "float64", "uint16"]

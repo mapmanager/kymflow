@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 """Headless batch kym-event analysis (edit constants, then run from repo).
 
-Run from the ``kymflow`` project directory, for example::
+Run from the ``kymflow`` project directory with the package on the environment
+(``uv run`` / editable install), for example::
 
-    uv run python src/kymflow/core/scripts/run_kym_analysis_batch.py
+    uv run python -m kymflow.core.scripts.run_kym_analysis_batch
 
 There are **no command-line arguments**. Adjust the constants in this file,
 save, and re-run. This script is for interactive exploration and reproducibility.
 
-The batch runner is :class:`~kymflow.core.batch_analysis.kym_analysis_batch.KymAnalysisBatch`;
+The batch runner is :class:`~kymflow.core.kym_analysis_batch.kym_analysis_batch.KymAnalysisBatch`;
 results are stored on each file's :class:`~kymflow.core.image_loaders.kym_analysis.KymAnalysis`.
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Literal
 
-# Ensure ``kymflow`` package is importable when running this file directly.
-_SRC_ROOT = Path(__file__).resolve().parents[3]
-if str(_SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(_SRC_ROOT))
-
 from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
-from kymflow.core.batch_analysis import KymAnalysisBatch, KymEventBatchStrategy
+from kymflow.core.kym_analysis_batch import KymAnalysisBatch, KymEventBatchStrategy
 from kymflow.core.image_loaders.kym_image import KymImage
 
 # ---------------------------------------------------------------------------

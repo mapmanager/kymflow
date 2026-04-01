@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-from diameter_analysis import DiameterDetectionParams
-from gui.widgets import _field_help_text
+from kymflow.core.analysis.diameter_analysis import DiameterDetectionParams
+from kymflow.core.analysis.diameter_analysis.gui.widgets import _field_help_text
 
 
 def test_detection_params_metadata_has_description_and_units() -> None:

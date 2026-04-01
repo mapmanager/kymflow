@@ -4,13 +4,10 @@ run_heart_rate_examples.py
 
 Standalone demo script for the heart-rate-from-velocity pipeline.
 
-ASSUMPTION (per request)
-------------------------
-This script lives in the *same folder* as:
-  - heart_rate_analysis.py
-  - heart_rate_plots.py
-
-So imports below assume sibling modules (no parent package).
+Environment
+-----------
+Run with the ``kymflow`` package importable (e.g. ``uv run`` from the project).
+Imports use the ``kymflow.core.analysis.heart_rate`` package.
 
 What this script does
 ---------------------
@@ -28,7 +25,7 @@ For each provided CSV file:
 
 How to run
 ----------
-python run_heart_rate_examples_fixed2.py
+``uv run python -m kymflow.core.analysis.heart_rate.run_heart_rate_examples_fixed2``
 
 This runner uses hard-coded `DEFAULT_FILES` and dataclass defaults (no CLI parsing).
 
@@ -60,8 +57,8 @@ import numpy as np
 from matplotlib import pyplot as mpl
 import matplotlib.pyplot as plt
 
-from heart_rate_pipeline import HeartRateAnalysis
-from heart_rate_plots import (
+from kymflow.core.analysis.heart_rate.heart_rate_pipeline import HeartRateAnalysis
+from kymflow.core.analysis.heart_rate.heart_rate_plots import (
     HRPlotConfig,
     plot_velocity_hr_overview,
     plot_hr_psd_welch,

@@ -6,20 +6,21 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from diameter_analysis import (
+from kymflow.core.analysis.diameter_analysis import (
     DiameterAnalyzer,
     DiameterDetectionParams,
     DiameterMethod,
     PostFilterParams,
     PostFilterType,
+    SyntheticKymographParams,
+    generate_synthetic_kymograph,
 )
-from diameter_plots import (
+from kymflow.core.analysis.diameter_analysis.diameter_plots import (
     plot_diameter_vs_time_mpl,
     plot_diameter_vs_time_plotly_dict,
     plot_kymograph_with_edges_mpl,
     plot_kymograph_with_edges_plotly_dict,
 )
-from synthetic_kymograph import SyntheticKymographParams, generate_synthetic_kymograph
 
 
 def _run_one_method(

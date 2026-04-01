@@ -7,7 +7,7 @@ from typing import Optional, Sequence
 import numpy as np
 import matplotlib.pyplot as plt
 
-from heart_rate_analysis import (
+from .heart_rate_analysis import (
     estimate_fs,
     winsorize_mad,
     detrend_finite,

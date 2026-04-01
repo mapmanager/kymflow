@@ -1,15 +1,16 @@
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import heart_rate_pipeline as hrp
-from heart_rate_analysis import HRStatus, HeartRateEstimate, estimate_heart_rate_global
+import kymflow.core.analysis.heart_rate.heart_rate_pipeline as hrp
+from kymflow.core.analysis.heart_rate.heart_rate_analysis import (
+    HRStatus,
+    HeartRateEstimate,
+    estimate_heart_rate_global,
+)
 
 
 def _write_csv(tmp_path, df: pd.DataFrame, name: str = "sample.csv"):

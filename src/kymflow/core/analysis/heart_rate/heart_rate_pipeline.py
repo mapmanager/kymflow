@@ -11,7 +11,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence, TypeVar, Union, ge
 import numpy as np
 import pandas as pd
 
-from heart_rate_analysis import (
+from .heart_rate_analysis import (
     HRStatus,
     HeartRateEstimate,
     estimate_heart_rate_global,

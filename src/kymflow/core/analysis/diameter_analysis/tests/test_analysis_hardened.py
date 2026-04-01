@@ -6,14 +6,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from diameter_analysis import (
-    DiameterAnalysisBundle,
+from kymflow.core.analysis.diameter_analysis import (
     DiameterAnalyzer,
     DiameterDetectionParams,
+    generate_synthetic_kymograph,
+)
+from kymflow.core.analysis.diameter_analysis.diameter_analysis import (
+    DiameterAnalysisBundle,
     load_diameter_analysis,
     save_diameter_analysis,
 )
-from synthetic_kymograph import generate_synthetic_kymograph
 
 
 def test_stride_semantics_center_row_and_time() -> None:

@@ -8,8 +8,8 @@ import pandas as pd
 from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.utils.logging import get_logger, setup_logging
 
-from heart_rate_pipeline import HeartRateAnalysis
-from heart_rate_pipeline import HRAnalysisConfig
+from kymflow.core.analysis.heart_rate.heart_rate_pipeline import HRAnalysisConfig
+from kymflow.core.analysis.heart_rate.heart_rate_pipeline import HeartRateAnalysis
 from pprint import pprint
 
 logger = get_logger(__name__)

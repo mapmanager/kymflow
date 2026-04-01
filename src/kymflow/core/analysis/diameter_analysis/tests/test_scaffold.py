@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from diameter_analysis import DiameterAnalyzer, DiameterDetectionParams
-from synthetic_kymograph import generate_synthetic_kymograph
+from kymflow.core.analysis.diameter_analysis import DiameterAnalyzer, DiameterDetectionParams
+from kymflow.core.analysis.diameter_analysis import generate_synthetic_kymograph
 
 
 def test_basic_scaffold_still_runs_with_new_engine() -> None:

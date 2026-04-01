@@ -9,10 +9,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from diameter_analysis import (
-    DiameterAnalysisBundle,
+from kymflow.core.analysis.diameter_analysis import (
     DiameterAnalyzer,
     DiameterDetectionParams,
+    generate_synthetic_kymograph,
+)
+from kymflow.core.analysis.diameter_analysis.diameter_analysis import (
+    DiameterAnalysisBundle,
     WIDE_CSV_ARRAY_FIELDS,
     WIDE_CSV_REGISTRY,
     WIDE_CSV_SCALAR_FIELDS,
@@ -22,7 +25,6 @@ from diameter_analysis import (
     load_diameter_analysis,
     save_diameter_analysis,
 )
-from synthetic_kymograph import generate_synthetic_kymograph
 
 
 def _make_bundle() -> DiameterAnalysisBundle:

@@ -1,15 +1,12 @@
 from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import heart_rate_pipeline as hrp
-from heart_rate_analysis import HeartRateEstimate
-from heart_rate_batch import (
+import kymflow.core.analysis.heart_rate.heart_rate_pipeline as hrp
+from kymflow.core.analysis.heart_rate.heart_rate_analysis import HeartRateEstimate
+from kymflow.core.analysis.heart_rate.heart_rate_batch import (
     HRBatchTask,
     batch_results_to_dataframe,
     run_hr_batch,

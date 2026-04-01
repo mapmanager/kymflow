@@ -11,9 +11,9 @@ from .controllers_v2 import AppControllerV2
 from .models import AppState
 from .views_v2 import build_home_page_v2
 
-from synthetic_kymograph import SyntheticKymographParams
-from diameter_analysis import DiameterDetectionParams, DiameterMethod
-from logging_setup import configure_logging
+from ..diameter_analysis import DiameterDetectionParams, DiameterMethod
+from ..logging_setup import configure_logging
+from ..synthetic_kymograph import SyntheticKymographParams
 
 logger = logging.getLogger(__name__)
 

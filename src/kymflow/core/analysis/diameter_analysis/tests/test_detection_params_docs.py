@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import fields
 from pathlib import Path
 
-from diameter_analysis import DiameterDetectionParams
+from kymflow.core.analysis.diameter_analysis import DiameterDetectionParams
 
 
 def test_detection_params_doc_covers_all_fields() -> None:

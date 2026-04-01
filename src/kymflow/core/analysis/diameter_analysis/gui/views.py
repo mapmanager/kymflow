@@ -109,7 +109,7 @@ def build_home_page(controller: AppController) -> None:
                     state.detection_params, "__dataclass_fields__"
                 ):
                     def _reset_detection_params() -> None:
-                        from diameter_analysis import DiameterDetectionParams
+                        from ..diameter_analysis import DiameterDetectionParams
 
                         controller.state.detection_params = DiameterDetectionParams()
                         if refresh_detection_editor is None:

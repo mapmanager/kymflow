@@ -8,11 +8,11 @@ from .config import SEED_FOLDER
 
 from .models import AppState
 from .controllers import AppController
-from logging_setup import configure_logging
+from ..logging_setup import configure_logging
 from .views import build_home_page
 
-from synthetic_kymograph import SyntheticKymographParams
-from diameter_analysis import DiameterDetectionParams, DiameterMethod
+from ..diameter_analysis import DiameterDetectionParams, DiameterMethod
+from ..synthetic_kymograph import SyntheticKymographParams
 
 logger = logging.getLogger(__name__)
 

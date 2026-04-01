@@ -1,4 +1,4 @@
-"""Tests for :class:`~kymflow.core.batch_analysis.kym_analysis_batch.KymAnalysisBatch`."""
+"""Tests for :class:`~kymflow.core.kym_analysis_batch.kym_analysis_batch.KymAnalysisBatch`."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import threading
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from kymflow.core.batch_analysis.kym_analysis_batch import KymAnalysisBatch
-from kymflow.core.batch_analysis.types import (
+from kymflow.core.kym_analysis_batch.kym_analysis_batch import KymAnalysisBatch
+from kymflow.core.kym_analysis_batch.types import (
     AnalysisBatchKind,
     BatchFileOutcome,
     BatchFileResult,

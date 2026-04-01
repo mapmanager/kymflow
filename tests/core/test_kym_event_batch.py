@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from kymflow.core.batch_analysis.kym_event_batch import (
+from kymflow.core.kym_analysis_batch.kym_event_batch import (
     has_radon_velocity_and_time,
     roi_intersection_across_files,
 )

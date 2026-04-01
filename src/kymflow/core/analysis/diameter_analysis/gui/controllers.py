@@ -109,7 +109,7 @@ class AppController:
         self._emit()
 
     def generate_synthetic(self) -> None:
-        from synthetic_kymograph import generate_synthetic_kymograph
+        from ..synthetic_kymograph import generate_synthetic_kymograph
 
         if self.state.synthetic_params is None:
             raise RuntimeError("synthetic_params not set")
@@ -176,7 +176,7 @@ class AppController:
         um_per_pixel: float | None = None,
         selected_kym_image: Any | None = None,
     ) -> None:
-        from tiff_loader import load_tiff_kymograph
+        from ..tiff_loader import load_tiff_kymograph
 
         resolved_seconds: float
         resolved_um: float
@@ -245,7 +245,7 @@ class AppController:
         if self.state.is_busy:
             raise RuntimeError("busy")
 
-        from diameter_analysis import DiameterAnalyzer
+        from ..diameter_analysis import DiameterAnalyzer
 
         self.state.is_busy = True
         self._emit()
@@ -306,7 +306,7 @@ class AppController:
         if self.state.img is None:
             raise RuntimeError("No loaded image for ROI bounds metadata.")
 
-        from diameter_analysis import DiameterAnalysisBundle, save_diameter_analysis
+        from ..diameter_analysis import DiameterAnalysisBundle, save_diameter_analysis
 
         n_time, n_space = self.state.img.shape
         roi_bounds = (0, int(n_time), 0, int(n_space))
@@ -329,7 +329,7 @@ class AppController:
     def try_load_saved_analysis(self) -> list[str]:
         if self.state.loaded_path is None:
             return []
-        from diameter_analysis import load_diameter_analysis
+        from ..diameter_analysis import load_diameter_analysis
         json_path = Path(self.state.loaded_path).with_suffix(".diameter.json")
         csv_path = Path(self.state.loaded_path).with_suffix(".diameter.csv")
         if not json_path.exists() or not csv_path.exists():

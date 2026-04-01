@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from gui.controllers import AppController
-from gui.models import AppState
+from kymflow.core.analysis.diameter_analysis.gui.controllers import AppController
+from kymflow.core.analysis.diameter_analysis.gui.models import AppState
 
 
 def _make_controller(seconds_per_line: float = 0.5, um_per_pixel: float = 2.0) -> AppController:

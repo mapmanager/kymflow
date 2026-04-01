@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from diameter_analysis import (
+from kymflow.core.analysis.diameter_analysis import (
     ALIGNED_RESULTS_SCHEMA_VERSION,
     DiameterAlignedResults,
     DiameterAnalyzer,
@@ -10,7 +10,7 @@ from diameter_analysis import (
     DiameterResult,
     DiameterMethod,
 )
-from synthetic_kymograph import generate_synthetic_kymograph
+from kymflow.core.analysis.diameter_analysis import generate_synthetic_kymograph
 
 
 def test_aligned_results_length_mismatch_raises() -> None:

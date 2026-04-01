@@ -118,7 +118,7 @@ def build_home_page_v2(controller: AppControllerV2) -> None:
                 ):
 
                     def _reset_detection_params() -> None:
-                        from diameter_analysis import DiameterDetectionParams
+                        from ..diameter_analysis import DiameterDetectionParams
 
                         controller.state.detection_params = DiameterDetectionParams()
                         if refresh_detection_editor is None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from gui.controllers import AppController
-from gui.models import AppState
+from kymflow.core.analysis.diameter_analysis.gui.controllers import AppController
+from kymflow.core.analysis.diameter_analysis.gui.models import AppState
 
 
 def _make_controller_and_counters() -> tuple[AppController, dict[str, int]]:

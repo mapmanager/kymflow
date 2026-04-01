@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.io as pio
 
-from heart_rate_plots_plotly import (
+from kymflow.core.analysis.heart_rate.heart_rate_plots_plotly import (
     HRPlotlyConfig,
     plot_velocity_hr_overview_plotly,
     plot_hr_psd_welch_plotly,

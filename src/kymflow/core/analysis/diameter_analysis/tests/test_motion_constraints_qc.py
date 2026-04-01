@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from diameter_analysis import DiameterAnalyzer, DiameterDetectionParams, DiameterMethod
-from synthetic_kymograph import generate_synthetic_kymograph
+from kymflow.core.analysis.diameter_analysis import DiameterAnalyzer, DiameterDetectionParams, DiameterMethod
+from kymflow.core.analysis.diameter_analysis import generate_synthetic_kymograph
 
 
 def _make_analyzer() -> DiameterAnalyzer:

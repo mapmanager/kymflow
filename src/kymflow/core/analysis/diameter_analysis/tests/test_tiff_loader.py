@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from diameter_analysis import KymographPayload
-from tiff_loader import load_tiff_kymograph
+from kymflow.core.analysis.diameter_analysis.diameter_analysis import KymographPayload
+from kymflow.core.analysis.diameter_analysis.tiff_loader import load_tiff_kymograph
 
 
 def test_load_tiff_kymograph_rejects_non_2d(monkeypatch: pytest.MonkeyPatch) -> None:

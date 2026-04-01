@@ -13,8 +13,8 @@ from typing import Any, ClassVar, Iterable, Literal, Optional
 
 import numpy as np
 
-from serialization import dataclass_from_dict, dataclass_to_dict
-from diameter_plots import (
+from .serialization import dataclass_from_dict, dataclass_to_dict
+from .diameter_plots import (
     plot_diameter_vs_time_mpl,
     plot_diameter_vs_time_plotly_dict,
     plot_kymograph_with_edges_mpl,

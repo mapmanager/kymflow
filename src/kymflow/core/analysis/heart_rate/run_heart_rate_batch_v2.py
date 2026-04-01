@@ -5,9 +5,9 @@ from kymflow.core.utils.logging import get_logger, setup_logging
 setup_logging()
 logger = get_logger(__name__)
 
-from heart_rate_batch import batch_run_and_save
-from heart_rate_pipeline import HRAnalysisConfig
-from heart_rate_pipeline import HeartRateAnalysis
+from kymflow.core.analysis.heart_rate.heart_rate_batch import batch_run_and_save
+from kymflow.core.analysis.heart_rate.heart_rate_pipeline import HRAnalysisConfig
+from kymflow.core.analysis.heart_rate.heart_rate_pipeline import HeartRateAnalysis
 
 def _get_csv_paths_from_kymimagelist(path:str) -> list[Path]:
     csv_paths = []

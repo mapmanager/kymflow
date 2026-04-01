@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from diameter_analysis import DiameterDetectionParams
-from gui.controllers import AppController
-from gui.models import AppState
+from kymflow.core.analysis.diameter_analysis import DiameterDetectionParams
+from kymflow.core.analysis.diameter_analysis.gui.controllers import AppController
+from kymflow.core.analysis.diameter_analysis.gui.models import AppState
 
 
 class _DummyKymImage:
@@ -33,9 +33,12 @@ def test_detect_uses_selected_kym_image_units(monkeypatch) -> None:
         def analyze(self, params, **_kwargs):
             return []
 
-    monkeypatch.setattr("diameter_analysis.DiameterAnalyzer", _FakeAnalyzer)
     monkeypatch.setattr(
-        "gui.controllers.get_kym_geometry_for",
+        "kymflow.core.analysis.diameter_analysis.diameter_analysis.DiameterAnalyzer",
+        _FakeAnalyzer,
+    )
+    monkeypatch.setattr(
+        "kymflow.core.analysis.diameter_analysis.gui.controllers.get_kym_geometry_for",
         lambda _kimg: ((4, 6), 0.003, 0.21),
     )
 
@@ -62,7 +65,10 @@ def test_detect_uses_synthetic_params_units(monkeypatch) -> None:
         def analyze(self, params, **_kwargs):
             return []
 
-    monkeypatch.setattr("diameter_analysis.DiameterAnalyzer", _FakeAnalyzer)
+    monkeypatch.setattr(
+        "kymflow.core.analysis.diameter_analysis.diameter_analysis.DiameterAnalyzer",
+        _FakeAnalyzer,
+    )
 
     state = AppState()
     state.synthetic_params = _DummySyntheticParams(seconds_per_line=0.006, um_per_pixel=0.19)
@@ -109,13 +115,13 @@ def test_detect_kymflow_fails_fast_when_required_roi_or_channel_missing(monkeypa
         um_per_pixel=0.21,
     )
     monkeypatch.setattr(
-        "gui.controllers.get_kym_geometry_for",
+        "kymflow.core.analysis.diameter_analysis.gui.controllers.get_kym_geometry_for",
         lambda _kimg: ((4, 6), 0.003, 0.21),
     )
     controller.set_img(np.ones((4, 6), dtype=float), source="kymflow", selected_kym_image=state.selected_kym_image)
 
     monkeypatch.setattr(
-        "gui.controllers.require_channel_and_roi",
+        "kymflow.core.analysis.diameter_analysis.gui.controllers.require_channel_and_roi",
         lambda _kimg, *, channel, roi_id: (_ for _ in ()).throw(
             ValueError(f"Missing channel {channel}. Missing ROI {roi_id}.")
         ),
@@ -141,7 +147,10 @@ def test_controller_detect_preserves_motion_toggle_params(monkeypatch) -> None:
             captured["max_center_shift_um_on"] = params.max_center_shift_um_on
             return []
 
-    monkeypatch.setattr("diameter_analysis.DiameterAnalyzer", _FakeAnalyzer)
+    monkeypatch.setattr(
+        "kymflow.core.analysis.diameter_analysis.diameter_analysis.DiameterAnalyzer",
+        _FakeAnalyzer,
+    )
 
     state = AppState()
     state.synthetic_params = _DummySyntheticParams(seconds_per_line=0.006, um_per_pixel=0.19)

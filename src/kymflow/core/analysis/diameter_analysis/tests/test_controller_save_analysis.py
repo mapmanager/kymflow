@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import diameter_analysis as da
-from diameter_analysis import DiameterDetectionParams, DiameterResult
-from gui.controllers import AppController
-from gui.models import AppState
+import kymflow.core.analysis.diameter_analysis.diameter_analysis as da
+from kymflow.core.analysis.diameter_analysis import DiameterDetectionParams, DiameterResult
+from kymflow.core.analysis.diameter_analysis.gui.controllers import AppController
+from kymflow.core.analysis.diameter_analysis.gui.models import AppState
 
 
 def _one_result() -> DiameterResult:

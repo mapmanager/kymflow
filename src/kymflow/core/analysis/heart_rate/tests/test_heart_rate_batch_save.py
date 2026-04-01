@@ -1,14 +1,11 @@
 from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import heart_rate_pipeline as hrp
-from heart_rate_analysis import HeartRateEstimate
-from heart_rate_batch import batch_run_and_save
+import kymflow.core.analysis.heart_rate.heart_rate_pipeline as hrp
+from kymflow.core.analysis.heart_rate.heart_rate_analysis import HeartRateEstimate
+from kymflow.core.analysis.heart_rate.heart_rate_batch import batch_run_and_save
 
 
 def _fake_estimator(time_s, velocity, *, method, **kwargs):

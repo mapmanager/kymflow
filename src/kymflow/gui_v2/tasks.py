@@ -22,10 +22,10 @@ from kymflow.core.analysis.velocity_events.velocity_events import (
     NanGapParams,
     ZeroGapParams,
 )
-from kymflow.core.batch_analysis.kym_analysis_batch import KymAnalysisBatch
-from kymflow.core.batch_analysis.kym_event_batch_strategy import KymEventBatchStrategy
-from kymflow.core.batch_analysis.radon_batch_strategy import RadonBatchStrategy
-from kymflow.core.batch_analysis.types import BatchFileOutcome, BatchFileResult
+from kymflow.core.kym_analysis_batch.kym_analysis_batch import KymAnalysisBatch
+from kymflow.core.kym_analysis_batch.kym_event_batch_strategy import KymEventBatchStrategy
+from kymflow.core.kym_analysis_batch.radon_batch_strategy import RadonBatchStrategy
+from kymflow.core.kym_analysis_batch.types import BatchFileOutcome, BatchFileResult
 from kymflow.core.image_loaders.kym_image import KymImage
 from kymflow.core.image_loaders.kym_image_list import KymImageList
 from kymflow.core.analysis.kym_flow_radon import FlowCancelled
@@ -452,7 +452,7 @@ def run_batch_kym_event_analysis(
         baseline_drop_params: Baseline-drop detection parameters.
         nan_gap_params: Optional NaN-gap parameters (defaults inside analysis if None).
         zero_gap_params: Optional zero-gap parameters (defaults inside analysis if None).
-        max_parallel_files: Concurrent file workers for :class:`~kymflow.core.batch_analysis.kym_analysis_batch.KymAnalysisBatch`.
+        max_parallel_files: Concurrent file workers for :class:`~kymflow.core.kym_analysis_batch.kym_analysis_batch.KymAnalysisBatch`.
         app_context: Optional application context used to suppress per-file cache sync on ``DetectEvents``.
         on_file_complete: Optional callback after each successful detection (main loop); e.g. row refresh.
         on_finalize_batch_velocity_cache: Optional callback after in-memory cache rebuild; argument is

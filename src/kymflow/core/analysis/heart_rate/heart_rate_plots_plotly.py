@@ -6,7 +6,7 @@ from typing import Any, Optional, Sequence
 
 import numpy as np
 
-from heart_rate_analysis import (
+from .heart_rate_analysis import (
     estimate_fs,
     winsorize_mad,
     detrend_finite,

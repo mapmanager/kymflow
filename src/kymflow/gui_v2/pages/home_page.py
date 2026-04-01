@@ -28,7 +28,7 @@ from kymflow.gui_v2.controllers import (
     SaveController,
     TaskStateBridgeController,
 )
-from kymflow.core.batch_analysis.types import AnalysisBatchKind
+from kymflow.core.kym_analysis_batch.types import AnalysisBatchKind
 from kymflow.gui_v2.dialogs import KymAnalysisBatchDialog
 from kymflow.gui_v2.events import (
     AddRoi,
@@ -228,14 +228,10 @@ class HomePage(BasePage):
         self._plot_pool_bindings: PlotPoolBindings | None = None
 
         def _open_batch_kym_event_dialog() -> None:
-            dlg = getattr(self, "_batch_kym_event_dialog", None)
-            if dlg is not None:
-                dlg.schedule_open(AnalysisBatchKind.KYM_EVENT)
+            self._open_batch_analysis_dialog(AnalysisBatchKind.KYM_EVENT)
 
         def _open_batch_radon_dialog() -> None:
-            dlg = getattr(self, "_batch_kym_event_dialog", None)
-            if dlg is not None:
-                dlg.schedule_open(AnalysisBatchKind.RADON)
+            self._open_batch_analysis_dialog(AnalysisBatchKind.RADON)
 
         # Splitter pane toolbar views
         self._drawer_analysis_toolbar_view = AnalysisToolbarView(
@@ -298,6 +294,8 @@ class HomePage(BasePage):
         # Per-client state tracking
         self._restored_once: bool = False
         self._setup_complete: bool = False
+        self._batch_dialog_open: bool = False
+        self._batch_analysis_controller: BatchAnalysisController | None = None
         self._full_zoom_shortcut_registered: bool = False
         self._full_zoom_shortcut_event: str = "kymflow_full_zoom_enter"
         self._next_prev_file_shortcut_registered: bool = False
@@ -375,13 +373,6 @@ class HomePage(BasePage):
         self._batch_analysis_controller = BatchAnalysisController(
             self.context.app_state, self.bus, self.context
         )
-        self._batch_kym_event_dialog = KymAnalysisBatchDialog(
-            self.context.app_state,
-            self._file_table_view,
-            self._batch_analysis_controller,
-            self.context,
-            get_baseline_params=self._drawer_analysis_toolbar_view.get_baseline_params_for_batch,
-        )
 
         self._persistence = FileTablePersistenceController(
             self.context.app_state,
@@ -430,6 +421,33 @@ class HomePage(BasePage):
         )
 
         self._setup_complete = True
+
+    def _open_batch_analysis_dialog(self, kind: AnalysisBatchKind) -> None:
+        """Create a fresh batch dialog; clear re-entrancy guard when the dialog is disposed.
+
+        Args:
+            kind: Radon flow or kym-event detection batch.
+        """
+        if not self._setup_complete:
+            return
+        if self._batch_dialog_open:
+            return
+        if self._batch_analysis_controller is None:
+            return
+        self._batch_dialog_open = True
+
+        def _on_disposed() -> None:
+            self._batch_dialog_open = False
+
+        dlg = KymAnalysisBatchDialog(
+            self.context.app_state,
+            self._file_table_view,
+            self._batch_analysis_controller,
+            self.context,
+            get_baseline_params=self._drawer_analysis_toolbar_view.get_baseline_params_for_batch,
+            on_disposed=_on_disposed,
+        )
+        dlg.schedule_open(kind)
 
     def _refresh_plot_pool_content(self) -> None:
         """Refresh plot pool with radon data. Unified handler for FileListChanged and RadonReportUpdated.
@@ -874,8 +892,8 @@ class HomePage(BasePage):
         - Left pane (before): Contains DrawerView with tabs and toolbars
         - Right pane (after): Contains main page content (folder selector, file table, viewer)
 
-        Snap positions are percentages for the LEFT pane (before):
-        - CLOSED = 6 (icon tabs always visible, minimum width)
+        Snap positions for the left pane are documented inline where ``ui.splitter`` is
+        constructed (``LEFT_DRAWER_SPLITTER_*`` constants).
         """
         ui.page_title(page_title)
 
@@ -891,9 +909,21 @@ class HomePage(BasePage):
         # self._register_next_prev_file_shortcuts()
         self._register_save_selected_shortcut()
 
-        # Snap positions are percentages for the LEFT pane (before)
-        CLOSED = 6
-        OPEN_DEFAULT = 28
+        # --- Left/right splitter: DrawerView (before) | main content (after) ---
+        # NiceGUI/Quasar `ui.splitter` `value` and `limits` are percentages (0–100) of the
+        # splitter’s width for the *before* pane only. See `drawer_view.DrawerView`: a fixed
+        # tab rail (`w-12`) + `tab_panels` (`flex-grow min-w-0`). Lower CLOSED leaves more
+        # room for main content and squeezes panel content first; too low can crowd the icon
+        # rail on very narrow windows (~48px tabs ≈ 3% at 1600px width).
+        LEFT_DRAWER_SPLITTER_CLOSED_PCT = 4.0
+        LEFT_DRAWER_SPLITTER_OPEN_DEFAULT_PCT = 28.0
+        LEFT_DRAWER_SPLITTER_MAX_PCT = 70.0
+        # Treat values within this many percentage points above CLOSED as “still collapsed”
+        # for tab-click expand and double-click toggle heuristics.
+        LEFT_DRAWER_COLLAPSED_SLACK_PCT = 2.0
+
+        CLOSED = LEFT_DRAWER_SPLITTER_CLOSED_PCT
+        OPEN_DEFAULT = LEFT_DRAWER_SPLITTER_OPEN_DEFAULT_PCT
         last_open = {'value': OPEN_DEFAULT}
         # Tab that currently "has" the drawer open; used so we only close when same tab is clicked again.
         # We track this ourselves because the tab panel may update to the clicked tab before our handler runs.
@@ -903,15 +933,20 @@ class HomePage(BasePage):
         ui.keyboard(on_key=self._on_key)  # no ignore will ignore when defaults active
 
         # Create splitter layout
-        with ui.splitter(value=CLOSED, limits=(CLOSED, 70)).classes('w-full h-screen') as splitter:
+        with ui.splitter(
+            value=CLOSED,
+            limits=(CLOSED, LEFT_DRAWER_SPLITTER_MAX_PCT),
+        ).classes("w-full h-screen") as splitter:
+            collapsed_threshold = CLOSED + LEFT_DRAWER_COLLAPSED_SLACK_PCT
+
             def ensure_open() -> None:
                 """If the left pane is collapsed, restore it to a reasonable open width."""
-                if splitter.value <= (CLOSED + 2):
+                if splitter.value <= collapsed_threshold:
                     splitter.value = last_open['value']
 
             def _on_tab_click(clicked_tab) -> None:
                 """Open drawer when closed; close drawer only when the same tab that has it open is clicked again."""
-                if splitter.value > (CLOSED + 2) and last_open_tab['value'] is not None and last_open_tab['value'] == clicked_tab:
+                if splitter.value > collapsed_threshold and last_open_tab['value'] is not None and last_open_tab['value'] == clicked_tab:
                     last_open['value'] = splitter.value
                     splitter.value = CLOSED
                 else:
@@ -940,7 +975,7 @@ class HomePage(BasePage):
                     self.build()
 
             def _toggle_drawer_splitter() -> None:
-                if splitter.value > (CLOSED + 2):
+                if splitter.value > collapsed_threshold:
                     last_open['value'] = splitter.value
                     splitter.value = CLOSED
                 else:
@@ -962,7 +997,6 @@ class HomePage(BasePage):
         Selection restoration happens after the UI is created, but only once
         per client session to avoid overwriting user selections.
         """
-        self._batch_kym_event_dialog.render()
         # Splitter parameters (percentages, horizontal layout). Tweak these as needed.
         file_plot_splitter = {"value": 15.0, "limits": (0, 60)}
         # Allow the viewer pane (which contains Plotly) to shrink fully.

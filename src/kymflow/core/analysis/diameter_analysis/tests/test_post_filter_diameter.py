@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import numpy as np
 
-from diameter_analysis import (
-    DiameterAnalysisBundle,
+from kymflow.core.analysis.diameter_analysis import (
     DiameterAnalyzer,
     DiameterDetectionParams,
     PostFilterParams,
     PostFilterType,
+    generate_synthetic_kymograph,
+)
+from kymflow.core.analysis.diameter_analysis.diameter_analysis import (
+    DiameterAnalysisBundle,
     load_diameter_analysis,
     save_diameter_analysis,
 )
-from synthetic_kymograph import generate_synthetic_kymograph
 
 
 def test_nan_safe_median_filter_removes_single_spike() -> None:

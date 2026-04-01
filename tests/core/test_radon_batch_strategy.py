@@ -1,4 +1,4 @@
-"""Tests for :class:`~kymflow.core.batch_analysis.radon_batch_strategy.RadonBatchStrategy`."""
+"""Tests for :class:`~kymflow.core.kym_analysis_batch.radon_batch_strategy.RadonBatchStrategy`."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import threading
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from kymflow.core.batch_analysis.radon_batch_strategy import RadonBatchStrategy
-from kymflow.core.batch_analysis.types import BatchFileOutcome
+from kymflow.core.kym_analysis_batch.radon_batch_strategy import RadonBatchStrategy
+from kymflow.core.kym_analysis_batch.types import BatchFileOutcome
 
 
 def _make_kf(*, roi_ids: list[int]) -> MagicMock:

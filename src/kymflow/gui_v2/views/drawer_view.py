@@ -99,7 +99,7 @@ class DrawerView:
             }
         """)
 
-        with ui.row(wrap=False).classes("w-full h-full items-start"):
+        with ui.row(wrap=False).classes("w-full h-full min-w-0 items-start"):
             # Left side: Vertical tabs for organizing splitter pane content
             with ui.tabs().props('vertical dense').classes("w-12 shrink-0 icon_only_tabs") as tabs:
                 tab_analysis = ui.tab("Analysis", icon="speed").tooltip("Analysis")
@@ -110,7 +110,7 @@ class DrawerView:
             
             # Right side: Tab panels - content for each tab (store ref for get_current_tab)
             tab_panels = ui.tab_panels(tabs, value=tab_analysis).props("vertical animated").classes(
-                "flex-grow min-w-0 p-4"
+                "flex-grow min-w-0 min-h-0 overflow-hidden p-4"
             )
             self._tab_panels = tab_panels
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-from diameter_analysis import KymographPayload, Polarity
+from .diameter_analysis import KymographPayload, Polarity
 
 logger = logging.getLogger(__name__)
 

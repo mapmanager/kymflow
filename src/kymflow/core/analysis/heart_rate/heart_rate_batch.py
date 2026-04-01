@@ -8,7 +8,7 @@ from typing import Literal, Optional, Sequence
 
 import pandas as pd
 
-from heart_rate_pipeline import (
+from .heart_rate_pipeline import (
     HRAnalysisConfig,
     HeartRateAnalysis,
     HeartRatePerRoiResults,

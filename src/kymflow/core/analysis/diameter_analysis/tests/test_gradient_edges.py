@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from diameter_analysis import DiameterAnalyzer, DiameterDetectionParams, DiameterMethod
-from diameter_plots import plot_kymograph_with_edges_mpl, plot_kymograph_with_edges_plotly_dict
-from synthetic_kymograph import generate_synthetic_kymograph
+from kymflow.core.analysis.diameter_analysis import DiameterAnalyzer, DiameterDetectionParams, DiameterMethod
+from kymflow.core.analysis.diameter_analysis.diameter_plots import plot_kymograph_with_edges_mpl, plot_kymograph_with_edges_plotly_dict
+from kymflow.core.analysis.diameter_analysis import generate_synthetic_kymograph
 
 
 def test_gradient_edges_runs_and_is_mostly_ordered() -> None:

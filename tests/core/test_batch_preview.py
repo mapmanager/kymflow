@@ -1,4 +1,4 @@
-"""Tests for :mod:`~kymflow.core.batch_analysis.batch_preview`."""
+"""Tests for :mod:`~kymflow.core.kym_analysis_batch.batch_preview`."""
 
 from __future__ import annotations
 
@@ -6,14 +6,15 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 
-from kymflow.core.batch_analysis.batch_preview import (
+from kymflow.core.kym_analysis_batch.batch_preview import (
     MSG_ADD_ROI,
     MSG_WILL_RUN,
     PENDING_OUTCOME,
     preview_batch_table_rows,
 )
-from kymflow.core.batch_analysis.types import AnalysisBatchKind, BatchFileOutcome
+from kymflow.core.kym_analysis_batch.types import AnalysisBatchKind, BatchFileOutcome
 
 
 def _make_kf_radon(*, roi_ids: list[int]) -> MagicMock:
@@ -126,6 +127,19 @@ def test_preview_kym_event_existing_skips_no_radon_velocity() -> None:
     )
     assert rows[0]["outcome"] == BatchFileOutcome.SKIPPED.value
     assert "no radon flow for ROI 1 ch 1" in rows[0]["message"]
+
+
+def test_preview_diameter_raises_not_implemented() -> None:
+    """Diameter (and unimplemented kinds) must not fall through to kym-event preview."""
+    kf = _make_kf_radon(roi_ids=[1])
+    with pytest.raises(NotImplementedError, match="diameter"):
+        preview_batch_table_rows(
+            kind=AnalysisBatchKind.DIAMETER,
+            files=[kf],
+            roi_mode="existing",
+            roi_id=1,
+            channel=1,
+        )
 
 
 def test_preview_kym_event_existing_pending_will_run() -> None:

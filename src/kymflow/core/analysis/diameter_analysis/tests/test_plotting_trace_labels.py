@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from diameter_analysis import PostFilterParams
-from gui.plotting import make_diameter_figure_dict
+from kymflow.core.analysis.diameter_analysis import PostFilterParams
+from kymflow.core.analysis.diameter_analysis.gui.plotting import make_diameter_figure_dict
 
 
 @dataclass(frozen=True)

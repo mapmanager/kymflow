@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from diameter_analysis import DiameterAnalyzer, DiameterDetectionParams
-from synthetic_kymograph import SyntheticKymographParams, generate_synthetic_kymograph
+from kymflow.core.analysis.diameter_analysis import DiameterAnalyzer, DiameterDetectionParams
+from kymflow.core.analysis.diameter_analysis import SyntheticKymographParams, generate_synthetic_kymograph
 
 
 def test_backward_compatible_default_float_range_and_params_key() -> None:

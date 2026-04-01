@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from diameter_analysis import PostFilterParams, PostFilterType
+from kymflow.core.analysis.diameter_analysis import PostFilterParams, PostFilterType
 
 
 def test_post_filter_params_roundtrip() -> None:

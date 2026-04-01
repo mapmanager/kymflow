@@ -4,15 +4,17 @@ import csv
 
 import pytest
 
-from diameter_analysis import (
-    DiameterAnalysisBundle,
+from kymflow.core.analysis.diameter_analysis import (
     DiameterAnalyzer,
     DiameterDetectionParams,
     DiameterResult,
+    generate_synthetic_kymograph,
+)
+from kymflow.core.analysis.diameter_analysis.diameter_analysis import (
+    DiameterAnalysisBundle,
     load_diameter_analysis,
     save_diameter_analysis,
 )
-from synthetic_kymograph import generate_synthetic_kymograph
 
 
 def _make_analyzer() -> DiameterAnalyzer:

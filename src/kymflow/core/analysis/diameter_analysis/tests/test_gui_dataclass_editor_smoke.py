@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from diameter_analysis import DiameterDetectionParams
-from gui.widgets import dataclass_editor_card, _coerce_switch_bool
+from kymflow.core.analysis.diameter_analysis import DiameterDetectionParams
+from kymflow.core.analysis.diameter_analysis.gui.widgets import dataclass_editor_card, _coerce_switch_bool
 
 
 def test_dataclass_editor_card_renders_detection_params() -> None:
@@ -22,7 +22,7 @@ def test_dataclass_editor_card_renders_detection_params() -> None:
 
 def test_dataclass_editor_card_contains_no_detection_specific_motion_logic() -> None:
     import inspect
-    import gui.widgets as widgets
+    import kymflow.core.analysis.diameter_analysis.gui.widgets as widgets
 
     src = inspect.getsource(widgets.dataclass_editor_card)
     assert "enable_motion_constraints" not in src
