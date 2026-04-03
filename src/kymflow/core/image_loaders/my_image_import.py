@@ -9,6 +9,9 @@ import numpy as np
 import czifile
 import oirfile
 
+from kymflow.core.utils.logging import get_logger
+logger = get_logger(__name__)
+
 
 @dataclass(frozen=True)
 class ImagePhysicalUnits:
@@ -246,8 +249,8 @@ def _extract_oir_physical_units(oir: Any) -> ImagePhysicalUnits:
     """
     coords = oir.coords
 
-    print(f'coords:')
-    print(coords)
+    # logger.info(f'coords:')
+    # print(coords)
 
     return ImagePhysicalUnits(
         seconds_per_line=_get_step_from_coord(coords.get("X")),  # abb FIX THIS
