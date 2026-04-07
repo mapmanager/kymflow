@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+import os
 
 import numpy as np
 
@@ -12,6 +13,28 @@ import oirfile
 from kymflow.core.utils.logging import get_logger
 logger = get_logger(__name__)
 
+
+def _build_file_list(path: str | Path, file_types: list[str]) -> list[str]:
+    """Build a list of files in the given path.
+
+    Recursively traverse into path and build a list of files with the given types.
+
+    Args:
+        path: The path to traverse.
+        file_types: The types of files to include in the list (no dot extension)
+
+    Returns:
+        A list of absolute file paths.
+    """
+    allowed_exts = {f".{ext.lower().lstrip('.')}" for ext in file_types}
+    result: list[str] = []
+
+    for root, _dirs, filenames in os.walk(str(path)):
+        for filename in filenames:
+            file_path = Path(root) / filename
+            if file_path.suffix.lower() in allowed_exts:
+                result.append(str(file_path.resolve()))
+    return result
 
 @dataclass(frozen=True)
 class ImagePhysicalUnits:
@@ -186,7 +209,14 @@ def _normalize_czi_channel_to_yx(
             )
         return np.expand_dims(channel_data, axis=0)
 
-    raise ValueError(f"Unsupported CZI dims after channel selection: {dims_without_c}")
+    if dims_without_c == ("T", "Y", "X"):
+        if channel_data.ndim != 3:
+            raise ValueError(
+                f"Expected 3D channel data for dims ('T', 'Y', 'X'), got shape {channel_data.shape}"
+            )
+        return channel_data
+
+    raise ValueError(f"Unsupported CZI dims after channel selection: {dims_without_c} shape: {channel_data.shape}")
 
 
 # -----------------------------------------------------------------------------
@@ -497,9 +527,20 @@ class MyOirImage:
 if __name__ == '__main__':
     from pprint import pprint
 
-    path = '/Users/cudmore/Dropbox/data/arsalan/20190416/20190416_b_0021.oir'
-    oir = MyOirImage(path)
-    print(f'oir.header:')
-    pprint(oir.header.as_dict(), indent=4, width=120, sort_dicts=False)
-    img_data = oir.load_channel(0)
-    print(f'img_data: {img_data.shape} {img_data.dtype} min:{img_data.min()} max:{img_data.max()}')
+    # path = '/Users/cudmore/Dropbox/data/arsalan/20190416/20190416_b_0021.oir'
+    # oir = MyOirImage(path)
+    # print(f'oir.header:')
+    # pprint(oir.header.as_dict(), indent=4, width=120, sort_dicts=False)
+    # img_data = oir.load_channel(0)
+    # print(f'img_data: {img_data.shape} {img_data.dtype} min:{img_data.min()} max:{img_data.max()}')
+
+    path = '/Users/cudmore/Dropbox/data/sanpy-users/kym-users/czi-data/linescansForVelocityMeasurement'
+    path = '/Users/cudmore/Dropbox/data/sanpy-users/kym-users/czi-data/disjointedlinescansandframescans'
+    
+    files = _build_file_list(path, ['czi'])
+    for file in files:
+        czi_image = MyCziImage(file)
+        print(f'czi_image.header:')
+        pprint(czi_image.header.as_dict(), indent=4, width=120, sort_dicts=False)
+        img_data = czi_image.load_channel(1)
+        print(f'img_data: {img_data.shape} {img_data.dtype} min:{img_data.min()} max:{img_data.max()}')

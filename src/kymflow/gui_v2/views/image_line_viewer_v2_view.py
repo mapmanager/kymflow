@@ -248,7 +248,7 @@ class ImageLineViewerV2View:
             import numpy as np
             from nicewidgets.image_line_widget.models import Channel, ChannelManager
 
-            placeholder = np.zeros((10, 10), dtype=np.float64)
+            placeholder = np.zeros((10, 10), dtype=np.uint8)
             placeholder_manager = ChannelManager(
                 channels=[Channel("Empty", placeholder)],
                 row_scale=1.0,
