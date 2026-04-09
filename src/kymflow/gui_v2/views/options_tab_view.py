@@ -14,8 +14,6 @@ from kymflow.core.utils.logging import get_logger
 from kymflow.gui_v2.app_config import AppConfig
 from kymflow.gui_v2.app_context import AppContext
 
-from kymflow.gui_v2._pywebview import _save_all_configs
-
 logger = get_logger(__name__)
 
 
@@ -190,7 +188,8 @@ class OptionsTabView:
     def _on_save_settings(self) -> None:
         """Handle Save Settings button click - saves both user_config and app_config."""
         try:
-            success = _save_all_configs(self._context)
+            # success = _save_all_configs(self._context)
+            success = self._context._save_all_configs()
             if success:
                 # Sync folder_depth from app_config to app_state (runtime sync, no restart needed)
                 if hasattr(self._context, "app_state") and hasattr(self._context, "app_config"):

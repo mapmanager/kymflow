@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from nicegui import ui
+from nicegui import ui, app
 
 from nicewidgets.utils import setUpGuiDefaults
 
@@ -25,9 +25,9 @@ from kymflow.core.utils.logging import get_logger
 from kymflow.core.user_config import UserConfig
 from kymflow.gui_v2.app_config import AppConfig
 from kymflow.gui_v2.native_ui_gate import NativeUiGate
+# from kymflow.gui_v2._pywebview import install_shutdown_handlers
 
 logger = get_logger(__name__)
-
 
 @dataclass
 class RuntimeEnvironment:
@@ -140,7 +140,7 @@ class AppContext:
         # Detect runtime environment (must happen early, before other initialization)
         self.runtime_env = RuntimeEnvironment.detect()
         logger.info(
-            f"Runtime environment: native={self.runtime_env.native_mode}, "
+            f"  Runtime environment: native={self.runtime_env.native_mode}, "
             f"remote={self.runtime_env.is_remote}, "
             f"file_access={self.runtime_env.has_file_system_access}"
         )
@@ -152,7 +152,7 @@ class AppContext:
             self.user_config = UserConfig.load(config_path=Path(user_config_path))
         else:
             self.user_config = UserConfig.load()
-        logger.info(f"User config loaded from: {self.user_config.path}")
+        logger.info(f"  User config loaded from: {self.user_config.path}")
         
         # Load app config
         app_config_path = os.getenv("KYMFLOW_APP_CONFIG_PATH")
@@ -160,8 +160,11 @@ class AppContext:
             self.app_config = AppConfig.load(config_path=Path(app_config_path))
         else:
             self.app_config = AppConfig.load()
-        logger.info(f"App config loaded from: {self.app_config.path}")
+        logger.info(f"  App config loaded from: {self.app_config.path}")
         
+        app.native.on('resized', self._native_resize)
+        app.native.on('moved', self._native_moved)
+
         # Initialize app_state.folder_depth from app_config
         self.app_state.folder_depth = self.app_config.data.folder_depth
         
@@ -170,12 +173,6 @@ class AppContext:
         text_size = self.app_config.get_attribute("text_size")
         setUpGuiDefaults(text_size)
 
-        #
-        # global css styles
-        # this has to be in a page function ???
-        # from kymflow.gui_v2.styles import install_global_styles
-        # install_global_styles()
-        
         self.home_task = TaskState()
         # Dedicated TaskState for folder / CSV loads (task_type='load')
         self.load_task = TaskState()
@@ -189,9 +186,106 @@ class AppContext:
         # abb 20260207 while adding global lock for pywebview. not sure the correct location ???
         self.native_ui_gate = NativeUiGate()
         
+        self._install_shutdown_handlers()
+
         self._initialized = True
-        logger.info("AppContext initialized successfully")
+        logger.info("--> Done: AppContext initialized successfully")
     
+    def _install_shutdown_handlers(self) -> None:
+        """Register app shutdown handlers for GUI v2.
+        
+        Only installs handlers when running in native mode (native=True).
+        In browser mode, configs are saved via other mechanisms.
+        """
+        native = getattr(app, "native", None)
+        if native is None:
+            logger.debug("skipping (not native mode)")
+            return
+        
+        # logger.info("installing (native mode detected)")
+
+        async def _persist_on_shutdown() -> None:
+            """Persist user and app config on shutdown without touching native window APIs."""
+            self._save_all_configs()
+
+        app.on_shutdown(_persist_on_shutdown)
+
+
+    # abb 20260323 pywebview native save png (clipboard)
+    def _native_resize(self, e):# we also can do this:
+        """
+        NativeEventArguments(type='resized', args={'width': 1221.0, 'height': 1538.0})
+        """
+        args = e.args
+        
+        # logger.info(f"  args is: {args}")
+
+        # cfg = AppConfig.load()
+        # logger.info(f"App config loaded from: {cfg.path}")
+
+        x, y, w, h = self.app_config.get_window_rect()
+
+        # logger.info(f"  old window size: w:{w}, h:{h}")
+        w = args['width']
+        h = args['height']  
+        # logger.info(f"  new window size: w:{w}, h:{h}")
+
+        self.app_config.set_window_rect(x, y, w, h)
+
+    def _native_moved(self, e):
+        """
+        NativeEventArguments(type='moved', args={'x': 2365.0, 'y': 545.0})
+        """
+        args = e.args
+
+        # logger.info(f"  args is: {args}")
+
+        # cfg = AppConfig.load()
+        # logger.info(f"App config loaded from: {cfg.path}")
+
+        x, y, w, h = self.app_config.get_window_rect()
+
+        # logger.info(f"  old window position: x:{x}, y:{y}")
+        x = args['x']
+        y = args['y']  
+        # logger.info(f"  new window position: x:{x}, y:{y}")
+
+        self.app_config.set_window_rect(x, y, w, h)
+
+    def _save_all_configs(self) -> bool:
+        """Save both user_config and app_config to disk.
+        
+        Single source of truth for persisting all application configs.
+        Used by both shutdown handler and manual save button.
+        
+        Args:
+            context: AppContext instance containing user_config and app_config.
+        
+        Returns:
+            True if both configs saved successfully, False otherwise.
+        """
+        success = True
+        
+        cfg = getattr(self, "user_config", None)
+        if cfg is not None:
+            try:
+                cfg.save()
+                logger.info("user_config saved successfully")
+            except Exception:
+                logger.exception("Failed to save user_config")
+                success = False
+
+        app_cfg = getattr(self, "app_config", None)
+        if app_cfg is not None:
+            try:
+                app_cfg.save()
+                logger.info("app_config saved successfully")
+            except Exception:
+                logger.exception("Failed to save app_config")
+                success = False
+        
+        return success
+
     def init_dark_mode_for_page(self):
         """Initialize dark mode for current page.
         

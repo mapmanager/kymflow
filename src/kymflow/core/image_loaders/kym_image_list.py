@@ -428,14 +428,19 @@ class KymImageList(AcqImageList[KymImage]):
                     rebuild_reason = "schema was stale"
                 else:
                     base = self._get_base_path()
+
+                    logger.error(f'abb declan 20260407 _get_base_path() base:{base}')
+
                     cache: Dict[str, List[RadonReport]] = {}
                     for _, row in df.iterrows():
                         d = row.to_dict()
-                        path_val = d.get("path")
-                        if pd.isna(path_val) or path_val is None or path_val == "":
+                        # path_val = d.get("path")
+                        # if pd.isna(path_val) or path_val is None or path_val == "":
+                        if 1:
                             if base is not None and "rel_path" in d and d.get("rel_path"):
                                 path_val = str(base / str(d["rel_path"]))
                             else:
+                                logger.error(f'abb declan 20260407 no base or rel_path in d:{d}')
                                 continue
                         path_str = str(path_val)
                         report = RadonReport.from_dict(d)
@@ -451,7 +456,17 @@ class KymImageList(AcqImageList[KymImage]):
             need_rebuild = True
             rebuild_reason = "no DB file"
 
-        if need_rebuild:
+        # logger.error(f'abb declan 20260407 need_rebuild:{need_rebuild}')
+
+        if not need_rebuild:
+
+            logger.error(f'abb declan 20260407 not need_rebuild')
+            # for k, v in self._radon_report_cache.items():
+            #     logger.error(f'{k}: {len(v)}')
+            #     for r in v:
+            #         logger.error(f'  {r}')
+
+        else:
             n = len(self.images)
             if progress_cb is not None:
                 progress_cb(
