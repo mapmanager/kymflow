@@ -111,6 +111,23 @@ def test_kym_image_list_always_kym_image() -> None:
     logger.info(f"  - All {len(image_list)} images are KymImage instances")
 
 
+def test_kym_image_list_find_by_path_matches_any_channel_file(tmp_path: Path) -> None:
+    """find_by_path resolves the same KymImage for primary path or a registered channel path."""
+    ch1 = tmp_path / "acq_C001T001.tif"
+    ch2 = tmp_path / "acq_C002T001.tif"
+    ch1.touch()
+    ch2.touch()
+    kym = KymImage(path=ch1, load_image=False)
+    kym._file_path_dict[2] = ch2
+
+    image_list = KymImageList(path=None, file_extension=".tif")
+    image_list.images = [kym]
+
+    assert image_list.find_by_path(ch1) is kym
+    assert image_list.find_by_path(ch2) is kym
+    assert image_list.find_by_path(tmp_path / "missing.tif") is None
+
+
 @pytest.mark.requires_data
 def test_kym_image_list_with_real_files(sample_tif_files: list[Path]) -> None:
     """Test KymImageList with real TIFF files."""

@@ -58,6 +58,11 @@ class RadonReport:
     vel_n_nan: Optional[int] = None
     vel_n_zero: Optional[int] = None
     vel_n_big: Optional[int] = None
+
+    users_added_count: Optional[int] = None
+    users_added_dur_sum: Optional[float] = None
+    users_added_dur_mean: Optional[float] = None
+
     img_min: Optional[int] = None
     img_max: Optional[int] = None
     img_mean: Optional[float] = None

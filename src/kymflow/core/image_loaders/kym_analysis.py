@@ -531,6 +531,26 @@ class KymAnalysis:
         rea = self.get_analysis_object("RadonEventAnalysis")
         return rea.get_velocity_event_row(event_id, blinded=blinded) if rea else None
 
+    # abb declan 20260407
+    def _get_user_added_stats(self, roi_id:int, channel:int) -> [int, float, float]:
+        """Get the user added stats for a given kym analysis.
+        """
+
+        
+        user_added_count = self.num_user_added_velocity_events()
+        
+        if user_added_count == 0:
+            return 0, np.nan, np.nan
+        else:
+            _velocity_events = self.get_velocity_events(roi_id, channel)
+            # if _velocity_events is None:
+            #     return 0, 0, None
+
+            user_added_dur_sum = sum(event.duration_sec for event in _velocity_events if event.event_type == 'User Added')
+            user_added_dur_mean = user_added_dur_sum / user_added_count if user_added_count is not None and user_added_count > 0 else None
+
+            return user_added_count, user_added_dur_sum, user_added_dur_mean
+
     def get_radon_report(self) -> List[RadonReport]:
         """Delegate to RadonAnalysis. Prefer get_analysis_object('RadonAnalysis').get_radon_report(accepted=...)."""
         radon = self.get_analysis_object("RadonAnalysis")

@@ -15,6 +15,7 @@ from kymflow.gui_v2.events import (
     FileChanged,
     ROISelection,
     SelectionOrigin,
+    SetRoiBounds,
 )
 from kymflow.gui_v2.events_state import ThemeChanged
 from kymflow.gui_v2.views.image_line_viewer_v2_bindings import (
@@ -152,6 +153,35 @@ def test_file_changed_roi_triggers_refresh_for_current_file(
     )
     bindings._on_file_changed(event)
     mock_v2_view.refresh_rois_for_current_file.assert_called_once()
+
+
+def test_set_roi_bounds_routes_to_on_edit_roi_intent_when_set(
+    mock_v2_view: MagicMock, mock_bus: MagicMock
+) -> None:
+    """When on_edit_roi_intent is provided, SetRoiBounds does not bus.emit(EditRoi)."""
+    received: list = []
+
+    def capture_edit(edit) -> None:
+        received.append(edit)
+
+    bindings = ImageLineViewerV2Bindings(
+        mock_bus, mock_v2_view, on_edit_roi_intent=capture_edit
+    )
+    event = SetRoiBounds(
+        roi_id=3,
+        path="/fake/path.tif",
+        x0=1.0,
+        x1=5.0,
+        y0=2.0,
+        y1=8.0,
+        origin=SelectionOrigin.IMAGE_VIEWER,
+        phase="intent",
+    )
+    bindings._on_roi_bounds(event)
+    mock_bus.emit.assert_not_called()
+    assert len(received) == 1
+    assert received[0].roi_id == 3
+    assert received[0].phase == "intent"
 
 
 def test_teardown_unsubscribes(mock_v2_view: MagicMock, mock_bus: MagicMock) -> None:

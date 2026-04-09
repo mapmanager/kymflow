@@ -119,3 +119,41 @@ def test_radon_report_to_dict_roundtrip() -> None:
     assert r2.rel_path == r.rel_path
     assert r2.parent_folder == r.parent_folder
     assert r2.grandparent_folder == r.grandparent_folder
+
+
+def test_radon_report_users_added_fields_serialize() -> None:
+    """user-added velocity stats round-trip through to_dict / from_dict."""
+    r = RadonReport(
+        roi_id=1,
+        channel=1,
+        users_added_count=2,
+        users_added_dur_sum=1.25,
+        users_added_dur_mean=0.625,
+        path="/x.tif",
+    )
+    d = r.to_dict()
+    assert d["users_added_count"] == 2
+    assert d["users_added_dur_sum"] == 1.25
+    assert d["users_added_dur_mean"] == 0.625
+    r2 = RadonReport.from_dict(d)
+    assert r2.users_added_count == 2
+    assert r2.users_added_dur_sum == pytest.approx(1.25)
+    assert r2.users_added_dur_mean == pytest.approx(0.625)
+
+
+def test_radon_report_accepted_and_experiment_fields_from_dict() -> None:
+    """accepted and treatment/condition/date deserialize via from_dict."""
+    r = RadonReport.from_dict(
+        {
+            "roi_id": 3,
+            "path": "/a.tif",
+            "accepted": "false",
+            "treatment": "DrugA",
+            "condition": "Ctrl",
+            "date": "2025-01-01",
+        }
+    )
+    assert r.accepted is False
+    assert r.treatment == "DrugA"
+    assert r.condition == "Ctrl"
+    assert r.date == "2025-01-01"

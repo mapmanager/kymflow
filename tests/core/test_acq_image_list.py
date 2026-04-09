@@ -1512,3 +1512,44 @@ def test_acq_image_list_csv_source_path_when_loading_from_csv() -> None:
         assert image_list._csv_source_path is not None
         assert image_list._csv_source_path.name == "file_list.csv"
 
+
+def test_dedupe_olympus_multichannel_scan_paths_keeps_lowest_channel() -> None:
+    """Sibling Olympus TIFs collapse to one path per acquisition (lowest channel id)."""
+    from unittest.mock import patch
+
+    from kymflow.core.image_loaders.acq_image_list import dedupe_olympus_multichannel_scan_paths
+
+    with TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        c1 = tmp_path / "acq_C001T001.tif"
+        c2 = tmp_path / "acq_C002T001.tif"
+        c1.touch()
+        c2.touch()
+        r1 = c1.resolve()
+        r2 = c2.resolve()
+
+        def _fake_olympus_header(p: Path):
+            pp = Path(p).resolve()
+            if pp not in {r1, r2}:
+                return None
+            return {
+                "tifChannelPaths": {
+                    1: str(r1),
+                    2: str(r2),
+                },
+            }
+
+        with patch(
+            "kymflow.core.image_loaders.acq_image_list._readOlympusHeader",
+            side_effect=_fake_olympus_header,
+        ):
+            out = dedupe_olympus_multichannel_scan_paths([c1, c2])
+        assert out == [c1]
+
+        with patch(
+            "kymflow.core.image_loaders.acq_image_list._readOlympusHeader",
+            side_effect=_fake_olympus_header,
+        ):
+            out_rev = dedupe_olympus_multichannel_scan_paths([c2, c1])
+        assert out_rev == [c1]
+

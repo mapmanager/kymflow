@@ -32,12 +32,18 @@ from kymflow.core.kym_analysis_batch.types import AnalysisBatchKind
 from kymflow.gui_v2.dialogs import KymAnalysisBatchDialog
 from kymflow.gui_v2.events import (
     AddRoi,
+    DeleteRoi,
+    EditRoi,
     FileChanged,
     FileSelection,
     NextPrevFileEvent,
     ROISelection,
     SaveSelected,
     SelectionOrigin,
+)
+from kymflow.gui_v2.roi_intent_confirm import (
+    confirm_delete_roi_intent,
+    confirm_edit_roi_intent,
 )
 from kymflow.gui_v2.events_state import FileListChanged, ThemeChanged
 from kymflow.gui_v2.pages.base_page import BasePage
@@ -198,13 +204,24 @@ class HomePage(BasePage):
             """Channel selection intent from image viewer; forward to bus."""
             bus.emit(e)
 
+        def _on_delete_roi_intent(e: DeleteRoi) -> None:
+            """Confirm delete in dialog, clear analysis, then emit intent for RoiController."""
+            confirm_delete_roi_intent(context.app_state, bus, e)
+
+        def _on_edit_roi_intent(e: EditRoi) -> None:
+            """Confirm edit in dialog, clear analysis, then emit intent for RoiController."""
+            confirm_edit_roi_intent(context.app_state, bus, e)
+
+        self._on_delete_roi_intent = _on_delete_roi_intent
+        self._on_edit_roi_intent = _on_edit_roi_intent
+
         self._image_line_viewer = ImageLineViewerV2View(
             on_kym_event_x_range=bus.emit,
             on_set_roi_bounds=bus.emit,
             on_roi_select=_on_roi_select,
-            on_edit_roi=bus.emit,
+            on_edit_roi=self._on_edit_roi_intent,
             on_add_roi=_on_add_roi,
-            on_delete_roi=bus.emit,
+            on_delete_roi=self._on_delete_roi_intent,
         )
         # Wire channel selection callback after construction.
         self._image_line_viewer._on_channel_select = _on_channel_select
@@ -393,7 +410,9 @@ class HomePage(BasePage):
         )
         self._folder_bindings = FolderSelectorBindings(self.bus, self._folder_view)
         self._image_line_viewer_bindings = ImageLineViewerV2Bindings(
-            self.bus, self._image_line_viewer
+            self.bus,
+            self._image_line_viewer,
+            on_edit_roi_intent=self._on_edit_roi_intent,
         )
         self._event_bindings = KymEventBindings(self.bus, self._event_view, app_state=self.context.app_state)
 

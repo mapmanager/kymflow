@@ -446,3 +446,19 @@ def test_kym_image_get_file_name() -> None:
     assert file_name5 is None
     
     logger.info("  - get_file_name() works correctly with blinded support")
+
+
+def test_kym_image_load_image_reads_2d_tiff(tmp_path: Path) -> None:
+    """KymImage._load_channel_from_path loads a 2D TIFF written with tifffile."""
+    import numpy as np
+    import tifffile
+
+    arr = np.arange(12, dtype=np.uint16).reshape(3, 4)
+    tif_path = tmp_path / "small_kym.tif"
+    tifffile.imwrite(tif_path, arr)
+
+    kym = KymImage(path=tif_path, load_image=True)
+    loaded = kym.getChannelData(1)
+    assert loaded is not None
+    assert loaded.shape == (3, 4)
+    assert np.array_equal(loaded, arr)

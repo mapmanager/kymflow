@@ -14,8 +14,15 @@ import pytest
 from nicegui import app, ui
 
 from kymflow.gui_v2.events_folder import SelectPathEvent
+from kymflow.gui_v2.app_context import AppContext
 import os
 from kymflow.core.user_config import UserConfig
+
+
+def _fresh_app_context() -> AppContext:
+    """Reset singleton and return the AppContext ``home()`` will use."""
+    AppContext._instance = None
+    return AppContext()
 
 
 class DummyPage:
@@ -42,8 +49,6 @@ def _load_app_module(monkeypatch):
         name = "MainProcess"
 
     monkeypatch.setattr(multiprocessing, "current_process", lambda: _MainProcess())
-
-    from kymflow.gui_v2.app_context import AppContext
 
     AppContext._instance = None
 
@@ -101,10 +106,10 @@ def test_home_bootstrap_emits_folder_chosen(monkeypatch, tmp_path: Path) -> None
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Set up user config with last folder
-    app_module.context.app_state.folder = None
-    app_module.context.user_config.push_recent_path(str(tmp_path), depth=1)
-    app_module.context.user_config.save()
+    ctx = _fresh_app_context()
+    ctx.app_state.folder = None
+    ctx.user_config.push_recent_path(str(tmp_path), depth=1)
+    ctx.user_config.save()
 
     app_module.home()
 
@@ -129,12 +134,10 @@ def test_home_bootstrap_skips_if_folder_loaded(monkeypatch, tmp_path: Path) -> N
     monkeypatch.setattr(app_module, "get_event_bus", lambda *_: bus)
     monkeypatch.setattr(app_module, "HomePage", lambda _context, _bus: DummyPage(bus=_bus))
 
-    # Set up user config with last folder
-    app_module.context.user_config.push_recent_path(str(tmp_path), depth=1)
-    app_module.context.user_config.save()
-    
-    # But folder is already loaded
-    app_module.context.app_state.folder = tmp_path
+    ctx = _fresh_app_context()
+    ctx.user_config.push_recent_path(str(tmp_path), depth=1)
+    ctx.user_config.save()
+    ctx.app_state.folder = tmp_path
 
     app_module.home()
 
@@ -158,10 +161,10 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Set up user config with last folder
-    app_module.context.app_state.folder = None
-    app_module.context.user_config.push_recent_path(str(tmp_path), depth=2)
-    app_module.context.user_config.save()
+    ctx = _fresh_app_context()
+    ctx.app_state.folder = None
+    ctx.user_config.push_recent_path(str(tmp_path), depth=2)
+    ctx.user_config.save()
 
     app_module.home()
 
@@ -173,19 +176,13 @@ def test_home_bootstrap_loads_last_folder_from_config(monkeypatch, tmp_path: Pat
     assert emitted.phase == "intent"
 
 
-
-
-def test_main_registers_shutdown_handlers(monkeypatch) -> None:
-    """main() should register shutdown handlers before ui.run()."""
+def test_main_invokes_ui_run(monkeypatch) -> None:
+    """main() calls ui.run; shutdown handlers are no longer registered at module scope."""
     app_module = _load_app_module(monkeypatch)
-
-    install_mock = MagicMock()
-    monkeypatch.setattr(app_module, "install_shutdown_handlers", install_mock)
-    monkeypatch.setattr(app_module.ui, "run", lambda **_kwargs: None)
-
-    app_module.main(native_bool=True)
-
-    install_mock.assert_called_once_with(app_module.context)
+    run_mock = MagicMock()
+    monkeypatch.setattr(app_module.ui, "run", run_mock)
+    app_module.main(native_bool=False)
+    run_mock.assert_called_once()
 
 
 def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
@@ -205,15 +202,12 @@ def test_home_bootstrap_no_user_config_no_emit(monkeypatch) -> None:
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Set up user config with empty recent_folders and no last_folder
-    # (simulating first-time user with no config)
-    app_module.context.app_state.folder = None
-    # Explicitly reset last_folder to empty (simulating fresh config)
-    # Directly set the data to avoid normalization issues with empty string
+    ctx = _fresh_app_context()
+    ctx.app_state.folder = None
     from kymflow.core.user_config import LastPath, DEFAULT_FOLDER_DEPTH
-    app_module.context.user_config.data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
-    # Verify config has no last folder
-    last_path, _ = app_module.context.user_config.get_last_path()
+
+    ctx.user_config.data.last_path = LastPath(path="", depth=DEFAULT_FOLDER_DEPTH)
+    last_path, _ = ctx.user_config.get_last_path()
     assert last_path == ""
 
     app_module.home()
@@ -239,14 +233,13 @@ def test_home_bootstrap_loads_csv_from_last_path(monkeypatch, tmp_path: Path) ->
 
     monkeypatch.setattr(app_module, "HomePage", _homepage)
 
-    # Create CSV file
     csv_file = tmp_path / "test.csv"
     csv_file.write_text("path\n/file1.tif\n/file2.tif")
-    
-    # Set up user config with CSV as last path
-    app_module.context.app_state.folder = None
-    app_module.context.user_config.push_recent_csv(str(csv_file))
-    app_module.context.user_config.save()
+
+    ctx = _fresh_app_context()
+    ctx.app_state.folder = None
+    ctx.user_config.push_recent_csv(str(csv_file))
+    ctx.user_config.save()
 
     app_module.home()
 

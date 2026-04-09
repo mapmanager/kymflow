@@ -598,7 +598,7 @@ class KymImageList(AcqImageList[KymImage]):
                     self._radon_report_cache[str(image.path)] = with_rel
                 master_report.extend(with_rel)
             except Exception as e:
-                logger.warning(f"Failed to generate radon report for image {image.path}: {e}")
+                logger.error(f"Failed to generate radon report for image {image.path}: {e}")
             if progress_cb is not None and n > 0:
                 if (i + 1) % progress_every == 0 or (i + 1) == n:
                     progress_cb(

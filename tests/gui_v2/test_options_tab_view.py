@@ -21,22 +21,17 @@ def test_options_tab_syncs_folder_depth_on_save(tmp_path: Path) -> None:
     # Create app_state with different folder_depth
     app_state = AppState()
     app_state.folder_depth = 2  # Different from app_config
-    
-    # Create mock context
+
     context = MagicMock(spec=AppContext)
     context.app_config = app_config
     context.app_state = app_state
-    
-    # Create OptionsTabView
+    context._save_all_configs = MagicMock(return_value=True)
+
     view = OptionsTabView(app_config=app_config, context=context)
-    
-    # Mock _save_all_configs to return success
-    with patch("kymflow.gui_v2.views.options_tab_view._save_all_configs", return_value=True):
-        # Mock ui.notify to avoid UI calls
-        with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
-            # Call save settings
-            view._on_save_settings()
-    
+
+    with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
+        view._on_save_settings()
+
     # Verify app_state.folder_depth was synced from app_config
     assert app_state.folder_depth == 6
     assert app_config.get_attribute("folder_depth") == 6
@@ -53,21 +48,16 @@ def test_options_tab_syncs_folder_depth_on_save_with_default(tmp_path: Path) -> 
     app_state = AppState()
     app_state.folder_depth = 1  # Different from default
     
-    # Create mock context
     context = MagicMock(spec=AppContext)
     context.app_config = app_config
     context.app_state = app_state
-    
-    # Create OptionsTabView
+    context._save_all_configs = MagicMock(return_value=True)
+
     view = OptionsTabView(app_config=app_config, context=context)
-    
-    # Mock _save_all_configs to return success
-    with patch("kymflow.gui_v2.views.options_tab_view._save_all_configs", return_value=True):
-        # Mock ui.notify to avoid UI calls
-        with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
-            # Call save settings
-            view._on_save_settings()
-    
+
+    with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
+        view._on_save_settings()
+
     # Verify app_state.folder_depth was synced to default
     assert app_state.folder_depth == DEFAULT_FOLDER_DEPTH
     assert app_config.get_attribute("folder_depth") == DEFAULT_FOLDER_DEPTH
@@ -95,13 +85,10 @@ def test_options_tab_syncs_folder_depth_after_changing_value(tmp_path: Path) -> 
     view._on_value_change("folder_depth", 8)
     assert app_config.get_attribute("folder_depth") == 8
     assert app_state.folder_depth == 3  # Not synced yet
-    
-    # Mock _save_all_configs to return success
-    with patch("kymflow.gui_v2.views.options_tab_view._save_all_configs", return_value=True):
-        # Mock ui.notify to avoid UI calls
-        with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
-            # Call save settings - this should sync
-            view._on_save_settings()
+
+    context._save_all_configs = MagicMock(return_value=True)
+    with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
+        view._on_save_settings()
     
     # Verify app_state.folder_depth was synced after save
     assert app_state.folder_depth == 8
@@ -119,20 +106,15 @@ def test_options_tab_handles_save_failure(tmp_path: Path) -> None:
     app_state = AppState()
     app_state.folder_depth = 2
     
-    # Create mock context
     context = MagicMock(spec=AppContext)
     context.app_config = app_config
     context.app_state = app_state
-    
-    # Create OptionsTabView
+    context._save_all_configs = MagicMock(return_value=False)
+
     view = OptionsTabView(app_config=app_config, context=context)
-    
-    # Mock _save_all_configs to return failure
-    with patch("kymflow.gui_v2.views.options_tab_view._save_all_configs", return_value=False):
-        # Mock ui.notify to avoid UI calls
-        with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
-            # Call save settings
-            view._on_save_settings()
+
+    with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
+        view._on_save_settings()
     
     # Verify app_state.folder_depth was NOT synced on failure
     assert app_state.folder_depth == 2  # Unchanged
@@ -145,19 +127,14 @@ def test_options_tab_handles_missing_app_state(tmp_path: Path) -> None:
     cfg_path = tmp_path / "app_config.json"
     app_config = AppConfig.load(config_path=cfg_path)
     
-    # Create mock context without app_state
     context = MagicMock(spec=AppContext)
     context.app_config = app_config
-    context.app_state = None  # Missing app_state
-    
-    # Create OptionsTabView
+    context.app_state = None
+    context._save_all_configs = MagicMock(return_value=True)
+
     view = OptionsTabView(app_config=app_config, context=context)
-    
-    # Mock _save_all_configs to return success
-    with patch("kymflow.gui_v2.views.options_tab_view._save_all_configs", return_value=True):
-        # Mock ui.notify to avoid UI calls
-        with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
-            # Call save settings - should not crash
-            view._on_save_settings()
+
+    with patch("kymflow.gui_v2.views.options_tab_view.ui.notify"):
+        view._on_save_settings()
     
     # Should complete without error (hasattr check prevents AttributeError)

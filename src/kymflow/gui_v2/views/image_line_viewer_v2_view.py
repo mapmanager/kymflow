@@ -264,6 +264,27 @@ class ImageLineViewerV2View:
                     self._on_add_roi(int(new_roi.name))
                 return new_roi
 
+            def on_request_delete_roi(roi_name: str) -> None:
+                """Forward toolbar delete intent to bus; canonical delete is app-controlled."""
+                if self._on_delete_roi is None:
+                    return
+                roi_id = _parse_roi_id_from_name(roi_name)
+                if roi_id is None:
+                    logger.warning(
+                        "ImageLineViewerV2View: cannot parse roi_name %r for delete; skipping DeleteRoi emit",
+                        roi_name,
+                    )
+                    return
+                path = str(self._current_file.path) if self._current_file else None
+                self._on_delete_roi(
+                    DeleteRoi(
+                        roi_id=roi_id,
+                        path=path,
+                        origin=SelectionOrigin.IMAGE_VIEWER,
+                        phase="intent",
+                    )
+                )
+
             # Contrast widget row (above image ROI widget)
             # self._contrast_widget = ImageContrastWidget(
             #     widget_name="image_contrast_widget",
@@ -280,6 +301,7 @@ class ImageLineViewerV2View:
                 on_channel_event=on_channel_event,
                 on_rect_selection=None,
                 on_request_add_roi=on_request_add_roi,
+                on_request_delete_roi=on_request_delete_roi,
                 theme=theme_str,
             )
 

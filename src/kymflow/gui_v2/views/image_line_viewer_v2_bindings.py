@@ -6,6 +6,8 @@ AppState events. No SetRoiEditState (ROI edit is ImageRoiWidget built-in only).
 
 from __future__ import annotations
 
+from typing import Callable
+
 from nicegui import run
 
 from kymflow.gui_v2.bus import EventBus
@@ -14,6 +16,7 @@ from kymflow.gui_v2.events import (
     ChannelSelection,
     DetectEvents,
     EditPhysicalUnits,
+    EditRoi,
     KymEventSelection,
     FileChanged,
     FileSelection,
@@ -33,6 +36,8 @@ from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+OnEditRoiIntent = Callable[[EditRoi], None]
+
 
 class ImageLineViewerV2Bindings:
     """Bind ImageLineViewerV2View to event bus.
@@ -42,9 +47,16 @@ class ImageLineViewerV2Bindings:
     DeleteKymEvent use refresh_velocity_events (no Plotly CRUD).
     """
 
-    def __init__(self, bus: EventBus, view: ImageLineViewerV2View) -> None:
+    def __init__(
+        self,
+        bus: EventBus,
+        view: ImageLineViewerV2View,
+        *,
+        on_edit_roi_intent: OnEditRoiIntent | None = None,
+    ) -> None:
         self._bus = bus
         self._view = view
+        self._on_edit_roi_intent = on_edit_roi_intent
         self._subscribed = False
         # Tracks ROI applied as part of FileSelection so we can skip the
         # immediately following ROISelection(state) echo from AppState.
@@ -207,15 +219,17 @@ class ImageLineViewerV2Bindings:
             dim1_start=int(min(e.x0, e.x1)),
             dim1_stop=int(max(e.x0, e.x1)),
         )
-        self._bus.emit(
-            EditRoi(
-                roi_id=e.roi_id if e.roi_id is not None else 0,
-                bounds=bounds,
-                path=e.path,
-                origin=e.origin,
-                phase="intent",
-            )
+        edit = EditRoi(
+            roi_id=e.roi_id if e.roi_id is not None else 0,
+            bounds=bounds,
+            path=e.path,
+            origin=e.origin,
+            phase="intent",
         )
+        if self._on_edit_roi_intent is not None:
+            self._on_edit_roi_intent(edit)
+        else:
+            self._bus.emit(edit)
 
     def _on_kym_scroll_x(self, e: KymScrollXEvent) -> None:
         safe_call(self._view.scroll_x, e.direction)

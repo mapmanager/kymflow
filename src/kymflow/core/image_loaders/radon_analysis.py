@@ -63,6 +63,16 @@ class RadonAnalysis(AcqAnalysisBase):
         self._df: Optional[pd.DataFrame] = None
         self._dirty: bool = False
 
+    # abb declan
+    def get_kym_analysis(self) -> "KymAnalysis" | None:
+        """try and get kym analysis if acq_image is actually a kymimage.
+        """
+        # check if acqimage has attribute (member function) get_kym_analysis
+        if hasattr(self.acq_image, 'get_kym_analysis'):
+            return self.acq_image.get_kym_analysis()
+        else:
+            return None
+
     def iter_roi_channel_keys(self) -> list[tuple[int, int]]:
         """Return all (roi_id, channel) keys that have radon analysis metadata."""
         return list(self._analysis_metadata.keys())
@@ -647,6 +657,12 @@ class RadonAnalysis(AcqAnalysisBase):
 
             vel_min = vel_max = vel_mean = vel_std = vel_se = vel_cv = None
             vel_n_nan = vel_n_zero = vel_n_big = None
+
+            # abb declan 20260407
+            user_added_count: Optional[int] = None
+            user_added_dur_sum: Optional[float] = None
+            user_added_dur_mean: Optional[float] = None
+
             if velocity is not None and len(velocity) > 0 and not np.all(np.isnan(velocity)):
                 vel_min = float(np.nanmin(velocity))
                 vel_max = float(np.nanmax(velocity))
@@ -662,6 +678,11 @@ class RadonAnalysis(AcqAnalysisBase):
                 if vel_mean is not None and vel_std is not None:
                     big_threshold = vel_mean + 2.0 * vel_std
                     vel_n_big = int(np.sum((velocity > big_threshold) & (~np.isnan(velocity))))
+
+                #abb declan 20260407
+                kym_analysis = self.get_kym_analysis()
+                if kym_analysis is not None:
+                    user_added_count, user_added_dur_sum, user_added_dur_mean = kym_analysis._get_user_added_stats(roi_id, channel)
 
             roi = self.acq_image.rois.get(roi_id)
             if roi is None:
@@ -684,6 +705,11 @@ class RadonAnalysis(AcqAnalysisBase):
                 vel_n_nan=vel_n_nan,
                 vel_n_zero=vel_n_zero,
                 vel_n_big=vel_n_big,
+
+                users_added_count=user_added_count,
+                users_added_dur_sum=user_added_dur_sum,
+                users_added_dur_mean=user_added_dur_mean,
+
                 img_min=img_min,
                 img_max=img_max,
                 img_mean=img_mean,

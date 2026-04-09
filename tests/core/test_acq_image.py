@@ -733,3 +733,49 @@ def test_acq_image_load_channel_not_implemented() -> None:
         
         logger.info("  - load_channel() returns False for base class (as expected)")
 
+
+def test_channels_available_matches_get_channel_keys() -> None:
+    """channels_available() is an alias of getChannelKeys()."""
+    img_2d = np.random.randint(0, 255, size=(10, 20), dtype=np.uint8)
+    acq = AcqImage(path=None, img_data=img_2d)
+    assert acq.channels_available() == acq.getChannelKeys()
+
+    acq.addColorChannel(2, np.zeros((10, 20), dtype=np.uint8))
+    assert acq.channels_available() == [1, 2]
+
+
+def test_acq_image_accepted_roundtrip_via_metadata_json() -> None:
+    """set_accepted persists through save_metadata / load_metadata."""
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as tmpdir:
+        tif_path = Path(tmpdir) / "item.tif"
+        tif_path.touch()
+        data = np.zeros((4, 6), dtype=np.uint8)
+        acq = AcqImage(path=tif_path, img_data=data)
+        acq.set_accepted(False)
+        assert acq.get_accepted() is False
+        assert acq.save_metadata() is True
+
+        acq2 = AcqImage(path=tif_path, load_image=False)
+        assert acq2.get_accepted() is True
+        assert acq2.load_metadata() is True
+        assert acq2.get_accepted() is False
+
+
+def test_load_metadata_returns_false_without_path() -> None:
+    """load_metadata is a no-op when there is no representative image path."""
+    acq = AcqImage(path=None, img_data=np.zeros((3, 3), dtype=np.uint8))
+    assert acq.load_metadata() is False
+
+
+def test_load_metadata_returns_false_when_json_missing() -> None:
+    """load_metadata returns False if sidecar JSON does not exist."""
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as tmpdir:
+        tif_path = Path(tmpdir) / "only.tif"
+        tif_path.touch()
+        acq = AcqImage(path=tif_path, load_image=False)
+        assert acq.load_metadata() is False
+
