@@ -227,6 +227,8 @@ def main(*, reload: bool | None = None, native_bool: bool | None = None) -> None
     native_bool = is_native_mode()
     reload = _env_bool("KYMFLOW_GUI_RELOAD", False) if reload is None else reload
 
+    native_bool = False
+    
     from nicegui import native as native_module    
     if native_bool:
         port = _env_int("PORT", native_module.find_open_port())
