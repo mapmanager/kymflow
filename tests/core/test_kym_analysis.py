@@ -1870,3 +1870,148 @@ def test_kymanalysis_round_trip_delete_all_then_add_roi() -> None:
         assert len(_radon(kym_analysis)._df) > 0
         assert _radon(kym_analysis).has_analysis(roi2.id, roi2.channel)
 
+
+# --- ROI dependency / clear-all-for-roi API (Phases 1–3) --------------------------------
+
+
+def test_get_roi_dependencies_and_has_any_per_channel_empty() -> None:
+    """No analysis: get_roi_dependencies empty; has_any_analysis_for_roi_channel false."""
+    test_image = np.zeros((80, 80), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    assert kym_analysis.get_roi_dependencies(roi.id, roi.channel) == []
+    assert not kym_analysis.has_any_analysis_for_roi_channel(roi.id, roi.channel)
+
+
+def test_get_roi_dependencies_and_has_any_per_channel_radon() -> None:
+    """After radon analyze, per-channel dependency lists include RadonAnalysis."""
+    test_image = np.zeros((80, 80), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=8, use_multiprocessing=False)
+    deps = kym_analysis.get_roi_dependencies(roi.id, roi.channel)
+    assert len(deps) == 1
+    assert deps[0]["analysis_name"] == "RadonAnalysis"
+    assert deps[0]["roi_id"] == roi.id
+    assert deps[0]["channel"] == roi.channel
+    assert kym_analysis.has_any_analysis_for_roi_channel(roi.id, roi.channel)
+
+
+def test_radon_clear_analysis_for_roi_channel() -> None:
+    """RadonAnalysis.clear_analysis_for_roi_channel removes that pair."""
+    test_image = np.zeros((80, 80), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    r = _radon(kym_analysis)
+    r.analyze_roi(roi.id, roi.channel, window_size=8, use_multiprocessing=False)
+    r.clear_analysis_for_roi_channel(roi.id, roi.channel)
+    assert not r.has_analysis(roi.id, roi.channel)
+    assert kym_analysis.get_roi_dependencies(roi.id, roi.channel) == []
+
+
+def test_radon_event_clear_analysis_for_roi_channel() -> None:
+    """RadonEventAnalysis.clear_analysis_for_roi_channel drops the key."""
+    test_image = np.zeros((80, 80), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    _radon(kym_analysis).analyze_roi(roi.id, roi.channel, window_size=8, use_multiprocessing=False)
+    _radon_events(kym_analysis).run_velocity_event_analysis(roi.id, roi.channel)
+    rea = _radon_events(kym_analysis)
+    assert rea.num_velocity_events(roi.id, roi.channel) >= 0
+    assert (roi.id, roi.channel) in rea._velocity_events
+    rea.clear_analysis_for_roi_channel(roi.id, roi.channel)
+    assert (roi.id, roi.channel) not in rea._velocity_events
+
+
+def test_get_roi_dependencies_all_channels_two_image_channels_analyze_one() -> None:
+    """Union (a): image has ch1+ch2; analysis only on ch1; scan includes both channels."""
+    img1 = np.zeros((60, 60), dtype=np.uint16)
+    img2 = np.zeros((60, 60), dtype=np.uint16)
+    kym_image = KymImage(path=None, img_data=img1, channel=1, load_image=False)
+    kym_image.addColorChannel(2, img2)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    _radon(kym_analysis).analyze_roi(roi.id, 1, window_size=8, use_multiprocessing=False)
+
+    assert kym_analysis._channel_indices_for_roi_analysis(roi.id) == [1, 2]
+    assert kym_analysis.has_any_analysis_for_roi(roi.id)
+    assert not kym_analysis.has_any_analysis_for_roi_channel(roi.id, 2)
+
+    all_deps = kym_analysis.get_roi_dependencies_all_channels(roi.id)
+    assert len(all_deps) == 1
+    assert all_deps[0]["channel"] == 1
+
+
+def test_channel_union_includes_stray_analysis_channel() -> None:
+    """Union (b): metadata key (roi, 99) not in image channels still appears in scan."""
+    test_image = np.zeros((80, 80), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    assert kym_image.channels_available() == [1]
+
+    now_iso = "2026-01-01T00:00:00+00:00"
+    stray_meta = RoiAnalysisMetadata(
+        roi_id=roi.id,
+        channel=99,
+        algorithm="mpRadon",
+        window_size=8,
+        analyzed_at=now_iso,
+        analyzed_on=now_iso,
+        roi_revision_at_analysis=0,
+    )
+    _radon(kym_analysis)._analysis_metadata[(roi.id, 99)] = stray_meta
+
+    chans = kym_analysis._channel_indices_for_roi_analysis(roi.id)
+    assert 1 in chans and 99 in chans
+    assert kym_analysis.has_any_analysis_for_roi_channel(roi.id, 99)
+    deps_99 = kym_analysis.get_roi_dependencies(roi.id, 99)
+    assert len(deps_99) == 1 and deps_99[0]["analysis_name"] == "RadonAnalysis"
+
+
+def test_clear_all_analysis_for_roi_multi_channel_and_other_roi_intact() -> None:
+    """clear_all_analysis_for_roi clears all scanned channels; other ROI unchanged."""
+    img1 = np.zeros((60, 60), dtype=np.uint16)
+    img2 = np.zeros((60, 60), dtype=np.uint16)
+    kym_image = KymImage(path=None, img_data=img1, channel=1, load_image=False)
+    kym_image.addColorChannel(2, img2)
+    kym_analysis = kym_image.get_kym_analysis()
+
+    b1 = RoiBounds(dim0_start=5, dim0_stop=25, dim1_start=5, dim1_stop=25)
+    r1 = kym_image.rois.create_roi(bounds=b1)
+    b2 = RoiBounds(dim0_start=30, dim0_stop=55, dim1_start=30, dim1_stop=55)
+    r2 = kym_image.rois.create_roi(bounds=b2)
+
+    _radon(kym_analysis).analyze_roi(r1.id, 1, window_size=8, use_multiprocessing=False)
+    _radon(kym_analysis).analyze_roi(r1.id, 2, window_size=8, use_multiprocessing=False)
+    _radon_events(kym_analysis).run_velocity_event_analysis(r1.id, 1)
+    _radon(kym_analysis).analyze_roi(r2.id, 1, window_size=8, use_multiprocessing=False)
+
+    assert kym_analysis.has_any_analysis_for_roi(r1.id)
+    kym_analysis.clear_all_analysis_for_roi(r1.id)
+
+    assert not kym_analysis.has_any_analysis_for_roi(r1.id)
+    assert kym_analysis.get_roi_dependencies_all_channels(r1.id) == []
+    assert kym_analysis.has_any_analysis_for_roi(r2.id)
+    assert _radon(kym_analysis).has_analysis(r2.id, 1)
+
+
+def test_has_any_analysis_for_roi_false_when_no_data() -> None:
+    """has_any_analysis_for_roi is False when ROI has no analysis on any channel."""
+    test_image = np.zeros((80, 80), dtype=np.uint16)
+    kym_image = KymImage(img_data=test_image, load_image=True)
+    kym_analysis = kym_image.get_kym_analysis()
+    bounds = RoiBounds(dim0_start=5, dim0_stop=40, dim1_start=5, dim1_stop=40)
+    roi = kym_image.rois.create_roi(bounds=bounds)
+    assert not kym_analysis.has_any_analysis_for_roi(roi.id)
+

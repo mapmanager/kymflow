@@ -72,6 +72,21 @@ class RadonEventAnalysis(AcqAnalysisBase):
         """Return all (roi_id, channel) keys that have velocity events."""
         return list(self._velocity_events.keys())
 
+    def clear_analysis_for_roi_channel(self, roi_id: int, channel: int) -> None:
+        """Remove velocity events for (roi_id, channel).
+
+        Deletes the key from internal storage so :meth:`iter_roi_channel_keys`
+        no longer reports this pair. Sets is_dirty when a key was removed.
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+        """
+        key = _meta_key(roi_id, channel)
+        if key in self._velocity_events:
+            del self._velocity_events[key]
+            self._dirty = True
+
     @property
     def is_dirty(self) -> bool:
         """Return True if this analysis has unsaved changes."""

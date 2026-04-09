@@ -565,3 +565,72 @@ class KymAnalysis:
     def has_any_analysis_for_roi_channel(self, roi_id: int, channel: int) -> bool:
         """Return True if any analysis has state for (roi_id, channel)."""
         return bool(self.get_roi_dependencies(roi_id, channel))
+
+    def _channel_indices_for_roi_analysis(self, roi_id: int) -> list[int]:
+        """Channels to scan for dependencies or clear for this ROI.
+
+        Union of (a) all channel keys on the parent image and (b) any channel
+        that appears with this ``roi_id`` in a child's ``iter_roi_channel_keys``
+        (including stray keys not in ``channels_available()``).
+
+        Args:
+            roi_id: ROI identifier.
+
+        Returns:
+            Sorted unique 1-based channel indices.
+        """
+        channels: set[int] = set(self.acq_image.channels_available())
+        for child in self._analysis_children.values():
+            for rid, ch in child.iter_roi_channel_keys():
+                if rid == roi_id:
+                    channels.add(ch)
+        return sorted(channels)
+
+    def get_roi_dependencies_all_channels(self, roi_id: int) -> list[dict]:
+        """Aggregate dependency metadata for ``roi_id`` across all relevant channels.
+
+        For each channel in :meth:`_channel_indices_for_roi_analysis`, extends
+        the result of :meth:`get_roi_dependencies` for that ``(roi_id, channel)``
+        pair. Order follows sorted channel indices; entries for the same
+        analysis type on different channels appear as separate dicts.
+
+        Args:
+            roi_id: ROI identifier.
+
+        Returns:
+            Flat list of dependency dicts
+            ``{"analysis_name", "roi_id", "channel"}``.
+        """
+        deps: list[dict] = []
+        for ch in self._channel_indices_for_roi_analysis(roi_id):
+            deps.extend(self.get_roi_dependencies(roi_id, ch))
+        return deps
+
+    def has_any_analysis_for_roi(self, roi_id: int) -> bool:
+        """Return True if any child has analysis state for this ROI on any scanned channel.
+
+        Uses the same channel set as :meth:`get_roi_dependencies_all_channels`.
+        """
+        for ch in self._channel_indices_for_roi_analysis(roi_id):
+            if self.has_any_analysis_for_roi_channel(roi_id, ch):
+                return True
+        return False
+
+    def clear_all_analysis_for_roi(self, roi_id: int) -> None:
+        """Remove in-memory analysis for ``roi_id`` across all scanned channels.
+
+        Clears **RadonEventAnalysis** first, then **RadonAnalysis**, per pair
+        ``(roi_id, channel)`` for each ``channel`` in
+        :meth:`_channel_indices_for_roi_analysis`. Does not persist; affected
+        children set ``is_dirty`` when they remove state.
+
+        Args:
+            roi_id: ROI identifier.
+        """
+        radon = self.get_analysis_object("RadonAnalysis")
+        rea = self.get_analysis_object("RadonEventAnalysis")
+        for ch in self._channel_indices_for_roi_analysis(roi_id):
+            if rea is not None:
+                rea.clear_analysis_for_roi_channel(roi_id, ch)
+            if radon is not None:
+                radon.clear_analysis_for_roi_channel(roi_id, ch)

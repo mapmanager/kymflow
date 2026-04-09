@@ -190,6 +190,18 @@ class RadonAnalysis(AcqAnalysisBase):
             self._remove_all_roi_data_from_df(roi_id)
         self._dirty = True
 
+    def clear_analysis_for_roi_channel(self, roi_id: int, channel: int) -> None:
+        """Remove in-memory radon analysis for (roi_id, channel).
+
+        Clears metadata and DataFrame rows for this pair and sets is_dirty.
+        Delegates to :meth:`invalidate` with a fixed channel (same semantics).
+
+        Args:
+            roi_id: ROI identifier.
+            channel: 1-based channel index.
+        """
+        self.invalidate(roi_id, channel)
+
     def _remove_roi_data_from_df(self, roi_id: int, channel: int) -> None:
         if self._df is None or "roi_id" not in self._df.columns:
             return
