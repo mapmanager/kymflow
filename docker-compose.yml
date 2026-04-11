@@ -1,0 +1,43 @@
+services:
+  kymflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DEV_MODE: "false"
+        NICEWIDGETS_REF: "swap-to-nicewidget-image-line-widgets"
+    image: kymflow:latest
+    ports:
+      - "8080:8080"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      KYMFLOW_GUI_NATIVE: "0"
+      KYMFLOW_GUI_RELOAD: "0"
+      KYMFLOW_REMOTE: "1"
+      KYMFLOW_DEFAULT_PATH: "/app/tests/data"
+      KYMFLOW_DEFAULT_DEPTH: "3"
+
+  kymflow-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DEV_MODE: "true"
+        NICEWIDGETS_REF: "swap-to-nicewidget-image-line-widgets"
+    image: kymflow:dev
+    ports:
+      - "8080:8080"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      KYMFLOW_GUI_NATIVE: "0"
+      KYMFLOW_GUI_RELOAD: "0"
+      KYMFLOW_REMOTE: "1"
+      KYMFLOW_DEFAULT_PATH: "/app/tests/data"
+      KYMFLOW_DEFAULT_DEPTH: "3"
+    volumes:
+      - ./src:/app/src
+      - ./tests/data:/app/tests/data
