@@ -11,19 +11,43 @@ import numpy as np
 import pytest
 import tifffile
 
-from kymflow.core.image_loaders.kym_image import KymImage
-from kymflow.core.image_loaders.roi import RoiBounds
-
-
-def _radon(ka):
-    return ka.get_analysis_object("RadonAnalysis")
-from kymflow.core.state import TaskState
+from kymflow.core.analysis.kym_flow_radon import FlowCancelled
 from kymflow.core.analysis.velocity_events.velocity_events import BaselineDropParams
+from kymflow.core.image_loaders.kym_image import KymImage
+from kymflow.core.image_loaders.radon_analysis import RadonAnalysis
+from kymflow.core.image_loaders.roi import RoiBounds
+from kymflow.core.state import TaskState
 from kymflow.gui_v2.tasks import (
     run_batch_flow_analysis,
     run_batch_kym_event_analysis,
     run_flow_analysis,
 )
+
+
+def _radon(ka):
+    return ka.get_analysis_object("RadonAnalysis")
+
+
+def _stub_analyze_roi_until_cancelled(
+    self,
+    roi_id: int,
+    channel: int,
+    window_size: int,
+    *,
+    progress_queue=None,
+    is_cancelled=None,
+    use_multiprocessing: bool = True,
+) -> None:
+    """Stand-in for RadonAnalysis.analyze_roi: block until cancel (deterministic in CI)."""
+    if progress_queue is not None:
+        progress_queue.put(("progress", 0, 10))
+    cancelled = is_cancelled or (lambda: False)
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        if cancelled():
+            raise FlowCancelled()
+        time.sleep(0.001)
+    pytest.fail("test_run_flow_analysis_cancellation: cancel never observed")
 
 
 @pytest.fixture
@@ -261,7 +285,13 @@ def test_run_batch_flow_analysis_skips_files_without_rois(sample_kym_file: KymIm
 
 
 def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
-    """Test that cancellation works with ROI-based analysis."""
+    """Test that cancellation works with ROI-based analysis.
+
+    Without stubbing Radon, a fast CI runner can finish flow analysis before
+    ``request_cancel()`` runs (fixed sleep), queueing ``done`` instead of
+    ``cancelled``. ``analyze_roi`` is replaced with a spin that only exits via
+    ``FlowCancelled`` once ``is_cancelled()`` is true.
+    """
     task_state = TaskState()
     
     # Create ROI
@@ -279,34 +309,32 @@ def test_run_flow_analysis_cancellation(sample_kym_file: KymImage) -> None:
     
     # Start analysis
     with patch("kymflow.gui_v2.tasks.ui.timer", side_effect=mock_timer_func):
-        run_flow_analysis(
-            sample_kym_file,
-            task_state,
-            window_size=16,
-            roi_id=roi.id,
-            channel=roi.channel,
-        )
-        
-        # Wait a bit for analysis to start
-        time.sleep(0.5)
-        
-        # Cancel the analysis
-        if task_state.running:
+        with patch.object(RadonAnalysis, "analyze_roi", _stub_analyze_roi_until_cancelled):
+            run_flow_analysis(
+                sample_kym_file,
+                task_state,
+                window_size=16,
+                roi_id=roi.id,
+                channel=roi.channel,
+            )
+
+            # Let the worker thread enter the stub (avoid racing request_cancel before start).
+            time.sleep(0.05)
+
             task_state.request_cancel()
-        
-        # Wait for cancellation to complete, manually draining queue
-        timeout = 5.0
-        start_time = time.time()
-        while (time.time() - start_time) < timeout:
-            # Manually call timer callback to drain queue
-            if timer_callback is not None:
-                timer_callback()
-            
-            if not task_state.running:
-                break
-            
-            time.sleep(0.1)
-    
+
+            # Wait for cancellation to complete, manually draining queue
+            timeout = 5.0
+            start_time = time.time()
+            while (time.time() - start_time) < timeout:
+                if timer_callback is not None:
+                    timer_callback()
+
+                if not task_state.running:
+                    break
+
+                time.sleep(0.05)
+
     # Check that analysis was cancelled (message is "Flow analysis cancelled" or contains "Cancelled")
     assert not task_state.running
     assert "Cancelled" in task_state.message or task_state.message == "Flow analysis cancelled"
