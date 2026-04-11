@@ -581,10 +581,13 @@ class AddRoi:
         - State: RoiController after creating the ROI on the associated KymImage.
 
     Consumed by:
-        - RoiController (intent → KymImage.rois.create_roi(), AppState.select_roi()).
-        - Any state listeners that need to refresh UI after ROI creation, primarily
-          via FileChanged(state, change_type="roi") and ROISelection(state)
-          emitted from AppStateBridge/AppState.
+        - RoiController (**intent only** → KymImage.rois.create_roi(), AppState.select_roi(),
+          FileChanged(state, change_type="roi"); it does not emit AddRoi(state) on the bus).
+        - Image line viewer path: adapter ``create_full_roi_for_widget`` creates on the model
+          inside ``on_request_add_roi``; HomePage may emit AddRoi(phase="state") for symmetry
+          even when no subscriber listens yet.
+        - UI refresh after ROI structure changes is primarily driven by
+          FileChanged(state, change_type="roi") and ROISelection(state) from AppStateBridge.
 
     Attributes:
         roi_id: ROI ID after creation (None in intent, set in state when used).

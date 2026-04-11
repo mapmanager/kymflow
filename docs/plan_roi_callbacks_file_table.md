@@ -3,7 +3,7 @@
 ## Summary
 
 Examination of the codebase shows:
-1. **Add ROI** – correctly wired: `on_request_add_roi` → `create_full_roi_for_widget` → `_on_add_roi` → `AddRoi(state)` + `FileChanged`
+1. **Add ROI** – model + bus wiring works, but **ordering is wrong today**: `_on_add_roi` runs **inside** `on_request_add_roi` **before** nicewidgets `_do_add_roi` inserts the returned `RegionOfInterest` into `image_roi_widget.rois`, so `AppState.select_roi` → `ROISelection` → `set_selected_roi` can run while the widget dict does not yet contain `str(roi_id)` (see “Add ROI ordering” below). **Recommended fix:** keep `create_full_roi_for_widget` in `on_request_add_roi`, but move `_on_add_roi` (AppState + bus) to **`on_roi_event(ROIEventType.ADD)`** after the combined widget has applied the ROI locally.
 2. **Edit ROI** – correctly wired: `on_roi_event(UPDATE)` → `_on_edit_roi(EditRoi)` → `bus.emit` → EditRoiController → `EditRoi(state)` + `FileChanged`
 3. **Delete ROI** – **not wired**: `on_roi_event(DELETE)` is not handled; no `on_delete_roi` callback in the v2 view
 4. **File table** – already reacts to `FileChanged` via `FileTableBindings._on_file_changed` → `update_row_for_file` (updates ROIS column, Saved, etc.)
@@ -51,7 +51,11 @@ def on_roi_event(e: ROIEvent) -> None:
    - The view ignores it; kymflow `KymImage` still has the ROI
    - File table and KymAnalysis do not update
 
-2. **Add ROI state event** – `_on_add_roi` emits `AddRoi(phase="state")`. `AddRoiController` listens for `AddRoi` intent. That’s fine: the adapter already creates the ROI; we only need `FileChanged` to refresh the file table. No change needed.
+2. **AddRoi(state) vs listeners** – `HomePage._on_add_roi` emits `AddRoi(phase="state")`, but **no gui_v2 binding currently subscribes to `AddRoi` state** (the analysis toolbar subscription is commented out). **What actually refreshes consumers today:** `FileChanged(state, change_type="roi")` (e.g. file table, `ImageLineViewerV2Bindings.refresh_rois_for_current_file`) and **`ROISelection(state)`** from `AppStateBridge` after `AppState.select_roi`. Treat **`FileChanged` + `ROISelection` as the canonical “ROI set / selection changed” signals** unless/until something subscribes to `AddRoi` state on purpose.
+
+3. **Two ROI-creation paths** – (A) **`AddRoi` intent** → `RoiController._on_add_roi`: creates on `KymImage`, `select_roi`, `FileChanged` only (controller does **not** emit `AddRoi(state)` in code today; module docstring is outdated). (B) **Image line viewer:** `on_request_add_roi` → **`create_full_roi_for_widget`** (creates on model, returns `RegionOfInterest`) → nicewidgets inserts ROI → should notify app via **`ROIEvent(ADD)`** + deferred `_on_add_roi` (see above). **Best strategy:** keep **(B)** for this viewer (needs synchronous `RegionOfInterest` for Plotly), but document **(A)** as the canonical bus pattern for *new* UIs that can refresh purely from model + `FileChanged` without a return value from `on_request_add_roi`. Avoid emitting **`AddRoi` intent** for the same user action after the adapter has already called `create_roi`, or the controller would create a **second** ROI.
+
+4. **Plotly refresh count on Add** – Fixing ordering removes the early failed `set_selected_roi` / deselect redraw, but **one** `plot.update` for the whole Add flow still requires **coalescing** redundant work (local `_do_add_roi` shape updates vs `refresh_rois_for_current_file` `set_rois` + velocity refresh). Plan: after ordering fix, **batch** via `ImageLineCombinedWidget` suspend/one-shot update and/or **skip** `refresh_rois_for_current_file` when the widget ROI set already matches `KymImage.rois` (policy + tests).
 
 ---
 
@@ -101,6 +105,8 @@ No changes needed for the file table or KymAnalysis.
 
 ## Implementation Checklist
 
+- [ ] **Add ROI ordering:** In `on_request_add_roi`, only call `create_full_roi_for_widget` and return `new_roi` (do **not** call `_on_add_roi` there). In `on_roi_event`, handle `ROIEventType.ADD`: parse `roi_id` from `e.roi.name`, call `_on_add_roi(roi_id)` (AppState + `AddRoi(state)` + `FileChanged`). Ensures `select_roi` runs after nicewidgets `_do_add_roi` has registered the ROI.
+- [ ] **Single Plotly update (follow-up):** Profile Add path after ordering fix; add coalescing in combined widget and/or dedupe `refresh_rois_for_current_file` vs local widget state.
 - [ ] Add `OnDeleteRoi` type and `on_delete_roi` to `ImageLineViewerV2View`
 - [ ] In `on_roi_event`, handle `ROIEventType.DELETE` and call `on_delete_roi` with `DeleteRoi(phase="intent")`
 - [ ] In `HomePage`, pass `on_delete_roi=bus.emit` to `ImageLineViewerV2View`

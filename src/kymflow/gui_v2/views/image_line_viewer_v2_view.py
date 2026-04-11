@@ -38,6 +38,26 @@ from kymflow.core.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+def _roi_maps_equal_geometry(
+    widget_rois: dict,
+    model_rois: dict,
+) -> bool:
+    """Return True if both maps have the same keys and identical bounds (r0,r1,c0,c1).
+
+    Used to skip redundant ``set_rois`` Plotly work when ``FileChanged`` echoes a
+    viewer-initiated add that already updated the subplot helper in memory.
+    """
+    if set(widget_rois.keys()) != set(model_rois.keys()):
+        return False
+    for k in widget_rois:
+        u = widget_rois[k]
+        v = model_rois[k]
+        if (u.r0, u.r1, u.c0, u.c1) != (v.r0, v.r1, v.c0, v.c1):
+            return False
+    return True
+
+
 OnKymEventXRange = Callable[[SetKymEventXRange], None]
 OnSetRoiBounds = Callable[[SetRoiBounds], None]
 OnRoiSelect = Callable[[int | None], None]
@@ -217,6 +237,12 @@ class ImageLineViewerV2View:
                                 phase="intent",
                             )
                         )
+                elif e.type is ROIEventType.ADD and e.roi and self._on_add_roi:
+                    # Run after nicewidgets ``_do_add_roi`` registers the ROI on the widget
+                    # so ``ROISelection`` → ``set_selected_roi`` sees ``str(roi_id)`` in ``.rois``.
+                    roi_id = _parse_roi_id_from_name(e.roi.name)
+                    if roi_id is not None:
+                        self._on_add_roi(roi_id)
 
             def on_axis_change(ev: AxisEvent) -> None:
                 # abb this is handled by image line combined widget
@@ -259,10 +285,9 @@ class ImageLineViewerV2View:
             def on_request_add_roi():
                 if self._current_file is None:
                     return None
-                new_roi = create_full_roi_for_widget(self._current_file)
-                if new_roi is not None and self._on_add_roi:
-                    self._on_add_roi(int(new_roi.name))
-                return new_roi
+                # Model-only: ``_on_add_roi`` (AppState + bus) runs from ``ROIEventType.ADD``
+                # after nicewidgets inserts the ROI into ``image_roi_widget.rois``.
+                return create_full_roi_for_widget(self._current_file)
 
             def on_request_delete_roi(roi_name: str) -> None:
                 """Forward toolbar delete intent to bus; canonical delete is app-controlled."""
@@ -523,7 +548,8 @@ class ImageLineViewerV2View:
                 continue
             rois_dict[str(roi_id)] = _rectroi_to_region_of_interest(roi_id, rect)
 
-        self._image_roi_widget.set_rois(rois_dict)
+        if not _roi_maps_equal_geometry(self._image_roi_widget.rois, rois_dict):
+            self._image_roi_widget.set_rois(rois_dict)
 
         # Preserve the current ROI selection when possible by mapping the
         # numeric id back to the string name used by the widget.

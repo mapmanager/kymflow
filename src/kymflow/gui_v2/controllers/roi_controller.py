@@ -7,25 +7,23 @@ class while preserving the existing event contracts.
 Event Flow:
 
 * AddRoi (intent):
-    - Emitted by views when the user requests a new ROI (e.g. via ImageRoiWidget).
+    - Emitted by views when the user requests a new ROI (e.g. toolbar Add) and the
+      ROI is not already created on ``KymImage`` (see adapter path in docs).
     - RoiController resolves the target KymImage, applies constraints such as
       MAX_NUM_ROI, creates a new ROI on the model, selects it via AppState, and
-      emits:
-        - AddRoi (state) to mirror the operation.
-        - FileChanged (state, change_type="roi") so views can refresh.
+      emits FileChanged (state, change_type="roi") so views can refresh.
+      It does **not** emit AddRoi(state) on the bus (AppStateBridge emits ROISelection).
 
 * EditRoi (intent):
     - Emitted when the user changes ROI bounds.
-    - RoiController validates the target ROI, applies new bounds, and emits:
-        - EditRoi (state) to mirror the operation.
-        - FileChanged (state, change_type="roi").
+    - RoiController validates the target ROI, applies new bounds, and emits
+      FileChanged (state, change_type="roi") only.
 
 * DeleteRoi (intent):
     - Emitted when the user requests ROI deletion.
     - RoiController validates existence, deletes the ROI, updates AppState
-      selection to a remaining ROI (or clears it), and emits:
-        - DeleteRoi (state) to mirror the operation.
-        - FileChanged (state, change_type="roi").
+      selection to a remaining ROI (or clears it), and emits
+      FileChanged (state, change_type="roi") only.
 
 * ROISelection (intent):
     - Emitted by views when the user selects a different ROI.
@@ -132,7 +130,7 @@ class RoiController:
         """Handle AddRoi intent events.
 
         Creates a new ROI on the resolved KymImage, selects it via AppState,
-        and emits AddRoi(state) plus FileChanged(state).
+        and emits FileChanged(state, change_type="roi").
 
         Args:
             e: AddRoi intent event including path, origin, and phase.
@@ -174,8 +172,8 @@ class RoiController:
     def _on_edit_roi(self, e: EditRoi) -> None:
         """Handle EditRoi intent events.
 
-        Validates the target ROI, applies new bounds, and emits EditRoi(state)
-        and FileChanged(state) so views can refresh.
+        Validates the target ROI, applies new bounds, and emits
+        FileChanged(state, change_type="roi") so views can refresh.
 
         Args:
             e: EditRoi intent event including roi_id, bounds, path, and origin.
@@ -216,8 +214,7 @@ class RoiController:
         """Handle DeleteRoi intent events.
 
         Deletes the specified ROI if it exists, updates AppState selection to a
-        remaining ROI (or clears it), and emits DeleteRoi(state) plus
-        FileChanged(state).
+        remaining ROI (or clears it), and emits FileChanged(state, change_type="roi").
 
         Args:
             e: DeleteRoi intent event including roi_id, path, and origin.
