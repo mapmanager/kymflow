@@ -775,22 +775,27 @@ class ImageLineViewerV2View:
     def _set_selected_roi_impl(self, roi_id: Optional[int]) -> None:
         """Select ROI by roi_id. Name must match adapter convention (str(roi_id))."""
         self._current_roi_id = roi_id
-        if self._image_roi_widget:
-            name = str(roi_id) if roi_id is not None else None
-            if name is not None and name not in self._image_roi_widget.rois:
-                logger.error(
-                    "set_selected_roi: ROI name %r not in widget (expected str(roi_id) from adapter)",
-                    name,
-                )
-                name = None
-            self._suppress_roi_select_emit = True
-            try:
-                self._image_roi_widget.select_roi_by_name(name, emit_select=False)
-            finally:
-                self._suppress_roi_select_emit = False
-        # if self._contrast_widget is not None:
-        #     self._contrast_widget.select_roi_by_index(roi_id)
-        self._update_velocity_and_events_for_current_roi()
+        if self._combined is None:
+            return
+
+        name: str | None = str(roi_id) if roi_id is not None else None
+        if self._image_roi_widget is not None and name is not None and name not in self._image_roi_widget.rois:
+            logger.error(
+                "set_selected_roi: ROI name %r not in widget (expected str(roi_id) from adapter)",
+                name,
+            )
+            name = None
+
+        def _do_roi_selection_and_line() -> None:
+            if self._image_roi_widget is not None:
+                self._suppress_roi_select_emit = True
+                try:
+                    self._image_roi_widget.select_roi_by_name(name, emit_select=False)
+                finally:
+                    self._suppress_roi_select_emit = False
+            self._update_velocity_and_events_for_current_roi()
+
+        self._combined.with_plot_updates_batched(_do_roi_selection_and_line)
 
     def set_theme(self, theme: KymflowThemeMode) -> None:
         """Update theme for both widgets."""
