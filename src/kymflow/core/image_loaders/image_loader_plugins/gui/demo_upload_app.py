@@ -49,4 +49,4 @@ def main_page() -> None:
 
 if __name__ in {"__main__", "__mp_main__"}:
     logger.info('Starting demo_upload_app')
-    ui.run(native=False, title="Kymflow image plugins demo")
+    ui.run(native=False, reload=False, title="Kymflow image plugins demo")

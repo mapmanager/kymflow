@@ -90,8 +90,13 @@ def _bounded_file_paths(root: Path, max_depth: int) -> list[Path]:
     Depth of ``root`` is ``0``; each step into a child directory adds ``1``.
     Files directly in ``root`` are included when ``max_depth >= 0``. Subdirectories
     at depth ``max_depth`` are listed for files but not descended further.
+
+    If ``root`` does not exist (e.g. fixtures not checked out), returns an empty list
+    so callers like :class:`MyImageList` can still construct with an empty catalog.
     """
     root = root.resolve()
+    if not root.exists():
+        return []
     if not root.is_dir():
         raise ValueError(f"Expected a directory: {root}")
     out: list[Path] = []

@@ -250,3 +250,10 @@ def test_non_directory_raises(tmp_path: Path) -> None:
     f.write_text("x")
     with pytest.raises(ValueError, match="directory"):
         MyImageList(f, find_these_extensions=["tif"], max_depth=0)
+
+
+def test_missing_directory_yields_empty_catalog(tmp_path: Path) -> None:
+    missing = tmp_path / "no_such_folder"
+    lst = MyImageList(missing, find_these_extensions=["tif"], max_depth=2)
+    assert len(lst) == 0
+    assert lst.header_records() == []

@@ -143,7 +143,10 @@ class FolderCatalogPanel:
         footer_status: ui.label | None = None,
         footer_spinner: ui.spinner | None = None,
     ) -> FolderCatalogPanel:
-        """Catalog ``tests/fixtures`` under ``image_loader_plugins``."""
+        """Catalog ``tests/fixtures`` under ``image_loader_plugins``.
+
+        If that directory is missing, the panel still builds with an empty file table.
+        """
         return cls(
             default_fixtures_dir(),
             footer_status=footer_status,
