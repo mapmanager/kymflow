@@ -1,18 +1,16 @@
 #
-# Production build (for deployment):
+# Build image locally:
 #   docker build -t kymflow:latest .
 #
-# Development build (editable install, picks up local src changes):
-#   docker build --build-arg DEV_MODE=true -t kymflow:dev .
-#
-# Run container:
+# Run locally and open in browser:
 #   docker run --rm -p 8080:8080 kymflow:latest
+#   then visit http://localhost:8080
 #
-# Run dev container with volume mount (for live code changes):
-#   docker run --rm -p 8080:8080 -v $(pwd)/src:/app/src kymflow:dev
+# Deploy on Raspberry Pi:
+#   docker build -t kymflow:latest .
+#   docker run -d --name kymflow --restart unless-stopped -p 8080:8080 kymflow:latest
+#   then verify it is reachable in a browser through your Cloudflare tunnel/domain
 #
-# Run the container locally
-#   docker run --rm -p 8080:8080 kymflow:latest
 
 FROM python:3.12-slim
 
@@ -43,11 +41,11 @@ COPY src ./src
 COPY tests/data ./tests/data
 
 ARG DEV_MODE=false
+# Git ref for nicewidgets (e.g. main). Override: docker compose build --build-arg NICEWIDGETS_REF=v0.1.0
+ARG NICEWIDGETS_REF=main
 
 RUN uv sync --frozen $(if [ "$DEV_MODE" != "true" ]; then echo "--no-editable"; fi) && \
-    uv pip install "nicewidgets[no_mpl] @ git+https://github.com/mapmanager/nicewidgets@swap-to-nicewidget-image-line-widgets"
-
-    # uv pip install "nicewidgets[no_mpl] @ git+https://github.com/mapmanager/nicewidgets"
+    uv pip install "nicewidgets[no_mpl] @ git+https://github.com/mapmanager/nicewidgets@${NICEWIDGETS_REF}"
 
 EXPOSE 8080
 

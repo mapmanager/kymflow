@@ -1,7 +1,7 @@
 # File: .github/workflows/tests.yml
 #
 # Overview:
-# - Runs unit tests on Python 3.11 and 3.12
+# - Runs unit tests on Python 3.12 (matches project requires-python >=3.12)
 # - Installs nicewidgets directly from GitHub (not PyPI)
 # - Collects coverage separately for core/ and gui_v2/
 # - Uploads flagged coverage reports to Codecov for separate badges
@@ -21,7 +21,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout repository
