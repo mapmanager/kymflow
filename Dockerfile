@@ -1,14 +1,16 @@
 #
+# KymFlow NiceGUI listens on port 8081 inside the image (host port 8080 stays free for local dev).
+#
 # Build image locally:
 #   docker build -t kymflow:latest .
 #
-# Run locally and open in browser:
-#   docker run --rm -p 8080:8080 kymflow:latest
-#   then visit http://localhost:8080
+# Run locally and open in browser (CLI publishes host 8081 -> container 8081):
+#   docker run --rm -p 8081:8081 kymflow:latest
+#   then visit http://localhost:8081
 #
-# Deploy on Raspberry Pi:
+# Deploy on Raspberry Pi (e.g. Cloudflare to kymflow.mapmanager.net on host port 8081):
 #   docker build -t kymflow:latest .
-#   docker run -d --name kymflow --restart unless-stopped -p 8080:8080 kymflow:latest
+#   docker run -d --name kymflow --restart unless-stopped -p 8081:8081 kymflow:latest
 #   then verify it is reachable in a browser through your Cloudflare tunnel/domain
 #
 
@@ -25,7 +27,7 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
-ENV PORT=8080
+ENV PORT=8081
 
 # Force web behavior
 ENV KYMFLOW_GUI_NATIVE=0
@@ -47,6 +49,6 @@ ARG NICEWIDGETS_REF=main
 RUN uv sync --frozen $(if [ "$DEV_MODE" != "true" ]; then echo "--no-editable"; fi) && \
     uv pip install "nicewidgets[no_mpl] @ git+https://github.com/mapmanager/nicewidgets@${NICEWIDGETS_REF}"
 
-EXPOSE 8080
+EXPOSE 8081
 
 CMD ["uv", "run", "python", "-m", "kymflow.gui_v2.app"]

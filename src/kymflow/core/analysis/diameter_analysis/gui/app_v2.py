@@ -6,14 +6,14 @@ import logging
 
 from nicegui import ui
 
-from .config import SEED_FOLDER
-from .controllers_v2 import AppControllerV2
-from .models import AppState
-from .views_v2 import build_home_page_v2
+from kymflow.core.analysis.diameter_analysis import PostFilterParams
+from kymflow.core.analysis.diameter_analysis import DiameterDetectionParams, DiameterMethod, PostFilterParams, SyntheticKymographParams
+from kymflow.core.analysis.diameter_analysis.logging_setup import configure_logging
 
-from ..diameter_analysis import DiameterDetectionParams, DiameterMethod
-from ..logging_setup import configure_logging
-from ..synthetic_kymograph import SyntheticKymographParams
+from kymflow.core.analysis.diameter_analysis.gui.models import AppState
+from kymflow.core.analysis.diameter_analysis.gui.controllers_v2 import AppControllerV2
+from kymflow.core.analysis.diameter_analysis.gui.views_v2 import build_home_page_v2
+from kymflow.core.analysis.diameter_analysis.gui.config import SEED_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -51,21 +51,21 @@ def _make_default_state() -> AppState:
     state.detection_params = DiameterDetectionParams(**kwargs)
 
     # Post-filter defaults (best effort; try a few import locations)
-    PostFilterParams = None
-    for mod, name in [
-        ("post_filter", "PostFilterParams"),
-        ("diameter_analysis", "PostFilterParams"),
-        ("diameter_post_filter", "PostFilterParams"),
-    ]:
-        try:
-            m = __import__(mod, fromlist=[name])
-            PostFilterParams = getattr(m, name)
-            break
-        except Exception:
-            continue
+    # PostFilterParams = None
+    # for mod, name in [
+    #     ("post_filter", "PostFilterParams"),
+    #     ("diameter_analysis", "PostFilterParams"),
+    #     ("diameter_post_filter", "PostFilterParams"),
+    # ]:
+    #     try:
+    #         m = __import__(mod, fromlist=[name])
+    #         PostFilterParams = getattr(m, name)
+    #         break
+    #     except Exception:
+    #         continue
 
-    if PostFilterParams is None:
-        raise ImportError("PostFilterParams not found in known modules")
+    # if PostFilterParams is None:
+    #     raise ImportError("PostFilterParams not found in known modules")
     state.post_filter_params = PostFilterParams()  # type: ignore[call-arg]
 
     return state
