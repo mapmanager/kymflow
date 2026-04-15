@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from kymflow.core.analysis.diameter_analysis import DiameterAnalyzer, DiameterDetectionParams, DiameterMethod
-from kymflow.core.analysis.diameter_analysis.diameter_plots import plot_kymograph_with_edges_mpl, plot_kymograph_with_edges_plotly_dict
+# from kymflow.core.analysis.diameter_analysis.diameter_plots import plot_kymograph_with_edges_mpl, plot_kymograph_with_edges_plotly_dict
+from kymflow.core.analysis.diameter_analysis.diameter_plots import plot_kymograph_with_edges_plotly_dict
 from kymflow.core.analysis.diameter_analysis import generate_synthetic_kymograph
 
 
@@ -131,14 +132,15 @@ def test_plot_orientation_uses_transposed_shape() -> None:
         backend="serial",
     )
 
-    fig = plot_kymograph_with_edges_mpl(
-        payload["kymograph"],
-        results,
-        seconds_per_line=payload["seconds_per_line"],
-        um_per_pixel=payload["um_per_pixel"],
-    )
-    arr = fig.axes[0].images[0].get_array()
-    assert arr.shape == (96, 48)
+    # abb 202604 removed so unit tests can pass with no mpl
+    # fig = plot_kymograph_with_edges_mpl(
+    #     payload["kymograph"],
+    #     results,
+    #     seconds_per_line=payload["seconds_per_line"],
+    #     um_per_pixel=payload["um_per_pixel"],
+    # )
+    # arr = fig.axes[0].images[0].get_array()
+    # assert arr.shape == (96, 48)
 
     plotly_dict = plot_kymograph_with_edges_plotly_dict(
         payload["kymograph"],

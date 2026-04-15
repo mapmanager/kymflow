@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -63,8 +63,10 @@ def plot_kymograph_with_edges_mpl(
     *,
     seconds_per_line: Optional[float] = None,
     um_per_pixel: Optional[float] = None,
-    ax: Optional[plt.Axes] = None,
+    ax: Optional["plt.Axes"] = None,
 ):
+    import matplotlib.pyplot as plt
+
     created = ax is None
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 3.8))
@@ -111,8 +113,10 @@ def plot_diameter_vs_time_mpl(
     seconds_per_line: Optional[float] = 1.0,
     use_filtered: bool = True,
     show_raw: bool = False,
-    ax: Optional[plt.Axes] = None,
+    ax: Optional["plt.Axes"] = None,
 ):
+    import matplotlib.pyplot as plt
+    
     created = ax is None
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 3.2))
