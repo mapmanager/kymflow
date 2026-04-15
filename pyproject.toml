@@ -150,6 +150,19 @@ members = [
     "sandbox/dropbox-fetch",
 ]
 
+[tool.coverage.run]
+omit = [
+  "src/kymflow/core/batch_analysis/*",
+  "src/kymflow/core/scripts/*",
+  "src/kymflow/core/image_loaders/image_loader_plugins/**/*",
+]
+
+[tool.coverage.report]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]
+
 [project.urls]
 Homepage = "https://github.com/mapmanager/kymflow"
 Repository = "https://github.com/mapmanager/kymflow"
