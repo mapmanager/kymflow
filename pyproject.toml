@@ -155,6 +155,7 @@ omit = [
   "src/kymflow/core/batch_analysis/*",
   "src/kymflow/core/scripts/*",
   "src/kymflow/core/image_loaders/image_loader_plugins/**/*",
+  "src/kymflow/core/analysis/diameter_analysis/gui/**/*",
 ]
 
 [tool.coverage.report]
